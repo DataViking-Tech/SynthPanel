@@ -96,12 +96,28 @@ OPUS_PRICING = ModelPricing(
     cache_read_cost_per_million=1.50,
 )
 
+GEMINI_FLASH_PRICING = ModelPricing(
+    input_cost_per_million=0.15,
+    output_cost_per_million=0.60,
+    cache_creation_cost_per_million=0.19,
+    cache_read_cost_per_million=0.04,
+)
+
+GEMINI_PRO_PRICING = ModelPricing(
+    input_cost_per_million=1.25,
+    output_cost_per_million=10.00,
+    cache_creation_cost_per_million=1.56,
+    cache_read_cost_per_million=0.31,
+)
+
 DEFAULT_PRICING = SONNET_PRICING
 
 _PRICING_TABLE: dict[str, ModelPricing] = {
     "haiku": HAIKU_PRICING,
     "sonnet": SONNET_PRICING,
     "opus": OPUS_PRICING,
+    "gemini-2.5-pro": GEMINI_PRO_PRICING,
+    "gemini": GEMINI_FLASH_PRICING,
 }
 
 

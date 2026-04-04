@@ -52,7 +52,7 @@ class TestProviderResolution:
 
     def test_fallback_to_available_credentials(self):
         """Unknown models fall back to first provider with credentials."""
-        env = {"ANTHROPIC_API_KEY": "", "XAI_API_KEY": "", "OPENAI_API_KEY": "sk-oai"}
+        env = {"ANTHROPIC_API_KEY": "", "GEMINI_API_KEY": "", "GOOGLE_API_KEY": "", "XAI_API_KEY": "", "OPENAI_API_KEY": "sk-oai"}
         with patch.dict(os.environ, env, clear=False):
             client = LLMClient()
             provider = client._resolve_provider("some-unknown-model")
@@ -61,7 +61,7 @@ class TestProviderResolution:
 
     def test_no_credentials_raises(self):
         """Missing all credentials raises MISSING_CREDENTIALS."""
-        env = {"ANTHROPIC_API_KEY": "", "XAI_API_KEY": "", "OPENAI_API_KEY": ""}
+        env = {"ANTHROPIC_API_KEY": "", "GEMINI_API_KEY": "", "GOOGLE_API_KEY": "", "XAI_API_KEY": "", "OPENAI_API_KEY": ""}
         with patch.dict(os.environ, env, clear=False):
             client = LLMClient()
             with pytest.raises(LLMError) as exc_info:
