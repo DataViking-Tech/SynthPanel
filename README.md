@@ -162,7 +162,7 @@ instrument.yaml ─┘                 ├──> Panelist 2 ──> LLM ──>
 
 ### Design Principles
 
-- **Zero external dependencies** — pure Python 3.10+, standard library only
+- **Minimal dependencies** — pure Python 3.10+ with only `httpx` and `pyyaml` required
 - **Provider agnostic** — swap LLMs without changing research definitions
 - **Cost transparent** — every API call is tracked and priced
 - **Reproducible** — same personas + same instrument = comparable output
