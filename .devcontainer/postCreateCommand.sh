@@ -7,30 +7,28 @@ echo "Setting up synth-panel development environment..."
 
 cd /workspaces/synth-panel
 
-# Initialize uv venv if one doesn't already exist
-if [ ! -d ".venv" ]; then
-  echo "Creating uv virtual environment..."
-  uv venv .venv
-fi
+# Initialize uv project (creates .venv if needed, generates uv.lock)
+echo "Initializing uv project..."
+uv lock 2>&1 || echo "uv lock failed, continuing..."
 
-# Activate the venv so subsequent commands target it
-export VIRTUAL_ENV="/workspaces/synth-panel/.venv"
-export PATH="$VIRTUAL_ENV/bin:$PATH"
+# Install the package in editable mode with all extras
+echo "Installing synth-panel (editable)..."
+uv pip install -e ".[dev,mcp]" 2>&1 || uv pip install -e . 2>&1 || {
+  echo "uv pip install failed, falling back to PYTHONPATH mode"
+}
 
-# Sync dependencies if pyproject.toml has them, otherwise install editable
-if uv sync 2>/dev/null; then
-  echo "uv sync complete"
+# Verify the synth-panel entry point is available
+if command -v synth-panel >/dev/null 2>&1; then
+  echo "synth-panel CLI installed and on PATH"
+elif [ -x ".venv/bin/synth-panel" ]; then
+  echo "synth-panel installed in .venv (activate with: source .venv/bin/activate)"
 else
-  uv pip install -e ".[dev]" 2>/dev/null || uv pip install -e . 2>/dev/null || {
-    echo "uv pip install failed, falling back to PYTHONPATH mode"
-  }
+  echo "Warning: synth-panel entry point not found"
+  echo "  Use: PYTHONPATH=src python3 -m synth_panel"
 fi
-
-# Install MCP SDK if available
-uv pip install mcp 2>/dev/null || echo "MCP SDK not available, mcp-serve will not work"
 
 # Verify CLI works
-if PYTHONPATH=src python3 -m synth_panel --help >/dev/null 2>&1; then
+if synth-panel --help >/dev/null 2>&1 || .venv/bin/synth-panel --help >/dev/null 2>&1; then
   echo "synth-panel CLI is working"
 else
   echo "Warning: synth-panel CLI failed to load"
