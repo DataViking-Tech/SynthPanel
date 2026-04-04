@@ -357,7 +357,7 @@ class TestYAMLLoading:
 
 
 class TestPanelRun:
-    @patch("synth_panel.cli.commands.AgentRuntime")
+    @patch("synth_panel.orchestrator.AgentRuntime")
     @patch("synth_panel.cli.commands.LLMClient")
     def test_panel_run_basic(self, mock_client_cls, mock_runtime_cls, capsys, tmp_path):
         mock_runtime = MagicMock()
@@ -387,7 +387,7 @@ class TestPanelRun:
         assert "Alice" in out
         assert "I think..." in out
 
-    @patch("synth_panel.cli.commands.AgentRuntime")
+    @patch("synth_panel.orchestrator.AgentRuntime")
     @patch("synth_panel.cli.commands.LLMClient")
     def test_panel_run_json(self, mock_client_cls, mock_runtime_cls, capsys, tmp_path):
         mock_runtime = MagicMock()
