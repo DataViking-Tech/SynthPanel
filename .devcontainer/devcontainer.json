@@ -1,6 +1,7 @@
 {
 	"name": "synth-panel Dev",
 	"image": "ghcr.io/dataviking-tech/ai-dev-base:edge",
+	"updateRemoteUserUID": false,
 	"containerEnv": {
 		"PYTHONPATH": "/workspaces/synth-panel/src",
 		"VIRTUAL_ENV": "/workspaces/synth-panel/.venv"
