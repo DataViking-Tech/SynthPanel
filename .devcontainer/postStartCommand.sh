@@ -3,7 +3,19 @@
 # Ensures synth-panel is ready and prints status.
 set -euo pipefail
 
-# Activate uv venv if it exists
+# Ensure every new terminal activates the venv
+BASHRC_SNIPPET='# synth-panel venv activation
+if [ -d "/workspaces/synth-panel/.venv" ]; then
+  export VIRTUAL_ENV="/workspaces/synth-panel/.venv"
+  export PATH="$VIRTUAL_ENV/bin:$PATH"
+fi
+export PYTHONPATH="${PYTHONPATH:-/workspaces/synth-panel/src}"'
+
+if ! grep -q "synth-panel venv activation" ~/.bashrc 2>/dev/null; then
+  echo "$BASHRC_SNIPPET" >> ~/.bashrc
+fi
+
+# Activate for this script too
 if [ -d "/workspaces/synth-panel/.venv" ]; then
   export VIRTUAL_ENV="/workspaces/synth-panel/.venv"
   export PATH="$VIRTUAL_ENV/bin:$PATH"

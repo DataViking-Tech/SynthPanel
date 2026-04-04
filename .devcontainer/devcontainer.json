@@ -3,8 +3,7 @@
 	"image": "ghcr.io/dataviking-tech/ai-dev-base:edge",
 	"containerEnv": {
 		"PYTHONPATH": "/workspaces/synth-panel/src",
-		"VIRTUAL_ENV": "/workspaces/synth-panel/.venv",
-		"PATH": "/workspaces/synth-panel/.venv/bin:${containerEnv:PATH}"
+		"VIRTUAL_ENV": "/workspaces/synth-panel/.venv"
 	},
 	"initializeCommand": "docker pull ghcr.io/dataviking-tech/ai-dev-base:edge || podman pull ghcr.io/dataviking-tech/ai-dev-base:edge || echo No container runtime found, skipping pre-pull",
 	"postCreateCommand": "bash .devcontainer/postCreateCommand.sh",
