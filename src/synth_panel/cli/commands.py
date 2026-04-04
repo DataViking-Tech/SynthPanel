@@ -13,9 +13,10 @@ from typing import Any
 import yaml
 
 from synth_panel.cli.output import OutputFormat, emit
-from synth_panel.cost import UsageTracker, estimate_cost, format_summary, lookup_pricing
+from synth_panel.cost import ZERO_USAGE, UsageTracker, estimate_cost, format_summary, lookup_pricing
 from synth_panel.llm.client import LLMClient
 from synth_panel.llm.models import TextBlock
+from synth_panel.orchestrator import run_panel_parallel
 from synth_panel.persistence import Session
 from synth_panel.runtime import AgentRuntime
 
@@ -152,7 +153,7 @@ def _build_question_prompt(question: dict[str, Any]) -> str:
 
 
 def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
-    """Run a panel: load personas + instrument, run each persona, aggregate."""
+    """Run a panel: load personas + instrument, run panelists in parallel."""
     model = _resolve_model(args)
 
     try:
@@ -173,86 +174,32 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         return 1
 
     client = LLMClient()
+
+    # Run all panelists in parallel via the orchestrator
+    panelist_results, _registry = run_panel_parallel(
+        client=client,
+        personas=personas,
+        questions=questions,
+        model=model,
+        system_prompt_fn=_persona_system_prompt,
+        question_prompt_fn=_build_question_prompt,
+    )
+
+    # Build output results and aggregate usage
     results: list[dict[str, Any]] = []
-    total_tracker = UsageTracker()
+    total_usage = ZERO_USAGE
 
-    for persona in personas:
-        name = persona.get("name", "Anonymous")
-        system_prompt = _persona_system_prompt(persona)
-
-        persona_result: dict[str, Any] = {
-            "persona": name,
-            "responses": [],
-            "usage": None,
-            "cost": None,
-        }
-        persona_tracker = UsageTracker()
-
-        for question in questions:
-            question_text = _build_question_prompt(question)
-
-            session = Session()
-            runtime = AgentRuntime(
-                client=client,
-                session=session,
-                system_prompt=system_prompt,
-                model=model,
-            )
-
-            try:
-                summary = runtime.run_turn(question_text)
-            except Exception as exc:
-                persona_result["responses"].append({
-                    "question": question_text,
-                    "response": f"[error: {exc}]",
-                    "error": True,
-                })
-                continue
-
-            # Extract response text
-            response_text = ""
-            for msg in summary.assistant_messages:
-                for block in msg.content:
-                    if isinstance(block, dict) and block.get("type") == "text":
-                        response_text += block.get("text", "")
-
-            persona_result["responses"].append({
-                "question": question_text,
-                "response": response_text,
-            })
-
-            persona_tracker.record_turn(summary.usage)
-            total_tracker.record_turn(summary.usage)
-
-            # Handle follow-ups if present
-            follow_ups = question.get("follow_ups", []) if isinstance(question, dict) else []
-            for follow_up in follow_ups:
-                try:
-                    fu_summary = runtime.run_turn(follow_up)
-                except Exception:
-                    continue
-
-                fu_text = ""
-                for msg in fu_summary.assistant_messages:
-                    for block in msg.content:
-                        if isinstance(block, dict) and block.get("type") == "text":
-                            fu_text += block.get("text", "")
-
-                persona_result["responses"].append({
-                    "question": follow_up,
-                    "response": fu_text,
-                    "follow_up": True,
-                })
-                persona_tracker.record_turn(fu_summary.usage)
-                total_tracker.record_turn(fu_summary.usage)
-
-        # Per-persona cost
+    for pr in panelist_results:
         pricing, is_estimated = lookup_pricing(model)
-        persona_cost = estimate_cost(persona_tracker.cumulative_usage, pricing)
-        persona_result["usage"] = persona_tracker.cumulative_usage.to_dict()
-        persona_result["cost"] = persona_cost.format_usd()
-
-        results.append(persona_result)
+        persona_cost = estimate_cost(pr.usage, pricing)
+        results.append({
+            "persona": pr.persona_name,
+            "responses": pr.responses,
+            "usage": pr.usage.to_dict(),
+            "cost": persona_cost.format_usd(),
+            "error": pr.error,
+        })
+        total_usage = total_usage + pr.usage
 
     # Output results
     if fmt is OutputFormat.TEXT:
@@ -260,6 +207,8 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             print(f"\n{'='*60}")
             print(f"Persona: {r['persona']}")
             print(f"{'='*60}")
+            if r.get("error"):
+                print(f"  ERROR: {r['error']}")
             for resp in r["responses"]:
                 prefix = "  [follow-up] " if resp.get("follow_up") else "  "
                 print(f"{prefix}Q: {resp['question']}")
@@ -269,16 +218,16 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
 
         # Total cost summary
         pricing, is_estimated = lookup_pricing(model)
-        total_cost = estimate_cost(total_tracker.cumulative_usage, pricing)
+        total_cost = estimate_cost(total_usage, pricing)
         print(f"\n{'='*60}")
-        print(format_summary("Total", total_tracker.cumulative_usage, total_cost,
+        print(format_summary("Total", total_usage, total_cost,
                              model=model, is_estimated=is_estimated))
     else:
         pricing, is_estimated = lookup_pricing(model)
-        total_cost = estimate_cost(total_tracker.cumulative_usage, pricing)
+        total_cost = estimate_cost(total_usage, pricing)
         emit(fmt, message="Panel complete", extra={
             "results": results,
-            "total_usage": total_tracker.cumulative_usage.to_dict(),
+            "total_usage": total_usage.to_dict(),
             "total_cost": total_cost.format_usd(),
             "model": model,
             "persona_count": len(personas),
