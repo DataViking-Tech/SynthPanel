@@ -746,4 +746,49 @@ For a first working version of synth-panel, the following components are require
 
 ---
 
+## 11. Acceptance Tests (Live Validation)
+
+Each component must be validated against a live LLM API (Claude or OpenAI-compatible). Tests should be runnable scripts in `tests/` that exercise real API calls and assert behavioral correctness.
+
+### LLM Client Abstraction
+- Send a simple prompt ("Say hello"), receive a text response containing at least one word.
+- Stream the same prompt, collect all stream events, verify: message_start → content_block_start → content_block_delta(s) → content_block_stop → message_delta → message_stop.
+- Send with an invalid API key, verify authentication error (not retried).
+- Send with an unreachable base URL, verify transport error with retry attempts.
+- Model alias resolution: "sonnet" resolves to a valid canonical model ID.
+
+### Structured Output
+- Define a schema: `{"name": string, "sentiment": "positive"|"negative"|"neutral", "confidence": number}`.
+- Force the LLM to respond via tool-use with that schema. Verify the response is valid JSON matching the schema.
+- Send a deliberately ambiguous prompt and verify retry on malformed output (if it occurs).
+
+### Cost/Budget Tracking
+- After a successful LLM call, verify token usage has non-zero input and output counts.
+- Verify cost estimation produces a non-zero dollar amount.
+- Set a budget of 100 tokens. Make a call. Verify budget enforcement triggers on a subsequent call.
+
+### Session Persistence
+- Run a turn, save the session, load it back, verify message count matches.
+- Verify JSONL append mode adds a single line (not full rewrite).
+- Fork a session, verify the fork has a parent link and all original messages.
+
+### Agent Runtime
+- Run a single turn with a prompt like "What is 2+2?". Verify the turn completes with a text response.
+- Verify cumulative usage is tracked across multiple turns.
+- Verify auto-compaction triggers after exceeding the token threshold (can be set low for testing, e.g., 1000 tokens).
+
+### CLI Framework
+- `synth-panel prompt "Say hello"` exits 0 and prints a response.
+- `synth-panel prompt "Say hello" --output-format json` outputs valid JSON with message and usage fields.
+- `synth-panel --help` prints usage information.
+- Invalid subcommand exits non-zero with an error message.
+
+### Integration (end-to-end)
+- Define 3 personas in YAML (e.g., "skeptical CTO", "enthusiastic intern", "pragmatic PM").
+- Define a survey instrument asking "What do you think of the name 'Traitprint' for a career matching app?"
+- Run `synth-panel run --personas personas.yaml --instrument survey.yaml --model sonnet`.
+- Verify: 3 structured responses returned, each conforming to the schema, each with different content reflecting the persona, total cost printed.
+
+---
+
 *End of specification.*
