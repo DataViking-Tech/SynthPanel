@@ -4,8 +4,8 @@ from __future__ import annotations
 
 # Short alias → canonical model identifier.
 MODEL_ALIASES: dict[str, str] = {
-    "opus": "claude-opus-4-6-20250415",
-    "sonnet": "claude-sonnet-4-6-20250414",
+    "opus": "claude-opus-4-6",
+    "sonnet": "claude-sonnet-4-6",
     "haiku": "claude-haiku-4-5-20251001",
     "grok": "grok-3",
 }
