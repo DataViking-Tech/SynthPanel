@@ -44,14 +44,21 @@ def _cmd_status(state: SessionState, argv: list[str], fmt: OutputFormat) -> None
 
 def _cmd_compact(state: SessionState, argv: list[str], fmt: OutputFormat) -> None:
     """Compact session history."""
-    # TODO: wire to session compaction
-    emit(fmt, message="[stub] Session compaction not yet implemented.")
+    runtime = state.runtime
+    msg_count = len(runtime.session.messages)
+    if msg_count <= 4:
+        emit(fmt, message="Not enough messages to compact.")
+        return
+    runtime._auto_compact()
+    state.compacted_count += 1
+    emit(fmt, message=f"Compacted {msg_count} messages. Compaction count: {state.compacted_count}")
 
 
 def _cmd_model(state: SessionState, argv: list[str], fmt: OutputFormat) -> None:
     """Show or switch the active model."""
     if argv:
         state.model = argv[0]
+        state.runtime._model = argv[0]
         emit(fmt, message=f"Model set to: {state.model}")
     else:
         emit(fmt, message=f"Current model: {state.model or '(default)'}")
@@ -87,6 +94,7 @@ def _cmd_clear(state: SessionState, argv: list[str], fmt: OutputFormat) -> None:
     state.turn_count = 0
     state.compacted_count = 0
     state.last_usage = None
+    state.rebuild_runtime()
     emit(fmt, message="Session cleared.")
 
 
