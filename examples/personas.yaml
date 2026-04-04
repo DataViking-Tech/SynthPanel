@@ -1,0 +1,35 @@
+personas:
+  - name: Sarah Chen
+    age: 34
+    occupation: Product Manager
+    background: >
+      Works at a mid-size SaaS company. Has 8 years of experience in tech,
+      previously worked as a software engineer. Manages a team of 5.
+    personality_traits:
+      - analytical
+      - pragmatic
+      - detail-oriented
+
+  - name: Marcus Johnson
+    age: 52
+    occupation: Small Business Owner
+    background: >
+      Runs a family-owned restaurant chain with 3 locations. Not very
+      tech-savvy but recognizes the need for digital tools. Values
+      simplicity and reliability over features.
+    personality_traits:
+      - practical
+      - skeptical of technology
+      - values personal relationships
+
+  - name: Priya Sharma
+    age: 28
+    occupation: Graduate Student
+    background: >
+      PhD candidate in computational linguistics. Heavy user of developer
+      tools and APIs. Budget-conscious but willing to pay for tools that
+      save significant time.
+    personality_traits:
+      - curious
+      - technically sophisticated
+      - cost-conscious

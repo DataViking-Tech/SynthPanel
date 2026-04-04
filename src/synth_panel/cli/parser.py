@@ -54,6 +54,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Prompt text (all remaining arguments are joined).",
     )
 
+    # panel
+    panel_parser = subparsers.add_parser(
+        "panel",
+        help="Panel operations: run synthetic focus groups.",
+    )
+    panel_subparsers = panel_parser.add_subparsers(dest="panel_command")
+
+    # panel run
+    panel_run_parser = panel_subparsers.add_parser(
+        "run",
+        help="Run a panel with personas and an instrument/survey.",
+    )
+    panel_run_parser.add_argument(
+        "--personas",
+        required=True,
+        metavar="PATH",
+        help="Path to a YAML file defining personas.",
+    )
+    panel_run_parser.add_argument(
+        "--instrument",
+        required=True,
+        metavar="PATH",
+        help="Path to a YAML file defining the survey/instrument.",
+    )
+
     # login
     subparsers.add_parser(
         "login",
