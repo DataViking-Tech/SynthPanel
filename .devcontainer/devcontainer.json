@@ -1,0 +1,10 @@
+{
+	"name": "synth-panel Dev",
+	"image": "ghcr.io/dataviking-tech/ai-dev-base:edge",
+	"containerEnv": {
+		"PYTHONPATH": "/workspaces/synth-panel/src"
+	},
+	"initializeCommand": "docker pull ghcr.io/dataviking-tech/ai-dev-base:edge || podman pull ghcr.io/dataviking-tech/ai-dev-base:edge || echo No container runtime found, skipping pre-pull",
+	"postCreateCommand": "bash .devcontainer/postCreateCommand.sh",
+	"postStartCommand": "bash .devcontainer/postStartCommand.sh"
+}
