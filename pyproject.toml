@@ -28,3 +28,6 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "acceptance: live API acceptance tests (require ANTHROPIC_API_KEY)",
+]
