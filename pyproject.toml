@@ -1,0 +1,14 @@
+[project]
+name = "synth-panel"
+version = "0.1.0"
+description = "Run synthetic focus groups and user research panels using AI personas. CLI tool, Python library, any LLM."
+requires-python = ">=3.10"
+license = "MIT"
+readme = "README.md"
+
+[project.scripts]
+synth-panel = "synth_panel.main:main"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
