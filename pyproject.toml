@@ -5,6 +5,15 @@ description = "Run synthetic focus groups and user research panels using AI pers
 requires-python = ">=3.10"
 license = "MIT"
 readme = "README.md"
+dependencies = [
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-httpx>=0.30",
+]
 
 [project.scripts]
 synth-panel = "synth_panel.main:main"
