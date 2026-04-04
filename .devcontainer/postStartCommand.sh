@@ -3,14 +3,19 @@
 # Ensures synth-panel is ready and prints status.
 set -euo pipefail
 
-# Verify PYTHONPATH
+# Activate uv venv if it exists
+if [ -d "/workspaces/synth-panel/.venv" ]; then
+  export VIRTUAL_ENV="/workspaces/synth-panel/.venv"
+  export PATH="$VIRTUAL_ENV/bin:$PATH"
+fi
+
 export PYTHONPATH="${PYTHONPATH:-/workspaces/synth-panel/src}"
 
 # Quick health check
-if PYTHONPATH=src python3 -m synth_panel --help >/dev/null 2>&1; then
+if python3 -m synth_panel --help >/dev/null 2>&1; then
   echo "synth-panel is ready"
 else
-  echo "Warning: synth-panel not working, try: pip install -e ."
+  echo "Warning: synth-panel not working, try: uv sync"
 fi
 
 # Check for API keys
