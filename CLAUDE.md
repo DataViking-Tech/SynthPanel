@@ -4,7 +4,7 @@ A lightweight, LLM-agnostic research harness for running synthetic focus groups 
 
 ## Architecture
 
-Pure Python 3.10+, zero external dependencies for core functionality. Optional deps: `mcp` (MCP server), `httpx`/`pyyaml` (if declared in pyproject.toml).
+Pure Python 3.10+ with minimal dependencies (`httpx` for HTTP, `pyyaml` for YAML parsing). Optional deps: `mcp` (MCP server).
 
 ```
 src/synth_panel/
