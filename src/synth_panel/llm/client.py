@@ -11,12 +11,14 @@ from synth_panel.llm.errors import LLMError, LLMErrorCategory
 from synth_panel.llm.models import CompletionRequest, CompletionResponse, StreamEvent
 from synth_panel.llm.providers.anthropic import ANTHROPIC_CONFIG, AnthropicProvider
 from synth_panel.llm.providers.base import LLMProvider, ProviderConfig
+from synth_panel.llm.providers.gemini import GEMINI_CONFIG, GeminiProvider
 from synth_panel.llm.providers.openai_compat import OPENAI_COMPAT_CONFIG, OpenAICompatibleProvider
 from synth_panel.llm.providers.xai import XAI_CONFIG, XAIProvider
 
 # Provider detection order (SPEC.md §2 — Provider Resolution).
 _PROVIDER_REGISTRY: list[tuple[ProviderConfig, type[LLMProvider]]] = [
     (ANTHROPIC_CONFIG, AnthropicProvider),
+    (GEMINI_CONFIG, GeminiProvider),
     (XAI_CONFIG, XAIProvider),
     (OPENAI_COMPAT_CONFIG, OpenAICompatibleProvider),
 ]
@@ -74,7 +76,7 @@ class LLMClient:
 
         raise LLMError(
             "No LLM provider credentials found. "
-            "Set ANTHROPIC_API_KEY, XAI_API_KEY, or OPENAI_API_KEY.",
+            "Set ANTHROPIC_API_KEY, GEMINI_API_KEY, XAI_API_KEY, or OPENAI_API_KEY.",
             LLMErrorCategory.MISSING_CREDENTIALS,
         )
 

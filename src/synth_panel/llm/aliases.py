@@ -8,6 +8,8 @@ MODEL_ALIASES: dict[str, str] = {
     "sonnet": "claude-sonnet-4-6",
     "haiku": "claude-haiku-4-5-20251001",
     "grok": "grok-3",
+    "gemini": "gemini-2.5-flash",
+    "gemini-pro": "gemini-2.5-pro",
 }
 
 
