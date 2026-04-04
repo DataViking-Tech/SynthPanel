@@ -6,12 +6,16 @@ slash commands, and output formatting.
 
 from __future__ import annotations
 
-import argparse
 import sys
 
 from synth_panel.cli.parser import build_parser
 from synth_panel.cli.repl import run_repl
-from synth_panel.cli.commands import handle_prompt, handle_login, handle_logout
+from synth_panel.cli.commands import (
+    handle_login,
+    handle_logout,
+    handle_panel_run,
+    handle_prompt,
+)
 from synth_panel.cli.output import OutputFormat
 
 
@@ -24,6 +28,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "prompt":
         return handle_prompt(args, output_format)
+    elif args.command == "panel":
+        if getattr(args, "panel_command", None) == "run":
+            return handle_panel_run(args, output_format)
+        else:
+            parser.parse_args(["panel", "--help"])
+            return 1
     elif args.command == "login":
         return handle_login(args, output_format)
     elif args.command == "logout":

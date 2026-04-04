@@ -1,0 +1,15 @@
+instrument:
+  questions:
+    - text: >
+        What is the most frustrating part of your current workflow
+        when collaborating with others on documents or projects?
+      response_schema:
+        type: text
+      follow_ups:
+        - "Can you describe a specific recent example?"
+
+    - text: >
+        If you could wave a magic wand and fix one thing about how you
+        work with technology daily, what would it be and why?
+      response_schema:
+        type: text

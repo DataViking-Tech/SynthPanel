@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import io
 import json
+import os
+import tempfile
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -12,6 +15,19 @@ from synth_panel.cli.parser import build_parser
 from synth_panel.cli.output import OutputFormat, emit
 from synth_panel.cli.slash import dispatch_slash, SLASH_COMMANDS
 from synth_panel.cli.repl import SessionState
+from synth_panel.cli.commands import (
+    _load_personas,
+    _load_instrument,
+    _persona_system_prompt,
+)
+from synth_panel.llm.models import (
+    CompletionResponse,
+    TextBlock,
+    TokenUsage as LLMTokenUsage,
+    StopReason,
+)
+from synth_panel.runtime import TurnSummary
+from synth_panel.cost import TokenUsage, ZERO_USAGE
 
 
 # --- Parser tests ---
@@ -49,6 +65,18 @@ class TestParser:
         args = parser.parse_args(["prompt", "hello", "world"])
         assert args.command == "prompt"
         assert args.text == ["hello", "world"]
+
+    def test_panel_run_subcommand(self):
+        parser = build_parser()
+        args = parser.parse_args([
+            "panel", "run",
+            "--personas", "p.yaml",
+            "--instrument", "i.yaml",
+        ])
+        assert args.command == "panel"
+        assert args.panel_command == "run"
+        assert args.personas == "p.yaml"
+        assert args.instrument == "i.yaml"
 
     def test_login_subcommand(self):
         parser = build_parser()
@@ -180,21 +208,64 @@ class TestSlashCommands:
         assert "Turn count" in data["message"]
 
 
-# --- main() integration tests ---
+# --- Mock helpers ---
+
+
+def _mock_turn_summary(text: str = "Hello!") -> TurnSummary:
+    """Create a TurnSummary with a text response."""
+    from synth_panel.persistence import ConversationMessage
+    usage = TokenUsage(input_tokens=10, output_tokens=20)
+    msg = ConversationMessage(
+        role="assistant",
+        content=[{"type": "text", "text": text}],
+        usage=usage,
+    )
+    return TurnSummary(
+        assistant_messages=[msg],
+        iterations=1,
+        usage=usage,
+    )
+
+
+# --- main() integration tests (with mocked LLM) ---
 
 
 class TestMain:
-    def test_prompt_command(self, capsys):
+    @patch("synth_panel.cli.commands.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_prompt_command(self, mock_client_cls, mock_runtime_cls, capsys):
+        mock_runtime = MagicMock()
+        mock_runtime.run_turn.return_value = _mock_turn_summary("Hi there!")
+        mock_runtime_cls.return_value = mock_runtime
+
         code = main(["prompt", "hello", "world"])
         assert code == 0
         out = capsys.readouterr().out
-        assert "hello world" in out
+        assert "Hi there!" in out
 
-    def test_prompt_json_output(self, capsys):
+    @patch("synth_panel.cli.commands.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_prompt_json_output(self, mock_client_cls, mock_runtime_cls, capsys):
+        mock_runtime = MagicMock()
+        mock_runtime.run_turn.return_value = _mock_turn_summary("response text")
+        mock_runtime_cls.return_value = mock_runtime
+
         code = main(["--output-format", "json", "prompt", "test"])
         assert code == 0
         data = json.loads(capsys.readouterr().out)
-        assert "test" in data["message"]
+        assert data["message"] == "response text"
+        assert "cost" in data
+        assert "usage" in data
+
+    @patch("synth_panel.cli.commands.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_prompt_error_returns_nonzero(self, mock_client_cls, mock_runtime_cls, capsys):
+        mock_runtime = MagicMock()
+        mock_runtime.run_turn.side_effect = RuntimeError("API failure")
+        mock_runtime_cls.return_value = mock_runtime
+
+        code = main(["prompt", "hello"])
+        assert code == 1
 
     def test_login_command(self, capsys):
         code = main(["login"])
@@ -203,3 +274,181 @@ class TestMain:
     def test_logout_command(self, capsys):
         code = main(["logout"])
         assert code == 0
+
+
+# --- YAML loading tests ---
+
+
+class TestYAMLLoading:
+    def test_load_personas_with_key(self, tmp_path):
+        p = tmp_path / "personas.yaml"
+        p.write_text(
+            "personas:\n"
+            "  - name: Alice\n"
+            "    age: 30\n"
+            "    occupation: Engineer\n"
+        )
+        personas = _load_personas(str(p))
+        assert len(personas) == 1
+        assert personas[0]["name"] == "Alice"
+
+    def test_load_personas_as_list(self, tmp_path):
+        p = tmp_path / "personas.yaml"
+        p.write_text(
+            "- name: Bob\n"
+            "  age: 25\n"
+        )
+        personas = _load_personas(str(p))
+        assert len(personas) == 1
+        assert personas[0]["name"] == "Bob"
+
+    def test_load_personas_invalid(self, tmp_path):
+        p = tmp_path / "bad.yaml"
+        p.write_text("just a string")
+        with pytest.raises(ValueError, match="Invalid personas file"):
+            _load_personas(str(p))
+
+    def test_load_personas_missing_file(self):
+        with pytest.raises(FileNotFoundError):
+            _load_personas("/nonexistent/path.yaml")
+
+    def test_load_instrument_with_key(self, tmp_path):
+        p = tmp_path / "survey.yaml"
+        p.write_text(
+            "instrument:\n"
+            "  questions:\n"
+            "    - text: What?\n"
+        )
+        instr = _load_instrument(str(p))
+        assert "questions" in instr
+
+    def test_load_instrument_questions_key(self, tmp_path):
+        p = tmp_path / "survey.yaml"
+        p.write_text(
+            "questions:\n"
+            "  - text: What?\n"
+        )
+        instr = _load_instrument(str(p))
+        assert "questions" in instr
+
+    def test_load_instrument_invalid(self, tmp_path):
+        p = tmp_path / "bad.yaml"
+        p.write_text("just a string")
+        with pytest.raises(ValueError, match="Invalid instrument file"):
+            _load_instrument(str(p))
+
+    def test_persona_system_prompt(self):
+        persona = {
+            "name": "Alice",
+            "age": 30,
+            "occupation": "Engineer",
+            "background": "10 years in software",
+            "personality_traits": ["curious", "methodical"],
+        }
+        prompt = _persona_system_prompt(persona)
+        assert "Alice" in prompt
+        assert "30" in prompt
+        assert "Engineer" in prompt
+        assert "curious" in prompt
+        assert "methodical" in prompt
+
+
+# --- Panel run tests ---
+
+
+class TestPanelRun:
+    @patch("synth_panel.cli.commands.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_panel_run_basic(self, mock_client_cls, mock_runtime_cls, capsys, tmp_path):
+        mock_runtime = MagicMock()
+        mock_runtime.run_turn.return_value = _mock_turn_summary("I think...")
+        mock_runtime_cls.return_value = mock_runtime
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text(
+            "personas:\n"
+            "  - name: Alice\n"
+            "    age: 30\n"
+        )
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text(
+            "instrument:\n"
+            "  questions:\n"
+            "    - text: What do you think?\n"
+        )
+
+        code = main([
+            "panel", "run",
+            "--personas", str(personas_file),
+            "--instrument", str(survey_file),
+        ])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "Alice" in out
+        assert "I think..." in out
+
+    @patch("synth_panel.cli.commands.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_panel_run_json(self, mock_client_cls, mock_runtime_cls, capsys, tmp_path):
+        mock_runtime = MagicMock()
+        mock_runtime.run_turn.return_value = _mock_turn_summary("answer")
+        mock_runtime_cls.return_value = mock_runtime
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text(
+            "personas:\n"
+            "  - name: Bob\n"
+        )
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text(
+            "instrument:\n"
+            "  questions:\n"
+            "    - text: Question?\n"
+        )
+
+        code = main([
+            "--output-format", "json",
+            "panel", "run",
+            "--personas", str(personas_file),
+            "--instrument", str(survey_file),
+        ])
+        assert code == 0
+        data = json.loads(capsys.readouterr().out)
+        assert data["persona_count"] == 1
+        assert data["question_count"] == 1
+        assert len(data["results"]) == 1
+
+    def test_panel_run_missing_personas(self, capsys, tmp_path):
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: Q?\n")
+
+        code = main([
+            "panel", "run",
+            "--personas", "/nonexistent.yaml",
+            "--instrument", str(survey_file),
+        ])
+        assert code == 1
+
+    def test_panel_run_missing_instrument(self, capsys, tmp_path):
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: X\n")
+
+        code = main([
+            "panel", "run",
+            "--personas", str(personas_file),
+            "--instrument", "/nonexistent.yaml",
+        ])
+        assert code == 1
+
+
+# --- __main__.py test ---
+
+
+class TestMainModule:
+    def test_main_module_importable(self):
+        """Verify __main__.py exists and references main()."""
+        from pathlib import Path
+        main_path = Path(__file__).parent.parent / "src" / "synth_panel" / "__main__.py"
+        assert main_path.exists()
+        content = main_path.read_text()
+        assert "from synth_panel.main import main" in content
