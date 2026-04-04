@@ -79,6 +79,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to a YAML file defining the survey/instrument.",
     )
 
+    # mcp-serve
+    subparsers.add_parser(
+        "mcp-serve",
+        help="Start the MCP server (stdio transport).",
+    )
+
     # login
     subparsers.add_parser(
         "login",

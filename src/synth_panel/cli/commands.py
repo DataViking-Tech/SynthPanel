@@ -237,6 +237,13 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     return 0
 
 
+def handle_mcp_serve(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Start the MCP server on stdio transport."""
+    from synth_panel.mcp.server import serve
+    serve()
+    return 0
+
+
 def handle_login(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """Start an authentication flow."""
     # TODO: implement OAuth flow

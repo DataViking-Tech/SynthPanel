@@ -13,6 +13,7 @@ from synth_panel.cli.repl import run_repl
 from synth_panel.cli.commands import (
     handle_login,
     handle_logout,
+    handle_mcp_serve,
     handle_panel_run,
     handle_prompt,
 )
@@ -34,6 +35,8 @@ def main(argv: list[str] | None = None) -> int:
         else:
             parser.parse_args(["panel", "--help"])
             return 1
+    elif args.command == "mcp-serve":
+        return handle_mcp_serve(args, output_format)
     elif args.command == "login":
         return handle_login(args, output_format)
     elif args.command == "logout":
