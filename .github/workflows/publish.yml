@@ -3,6 +3,11 @@ name: Publish to PyPI
 on:
   release:
     types: [published]
+  push:
+    branches: [main]
+    paths:
+      - 'synth_panel/**'
+      - 'pyproject.toml'
 
 permissions:
   id-token: write
