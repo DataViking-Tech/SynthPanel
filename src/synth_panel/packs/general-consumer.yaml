@@ -1,0 +1,81 @@
+name: General Consumers
+description: >
+  Broad demographic cross-section for general product and service testing.
+  Useful for consumer apps, e-commerce, subscription services, and brand
+  perception research.
+
+personas:
+  - name: Emily Nakamura
+    age: 33
+    occupation: Marketing Manager
+    background: >
+      Lives in a mid-size city, rents an apartment with her partner.
+      Subscribes to multiple streaming services and meal kits. Makes
+      purchasing decisions quickly based on reviews and social proof.
+      Will pay a premium for convenience. Impulse-buys from Instagram
+      ads but also returns frequently.
+    personality_traits:
+      - convenience-driven
+      - influenced by social proof
+      - brand-aware
+      - impatient with poor UX
+
+  - name: Thomas Brown
+    age: 61
+    occupation: Retired Electrician
+    background: >
+      Lives in a suburban home he owns. Careful with money after decades
+      of manual labor. Shops at the same stores out of habit. Suspicious
+      of subscription models and auto-renewals. His grandkids taught him
+      to use a tablet, which he primarily uses for news and YouTube.
+      Will call customer service rather than use a chatbot.
+    personality_traits:
+      - value-conscious
+      - brand-loyal
+      - prefers human support
+      - slow to adopt new habits
+
+  - name: Zara Osei
+    age: 24
+    occupation: Graduate Student & Part-Time Barista
+    background: >
+      Lives on a tight budget in a shared apartment. Extremely
+      price-sensitive but willing to spend on experiences and quality
+      food. Heavy user of comparison tools, coupon apps, and student
+      discounts. Makes most purchases on her phone. Shares product
+      recommendations actively on social media.
+    personality_traits:
+      - price-sensitive
+      - socially connected
+      - experience-oriented
+      - mobile-first shopper
+
+  - name: Michael Park
+    age: 45
+    occupation: Accountant
+    background: >
+      Married with two teenagers. Manages the household budget meticulously.
+      Researches major purchases for weeks before committing. Reads product
+      specifications and compares features in spreadsheets. Distrusts
+      marketing claims and looks for independent reviews. Loyal to brands
+      that have treated him well but will switch over a bad experience.
+    personality_traits:
+      - thorough researcher
+      - specification-focused
+      - loyalty-conditional
+      - skeptical of marketing
+
+  - name: Isabella Santos
+    age: 52
+    occupation: Nurse Practitioner
+    background: >
+      Single mother of one adult child. Works demanding shifts and values
+      anything that saves her time. Early adopter of smart home devices
+      and grocery delivery. Willing to pay for quality and reliability.
+      Leaves detailed reviews — both positive and negative. Has strong
+      opinions about customer service quality.
+    personality_traits:
+      - time-starved
+      - quality-over-price
+      - vocal reviewer
+      - tech-comfortable

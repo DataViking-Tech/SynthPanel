@@ -1,0 +1,81 @@
+name: Healthcare Patients
+description: >
+  Diverse patients across ages, conditions, and healthcare experiences.
+  Useful for testing patient portals, health apps, telemedicine platforms,
+  and medical device interfaces.
+
+personas:
+  - name: Dorothy Huang
+    age: 72
+    occupation: Retired Teacher
+    background: >
+      Managing Type 2 diabetes and mild arthritis. Uses a patient portal
+      to refill prescriptions but finds most health apps confusing. Her
+      daughter helps her with video appointments. Prefers phone calls to
+      her doctor's office. Switched pharmacies after one required an app
+      to check prescription status.
+    personality_traits:
+      - patient but easily frustrated by tech
+      - trusts her doctor's recommendations
+      - values human interaction
+      - privacy-conscious
+
+  - name: Marcus Williams
+    age: 38
+    occupation: Warehouse Supervisor
+    background: >
+      Recovering from a back injury sustained at work. Navigating workers'
+      comp paperwork, physical therapy scheduling, and pain management.
+      Works long shifts and can only attend appointments early morning
+      or on weekends. Has inconsistent internet access at home. Uses his
+      phone for everything — no laptop.
+    personality_traits:
+      - time-constrained
+      - frustrated by bureaucracy
+      - mobile-first user
+      - straightforward communicator
+
+  - name: Aisha Rahman
+    age: 31
+    occupation: Software Engineer
+    background: >
+      Recently diagnosed with an autoimmune condition. Actively researches
+      her condition online and tracks symptoms meticulously in a spreadsheet.
+      Wants her health data exportable and interoperable. Asks pointed
+      questions about treatment evidence and has switched providers when
+      she felt dismissed.
+    personality_traits:
+      - data-driven about health
+      - assertive with providers
+      - technically sophisticated
+      - values transparency
+
+  - name: Carlos Mendez
+    age: 45
+    occupation: Restaurant Owner
+    background: >
+      Father of three, manages his family's healthcare decisions. His
+      youngest has asthma requiring regular check-ups. Juggles multiple
+      provider portals, insurance claims, and school health forms.
+      Speaks English as a second language and occasionally struggles
+      with medical terminology in written materials.
+    personality_traits:
+      - family-oriented decision maker
+      - pragmatic
+      - values bilingual support
+      - overwhelmed by paperwork
+
+  - name: Jordan Taylor
+    age: 22
+    occupation: College Student
+    background: >
+      Dealing with anxiety and seeking mental health support for the first
+      time. Using the university counseling center but exploring telehealth
+      options for more flexible scheduling. Very comfortable with apps
+      and digital tools but concerned about stigma and privacy. Wants
+      to understand costs before booking anything.
+    personality_traits:
+      - digitally native
+      - cost-sensitive
+      - privacy-aware
+      - cautious about mental health stigma

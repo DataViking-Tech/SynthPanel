@@ -13,6 +13,7 @@ Layout::
 
 from __future__ import annotations
 
+import importlib.resources
 import json
 import os
 import uuid
@@ -43,37 +44,95 @@ def _results_dir() -> Path:
 
 
 # ---------------------------------------------------------------------------
+# Bundled packs (shipped with the package)
+# ---------------------------------------------------------------------------
+
+def _bundled_packs() -> dict[str, dict[str, Any]]:
+    """Load persona packs bundled in synth_panel.packs.
+
+    Returns a dict mapping pack_id (filename stem) to parsed YAML data.
+    """
+    result: dict[str, dict[str, Any]] = {}
+    try:
+        packs_pkg = importlib.resources.files("synth_panel.packs")
+        for item in packs_pkg.iterdir():
+            if item.name.endswith(".yaml"):
+                try:
+                    data = yaml.safe_load(item.read_text(encoding="utf-8"))
+                    if isinstance(data, dict):
+                        result[item.name.removesuffix(".yaml")] = data
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Persona packs
 # ---------------------------------------------------------------------------
 
 def list_persona_packs() -> list[dict[str, Any]]:
-    """Return metadata for all saved persona packs."""
+    """Return metadata for all persona packs (bundled + user-saved).
+
+    Bundled packs are listed first. If a user-saved pack has the same ID as
+    a bundled pack, the user-saved version takes precedence.
+    """
+    seen: set[str] = set()
     packs: list[dict[str, Any]] = []
+
+    # User-saved packs (take precedence)
     for p in sorted(_packs_dir().glob("*.yaml")):
         try:
             data = yaml.safe_load(p.read_text(encoding="utf-8"))
             personas = data.get("personas", []) if isinstance(data, dict) else []
+            pack_id = p.stem
+            seen.add(pack_id)
             packs.append({
-                "id": p.stem,
-                "name": data.get("name", p.stem) if isinstance(data, dict) else p.stem,
+                "id": pack_id,
+                "name": data.get("name", pack_id) if isinstance(data, dict) else pack_id,
                 "persona_count": len(personas),
                 "path": str(p),
+                "builtin": False,
             })
         except Exception:
             continue
-    return packs
+
+    # Bundled packs (only if not overridden by user)
+    bundled = []
+    for pack_id, data in sorted(_bundled_packs().items()):
+        if pack_id in seen:
+            continue
+        personas = data.get("personas", [])
+        bundled.append({
+            "id": pack_id,
+            "name": data.get("name", pack_id),
+            "persona_count": len(personas),
+            "builtin": True,
+        })
+
+    return bundled + packs
 
 
 def get_persona_pack(pack_id: str) -> dict[str, Any]:
-    """Load a persona pack by ID."""
+    """Load a persona pack by ID. User-saved packs override bundled ones."""
+    # Check user-saved packs first
     p = _packs_dir() / f"{pack_id}.yaml"
-    if not p.exists():
-        raise FileNotFoundError(f"Persona pack not found: {pack_id}")
-    data = yaml.safe_load(p.read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        raise ValueError(f"Invalid persona pack format in {pack_id}")
-    data["id"] = pack_id
-    return data
+    if p.exists():
+        data = yaml.safe_load(p.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError(f"Invalid persona pack format in {pack_id}")
+        data["id"] = pack_id
+        return data
+
+    # Fall back to bundled packs
+    bundled = _bundled_packs()
+    if pack_id in bundled:
+        data = bundled[pack_id]
+        data["id"] = pack_id
+        return data
+
+    raise FileNotFoundError(f"Persona pack not found: {pack_id}")
 
 
 class PackValidationError(ValueError):

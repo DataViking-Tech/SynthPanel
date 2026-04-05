@@ -1,0 +1,63 @@
+name: Startup Founders
+description: >
+  Solo founders and early-stage startup leaders navigating product-market fit,
+  fundraising, and rapid iteration. Useful for testing B2B SaaS tools, developer
+  platforms, and productivity software aimed at small teams.
+
+personas:
+  - name: Maya Okonkwo
+    age: 29
+    occupation: Solo Founder & CEO
+    background: >
+      First-time founder building a fintech API for small businesses in Lagos
+      and London. Bootstrapped with savings, just closed a pre-seed round.
+      Former backend engineer at a payments company. Does everything from
+      coding to customer calls. Lives on Slack, Notion, and her terminal.
+    personality_traits:
+      - resourceful
+      - impatient with complexity
+      - data-driven
+      - direct communicator
+
+  - name: Daniel Reeves
+    age: 42
+    occupation: Repeat Founder & CTO
+    background: >
+      On his third startup, this time in climate tech. Previously exited a
+      logistics SaaS company. Technical co-founder who still writes code daily
+      but spends half his time fundraising. Deeply skeptical of tools that
+      promise to "10x" productivity. Values reliability over features.
+    personality_traits:
+      - skeptical
+      - pragmatic
+      - systems thinker
+      - values simplicity
+
+  - name: Li Wei
+    age: 34
+    occupation: Technical Co-Founder
+    background: >
+      Building a developer tools startup after 8 years at a major cloud
+      provider. Manages a team of 4 engineers. Obsessed with developer
+      experience and API design. Evaluates every tool by reading the docs
+      first. Will reject anything with poor documentation.
+    personality_traits:
+      - meticulous
+      - opinionated about tooling
+      - community-oriented
+      - early adopter
+
+  - name: Sofia Marquez
+    age: 26
+    occupation: Non-Technical Solo Founder
+    background: >
+      Dropped out of an MBA program to build a marketplace connecting
+      freelance translators with small publishers. Uses no-code tools
+      extensively. Budget is extremely tight. Makes buying decisions based
+      on free tiers and onboarding experience. Asks friends for technical
+      advice before committing to any platform.
+    personality_traits:
+      - scrappy
+      - cost-conscious
+      - quick to churn if confused
+      - enthusiastic storyteller

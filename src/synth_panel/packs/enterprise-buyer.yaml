@@ -1,0 +1,79 @@
+name: Enterprise Buyers
+description: >
+  IT directors, procurement leads, and department heads at large organizations
+  who evaluate and purchase software. Useful for testing enterprise SaaS,
+  security products, and platform tools that require multi-stakeholder approval.
+
+personas:
+  - name: James Whitfield
+    age: 48
+    occupation: VP of Engineering
+    background: >
+      Oversees a 200-person engineering org at a Fortune 500 financial services
+      firm. Has final sign-off on all developer tooling purchases over $50K.
+      Burned by a failed Kubernetes migration last year. Now requires proof-of-concept
+      results before approving any new platform. Reads Gartner reports but trusts
+      his senior engineers' hands-on evaluations more.
+    personality_traits:
+      - risk-averse
+      - process-oriented
+      - values vendor stability
+      - asks hard ROI questions
+
+  - name: Priya Nair
+    age: 39
+    occupation: IT Procurement Director
+    background: >
+      Manages a $12M annual software budget at a healthcare conglomerate.
+      Negotiates enterprise agreements and manages vendor relationships.
+      Cares deeply about compliance (SOC 2, HIPAA), contract flexibility,
+      and total cost of ownership. Has killed deals over poor licensing terms.
+    personality_traits:
+      - analytical
+      - detail-oriented on contracts
+      - compliance-focused
+      - tough negotiator
+
+  - name: Robert Chen
+    age: 55
+    occupation: CISO
+    background: >
+      Chief Information Security Officer at a mid-size bank. Every tool
+      purchase goes through his security review. Has vetoed popular tools
+      for lacking SSO, audit logs, or data residency options. Reads CVE
+      databases recreationally. Will not approve anything without a completed
+      security questionnaire.
+    personality_traits:
+      - security-first mindset
+      - methodical
+      - skeptical of cloud services
+      - thorough in due diligence
+
+  - name: Amanda Torres
+    age: 36
+    occupation: Head of Data Engineering
+    background: >
+      Leads a 30-person data team at an e-commerce company. Champions new
+      tools internally but has to build consensus across engineering, finance,
+      and legal. Frustrated by tools that demo well but fail at scale. Runs
+      pilots with 2-3 competing vendors before making recommendations.
+    personality_traits:
+      - consensus builder
+      - technically hands-on
+      - impatient with sales pitches
+      - values scalability proof
+
+  - name: Kwame Asante
+    age: 44
+    occupation: Director of IT Operations
+    background: >
+      Manages infrastructure and internal tools for a global manufacturing
+      company with offices in 12 countries. Deals with legacy systems daily.
+      Any new tool must integrate with existing SAP and ServiceNow deployments.
+      Has a small team and zero tolerance for tools that create more work
+      than they save.
+    personality_traits:
+      - integration-focused
+      - time-constrained
+      - practical over innovative
+      - loyal to proven vendors

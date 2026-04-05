@@ -34,8 +34,19 @@ from synth_panel.mcp.data import (
 # ---------------------------------------------------------------------------
 
 class TestPersonaPacks:
-    def test_list_empty(self):
-        assert list_persona_packs() == []
+    def test_list_includes_bundled(self):
+        """With no user packs, bundled packs are still listed."""
+        packs = list_persona_packs()
+        builtin = [p for p in packs if p.get("builtin")]
+        assert len(builtin) == 5
+        names = {p["id"] for p in builtin}
+        assert names == {
+            "developer",
+            "enterprise-buyer",
+            "general-consumer",
+            "healthcare-patient",
+            "startup-founder",
+        }
 
     def test_save_and_list(self):
         personas = [{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}]
@@ -45,9 +56,10 @@ class TestPersonaPacks:
         assert "id" in result
 
         packs = list_persona_packs()
-        assert len(packs) == 1
-        assert packs[0]["name"] == "Test Pack"
-        assert packs[0]["persona_count"] == 2
+        user_packs = [p for p in packs if not p.get("builtin")]
+        assert len(user_packs) == 1
+        assert user_packs[0]["name"] == "Test Pack"
+        assert user_packs[0]["persona_count"] == 2
 
     def test_save_with_custom_id(self):
         result = save_persona_pack("Custom", [{"name": "Eve"}], pack_id="my-pack")
@@ -59,6 +71,24 @@ class TestPersonaPacks:
         assert pack["name"] == "Get Test"
         assert pack["id"] == "get-test"
         assert len(pack["personas"]) == 1
+
+    def test_get_bundled_pack(self):
+        pack = get_persona_pack("developer")
+        assert pack["name"] == "Developers"
+        assert pack["id"] == "developer"
+        assert len(pack["personas"]) >= 3
+
+    def test_user_pack_overrides_bundled(self):
+        save_persona_pack("My Devs", [{"name": "Custom Dev"}], pack_id="developer")
+        pack = get_persona_pack("developer")
+        assert pack["name"] == "My Devs"
+        assert len(pack["personas"]) == 1
+
+        # User override appears in list as non-builtin
+        packs = list_persona_packs()
+        dev_packs = [p for p in packs if p["id"] == "developer"]
+        assert len(dev_packs) == 1
+        assert dev_packs[0]["builtin"] is False
 
     def test_get_nonexistent_raises(self):
         with pytest.raises(FileNotFoundError):
