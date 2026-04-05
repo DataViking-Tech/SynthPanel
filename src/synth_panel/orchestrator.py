@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable
 
+from synth_panel.conditions import evaluate_condition, normalize_follow_up
 from synth_panel.cost import ZERO_USAGE, TokenUsage, UsageTracker
 from synth_panel.llm.client import LLMClient
 from synth_panel.llm.models import InputMessage, TextBlock, TokenUsage as LLMTokenUsage
@@ -339,19 +340,28 @@ def _run_panelist(
                 })
 
             # Handle follow-ups (always text mode — structured output applies to main questions)
+            # Evaluate conditions against the main question's response
             follow_ups = question.get("follow_ups", []) if isinstance(question, dict) else []
-            for follow_up in follow_ups:
-                try:
-                    fu_summary = runtime.run_turn(follow_up)
-                    fu_text = _extract_text(fu_summary)
-                    responses.append({
-                        "question": follow_up,
-                        "response": fu_text,
-                        "follow_up": True,
-                    })
-                    tracker.record_turn(fu_summary.usage)
-                except Exception:
-                    continue
+            if follow_ups:
+                # Get main response text for condition evaluation
+                last_response = responses[-1] if responses else {}
+                main_response_text = last_response.get("response", "")
+
+                for follow_up in follow_ups:
+                    fu_norm = normalize_follow_up(follow_up)
+                    if not evaluate_condition(fu_norm["condition"], main_response_text):
+                        continue
+                    try:
+                        fu_summary = runtime.run_turn(fu_norm["text"])
+                        fu_text = _extract_text(fu_summary)
+                        responses.append({
+                            "question": fu_norm["text"],
+                            "response": fu_text,
+                            "follow_up": True,
+                        })
+                        tracker.record_turn(fu_summary.usage)
+                    except Exception:
+                        continue
 
         # Transition: running → finished
         registry.set_result(worker_id, {"responses": responses}, tracker.cumulative_usage)
