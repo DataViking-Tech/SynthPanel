@@ -118,10 +118,13 @@ def _load_instrument(path: str) -> dict[str, Any]:
     """
     data = _load_yaml(path)
     if isinstance(data, dict) and "instrument" in data:
-        return data["instrument"]
-    if isinstance(data, dict) and "questions" in data:
-        return data
-    raise ValueError(f"Invalid instrument file: expected 'instrument' or 'questions' key")
+        instrument = data["instrument"]
+    elif isinstance(data, dict) and "questions" in data:
+        instrument = data
+    else:
+        raise ValueError(f"Invalid instrument file: expected 'instrument' or 'questions' key")
+    instrument.setdefault("version", 1)
+    return instrument
 
 
 def _persona_system_prompt(persona: dict[str, Any]) -> str:
