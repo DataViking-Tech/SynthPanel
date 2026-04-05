@@ -79,7 +79,7 @@ def _run_panel_sync(
 ) -> tuple[list[PanelistResult], list[dict[str, Any]], CostTokenUsage, Any, dict[str, Any] | None]:
     """Run panel synchronously. Returns (results, result_dicts, panelist_usage, panelist_cost, synthesis_dict)."""
     client = LLMClient()
-    panelist_results, _registry = run_panel_parallel(
+    panelist_results, _registry, _sessions = run_panel_parallel(
         client=client,
         personas=personas,
         questions=questions,
