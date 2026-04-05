@@ -244,15 +244,3 @@ def handle_mcp_serve(args: argparse.Namespace, fmt: OutputFormat) -> int:
     return 0
 
 
-def handle_login(args: argparse.Namespace, fmt: OutputFormat) -> int:
-    """Start an authentication flow."""
-    # TODO: implement OAuth flow
-    emit(fmt, message="[stub] Login not yet implemented.")
-    return 0
-
-
-def handle_logout(args: argparse.Namespace, fmt: OutputFormat) -> int:
-    """Clear saved authentication credentials."""
-    # TODO: implement credential clearing
-    emit(fmt, message="[stub] Logout not yet implemented.")
-    return 0
