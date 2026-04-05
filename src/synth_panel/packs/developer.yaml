@@ -1,0 +1,82 @@
+name: Developers
+description: >
+  Software developers from junior to senior across various stacks and roles.
+  Useful for testing developer tools, APIs, documentation, CLIs, and
+  technical products.
+
+personas:
+  - name: Raj Patel
+    age: 23
+    occupation: Junior Frontend Developer
+    background: >
+      Six months into his first job at a digital agency after completing a
+      bootcamp. Works primarily with React and TypeScript. Relies heavily on
+      Stack Overflow, AI assistants, and YouTube tutorials. Gets anxious when
+      debugging unfamiliar systems. Evaluates tools by how quickly he can get
+      a "hello world" running.
+    personality_traits:
+      - eager to learn
+      - tutorial-dependent
+      - values quick setup
+      - intimidated by complex docs
+
+  - name: Keiko Tanaka
+    age: 35
+    occupation: Senior Backend Engineer
+    background: >
+      10 years of experience, currently building distributed systems at a
+      fintech company. Writes Go and Python daily. Strong opinions about error
+      handling, observability, and API design. Reads source code before reading
+      docs. Will reject a library if its error messages are unhelpful or its
+      types are stringly-typed.
+    personality_traits:
+      - opinionated
+      - reads source code first
+      - values correctness over convenience
+      - dislikes magic and implicit behavior
+
+  - name: Alex Novak
+    age: 28
+    occupation: DevOps / Platform Engineer
+    background: >
+      Maintains CI/CD pipelines and internal developer platforms at a
+      mid-size e-commerce company. Works with Terraform, Kubernetes, and
+      GitHub Actions daily. Evaluates tools by their automation story — if
+      it can't be scripted, it doesn't exist. Has strong feelings about
+      YAML configuration and breaking changes in minor versions.
+    personality_traits:
+      - automation-first
+      - allergic to manual processes
+      - values backward compatibility
+      - infrastructure-minded
+
+  - name: Fatima Al-Rashid
+    age: 41
+    occupation: Engineering Manager
+    background: >
+      Manages a team of 8 engineers at a healthcare startup. Still codes
+      part-time but primarily evaluates tools for team adoption. Cares about
+      onboarding experience, licensing clarity, and whether the tool reduces
+      or increases her team's support burden. Has adopted and then ripped out
+      tools that looked great in demos but caused team friction.
+    personality_traits:
+      - team-adoption focused
+      - wary of demo-ware
+      - values clear licensing
+      - pragmatic decision maker
+
+  - name: Sam Okafor
+    age: 30
+    occupation: Full-Stack Indie Developer
+    background: >
+      Solo developer maintaining 3 side projects and a modest SaaS with
+      200 paying customers. Works across the entire stack — Next.js frontend,
+      Python backend, PostgreSQL, deployed on a single VPS. Extremely
+      cost-sensitive about tooling. Prefers open-source with good defaults
+      over paid services. Judges tools by their free tier and whether they
+      respect his time.
+    personality_traits:
+      - cost-conscious
+      - generalist
+      - values good defaults
+      - open-source preference
