@@ -2,6 +2,23 @@
 
 from typing import Any
 
+# Synthesis prompt version — increment when the prompt changes materially.
+SYNTHESIS_PROMPT_VERSION = 1
+
+SYNTHESIS_PROMPT = (
+    "You are a research analyst synthesizing responses from a focus group panel. "
+    "Multiple panelists answered the same set of questions. Your job is to identify "
+    "patterns, agreements, disagreements, and surprising insights across their responses.\n\n"
+    "Analyze the panelist responses below and produce a structured synthesis with:\n"
+    "- summary: A concise overview of the key findings (2-4 sentences)\n"
+    "- themes: The main themes that emerged across responses\n"
+    "- agreements: Points where panelists broadly agreed\n"
+    "- disagreements: Points where panelists diverged or disagreed\n"
+    "- surprises: Unexpected or notable findings\n"
+    "- recommendation: A brief actionable recommendation based on the findings\n\n"
+    "Be specific and cite panelist names when relevant. Focus on substance, not meta-commentary."
+)
+
 
 def persona_system_prompt(persona: dict[str, Any]) -> str:
     """Build a system prompt from a persona definition."""
