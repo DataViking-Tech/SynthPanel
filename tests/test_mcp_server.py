@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch, ANY
 
 import pytest
 
@@ -102,6 +102,83 @@ class TestDataTools:
         result = await mcp.call_tool("list_panel_results", {})
         data = json.loads(result[0][0].text)
         assert data == []
+
+
+# ---------------------------------------------------------------------------
+# run_panel pack_id parameter
+# ---------------------------------------------------------------------------
+
+class TestRunPanelPackId:
+    """Test run_panel's pack_id parameter for resolving saved persona packs."""
+
+    def _save_pack(self, pack_id: str, personas: list[dict]) -> None:
+        """Helper to save a persona pack directly."""
+        from synth_panel.mcp.data import save_persona_pack as _save
+        _save("Test Pack", personas, pack_id)
+
+    @pytest.mark.asyncio
+    async def test_pack_id_only(self):
+        """pack_id alone should resolve personas from storage."""
+        self._save_pack("demo-pack", [{"name": "Alice"}, {"name": "Bob"}])
+        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = {"results": []}
+            await mcp.call_tool("run_panel", {
+                "questions": [{"text": "Hello?"}],
+                "pack_id": "demo-pack",
+            })
+            args = mock_run.call_args
+            personas_used = args[0][0]
+            assert len(personas_used) == 2
+            assert personas_used[0]["name"] == "Alice"
+
+    @pytest.mark.asyncio
+    async def test_pack_id_merges_with_inline(self):
+        """Inline personas come first, pack personas appended."""
+        self._save_pack("merge-pack", [{"name": "Charlie"}])
+        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = {"results": []}
+            await mcp.call_tool("run_panel", {
+                "personas": [{"name": "Alice"}],
+                "questions": [{"text": "Hello?"}],
+                "pack_id": "merge-pack",
+            })
+            personas_used = mock_run.call_args[0][0]
+            assert len(personas_used) == 2
+            assert personas_used[0]["name"] == "Alice"
+            assert personas_used[1]["name"] == "Charlie"
+
+    @pytest.mark.asyncio
+    async def test_no_personas_no_pack_id_returns_error(self):
+        """Neither personas nor pack_id should return an error."""
+        result = await mcp.call_tool("run_panel", {
+            "questions": [{"text": "Hello?"}],
+        })
+        data = json.loads(result[0][0].text)
+        assert "error" in data
+
+    @pytest.mark.asyncio
+    async def test_invalid_pack_id_raises(self):
+        """Non-existent pack_id should raise ToolError wrapping FileNotFoundError."""
+        from mcp.server.fastmcp.exceptions import ToolError
+
+        with pytest.raises(ToolError, match="Persona pack not found"):
+            await mcp.call_tool("run_panel", {
+                "questions": [{"text": "Hello?"}],
+                "pack_id": "nonexistent",
+            })
+
+    @pytest.mark.asyncio
+    async def test_inline_personas_without_pack_id(self):
+        """Traditional usage: inline personas only, no pack_id."""
+        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = {"results": []}
+            await mcp.call_tool("run_panel", {
+                "personas": [{"name": "Alice"}],
+                "questions": [{"text": "Hello?"}],
+            })
+            personas_used = mock_run.call_args[0][0]
+            assert len(personas_used) == 1
+            assert personas_used[0]["name"] == "Alice"
 
 
 # ---------------------------------------------------------------------------

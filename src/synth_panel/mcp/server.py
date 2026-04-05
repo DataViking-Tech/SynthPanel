@@ -145,8 +145,9 @@ async def _run_panel_async(
 
 @mcp.tool()
 async def run_panel(
-    personas: list[dict[str, Any]],
     questions: list[dict[str, Any]],
+    personas: list[dict[str, Any]] | None = None,
+    pack_id: str | None = None,
     model: str | None = None,
     ctx: Context = None,
 ) -> str:
@@ -156,14 +157,23 @@ async def run_panel(
     Results are saved and can be retrieved later.
 
     Args:
-        personas: List of persona definitions. Each should have at minimum
-            a 'name' key. Optional: age, occupation, background, personality_traits.
         questions: List of question definitions. Each should have a 'text' key.
             Optional: follow_ups (list of follow-up question strings).
+        personas: List of persona definitions. Each should have at minimum
+            a 'name' key. Optional: age, occupation, background, personality_traits.
+        pack_id: ID of a saved persona pack to use. Personas from the pack are
+            merged with any inline personas (inline personas come first).
+            At least one of personas or pack_id must be provided.
         model: LLM model to use. Defaults to haiku.
     """
     model = model or MCP_DEFAULT_MODEL
-    result = await _run_panel_async(personas, questions, model, ctx)
+    merged = list(personas) if personas else []
+    if pack_id is not None:
+        pack = _data_get_persona_pack(pack_id)
+        merged.extend(pack.get("personas", []))
+    if not merged:
+        return json.dumps({"error": "No personas provided. Supply personas and/or pack_id."})
+    result = await _run_panel_async(merged, questions, model, ctx)
     return json.dumps(result, indent=2)
 
 
