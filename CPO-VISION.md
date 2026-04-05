@@ -8,11 +8,13 @@
 
 "Cheap fast focus groups" is accurate but forgettable. It describes the mechanism, not the outcome.
 
-**The narrative:** synth-panel is the first open-source harness for synthetic qualitative research. It turns any LLM into a research panel. No SaaS subscription, no vendor lock-in, no web UI standing between you and the signal. You define personas, ask questions, get structured responses — from your terminal, in your pipeline, with your model.
+**The narrative:** synth-panel is the first open-source, agent-native harness for synthetic qualitative research. It turns any LLM into a research panel. No SaaS subscription, no vendor lock-in, no web UI standing between you and the signal. You define personas, ask questions, get structured responses — from your terminal, from your pipeline, from an AI agent's tool call, with your model.
 
-The competitive field (Synthetic Users, OpinioAI, SYMAR) is entirely SaaS: opaque pricing, proprietary personas, walled gardens. synth-panel is the `curl` of synthetic research — composable, scriptable, provider-agnostic. That's not a limitation; it's the identity.
+There's a distinction that matters: synth-panel isn't a CLI that also has an MCP adapter bolted on. It's a research harness designed to be invoked by both humans and agents as a first-class operation. When a Claude Code agent can run `run_panel` mid-task — "before you ship this feature, run it past the panel" — that's not a convenience integration. That's a fundamentally different product than one you run manually. The focus group becomes a step in an autonomous workflow, not a separate activity you remember to do.
 
-**One-liner positioning:** "Open-source synthetic focus groups. Any LLM. Your terminal."
+The competitive field (Synthetic Users, OpinioAI, SYMAR) is entirely SaaS: opaque pricing, proprietary personas, walled gardens. synth-panel is the `curl` of synthetic research — composable, scriptable, provider-agnostic, agent-callable. That's not a limitation; it's the identity.
+
+**One-liner positioning:** "Open-source synthetic focus groups. Any LLM. Your terminal or your agent's tool call."
 
 ---
 
@@ -24,7 +26,7 @@ The PM listed three audiences: product teams, UX researchers, indie hackers. Tha
 - **Acute pain.** They can't afford UserTesting.com or a research consultant. The alternative is guessing or asking Twitter.
 - **Zero switching cost.** No existing research process to displace. synth-panel isn't competing with a workflow — it's creating one.
 - **Natural distribution.** They share tools on Hacker News, Twitter/X, and in newsletters. One good Show HN post could be the entire launch.
-- **CLI-native.** They live in the terminal. A `pip install` and an API key they already have is zero friction.
+- **CLI-native and agent-native.** They live in the terminal — and increasingly inside AI agents. A `pip install` and an API key they already have is zero friction, whether they're typing the command or their agent is calling it as a tool.
 
 **Sequence:**
 1. **Now:** Indie hackers, solo founders, devs validating side projects
@@ -107,7 +109,7 @@ The PM raised this as an open question. It's not close.
 - What: CLI tool that runs AI personas through structured research instruments
 - Why: Real user research is slow and expensive; this gives you a 5-minute pre-filter
 - How: `pip install synth-panel && synth-panel prompt "What frustrates you about password managers?" --model haiku`
-- Differentiator: Provider-agnostic, open source, MCP-integrated, no SaaS
+- Differentiator: Provider-agnostic, open source, agent-native (Claude Code skill + MCP server), no SaaS
 - What it's NOT: A replacement for talking to real users
 
 ---
@@ -120,14 +122,14 @@ Not a platform. Not a dashboard. A tool that's always one command or one MCP cal
 
 **Three bets:**
 
-1. **MCP as the primary interface.** The CLI is for standalone use. But the real unlock is when synth-panel is a tool inside Claude Code, Cursor, or any MCP-capable agent. "Before you ship this feature, run it past the panel" becomes a one-line agent instruction. This is where the distribution is — embedded in existing workflows, not competing for screen time.
+1. **Agent-native as product identity.** This is not "MCP as a distribution channel." The Claude Code skill (`/focus-group`) and the MCP server (7 tools, stdio transport) aren't integration conveniences — they're a first-class product surface equal to the CLI. When an AI agent can run a focus group as a tool call mid-task, the product category shifts: synthetic research becomes an ambient capability embedded in development workflows, not a separate activity. The architect should treat the agent integration surface with the same design rigor as the CLI — same structured output, same instrument support, same persona pack access. Every CLI feature should have an agent-callable equivalent. This is what makes synth-panel structurally different from SaaS competitors: they can't be embedded in an agent workflow without an API key to *their* service. We already are.
 
 2. **Instrument sophistication.** v0.1 instruments are flat question lists. The direction is branching logic, conditional follow-ups, multi-round conversations where persona responses in round 1 shape questions in round 2. This is what makes synth-panel more than "I could just prompt ChatGPT with a persona" — the harness does research design, not just prompting.
 
 3. **Community-contributed persona packs.** A startup founder persona pack. A healthcare patient persona pack. An enterprise buyer persona pack. The MCP server already has `save_persona_pack` / `list_persona_packs`. The infrastructure exists — we need the ecosystem. This is where the flywheel starts: the more persona packs exist, the more useful the tool is, the more people contribute packs.
 
 **What we are NOT building:**
-- A web UI or dashboard (CLI-first is the identity, not a phase)
+- A web UI or dashboard (CLI-first and agent-first is the identity, not a phase)
 - A hosted service (the value prop is "bring your own LLM")
 - Real-time collaboration features (this is a single-player tool)
 - Persona auto-generation from data (users define their own — that's a feature)
@@ -148,6 +150,6 @@ Everything else in the PM plan — the priority list, the effort estimates, the 
 
 ## Summary
 
-synth-panel is the only open-source tool in a market full of SaaS walled gardens. That's the positioning. Lead with indie hackers who live in the terminal. Ship 0.1.0 with an honest README. Remove what doesn't work instead of apologizing for it. Bet on MCP integration as the primary growth vector. Build the persona pack ecosystem.
+synth-panel is the only open-source, agent-native tool in a market full of SaaS walled gardens. That's the positioning. Three identity pillars: open-source, provider-agnostic, agent-native. Lead with indie hackers who live in the terminal and in AI agent workflows. Ship 0.1.0 with an honest README. Remove what doesn't work instead of apologizing for it. Treat the agent integration surface as a first-class product, not a bolt-on. Build the persona pack ecosystem.
 
 The product is good. Make the packaging match.
