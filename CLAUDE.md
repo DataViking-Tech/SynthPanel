@@ -100,6 +100,7 @@ personas:
 ### Instruments
 ```yaml
 instrument:
+  version: 1              # Schema version (default: 1 if omitted)
   questions:
     - text: "What frustrates you about your workflow?"
       response_schema:

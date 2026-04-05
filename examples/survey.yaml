@@ -1,4 +1,5 @@
 instrument:
+  version: 1
   questions:
     - text: >
         What is the most frustrating part of your current workflow
