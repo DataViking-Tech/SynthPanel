@@ -15,6 +15,7 @@ import yaml
 
 from synth_panel.cli.output import OutputFormat, emit
 from synth_panel.cost import ZERO_USAGE, TokenUsage, UsageTracker, estimate_cost, format_summary, lookup_pricing
+from synth_panel.instrument import Instrument, InstrumentError, parse_instrument
 from synth_panel.llm.client import LLMClient
 from synth_panel.llm.models import TextBlock
 from synth_panel.orchestrator import run_panel_parallel
@@ -108,26 +109,21 @@ def _load_personas(path: str) -> list[dict[str, Any]]:
     raise ValueError(f"Invalid personas file: expected 'personas' key or a list, got {type(data).__name__}")
 
 
-def _load_instrument(path: str) -> dict[str, Any]:
+def _load_instrument(path: str) -> Instrument:
     """Load an instrument/survey from a YAML file.
 
-    Expected format::
-
-        instrument:
-          questions:
-            - text: "What do you think about ...?"
-              response_schema: {type: text}
-              follow_ups: ["Can you elaborate?"]
+    Supports both v1 (flat questions) and v2 (multi-round) formats.
+    Returns a validated :class:`Instrument` with normalized round definitions.
     """
     data = _load_yaml(path)
     if isinstance(data, dict) and "instrument" in data:
-        instrument = data["instrument"]
-    elif isinstance(data, dict) and "questions" in data:
-        instrument = data
+        raw = data["instrument"]
+    elif isinstance(data, dict) and ("questions" in data or "rounds" in data):
+        raw = data
     else:
-        raise ValueError(f"Invalid instrument file: expected 'instrument' or 'questions' key")
-    instrument.setdefault("version", 1)
-    return instrument
+        raise ValueError("Invalid instrument file: expected 'instrument', 'questions', or 'rounds' key")
+    raw.setdefault("version", 1)
+    return parse_instrument(raw)
 
 
 def _load_schema(value: str) -> dict[str, Any]:
@@ -160,11 +156,11 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
 
     try:
         instrument = _load_instrument(args.instrument)
-    except (FileNotFoundError, ValueError) as exc:
+    except (FileNotFoundError, ValueError, InstrumentError) as exc:
         print(f"Error loading instrument: {exc}", file=sys.stderr)
         return 1
 
-    questions = instrument.get("questions", [])
+    questions = instrument.questions
     if not questions:
         print("Error: instrument has no questions", file=sys.stderr)
         return 1
