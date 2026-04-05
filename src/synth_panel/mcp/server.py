@@ -1,9 +1,10 @@
 """MCP server implementation for synth-panel.
 
-Exposes 7 tools, 4 resource URI patterns, and 3 prompt templates.
+Exposes 8 tools, 4 resource URI patterns, and 3 prompt templates.
 Uses stdio transport. Default model is haiku for MCP mode.
 
 Tools:
+    run_prompt          - Send a single prompt to an LLM (no personas)
     run_panel           - Run a full synthetic focus group panel
     run_quick_poll      - Quick single-question poll across personas
     list_persona_packs  - List saved persona packs
@@ -32,8 +33,9 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP, Context
 
-from synth_panel.cost import ZERO_USAGE, UsageTracker, estimate_cost, lookup_pricing
+from synth_panel.cost import ZERO_USAGE, TokenUsage as CostTokenUsage, UsageTracker, estimate_cost, lookup_pricing
 from synth_panel.llm.client import LLMClient
+from synth_panel.llm.models import CompletionRequest, InputMessage, TextBlock
 from synth_panel.mcp.data import (
     get_panel_result as _data_get_panel_result,
     get_persona_pack as _data_get_persona_pack,
@@ -142,6 +144,44 @@ async def _run_panel_async(
 # ---------------------------------------------------------------------------
 # Tools
 # ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def run_prompt(
+    prompt: str,
+    model: str | None = None,
+) -> str:
+    """Send a single prompt to an LLM and get a response. No personas required.
+
+    The simplest tool — ask a quick research question without constructing
+    personas or running a full panel.
+
+    Args:
+        prompt: The question or prompt to send.
+        model: LLM model to use. Defaults to haiku.
+    """
+    model = model or MCP_DEFAULT_MODEL
+    client = LLMClient()
+    request = CompletionRequest(
+        model=model,
+        max_tokens=4096,
+        messages=[InputMessage(role="user", content=[TextBlock(text=prompt)])],
+    )
+    response = await asyncio.to_thread(client.send, request)
+    usage = CostTokenUsage(
+        input_tokens=response.usage.input_tokens,
+        output_tokens=response.usage.output_tokens,
+        cache_creation_input_tokens=response.usage.cache_write_tokens,
+        cache_read_input_tokens=response.usage.cache_read_tokens,
+    )
+    pricing, _ = lookup_pricing(model)
+    cost = estimate_cost(usage, pricing)
+    return json.dumps({
+        "response": response.text,
+        "model": response.model,
+        "usage": usage.to_dict(),
+        "cost": cost.format_usd(),
+    }, indent=2)
+
 
 @mcp.tool()
 async def run_panel(

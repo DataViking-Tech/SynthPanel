@@ -34,6 +34,7 @@ class TestServerRegistration:
         tools = await mcp.list_tools()
         tool_names = {t.name for t in tools}
         expected = {
+            "run_prompt",
             "run_panel",
             "run_quick_poll",
             "list_persona_packs",
@@ -62,6 +63,67 @@ class TestServerRegistration:
 # ---------------------------------------------------------------------------
 # Data tools (no LLM calls)
 # ---------------------------------------------------------------------------
+
+class TestRunPrompt:
+    """Test the run_prompt tool (mocks LLM)."""
+
+    @pytest.mark.asyncio
+    async def test_run_prompt_returns_response_and_cost(self):
+        from synth_panel.llm.models import CompletionResponse, TextBlock, TokenUsage
+
+        mock_response = CompletionResponse(
+            id="resp-1",
+            model="claude-haiku-4-5-20251001",
+            content=[TextBlock(text="Hello back!")],
+            usage=TokenUsage(input_tokens=10, output_tokens=5),
+        )
+        with patch("synth_panel.mcp.server.LLMClient") as MockClient:
+            MockClient.return_value.send.return_value = mock_response
+            result = await mcp.call_tool("run_prompt", {"prompt": "Say hello"})
+
+        data = json.loads(result[0][0].text)
+        assert data["response"] == "Hello back!"
+        assert data["model"] == "claude-haiku-4-5-20251001"
+        assert "cost" in data
+        assert data["usage"]["input_tokens"] == 10
+        assert data["usage"]["output_tokens"] == 5
+
+    @pytest.mark.asyncio
+    async def test_run_prompt_uses_default_model(self):
+        from synth_panel.llm.models import CompletionResponse, TextBlock, TokenUsage
+
+        mock_response = CompletionResponse(
+            id="resp-2",
+            model="claude-haiku-4-5-20251001",
+            content=[TextBlock(text="Hi")],
+            usage=TokenUsage(input_tokens=5, output_tokens=2),
+        )
+        with patch("synth_panel.mcp.server.LLMClient") as MockClient:
+            MockClient.return_value.send.return_value = mock_response
+            result = await mcp.call_tool("run_prompt", {"prompt": "Hi"})
+            # Verify the request used 'haiku' model (MCP default)
+            call_args = MockClient.return_value.send.call_args
+            assert call_args[0][0].model == "haiku"
+
+    @pytest.mark.asyncio
+    async def test_run_prompt_custom_model(self):
+        from synth_panel.llm.models import CompletionResponse, TextBlock, TokenUsage
+
+        mock_response = CompletionResponse(
+            id="resp-3",
+            model="claude-sonnet-4-6",
+            content=[TextBlock(text="Hi")],
+            usage=TokenUsage(input_tokens=5, output_tokens=2),
+        )
+        with patch("synth_panel.mcp.server.LLMClient") as MockClient:
+            MockClient.return_value.send.return_value = mock_response
+            result = await mcp.call_tool("run_prompt", {
+                "prompt": "Hi",
+                "model": "sonnet",
+            })
+            call_args = MockClient.return_value.send.call_args
+            assert call_args[0][0].model == "sonnet"
+
 
 class TestDataTools:
     """Test tools that don't require LLM calls."""
