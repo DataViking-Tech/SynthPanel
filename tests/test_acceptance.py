@@ -146,8 +146,10 @@ class TestLLMClientErrors:
 
     def test_unreachable_base_url(self):
         original_url = os.environ.get("ANTHROPIC_BASE_URL")
+        original_key = os.environ.get("ANTHROPIC_API_KEY")
         try:
             os.environ["ANTHROPIC_BASE_URL"] = "http://192.0.2.1:1"  # RFC 5737 TEST-NET
+            os.environ["ANTHROPIC_API_KEY"] = "sk-ant-dummy-for-test"
             client = LLMClient(max_retries=1, initial_backoff=0.1, max_backoff=0.2)
             with pytest.raises(LLMError) as exc_info:
                 client.send(_hello_request())
@@ -160,6 +162,10 @@ class TestLLMClientErrors:
                 os.environ.pop("ANTHROPIC_BASE_URL", None)
             else:
                 os.environ["ANTHROPIC_BASE_URL"] = original_url
+            if original_key is None:
+                os.environ.pop("ANTHROPIC_API_KEY", None)
+            else:
+                os.environ["ANTHROPIC_API_KEY"] = original_key
 
 
 @acceptance
