@@ -35,12 +35,12 @@ from mcp.server.fastmcp import FastMCP, Context
 from synth_panel.cost import ZERO_USAGE, UsageTracker, estimate_cost, lookup_pricing
 from synth_panel.llm.client import LLMClient
 from synth_panel.mcp.data import (
-    get_panel_result,
-    get_persona_pack,
-    list_panel_results,
-    list_persona_packs,
+    get_panel_result as _data_get_panel_result,
+    get_persona_pack as _data_get_persona_pack,
+    list_panel_results as _data_list_panel_results,
+    list_persona_packs as _data_list_persona_packs,
     save_panel_result,
-    save_persona_pack,
+    save_persona_pack as _data_save_persona_pack,
 )
 from synth_panel.orchestrator import PanelistResult, run_panel_parallel
 
@@ -219,28 +219,28 @@ async def run_quick_poll(
 
 
 @mcp.tool()
-async def tool_list_persona_packs() -> str:
+async def list_persona_packs() -> str:
     """List all saved persona packs.
 
     Returns metadata for each pack including ID, name, and persona count.
     """
-    packs = list_persona_packs()
+    packs = _data_list_persona_packs()
     return json.dumps(packs, indent=2)
 
 
 @mcp.tool()
-async def tool_get_persona_pack(pack_id: str) -> str:
+async def get_persona_pack(pack_id: str) -> str:
     """Get a specific persona pack by ID.
 
     Args:
         pack_id: The ID of the persona pack to retrieve.
     """
-    pack = get_persona_pack(pack_id)
+    pack = _data_get_persona_pack(pack_id)
     return json.dumps(pack, indent=2)
 
 
 @mcp.tool()
-async def tool_save_persona_pack(
+async def save_persona_pack(
     name: str,
     personas: list[dict[str, Any]],
     pack_id: str | None = None,
@@ -252,28 +252,28 @@ async def tool_save_persona_pack(
         personas: List of persona definitions.
         pack_id: Optional ID. Auto-generated if not provided.
     """
-    result = save_persona_pack(name, personas, pack_id)
+    result = _data_save_persona_pack(name, personas, pack_id)
     return json.dumps(result, indent=2)
 
 
 @mcp.tool()
-async def tool_list_panel_results() -> str:
+async def list_panel_results() -> str:
     """List all saved panel results.
 
     Returns metadata for each result including ID, date, model, and counts.
     """
-    results = list_panel_results()
+    results = _data_list_panel_results()
     return json.dumps(results, indent=2)
 
 
 @mcp.tool()
-async def tool_get_panel_result(result_id: str) -> str:
+async def get_panel_result(result_id: str) -> str:
     """Get a specific panel result by ID.
 
     Args:
         result_id: The ID of the panel result to retrieve.
     """
-    result = get_panel_result(result_id)
+    result = _data_get_panel_result(result_id)
     return json.dumps(result, indent=2)
 
 
@@ -284,27 +284,27 @@ async def tool_get_panel_result(result_id: str) -> str:
 @mcp.resource("persona-pack://{pack_id}")
 async def resource_persona_pack(pack_id: str) -> str:
     """A specific persona pack."""
-    pack = get_persona_pack(pack_id)
+    pack = _data_get_persona_pack(pack_id)
     return json.dumps(pack, indent=2)
 
 
 @mcp.resource("persona-pack://")
 async def resource_persona_packs_list() -> str:
     """List all persona packs."""
-    return json.dumps(list_persona_packs(), indent=2)
+    return json.dumps(_data_list_persona_packs(), indent=2)
 
 
 @mcp.resource("panel-result://{result_id}")
 async def resource_panel_result(result_id: str) -> str:
     """A specific panel result."""
-    result = get_panel_result(result_id)
+    result = _data_get_panel_result(result_id)
     return json.dumps(result, indent=2)
 
 
 @mcp.resource("panel-result://")
 async def resource_panel_results_list() -> str:
     """List all panel results."""
-    return json.dumps(list_panel_results(), indent=2)
+    return json.dumps(_data_list_panel_results(), indent=2)
 
 
 # ---------------------------------------------------------------------------
