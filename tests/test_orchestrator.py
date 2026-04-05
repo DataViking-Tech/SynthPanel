@@ -335,7 +335,7 @@ class TestRunPanelParallel:
         personas = [{"name": "Alice", "age": 30}]
         questions = [{"text": "What do you think?"}]
 
-        results, registry = run_panel_parallel(
+        results, registry, _sessions = run_panel_parallel(
             client=client,
             personas=personas,
             questions=questions,
@@ -362,7 +362,7 @@ class TestRunPanelParallel:
         ]
         questions = [{"text": "Q1"}, {"text": "Q2"}]
 
-        results, registry = run_panel_parallel(
+        results, registry, _sessions = run_panel_parallel(
             client=client,
             personas=personas,
             questions=questions,
@@ -393,7 +393,7 @@ class TestRunPanelParallel:
         personas = [{"name": "Alice"}]
         questions = [{"text": "Main Q", "follow_ups": ["Tell me more"]}]
 
-        results, registry = run_panel_parallel(
+        results, registry, _sessions = run_panel_parallel(
             client=client,
             personas=personas,
             questions=questions,
@@ -413,7 +413,7 @@ class TestRunPanelParallel:
         personas = [{"name": "Alice"}]
         questions = [{"text": "Q1"}, {"text": "Q2"}]
 
-        results, _ = run_panel_parallel(
+        results, _, _sessions = run_panel_parallel(
             client=client,
             personas=personas,
             questions=questions,
@@ -446,7 +446,7 @@ class TestRunPanelParallel:
         personas = [{"name": "Alice"}, {"name": "Bob"}]
         questions = [{"text": "Q1"}]
 
-        results, registry = run_panel_parallel(
+        results, registry, _sessions = run_panel_parallel(
             client=client,
             personas=personas,
             questions=questions,
@@ -482,7 +482,7 @@ class TestRunPanelParallel:
         personas = [{"name": f"P{i}"} for i in range(6)]
         questions = [{"text": "Q"}]
 
-        results, _ = run_panel_parallel(
+        results, _, _sessions = run_panel_parallel(
             client=client,
             personas=personas,
             questions=questions,
@@ -516,7 +516,7 @@ class TestRunPanelParallel:
         ]
         questions = [{"text": "Q"}]
 
-        results, _ = run_panel_parallel(
+        results, _, _sessions = run_panel_parallel(
             client=client,
             personas=personas,
             questions=questions,
@@ -571,7 +571,7 @@ class TestStructuredOutputIntegration:
         personas = [{"name": "Alice"}]
         questions = [{"text": "What do you think?"}]
 
-        results, registry = run_panel_parallel(
+        results, registry, _sessions = run_panel_parallel(
             client=client,
             personas=personas,
             questions=questions,
@@ -595,7 +595,7 @@ class TestStructuredOutputIntegration:
         personas = [{"name": "Bob"}]
         questions = [{"text": "Tell me something"}]
 
-        results, _ = run_panel_parallel(
+        results, _, _sessions = run_panel_parallel(
             client=client,
             personas=personas,
             questions=questions,
@@ -625,7 +625,7 @@ class TestStructuredOutputIntegration:
         personas = [{"name": "Carol"}]
         questions = [{"text": "Main Q", "follow_ups": ["Tell me more"]}]
 
-        results, _ = run_panel_parallel(
+        results, _, _sessions = run_panel_parallel(
             client=client,
             personas=personas,
             questions=questions,
@@ -641,3 +641,114 @@ class TestStructuredOutputIntegration:
         # Follow-up is text
         assert responses[1].get("follow_up") is True
         assert "structured" not in responses[1]
+
+
+# ---------------------------------------------------------------------------
+# Tests: Session reuse
+# ---------------------------------------------------------------------------
+
+class TestSessionReuse:
+    def test_sessions_returned_without_input(self):
+        """When no sessions param, fresh sessions are created and returned."""
+        client = _make_mock_client([_make_text_response("Hi")])
+        personas = [{"name": "Alice"}]
+        questions = [{"text": "Hello?"}]
+
+        results, _, sessions = run_panel_parallel(
+            client=client,
+            personas=personas,
+            questions=questions,
+            model="sonnet",
+            system_prompt_fn=_simple_system_prompt,
+            question_prompt_fn=_simple_question_prompt,
+        )
+
+        assert "Alice" in sessions
+        assert len(sessions["Alice"].messages) > 0
+
+    def test_session_reuse_preserves_history(self):
+        """When a session is passed in, conversation history is preserved."""
+        from synth_panel.persistence import Session
+
+        # Round 1: fresh session
+        responses_r1 = [_make_text_response("Round 1 answer")]
+        client_r1 = _make_mock_client(responses_r1)
+        personas = [{"name": "Alice"}]
+        questions_r1 = [{"text": "First question"}]
+
+        _, _, sessions = run_panel_parallel(
+            client=client_r1,
+            personas=personas,
+            questions=questions_r1,
+            model="sonnet",
+            system_prompt_fn=_simple_system_prompt,
+            question_prompt_fn=_simple_question_prompt,
+        )
+
+        session_after_r1 = sessions["Alice"]
+        msg_count_r1 = len(session_after_r1.messages)
+        assert msg_count_r1 > 0
+
+        # Round 2: reuse sessions
+        responses_r2 = [_make_text_response("Round 2 answer")]
+        client_r2 = _make_mock_client(responses_r2)
+        questions_r2 = [{"text": "Follow-up question"}]
+
+        _, _, sessions_r2 = run_panel_parallel(
+            client=client_r2,
+            personas=personas,
+            questions=questions_r2,
+            model="sonnet",
+            system_prompt_fn=_simple_system_prompt,
+            question_prompt_fn=_simple_question_prompt,
+            sessions=sessions,
+        )
+
+        # Same session object, more messages accumulated
+        session_after_r2 = sessions_r2["Alice"]
+        assert session_after_r2 is session_after_r1
+        assert len(session_after_r2.messages) > msg_count_r1
+
+    def test_sessions_dict_maps_all_personas(self):
+        """Returned sessions dict has an entry for every persona."""
+        responses = [_make_text_response(f"R{i}") for i in range(4)]
+        client = _make_mock_client(responses)
+        personas = [{"name": "Alice"}, {"name": "Bob"}]
+        questions = [{"text": "Q1"}, {"text": "Q2"}]
+
+        _, _, sessions = run_panel_parallel(
+            client=client,
+            personas=personas,
+            questions=questions,
+            model="sonnet",
+            system_prompt_fn=_simple_system_prompt,
+            question_prompt_fn=_simple_question_prompt,
+        )
+
+        assert set(sessions.keys()) == {"Alice", "Bob"}
+
+    def test_partial_sessions_creates_missing(self):
+        """If sessions dict only has some personas, missing ones get fresh sessions."""
+        from synth_panel.persistence import Session
+
+        existing_session = Session()
+        responses = [_make_text_response("A"), _make_text_response("B")]
+        client = _make_mock_client(responses)
+        personas = [{"name": "Alice"}, {"name": "Bob"}]
+        questions = [{"text": "Q"}]
+
+        _, _, sessions = run_panel_parallel(
+            client=client,
+            personas=personas,
+            questions=questions,
+            model="sonnet",
+            system_prompt_fn=_simple_system_prompt,
+            question_prompt_fn=_simple_question_prompt,
+            sessions={"Alice": existing_session},
+        )
+
+        # Alice reused the existing session
+        assert sessions["Alice"] is existing_session
+        # Bob got a fresh session
+        assert "Bob" in sessions
+        assert sessions["Bob"] is not existing_session
