@@ -335,7 +335,7 @@ class TestRunPanelParallel:
         personas = [{"name": "Alice", "age": 30}]
         questions = [{"text": "What do you think?"}]
 
-        results, registry = run_panel_parallel(
+        results, registry, _sessions = run_panel_parallel(
             client=client,
             personas=personas,
             questions=questions,
@@ -362,7 +362,7 @@ class TestRunPanelParallel:
         ]
         questions = [{"text": "Q1"}, {"text": "Q2"}]
 
-        results, registry = run_panel_parallel(
+        results, registry, _sessions = run_panel_parallel(
             client=client,
             personas=personas,
             questions=questions,
@@ -393,7 +393,7 @@ class TestRunPanelParallel:
         personas = [{"name": "Alice"}]
         questions = [{"text": "Main Q", "follow_ups": ["Tell me more"]}]
 
-        results, registry = run_panel_parallel(
+        results, registry, _sessions = run_panel_parallel(
             client=client,
             personas=personas,
             questions=questions,
@@ -413,7 +413,7 @@ class TestRunPanelParallel:
         personas = [{"name": "Alice"}]
         questions = [{"text": "Q1"}, {"text": "Q2"}]
 
-        results, _ = run_panel_parallel(
+        results, _, _sessions = run_panel_parallel(
             client=client,
             personas=personas,
             questions=questions,
@@ -446,7 +446,7 @@ class TestRunPanelParallel:
         personas = [{"name": "Alice"}, {"name": "Bob"}]
         questions = [{"text": "Q1"}]
 
-        results, registry = run_panel_parallel(
+        results, registry, _sessions = run_panel_parallel(
             client=client,
             personas=personas,
             questions=questions,
@@ -482,7 +482,7 @@ class TestRunPanelParallel:
         personas = [{"name": f"P{i}"} for i in range(6)]
         questions = [{"text": "Q"}]
 
-        results, _ = run_panel_parallel(
+        results, _, _sessions = run_panel_parallel(
             client=client,
             personas=personas,
             questions=questions,
@@ -516,7 +516,7 @@ class TestRunPanelParallel:
         ]
         questions = [{"text": "Q"}]
 
-        results, _ = run_panel_parallel(
+        results, _, _sessions = run_panel_parallel(
             client=client,
             personas=personas,
             questions=questions,
@@ -571,7 +571,7 @@ class TestStructuredOutputIntegration:
         personas = [{"name": "Alice"}]
         questions = [{"text": "What do you think?"}]
 
-        results, registry = run_panel_parallel(
+        results, registry, _sessions = run_panel_parallel(
             client=client,
             personas=personas,
             questions=questions,
@@ -595,7 +595,7 @@ class TestStructuredOutputIntegration:
         personas = [{"name": "Bob"}]
         questions = [{"text": "Tell me something"}]
 
-        results, _ = run_panel_parallel(
+        results, _, _sessions = run_panel_parallel(
             client=client,
             personas=personas,
             questions=questions,
@@ -625,7 +625,7 @@ class TestStructuredOutputIntegration:
         personas = [{"name": "Carol"}]
         questions = [{"text": "Main Q", "follow_ups": ["Tell me more"]}]
 
-        results, _ = run_panel_parallel(
+        results, _, _sessions = run_panel_parallel(
             client=client,
             personas=personas,
             questions=questions,
