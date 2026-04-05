@@ -262,7 +262,8 @@ def _run_panelist(
     system_prompt_fn: Callable[[dict[str, Any]], str],
     question_prompt_fn: Callable[[dict[str, Any]], str],
     response_schema: dict[str, Any] | None = None,
-) -> PanelistResult:
+    session: Session | None = None,
+) -> tuple[PanelistResult, Session]:
     """Execute a single panelist's full interview. Runs in a worker thread.
 
     Manages the worker lifecycle: spawning → ready → running → finished/failed.
@@ -280,7 +281,8 @@ def _run_panelist(
         registry.transition(worker_id, WorkerStatus.PROMPT_ACCEPTED, "prompt received")
         registry.transition(worker_id, WorkerStatus.RUNNING, "executing questions")
 
-        session = Session()
+        if session is None:
+            session = Session()
         runtime = AgentRuntime(
             client=client,
             session=session,
@@ -357,11 +359,12 @@ def _run_panelist(
         registry.set_result(worker_id, {"responses": responses}, tracker.cumulative_usage)
         registry.transition(worker_id, WorkerStatus.FINISHED, "all questions complete")
 
-        return PanelistResult(
+        result = PanelistResult(
             persona_name=name,
             responses=responses,
             usage=tracker.cumulative_usage,
         )
+        return result, session
 
     except Exception as exc:
         # Transition to failed
@@ -376,7 +379,7 @@ def _run_panelist(
             responses=responses,
             usage=tracker.cumulative_usage,
             error=str(exc),
-        )
+        ), session
 
 
 def run_panel_parallel(
@@ -388,7 +391,8 @@ def run_panel_parallel(
     question_prompt_fn: Callable[[dict[str, Any]], str],
     max_workers: int | None = None,
     response_schema: dict[str, Any] | None = None,
-) -> tuple[list[PanelistResult], WorkerRegistry]:
+    sessions: dict[str, Session] | None = None,
+) -> tuple[list[PanelistResult], WorkerRegistry, dict[str, Session]]:
     """Run all panelists in parallel and return ordered results.
 
     Args:
@@ -402,9 +406,13 @@ def run_panel_parallel(
         response_schema: Optional JSON Schema for structured output. When
             provided, responses are extracted as structured data via tool-use
             forcing instead of free text.
+        sessions: Optional mapping of persona names to existing sessions.
+            When provided, panelists reuse their session (conversation history
+            preserved). When None, each panelist gets a fresh session.
 
     Returns:
-        Tuple of (ordered results matching persona order, registry).
+        Tuple of (ordered results matching persona order, registry,
+        sessions dict mapping persona names to their sessions).
     """
     registry = WorkerRegistry()
     effective_workers = max_workers or len(personas)
@@ -417,10 +425,14 @@ def run_panel_parallel(
         worker_ids.append(wid)
 
     results: list[PanelistResult | None] = [None] * len(personas)
+    out_sessions: dict[str, Session] = {}
+    session_lock = threading.Lock()
 
     with ThreadPoolExecutor(max_workers=effective_workers) as executor:
         future_to_index = {}
         for idx, (persona, worker_id) in enumerate(zip(personas, worker_ids)):
+            name = persona.get("name", "Anonymous")
+            existing_session = (sessions or {}).get(name)
             future = executor.submit(
                 _run_panelist,
                 registry,
@@ -432,13 +444,17 @@ def run_panel_parallel(
                 system_prompt_fn,
                 question_prompt_fn,
                 response_schema,
+                existing_session,
             )
             future_to_index[future] = idx
 
         for future in as_completed(future_to_index):
             idx = future_to_index[future]
             try:
-                results[idx] = future.result()
+                result, sess = future.result()
+                results[idx] = result
+                with session_lock:
+                    out_sessions[result.persona_name] = sess
             except Exception as exc:
                 name = personas[idx].get("name", "Anonymous")
                 results[idx] = PanelistResult(
@@ -449,4 +465,4 @@ def run_panel_parallel(
                 )
 
     # All slots should be filled; cast away None
-    return [r for r in results if r is not None], registry
+    return [r for r in results if r is not None], registry, out_sessions
