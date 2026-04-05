@@ -36,11 +36,11 @@ class TestServerRegistration:
         expected = {
             "run_panel",
             "run_quick_poll",
-            "tool_list_persona_packs",
-            "tool_get_persona_pack",
-            "tool_save_persona_pack",
-            "tool_list_panel_results",
-            "tool_get_panel_result",
+            "list_persona_packs",
+            "get_persona_pack",
+            "save_persona_pack",
+            "list_panel_results",
+            "get_panel_result",
         }
         assert expected.issubset(tool_names), f"Missing tools: {expected - tool_names}"
 
@@ -68,7 +68,7 @@ class TestDataTools:
 
     @pytest.mark.asyncio
     async def test_list_persona_packs_empty(self):
-        result = await mcp.call_tool("tool_list_persona_packs", {})
+        result = await mcp.call_tool("list_persona_packs", {})
         # call_tool returns a list of content blocks
         text = result[0][0].text
         data = json.loads(text)
@@ -77,7 +77,7 @@ class TestDataTools:
     @pytest.mark.asyncio
     async def test_save_and_get_persona_pack(self):
         # Save
-        save_result = await mcp.call_tool("tool_save_persona_pack", {
+        save_result = await mcp.call_tool("save_persona_pack", {
             "name": "Test Pack",
             "personas": [{"name": "Alice"}, {"name": "Bob"}],
             "pack_id": "test-1",
@@ -87,19 +87,19 @@ class TestDataTools:
         assert saved["persona_count"] == 2
 
         # Get
-        get_result = await mcp.call_tool("tool_get_persona_pack", {"pack_id": "test-1"})
+        get_result = await mcp.call_tool("get_persona_pack", {"pack_id": "test-1"})
         pack = json.loads(get_result[0][0].text)
         assert pack["name"] == "Test Pack"
         assert len(pack["personas"]) == 2
 
         # List
-        list_result = await mcp.call_tool("tool_list_persona_packs", {})
+        list_result = await mcp.call_tool("list_persona_packs", {})
         packs = json.loads(list_result[0][0].text)
         assert len(packs) == 1
 
     @pytest.mark.asyncio
     async def test_list_panel_results_empty(self):
-        result = await mcp.call_tool("tool_list_panel_results", {})
+        result = await mcp.call_tool("list_panel_results", {})
         data = json.loads(result[0][0].text)
         assert data == []
 
