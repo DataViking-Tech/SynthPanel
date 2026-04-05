@@ -268,16 +268,16 @@ def _run_panelist(
         registry.transition(worker_id, WorkerStatus.PROMPT_ACCEPTED, "prompt received")
         registry.transition(worker_id, WorkerStatus.RUNNING, "executing questions")
 
+        session = Session()
+        runtime = AgentRuntime(
+            client=client,
+            session=session,
+            system_prompt=system_prompt,
+            model=model,
+        )
+
         for question in questions:
             question_text = question_prompt_fn(question)
-
-            session = Session()
-            runtime = AgentRuntime(
-                client=client,
-                session=session,
-                system_prompt=system_prompt,
-                model=model,
-            )
 
             try:
                 summary = runtime.run_turn(question_text)
