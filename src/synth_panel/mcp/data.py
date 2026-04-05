@@ -203,10 +203,80 @@ def save_persona_pack(
 # Panel results
 # ---------------------------------------------------------------------------
 
+def _sessions_dir(result_id: str) -> Path:
+    """Return the sessions directory for a given result, creating it if needed."""
+    d = _results_dir() / f"{result_id}.sessions"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def save_panel_sessions(
+    result_id: str,
+    sessions: dict[str, "Session"],
+) -> Path:
+    """Save per-panelist sessions to disk.
+
+    Each session is stored as ``<PersonaName>.json`` under
+    ``results/<result_id>.sessions/``.
+
+    Returns the sessions directory path.
+    """
+    from synth_panel.persistence import Session  # avoid circular import
+
+    sdir = _sessions_dir(result_id)
+    for persona_name, session in sessions.items():
+        # Sanitise persona name for use as filename
+        safe_name = persona_name.replace("/", "_").replace("\\", "_")
+        p = sdir / f"{safe_name}.json"
+        p.write_text(json.dumps(session.to_dict(), indent=2) + "\n", encoding="utf-8")
+    return sdir
+
+
+def load_panel_sessions(result_id: str) -> dict[str, "Session"]:
+    """Load per-panelist sessions from disk.
+
+    Returns a dict mapping persona name to :class:`Session`.
+    Raises :class:`FileNotFoundError` if the sessions directory doesn't exist.
+    """
+    from synth_panel.persistence import Session
+
+    sdir = _results_dir() / f"{result_id}.sessions"
+    if not sdir.exists():
+        raise FileNotFoundError(f"No sessions found for result: {result_id}")
+
+    sessions: dict[str, Session] = {}
+    for p in sorted(sdir.glob("*.json")):
+        data = json.loads(p.read_text(encoding="utf-8"))
+        persona_name = p.stem.replace("_", " ")  # best-effort reverse of sanitisation
+        # Prefer the original persona name if we can recover it from session messages
+        sessions[persona_name] = Session.from_dict(data)
+    return sessions
+
+
+def update_panel_result(result_id: str, updated_data: dict[str, Any]) -> None:
+    """Update a panel result, saving a pre-extend snapshot first.
+
+    Creates ``<result_id>.pre-extend.json`` as a backup before overwriting
+    the main result file.
+    """
+    result_path = _results_dir() / f"{result_id}.json"
+    if not result_path.exists():
+        raise FileNotFoundError(f"Panel result not found: {result_id}")
+
+    # Save pre-extend snapshot (overwrite any previous snapshot)
+    snapshot_path = _results_dir() / f"{result_id}.pre-extend.json"
+    snapshot_path.write_text(result_path.read_text(encoding="utf-8"), encoding="utf-8")
+
+    # Overwrite main result
+    result_path.write_text(json.dumps(updated_data, indent=2) + "\n", encoding="utf-8")
+
+
 def list_panel_results() -> list[dict[str, Any]]:
     """Return metadata for all saved panel results."""
     results: list[dict[str, Any]] = []
     for p in sorted(_results_dir().glob("*.json"), reverse=True):
+        if p.name.endswith(".pre-extend.json"):
+            continue
         try:
             data = json.loads(p.read_text(encoding="utf-8"))
             results.append({
