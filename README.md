@@ -1,8 +1,8 @@
 # synth-panel
 
-A lightweight, LLM-agnostic research harness for running synthetic focus groups and user research panels using AI personas.
+Open-source synthetic focus groups. Any LLM. Your terminal or your agent's tool call.
 
-Define personas in YAML. Define your research instrument in YAML. Run against any LLM. Get structured, reproducible output with full cost transparency.
+Define personas in YAML. Define your research instrument in YAML. Run against any LLM — from your terminal, from a pipeline, or from an AI agent's MCP tool call. Get structured, reproducible output with full cost transparency.
 
 ```bash
 pip install synth-panel
@@ -24,7 +24,7 @@ Traditional focus groups cost $5,000-$15,000 and take weeks. Synthetic panels co
 # Install
 pip install synth-panel
 
-# Set your API key (Claude, OpenAI, xAI, or any OpenAI-compatible provider)
+# Set your API key (Claude, OpenAI, Gemini, xAI, or any OpenAI-compatible provider)
 export ANTHROPIC_API_KEY="sk-..."
 
 # Run a single prompt
@@ -118,6 +118,7 @@ synth-panel works with any LLM provider. Set the appropriate environment variabl
 | Provider | Environment Variable | Model Flag |
 |----------|---------------------|------------|
 | Anthropic (Claude) | `ANTHROPIC_API_KEY` | `--model sonnet` |
+| Google (Gemini) | `GOOGLE_API_KEY` or `GEMINI_API_KEY` | `--model gemini` |
 | OpenAI | `OPENAI_API_KEY` | `--model gpt-4o` |
 | xAI (Grok) | `XAI_API_KEY` | `--model grok` |
 | Any OpenAI-compatible | `OPENAI_API_KEY` + `OPENAI_BASE_URL` | `--model <model-id>` |
@@ -151,22 +152,48 @@ instrument.yaml ─┘                 ├──> Panelist 2 ──> LLM ──>
 
 | Module | Purpose |
 |--------|---------|
-| `llm/` | Provider-agnostic LLM client (Anthropic, OpenAI, xAI) |
+| `llm/` | Provider-agnostic LLM client (Anthropic, Google, OpenAI, xAI) |
 | `runtime.py` | Agent session loop (turns, tool calls, compaction) |
 | `orchestrator.py` | Parallel panelist execution with worker state tracking |
 | `structured/` | Schema-validated responses via tool-use forcing |
 | `cost.py` | Token tracking, model-specific pricing, budget enforcement |
 | `persistence.py` | Session save/load/fork (JSON + JSONL) |
 | `plugins/` | Manifest-based extension system with lifecycle hooks |
-| `cli/` | CLI framework with REPL, slash commands, output formatting |
+| `mcp/` | MCP server for agent-native invocation (stdio transport) |
+| `cli/` | CLI framework with slash commands, output formatting |
 
 ### Design Principles
 
-- **Minimal dependencies** — pure Python 3.10+ with only `httpx` and `pyyaml` as required deps
+- **Minimal dependencies** — Python 3.10+ with `httpx` for HTTP and `pyyaml` for YAML parsing. Optional: `mcp` for the MCP server
+- **Agent-native** — invoke from your terminal or from an AI agent's MCP tool call
 - **Provider agnostic** — swap LLMs without changing research definitions
 - **Cost transparent** — every API call is tracked and priced
 - **Reproducible** — same personas + same instrument = comparable output
 - **Structured by default** — responses conform to declared schemas
+
+## MCP Server (Agent Integration)
+
+synth-panel includes an MCP server so AI agents can run panels as tool calls:
+
+```bash
+synth-panel mcp-serve
+```
+
+Add to your editor's MCP config (Claude Code, Cursor, Windsurf, etc.):
+
+```json
+{
+  "mcpServers": {
+    "synth_panel": {
+      "command": "synth-panel",
+      "args": ["mcp-serve"],
+      "env": { "ANTHROPIC_API_KEY": "sk-..." }
+    }
+  }
+}
+```
+
+Tools exposed: `run_panel`, `run_quick_poll`, `list_persona_packs`, `get_persona_pack`, `save_persona_pack`, `list_panel_results`, `get_panel_result`.
 
 ## Output Formats
 
@@ -179,17 +206,6 @@ synth-panel panel run --personas p.yaml --instrument s.yaml --output-format json
 
 # NDJSON (streaming, one event per line)
 synth-panel panel run --personas p.yaml --instrument s.yaml --output-format ndjson
-```
-
-## Interactive Mode
-
-```bash
-synth-panel  # launches REPL
-
-> /help              # list commands
-> /model opus        # switch model
-> /status            # show session state
-> Tell me about yourself
 ```
 
 ## Budget Control
