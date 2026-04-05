@@ -331,7 +331,8 @@ class TestYAMLLoading:
             "    - text: What?\n"
         )
         instr = _load_instrument(str(p))
-        assert "questions" in instr
+        assert instr.questions == [{"text": "What?"}]
+        assert len(instr.rounds) == 1
 
     def test_load_instrument_questions_key(self, tmp_path):
         p = tmp_path / "survey.yaml"
@@ -340,7 +341,8 @@ class TestYAMLLoading:
             "  - text: What?\n"
         )
         instr = _load_instrument(str(p))
-        assert "questions" in instr
+        assert instr.questions == [{"text": "What?"}]
+        assert len(instr.rounds) == 1
 
     def test_load_instrument_invalid(self, tmp_path):
         p = tmp_path / "bad.yaml"
