@@ -1,0 +1,51 @@
+instrument:
+  version: 2
+  rounds:
+    - name: discovery
+      questions:
+        - text: >
+            What is the biggest challenge you face when onboarding
+            new team members to your codebase?
+          response_schema:
+            type: text
+          follow_ups:
+            - "Can you walk me through a recent example?"
+
+        - text: >
+            How do you currently document architectural decisions,
+            and how well does that process work?
+          response_schema:
+            type: text
+
+    - name: deep_dive
+      depends_on: discovery
+      questions:
+        - text: >
+            Earlier the group identified "{theme_0}" as a key theme.
+            What specific tools or processes have you tried to address this?
+          response_schema:
+            type: text
+          follow_ups:
+            - "What worked and what didn't?"
+
+        - text: >
+            If you could change one thing about how your team handles
+            "{theme_1}", what would it be?
+          response_schema:
+            type: text
+
+    - name: validation
+      depends_on: deep_dive
+      questions:
+        - text: >
+            We've heard suggestions around "{recommendation}".
+            On a scale of 1-5, how impactful would this be for your team?
+          response_schema:
+            type: text
+
+        - text: >
+            What would prevent your team from adopting this kind of change?
+          response_schema:
+            type: text
+          follow_ups:
+            - "Is that a technical constraint or an organizational one?"
