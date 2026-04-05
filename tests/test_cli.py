@@ -18,8 +18,8 @@ from synth_panel.cli.repl import SessionState
 from synth_panel.cli.commands import (
     _load_personas,
     _load_instrument,
-    _persona_system_prompt,
 )
+from synth_panel.prompts import persona_system_prompt
 from synth_panel.llm.models import (
     CompletionResponse,
     TextBlock,
@@ -327,7 +327,7 @@ class TestYAMLLoading:
             "background": "10 years in software",
             "personality_traits": ["curious", "methodical"],
         }
-        prompt = _persona_system_prompt(persona)
+        prompt = persona_system_prompt(persona)
         assert "Alice" in prompt
         assert "30" in prompt
         assert "Engineer" in prompt
