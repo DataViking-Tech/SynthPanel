@@ -264,6 +264,7 @@ def _run_panelist(
     question_prompt_fn: Callable[[dict[str, Any]], str],
     response_schema: dict[str, Any] | None = None,
     session: Session | None = None,
+    sentiment_cache: dict[str, str] | None = None,
 ) -> tuple[PanelistResult, Session]:
     """Execute a single panelist's full interview. Runs in a worker thread.
 
@@ -341,19 +342,23 @@ def _run_panelist(
                     "error": True,
                 })
 
-            # Handle follow-ups (always text mode — structured output applies to main questions)
-            follow_ups = question.get("follow_ups", []) if isinstance(question, dict) else []
-            # Get the main question's response for condition evaluation
-            main_response = responses[-1]["response"] if responses else ""
-            for follow_up in follow_ups:
-                fu_norm = normalize_follow_up(follow_up)
-                if not evaluate_condition(fu_norm["condition"], main_response):
+            # Handle conditional follow-ups (text mode only)
+            raw_follow_ups = question.get("follow_ups", []) if isinstance(question, dict) else []
+            # Get the last main-question response text for condition eval
+            last_response = responses[-1].get("response", "") if responses else ""
+            for raw_fu in raw_follow_ups:
+                fu = normalize_follow_up(raw_fu)
+                condition = fu.get("condition", "always")
+                if not evaluate_condition(
+                    condition, last_response,
+                    client=client, sentiment_cache=sentiment_cache,
+                ):
                     continue
                 try:
-                    fu_summary = runtime.run_turn(fu_norm["text"])
+                    fu_summary = runtime.run_turn(fu["text"])
                     fu_text = _extract_text(fu_summary)
                     responses.append({
-                        "question": fu_norm["text"],
+                        "question": fu["text"],
                         "response": fu_text,
                         "follow_up": True,
                     })
@@ -422,6 +427,7 @@ def run_panel_parallel(
     """
     registry = WorkerRegistry()
     effective_workers = max_workers or len(personas)
+    sentiment_cache: dict[str, str] = {}
 
     # Create workers and map to personas (preserves order)
     worker_ids: list[str] = []
@@ -451,6 +457,7 @@ def run_panel_parallel(
                 question_prompt_fn,
                 response_schema,
                 existing_session,
+                sentiment_cache,
             )
             future_to_index[future] = idx
 
