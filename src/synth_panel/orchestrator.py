@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable
 
+from synth_panel.conditions import evaluate_condition, normalize_follow_up
 from synth_panel.cost import ZERO_USAGE, TokenUsage, UsageTracker
 from synth_panel.llm.client import LLMClient
 from synth_panel.llm.models import InputMessage, TextBlock, TokenUsage as LLMTokenUsage
@@ -340,12 +341,17 @@ def _run_panelist(
 
             # Handle follow-ups (always text mode — structured output applies to main questions)
             follow_ups = question.get("follow_ups", []) if isinstance(question, dict) else []
+            # Get the main question's response for condition evaluation
+            main_response = responses[-1]["response"] if responses else ""
             for follow_up in follow_ups:
+                fu_norm = normalize_follow_up(follow_up)
+                if not evaluate_condition(fu_norm["condition"], main_response):
+                    continue
                 try:
-                    fu_summary = runtime.run_turn(follow_up)
+                    fu_summary = runtime.run_turn(fu_norm["text"])
                     fu_text = _extract_text(fu_summary)
                     responses.append({
-                        "question": follow_up,
+                        "question": fu_norm["text"],
                         "response": fu_text,
                         "follow_up": True,
                     })
