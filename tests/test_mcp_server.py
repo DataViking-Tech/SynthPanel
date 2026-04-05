@@ -9,6 +9,8 @@ from unittest.mock import AsyncMock, MagicMock, patch, ANY
 
 import pytest
 
+pytest.importorskip("mcp", reason="mcp package not installed (pip install .[mcp])")
+
 
 @pytest.fixture(autouse=True)
 def _data_dir(tmp_path, monkeypatch):
