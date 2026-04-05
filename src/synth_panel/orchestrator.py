@@ -16,9 +16,20 @@ from typing import Any, Callable
 
 from synth_panel.cost import ZERO_USAGE, TokenUsage, UsageTracker
 from synth_panel.llm.client import LLMClient
-from synth_panel.llm.models import TextBlock
+from synth_panel.llm.models import InputMessage, TextBlock, TokenUsage as LLMTokenUsage
 from synth_panel.persistence import Session
 from synth_panel.runtime import AgentRuntime, TurnSummary
+from synth_panel.structured.output import StructuredOutputConfig, StructuredOutputEngine
+
+
+def _convert_llm_usage(llm_usage: LLMTokenUsage) -> TokenUsage:
+    """Convert LLM-layer TokenUsage to cost-layer TokenUsage."""
+    return TokenUsage(
+        input_tokens=llm_usage.input_tokens,
+        output_tokens=llm_usage.output_tokens,
+        cache_creation_input_tokens=llm_usage.cache_write_tokens,
+        cache_read_input_tokens=llm_usage.cache_read_tokens,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -250,6 +261,7 @@ def _run_panelist(
     model: str,
     system_prompt_fn: Callable[[dict[str, Any]], str],
     question_prompt_fn: Callable[[dict[str, Any]], str],
+    response_schema: dict[str, Any] | None = None,
 ) -> PanelistResult:
     """Execute a single panelist's full interview. Runs in a worker thread.
 
@@ -276,17 +288,49 @@ def _run_panelist(
             model=model,
         )
 
+        # Set up structured output engine if schema provided
+        structured_engine: StructuredOutputEngine | None = None
+        structured_config: StructuredOutputConfig | None = None
+        if response_schema:
+            structured_engine = StructuredOutputEngine(client)
+            structured_config = StructuredOutputConfig(schema=response_schema)
+
         for question in questions:
             question_text = question_prompt_fn(question)
 
             try:
-                summary = runtime.run_turn(question_text)
-                response_text = _extract_text(summary)
-                responses.append({
-                    "question": question_text,
-                    "response": response_text,
-                })
-                tracker.record_turn(summary.usage)
+                if structured_engine and structured_config:
+                    # Use structured output: run turn for conversation context,
+                    # then extract structured response
+                    summary = runtime.run_turn(question_text)
+                    tracker.record_turn(summary.usage)
+
+                    # Build messages from session history for structured extraction
+                    messages = [
+                        InputMessage(role="user", content=[TextBlock(text=question_text)])
+                    ]
+                    result = structured_engine.extract(
+                        model=model,
+                        max_tokens=4096,
+                        messages=messages,
+                        config=structured_config,
+                        system=system_prompt,
+                    )
+                    tracker.record_turn(_convert_llm_usage(result.response.usage))
+                    responses.append({
+                        "question": question_text,
+                        "response": result.data,
+                        "structured": True,
+                        "is_fallback": result.is_fallback,
+                    })
+                else:
+                    summary = runtime.run_turn(question_text)
+                    response_text = _extract_text(summary)
+                    responses.append({
+                        "question": question_text,
+                        "response": response_text,
+                    })
+                    tracker.record_turn(summary.usage)
             except Exception as exc:
                 responses.append({
                     "question": question_text,
@@ -294,7 +338,7 @@ def _run_panelist(
                     "error": True,
                 })
 
-            # Handle follow-ups
+            # Handle follow-ups (always text mode — structured output applies to main questions)
             follow_ups = question.get("follow_ups", []) if isinstance(question, dict) else []
             for follow_up in follow_ups:
                 try:
@@ -343,6 +387,7 @@ def run_panel_parallel(
     system_prompt_fn: Callable[[dict[str, Any]], str],
     question_prompt_fn: Callable[[dict[str, Any]], str],
     max_workers: int | None = None,
+    response_schema: dict[str, Any] | None = None,
 ) -> tuple[list[PanelistResult], WorkerRegistry]:
     """Run all panelists in parallel and return ordered results.
 
@@ -354,6 +399,9 @@ def run_panel_parallel(
         system_prompt_fn: Builds system prompt from a persona dict.
         question_prompt_fn: Builds question text from a question dict.
         max_workers: Max concurrent threads. Defaults to number of personas.
+        response_schema: Optional JSON Schema for structured output. When
+            provided, responses are extracted as structured data via tool-use
+            forcing instead of free text.
 
     Returns:
         Tuple of (ordered results matching persona order, registry).
@@ -383,6 +431,7 @@ def run_panel_parallel(
                 model,
                 system_prompt_fn,
                 question_prompt_fn,
+                response_schema,
             )
             future_to_index[future] = idx
 
