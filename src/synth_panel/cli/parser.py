@@ -79,6 +79,59 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to a YAML file defining the survey/instrument.",
     )
 
+    # pack
+    pack_parser = subparsers.add_parser(
+        "pack",
+        help="Persona pack management: list, import, export.",
+    )
+    pack_subparsers = pack_parser.add_subparsers(dest="pack_command")
+
+    # pack list
+    pack_subparsers.add_parser(
+        "list",
+        help="List all saved persona packs.",
+    )
+
+    # pack import
+    pack_import_parser = pack_subparsers.add_parser(
+        "import",
+        help="Import a persona pack from a YAML file.",
+    )
+    pack_import_parser.add_argument(
+        "file",
+        metavar="FILE",
+        help="Path to a YAML persona pack file.",
+    )
+    pack_import_parser.add_argument(
+        "--name",
+        default=None,
+        help="Name for the pack (default: derived from file or pack content).",
+    )
+    pack_import_parser.add_argument(
+        "--id",
+        default=None,
+        dest="pack_id",
+        help="Custom pack ID (default: auto-generated).",
+    )
+
+    # pack export
+    pack_export_parser = pack_subparsers.add_parser(
+        "export",
+        help="Export a saved persona pack to stdout or a file.",
+    )
+    pack_export_parser.add_argument(
+        "pack_id",
+        metavar="PACK_ID",
+        help="ID of the persona pack to export.",
+    )
+    pack_export_parser.add_argument(
+        "--output",
+        "-o",
+        default=None,
+        metavar="FILE",
+        help="Write to file instead of stdout.",
+    )
+
     # mcp-serve
     subparsers.add_parser(
         "mcp-serve",

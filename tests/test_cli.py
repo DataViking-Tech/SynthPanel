@@ -18,6 +18,9 @@ from synth_panel.cli.repl import SessionState
 from synth_panel.cli.commands import (
     _load_personas,
     _load_instrument,
+    handle_pack_list,
+    handle_pack_import,
+    handle_pack_export,
 )
 from synth_panel.prompts import persona_system_prompt
 from synth_panel.llm.models import (
@@ -421,6 +424,108 @@ class TestPanelRun:
             "--instrument", "/nonexistent.yaml",
         ])
         assert code == 1
+
+
+# --- Pack CLI tests ---
+
+
+class TestPackCommands:
+    @pytest.fixture(autouse=True)
+    def _data_dir(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("SYNTH_PANEL_DATA_DIR", str(tmp_path))
+        self._tmp = tmp_path
+
+    def test_pack_list_empty(self, capsys):
+        code = main(["pack", "list"])
+        assert code == 0
+        assert "No persona packs" in capsys.readouterr().out
+
+    def test_pack_import_and_list(self, capsys):
+        pfile = self._tmp / "personas.yaml"
+        pfile.write_text(
+            "name: My Pack\n"
+            "personas:\n"
+            "  - name: Alice\n"
+            "    age: 30\n"
+        )
+        code = main(["pack", "import", str(pfile)])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "My Pack" in out
+        assert "1 personas" in out
+
+    def test_pack_import_with_custom_name_and_id(self, capsys):
+        pfile = self._tmp / "p.yaml"
+        pfile.write_text("personas:\n  - name: Bob\n")
+        code = main(["pack", "import", str(pfile), "--name", "Custom", "--id", "my-id"])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "Custom" in out
+        assert "my-id" in out
+
+    def test_pack_import_invalid_file(self, capsys):
+        code = main(["pack", "import", "/nonexistent.yaml"])
+        assert code == 1
+
+    def test_pack_import_validation_error(self, capsys):
+        pfile = self._tmp / "bad.yaml"
+        pfile.write_text("personas:\n  - age: 30\n")
+        code = main(["pack", "import", str(pfile)])
+        assert code == 1
+        assert "Validation error" in capsys.readouterr().err
+
+    def test_pack_export_stdout(self, capsys):
+        from synth_panel.mcp.data import save_persona_pack
+        save_persona_pack("Export Test", [{"name": "Eve"}], pack_id="exp")
+        code = main(["pack", "export", "exp"])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "Eve" in out
+        assert "Export Test" in out
+
+    def test_pack_export_to_file(self, capsys):
+        from synth_panel.mcp.data import save_persona_pack
+        save_persona_pack("File Export", [{"name": "Dan"}], pack_id="fexp")
+        outfile = self._tmp / "out.yaml"
+        code = main(["pack", "export", "fexp", "-o", str(outfile)])
+        assert code == 0
+        content = outfile.read_text()
+        assert "Dan" in content
+
+    def test_pack_export_nonexistent(self, capsys):
+        code = main(["pack", "export", "nope"])
+        assert code == 1
+
+    def test_pack_list_json(self, capsys):
+        from synth_panel.mcp.data import save_persona_pack
+        save_persona_pack("JSON Pack", [{"name": "X"}], pack_id="jp")
+        code = main(["--output-format", "json", "pack", "list"])
+        assert code == 0
+        data = json.loads(capsys.readouterr().out)
+        assert len(data["packs"]) == 1
+        assert data["packs"][0]["id"] == "jp"
+
+    def test_pack_import_name_from_stem(self, capsys):
+        pfile = self._tmp / "my-team.yaml"
+        pfile.write_text("- name: Alice\n")
+        code = main(["pack", "import", str(pfile)])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "my-team" in out
+
+    def test_parser_pack_subcommands(self):
+        parser = build_parser()
+        args = parser.parse_args(["pack", "list"])
+        assert args.command == "pack"
+        assert args.pack_command == "list"
+
+        args = parser.parse_args(["pack", "import", "file.yaml"])
+        assert args.pack_command == "import"
+        assert args.file == "file.yaml"
+
+        args = parser.parse_args(["pack", "export", "my-pack"])
+        assert args.pack_command == "export"
+        assert args.pack_id == "my-pack"
 
 
 # --- __main__.py test ---

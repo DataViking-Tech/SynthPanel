@@ -12,6 +12,9 @@ from synth_panel.cli.parser import build_parser
 from synth_panel.cli.repl import run_repl
 from synth_panel.cli.commands import (
     handle_mcp_serve,
+    handle_pack_export,
+    handle_pack_import,
+    handle_pack_list,
     handle_panel_run,
     handle_prompt,
 )
@@ -32,6 +35,17 @@ def main(argv: list[str] | None = None) -> int:
             return handle_panel_run(args, output_format)
         else:
             parser.parse_args(["panel", "--help"])
+            return 1
+    elif args.command == "pack":
+        sub = getattr(args, "pack_command", None)
+        if sub == "list":
+            return handle_pack_list(args, output_format)
+        elif sub == "import":
+            return handle_pack_import(args, output_format)
+        elif sub == "export":
+            return handle_pack_export(args, output_format)
+        else:
+            parser.parse_args(["pack", "--help"])
             return 1
     elif args.command == "mcp-serve":
         return handle_mcp_serve(args, output_format)
