@@ -18,6 +18,7 @@ from synth_panel.cli.repl import SessionState
 from synth_panel.cli.commands import (
     _load_personas,
     _load_instrument,
+    _load_schema,
     handle_pack_list,
     handle_pack_import,
     handle_pack_export,
@@ -526,6 +527,102 @@ class TestPackCommands:
         args = parser.parse_args(["pack", "export", "my-pack"])
         assert args.pack_command == "export"
         assert args.pack_id == "my-pack"
+
+
+# --- Schema loading tests ---
+
+
+class TestSchemaLoading:
+    def test_load_schema_from_file(self, tmp_path):
+        schema = {"type": "object", "properties": {"name": {"type": "string"}}}
+        p = tmp_path / "schema.json"
+        p.write_text(json.dumps(schema))
+        loaded = _load_schema(str(p))
+        assert loaded == schema
+
+    def test_load_schema_from_inline_json(self):
+        schema_str = '{"type": "object", "properties": {"x": {"type": "number"}}}'
+        loaded = _load_schema(schema_str)
+        assert loaded["type"] == "object"
+        assert "x" in loaded["properties"]
+
+    def test_load_schema_invalid_json(self):
+        with pytest.raises(ValueError, match="not a valid file path or JSON"):
+            _load_schema("not json at all {{{")
+
+    def test_load_schema_non_object(self):
+        with pytest.raises(ValueError, match="must be a JSON object"):
+            _load_schema("[1, 2, 3]")
+
+
+class TestParserSchemaFlag:
+    def test_schema_flag_accepted(self):
+        parser = build_parser()
+        args = parser.parse_args([
+            "panel", "run",
+            "--personas", "p.yaml",
+            "--instrument", "i.yaml",
+            "--schema", '{"type": "object"}',
+        ])
+        assert args.schema == '{"type": "object"}'
+
+    def test_schema_flag_default_none(self):
+        parser = build_parser()
+        args = parser.parse_args([
+            "panel", "run",
+            "--personas", "p.yaml",
+            "--instrument", "i.yaml",
+        ])
+        assert args.schema is None
+
+
+class TestPanelRunWithSchema:
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_panel_run_invalid_schema(self, mock_client_cls, mock_runtime_cls, capsys, tmp_path):
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: X\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: Q?\n")
+
+        code = main([
+            "panel", "run",
+            "--personas", str(personas_file),
+            "--instrument", str(survey_file),
+            "--schema", "not valid json {{{",
+        ])
+        assert code == 1
+
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_panel_run_passes_schema_to_orchestrator(self, mock_client_cls, mock_run, capsys, tmp_path):
+        """Verify --schema is loaded and passed to run_panel_parallel."""
+        from synth_panel.cost import ZERO_USAGE
+        from synth_panel.orchestrator import PanelistResult
+
+        mock_run.return_value = (
+            [PanelistResult(persona_name="X", responses=[{"question": "Q", "response": {"a": 1}, "structured": True}], usage=ZERO_USAGE)],
+            MagicMock(),
+        )
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: X\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: Q?\n")
+        schema_file = tmp_path / "schema.json"
+        schema_file.write_text('{"type": "object", "properties": {"a": {"type": "integer"}}}')
+
+        code = main([
+            "--output-format", "json",
+            "panel", "run",
+            "--personas", str(personas_file),
+            "--instrument", str(survey_file),
+            "--schema", str(schema_file),
+        ])
+        assert code == 0
+        # Verify run_panel_parallel was called with response_schema
+        call_kwargs = mock_run.call_args
+        assert call_kwargs[1]["response_schema"] == {"type": "object", "properties": {"a": {"type": "integer"}}}
 
 
 # --- __main__.py test ---

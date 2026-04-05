@@ -14,6 +14,7 @@ from synth_panel.llm.models import (
     StopReason,
     TextBlock,
     TokenUsage as LLMTokenUsage,
+    ToolInvocationBlock,
 )
 from synth_panel.orchestrator import (
     FailureKind,
@@ -526,3 +527,117 @@ class TestRunPanelParallel:
 
         assert results[0].persona_name == "Slow"
         assert results[1].persona_name == "Fast"
+
+
+# ---------------------------------------------------------------------------
+# Tests: Structured output through orchestrator
+# ---------------------------------------------------------------------------
+
+_SENTIMENT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "sentiment": {"type": "string", "enum": ["positive", "negative", "neutral"]},
+        "summary": {"type": "string"},
+    },
+    "required": ["sentiment", "summary"],
+}
+
+
+def _make_tool_response(data: dict, usage: LLMTokenUsage | None = None) -> CompletionResponse:
+    return CompletionResponse(
+        id="resp-tool",
+        model="claude-sonnet",
+        content=[ToolInvocationBlock(id="tc1", name="respond", input=data)],
+        stop_reason=StopReason.TOOL_USE,
+        usage=usage or LLMTokenUsage(input_tokens=10, output_tokens=5),
+    )
+
+
+class TestStructuredOutputIntegration:
+    def test_structured_output_returns_data_dict(self):
+        """When response_schema is provided, responses contain structured data."""
+        from synth_panel.llm.models import CompletionRequest, ToolChoice
+        structured_data = {"sentiment": "positive", "summary": "Looks great!"}
+
+        def send_side_effect(request):
+            # Structured engine sets tool_choice; runtime does not
+            if isinstance(request, CompletionRequest) and request.tool_choice is not None:
+                return _make_tool_response(structured_data)
+            return _make_text_response("I think it's great")
+
+        client = MagicMock()
+        client.send = MagicMock(side_effect=send_side_effect)
+
+        personas = [{"name": "Alice"}]
+        questions = [{"text": "What do you think?"}]
+
+        results, registry = run_panel_parallel(
+            client=client,
+            personas=personas,
+            questions=questions,
+            model="sonnet",
+            system_prompt_fn=_simple_system_prompt,
+            question_prompt_fn=_simple_question_prompt,
+            response_schema=_SENTIMENT_SCHEMA,
+        )
+
+        assert len(results) == 1
+        assert results[0].persona_name == "Alice"
+        assert len(results[0].responses) == 1
+        resp = results[0].responses[0]
+        assert resp["structured"] is True
+        assert resp["response"] == structured_data
+        assert resp["is_fallback"] is False
+
+    def test_no_schema_returns_text(self):
+        """Without response_schema, responses are plain text as before."""
+        client = _make_mock_client([_make_text_response("Plain text answer")])
+        personas = [{"name": "Bob"}]
+        questions = [{"text": "Tell me something"}]
+
+        results, _ = run_panel_parallel(
+            client=client,
+            personas=personas,
+            questions=questions,
+            model="sonnet",
+            system_prompt_fn=_simple_system_prompt,
+            question_prompt_fn=_simple_question_prompt,
+            response_schema=None,
+        )
+
+        assert len(results[0].responses) == 1
+        resp = results[0].responses[0]
+        assert isinstance(resp["response"], str)
+        assert "structured" not in resp
+
+    def test_structured_follow_ups_remain_text(self):
+        """Follow-up questions use text mode even with response_schema."""
+        structured_data = {"sentiment": "neutral", "summary": "Interesting"}
+
+        def send_side_effect(request):
+            if hasattr(request, 'tool_choice') and request.tool_choice is not None:
+                return _make_tool_response(structured_data)
+            return _make_text_response("Some answer")
+
+        client = MagicMock()
+        client.send = MagicMock(side_effect=send_side_effect)
+
+        personas = [{"name": "Carol"}]
+        questions = [{"text": "Main Q", "follow_ups": ["Tell me more"]}]
+
+        results, _ = run_panel_parallel(
+            client=client,
+            personas=personas,
+            questions=questions,
+            model="sonnet",
+            system_prompt_fn=_simple_system_prompt,
+            question_prompt_fn=_simple_question_prompt,
+            response_schema=_SENTIMENT_SCHEMA,
+        )
+
+        responses = results[0].responses
+        # Main question is structured
+        assert responses[0].get("structured") is True
+        # Follow-up is text
+        assert responses[1].get("follow_up") is True
+        assert "structured" not in responses[1]

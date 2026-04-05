@@ -70,6 +70,7 @@ def _run_panel_sync(
     personas: list[dict[str, Any]],
     questions: list[dict[str, Any]],
     model: str,
+    response_schema: dict[str, Any] | None = None,
 ) -> tuple[list[PanelistResult], dict[str, Any], str]:
     """Run panel synchronously. Returns (results, total_usage_dict, total_cost)."""
     client = LLMClient()
@@ -80,6 +81,7 @@ def _run_panel_sync(
         model=model,
         system_prompt_fn=persona_system_prompt,
         question_prompt_fn=build_question_prompt,
+        response_schema=response_schema,
     )
 
     total_usage = ZERO_USAGE
@@ -107,6 +109,7 @@ async def _run_panel_async(
     questions: list[dict[str, Any]],
     model: str,
     ctx: Context,
+    response_schema: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run panel via asyncio.to_thread with progress notifications."""
     total = len(personas)
@@ -114,7 +117,7 @@ async def _run_panel_async(
 
     # Run the blocking panel execution in a thread
     panelist_results, result_dicts, total_usage, total_cost = await asyncio.wait_for(
-        asyncio.to_thread(_run_panel_sync, personas, questions, model),
+        asyncio.to_thread(_run_panel_sync, personas, questions, model, response_schema),
         timeout=PANELIST_TIMEOUT * total,
     )
 
@@ -189,6 +192,7 @@ async def run_panel(
     personas: list[dict[str, Any]] | None = None,
     pack_id: str | None = None,
     model: str | None = None,
+    response_schema: dict[str, Any] | None = None,
     ctx: Context = None,
 ) -> str:
     """Run a full synthetic focus group panel.
@@ -205,6 +209,9 @@ async def run_panel(
             merged with any inline personas (inline personas come first).
             At least one of personas or pack_id must be provided.
         model: LLM model to use. Defaults to haiku.
+        response_schema: Optional JSON Schema for structured output. When
+            provided, each panelist's responses are extracted as structured
+            JSON matching this schema instead of free text.
     """
     model = model or MCP_DEFAULT_MODEL
     merged = list(personas) if personas else []
@@ -213,7 +220,7 @@ async def run_panel(
         merged.extend(pack.get("personas", []))
     if not merged:
         return json.dumps({"error": "No personas provided. Supply personas and/or pack_id."})
-    result = await _run_panel_async(merged, questions, model, ctx)
+    result = await _run_panel_async(merged, questions, model, ctx, response_schema)
     return json.dumps(result, indent=2)
 
 
@@ -222,6 +229,7 @@ async def run_quick_poll(
     question: str,
     personas: list[dict[str, Any]],
     model: str | None = None,
+    response_schema: dict[str, Any] | None = None,
     ctx: Context = None,
 ) -> str:
     """Quick single-question poll across personas.
@@ -232,10 +240,13 @@ async def run_quick_poll(
         question: The question to ask all personas.
         personas: List of persona definitions.
         model: LLM model to use. Defaults to haiku.
+        response_schema: Optional JSON Schema for structured output. When
+            provided, responses are extracted as structured JSON matching
+            this schema instead of free text.
     """
     model = model or MCP_DEFAULT_MODEL
     questions = [{"text": question}]
-    result = await _run_panel_async(personas, questions, model, ctx)
+    result = await _run_panel_async(personas, questions, model, ctx, response_schema)
     return json.dumps(result, indent=2)
 
 

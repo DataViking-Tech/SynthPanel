@@ -6,6 +6,7 @@ Each handler receives parsed args and output format, returns an exit code.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -128,6 +129,24 @@ def _load_instrument(path: str) -> dict[str, Any]:
     return instrument
 
 
+def _load_schema(value: str) -> dict[str, Any]:
+    """Load a JSON Schema from a file path or inline JSON string."""
+    p = Path(value)
+    if p.exists():
+        with open(p, encoding="utf-8") as f:
+            return json.load(f)
+    # Try parsing as inline JSON
+    try:
+        schema = json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"Schema is not a valid file path or JSON string: {exc}"
+        ) from exc
+    if not isinstance(schema, dict):
+        raise ValueError(f"Schema must be a JSON object, got {type(schema).__name__}")
+    return schema
+
+
 def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """Run a panel: load personas + instrument, run panelists in parallel."""
     model = _resolve_model(args)
@@ -149,6 +168,15 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         print("Error: instrument has no questions", file=sys.stderr)
         return 1
 
+    # Load optional response schema
+    response_schema: dict[str, Any] | None = None
+    if getattr(args, "schema", None):
+        try:
+            response_schema = _load_schema(args.schema)
+        except (FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
+            print(f"Error loading schema: {exc}", file=sys.stderr)
+            return 1
+
     client = LLMClient()
 
     # Run all panelists in parallel via the orchestrator
@@ -159,6 +187,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         model=model,
         system_prompt_fn=persona_system_prompt,
         question_prompt_fn=build_question_prompt,
+        response_schema=response_schema,
     )
 
     # Build output results and aggregate usage

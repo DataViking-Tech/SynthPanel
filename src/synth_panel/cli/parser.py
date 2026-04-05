@@ -78,6 +78,17 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="Path to a YAML file defining the survey/instrument.",
     )
+    panel_run_parser.add_argument(
+        "--schema",
+        default=None,
+        metavar="SCHEMA",
+        help=(
+            "JSON Schema for structured output. Can be a file path "
+            "(e.g. schema.json) or inline JSON string. When provided, "
+            "panelist responses are extracted as structured JSON matching "
+            "this schema instead of free text."
+        ),
+    )
 
     # pack
     pack_parser = subparsers.add_parser(
