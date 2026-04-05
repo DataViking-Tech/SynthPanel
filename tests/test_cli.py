@@ -436,10 +436,12 @@ class TestPackCommands:
         monkeypatch.setenv("SYNTH_PANEL_DATA_DIR", str(tmp_path))
         self._tmp = tmp_path
 
-    def test_pack_list_empty(self, capsys):
+    def test_pack_list_shows_bundled(self, capsys):
         code = main(["pack", "list"])
         assert code == 0
-        assert "No persona packs" in capsys.readouterr().out
+        out = capsys.readouterr().out
+        assert "developer" in out
+        assert "Developers" in out
 
     def test_pack_import_and_list(self, capsys):
         pfile = self._tmp / "personas.yaml"
@@ -503,8 +505,9 @@ class TestPackCommands:
         code = main(["--output-format", "json", "pack", "list"])
         assert code == 0
         data = json.loads(capsys.readouterr().out)
-        assert len(data["packs"]) == 1
-        assert data["packs"][0]["id"] == "jp"
+        user_packs = [p for p in data["packs"] if not p.get("builtin")]
+        assert len(user_packs) == 1
+        assert user_packs[0]["id"] == "jp"
 
     def test_pack_import_name_from_stem(self, capsys):
         pfile = self._tmp / "my-team.yaml"
