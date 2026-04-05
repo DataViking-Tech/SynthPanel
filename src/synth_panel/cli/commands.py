@@ -18,6 +18,7 @@ from synth_panel.llm.client import LLMClient
 from synth_panel.llm.models import TextBlock
 from synth_panel.orchestrator import run_panel_parallel
 from synth_panel.persistence import Session
+from synth_panel.prompts import build_question_prompt, persona_system_prompt
 from synth_panel.runtime import AgentRuntime
 
 
@@ -127,34 +128,6 @@ def _load_instrument(path: str) -> dict[str, Any]:
     return instrument
 
 
-def _persona_system_prompt(persona: dict[str, Any]) -> str:
-    """Build a system prompt from a persona definition."""
-    parts = [f"You are role-playing as {persona.get('name', 'an anonymous person')}."]
-    if persona.get("age"):
-        parts.append(f"Age: {persona['age']}.")
-    if persona.get("occupation"):
-        parts.append(f"Occupation: {persona['occupation']}.")
-    if persona.get("background"):
-        parts.append(f"Background: {persona['background']}.")
-    if persona.get("personality_traits"):
-        traits = persona["personality_traits"]
-        if isinstance(traits, list):
-            traits = ", ".join(str(t) for t in traits)
-        parts.append(f"Personality traits: {traits}.")
-    parts.append(
-        "Answer questions in character. Be authentic to this persona's "
-        "perspective, experiences, and communication style. "
-        "Give concise, direct answers."
-    )
-    return " ".join(parts)
-
-
-def _build_question_prompt(question: dict[str, Any]) -> str:
-    """Build a user prompt from a question definition."""
-    text = question.get("text", question) if isinstance(question, dict) else str(question)
-    return str(text)
-
-
 def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """Run a panel: load personas + instrument, run panelists in parallel."""
     model = _resolve_model(args)
@@ -184,8 +157,8 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         personas=personas,
         questions=questions,
         model=model,
-        system_prompt_fn=_persona_system_prompt,
-        question_prompt_fn=_build_question_prompt,
+        system_prompt_fn=persona_system_prompt,
+        question_prompt_fn=build_question_prompt,
     )
 
     # Build output results and aggregate usage
