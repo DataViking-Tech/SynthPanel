@@ -177,7 +177,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     client = LLMClient()
 
     # Run all panelists in parallel via the orchestrator
-    panelist_results, _registry = run_panel_parallel(
+    panelist_results, _registry, _sessions = run_panel_parallel(
         client=client,
         personas=personas,
         questions=questions,

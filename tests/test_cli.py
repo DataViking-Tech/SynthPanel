@@ -711,6 +711,7 @@ class TestPanelRunWithSchema:
         mock_run.return_value = (
             [PanelistResult(persona_name="X", responses=[{"question": "Q", "response": {"a": 1}, "structured": True}], usage=ZERO_USAGE)],
             MagicMock(),
+            {},
         )
         mock_synth.return_value = _mock_synthesis_result()
 
