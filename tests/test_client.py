@@ -77,11 +77,11 @@ class TestAliasResolution:
 
             mock_provider = MagicMock()
             mock_provider.send.return_value = _simple_response()
-            client._provider_cache["claude-sonnet-4-6-20250414"] = mock_provider
+            client._provider_cache["claude-sonnet-4-6"] = mock_provider
 
             client.send(_simple_request(model="sonnet"))
             call_args = mock_provider.send.call_args[0][0]
-            assert call_args.model == "claude-sonnet-4-6-20250414"
+            assert call_args.model == "claude-sonnet-4-6"
 
 
 class TestRetry:
