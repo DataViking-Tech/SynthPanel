@@ -26,6 +26,7 @@ dependencies = [
 Homepage = "https://github.com/DataViking-Tech/synth-panel"
 Repository = "https://github.com/DataViking-Tech/synth-panel"
 Issues = "https://github.com/DataViking-Tech/synth-panel/issues"
+Changelog = "https://github.com/DataViking-Tech/synth-panel/releases"
 
 [project.optional-dependencies]
 mcp = [
