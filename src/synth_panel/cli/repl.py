@@ -10,26 +10,46 @@ import sys
 
 from synth_panel.cli.output import OutputFormat, emit
 from synth_panel.cli.slash import dispatch_slash, SLASH_COMMANDS
+from synth_panel.llm.client import LLMClient
+from synth_panel.persistence import Session
+from synth_panel.runtime import AgentRuntime
 
 
 class SessionState:
     """Mutable state maintained during an interactive session."""
 
-    __slots__ = ("turn_count", "compacted_count", "model", "last_usage")
+    __slots__ = ("turn_count", "compacted_count", "model", "last_usage", "runtime")
 
-    def __init__(self, model: str | None = None) -> None:
+    def __init__(self, model: str | None = None, runtime: AgentRuntime | None = None) -> None:
         self.turn_count: int = 0
         self.compacted_count: int = 0
         self.model: str | None = model
         self.last_usage: dict[str, int] | None = None
+        self.runtime: AgentRuntime | None = runtime
 
 
 PROMPT_CHAR = "\u276f "  # ❯
 
 
+def _extract_response_text(summary) -> str:
+    """Extract plain text from a TurnSummary's assistant messages."""
+    parts: list[str] = []
+    for msg in summary.assistant_messages:
+        for block in msg.content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text = block.get("text", "")
+                if text:
+                    parts.append(text)
+    return "\n".join(parts)
+
+
 def run_repl(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """Run the interactive REPL loop. Returns exit code."""
-    state = SessionState(model=args.model)
+    model = args.model or "sonnet"
+    client = LLMClient()
+    session = Session()
+    runtime = AgentRuntime(client=client, session=session, model=model)
+    state = SessionState(model=model, runtime=runtime)
 
     print("synth-panel interactive mode. Type /help for commands, Ctrl-D to exit.")
 
@@ -48,9 +68,21 @@ def run_repl(args: argparse.Namespace, fmt: OutputFormat) -> int:
             dispatch_slash(line, state, fmt)
             continue
 
-        # Regular input → would be sent to agent runtime
+        # Regular input → send to agent runtime
         state.turn_count += 1
-        # TODO: wire to agent runtime
-        emit(fmt, message=f"[stub] Turn {state.turn_count}: {line}")
+        try:
+            summary = runtime.run_turn(line)
+        except Exception as exc:
+            emit(fmt, message=f"Error: {exc}")
+            continue
+
+        state.last_usage = summary.usage.to_dict() if summary.usage else None
+
+        if summary.compacted:
+            state.compacted_count += 1
+
+        response_text = _extract_response_text(summary)
+        usage_dict = summary.usage.to_dict() if summary.usage else None
+        emit(fmt, message=response_text, usage=usage_dict)
 
     return 0

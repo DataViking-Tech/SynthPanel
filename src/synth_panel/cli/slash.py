@@ -44,8 +44,26 @@ def _cmd_status(state: SessionState, argv: list[str], fmt: OutputFormat) -> None
 
 def _cmd_compact(state: SessionState, argv: list[str], fmt: OutputFormat) -> None:
     """Compact session history."""
-    # TODO: wire to session compaction
-    emit(fmt, message="[stub] Session compaction not yet implemented.")
+    if state.runtime is None:
+        emit(fmt, message="No active runtime session to compact.")
+        return
+    session = state.runtime.session
+    if len(session.messages) <= 2:
+        emit(fmt, message="Not enough messages to compact.")
+        return
+    # Build summary from older messages, keeping last 2
+    older = session.messages[:-2]
+    summary_parts: list[str] = []
+    for msg in older:
+        for block in msg.content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text = block.get("text", "")
+                if text:
+                    summary_parts.append(f"[{msg.role}]: {text[:200]}")
+    summary_text = "Compacted conversation summary:\n" + "\n".join(summary_parts[:20])
+    session.compact(summary_text, keep_last=2)
+    state.compacted_count += 1
+    emit(fmt, message=f"Session compacted. {len(session.messages)} messages remaining.")
 
 
 def _cmd_model(state: SessionState, argv: list[str], fmt: OutputFormat) -> None:
