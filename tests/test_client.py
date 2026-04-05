@@ -72,16 +72,19 @@ class TestProviderResolution:
 class TestAliasResolution:
     def test_alias_is_resolved_in_send(self):
         """Short aliases like 'sonnet' are resolved before provider lookup."""
+        from synth_panel.llm.aliases import resolve_alias
+
+        canonical = resolve_alias("sonnet")
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-test"}):
             client = LLMClient()
 
             mock_provider = MagicMock()
             mock_provider.send.return_value = _simple_response()
-            client._provider_cache["claude-sonnet-4-6-20250414"] = mock_provider
+            client._provider_cache[canonical] = mock_provider
 
             client.send(_simple_request(model="sonnet"))
             call_args = mock_provider.send.call_args[0][0]
-            assert call_args.model == "claude-sonnet-4-6-20250414"
+            assert call_args.model == canonical
 
 
 class TestRetry:
