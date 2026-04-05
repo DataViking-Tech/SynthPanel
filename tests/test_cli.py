@@ -82,6 +82,31 @@ class TestParser:
         assert args.personas == "p.yaml"
         assert args.instrument == "i.yaml"
 
+    def test_panel_run_synthesis_flags(self):
+        parser = build_parser()
+        args = parser.parse_args([
+            "panel", "run",
+            "--personas", "p.yaml",
+            "--instrument", "i.yaml",
+            "--no-synthesis",
+            "--synthesis-model", "opus",
+            "--synthesis-prompt", "Summarize briefly.",
+        ])
+        assert args.no_synthesis is True
+        assert args.synthesis_model == "opus"
+        assert args.synthesis_prompt == "Summarize briefly."
+
+    def test_panel_run_synthesis_defaults(self):
+        parser = build_parser()
+        args = parser.parse_args([
+            "panel", "run",
+            "--personas", "p.yaml",
+            "--instrument", "i.yaml",
+        ])
+        assert args.no_synthesis is False
+        assert args.synthesis_model is None
+        assert args.synthesis_prompt is None
+
     def test_invalid_permission_mode(self):
         parser = build_parser()
         with pytest.raises(SystemExit):
@@ -342,13 +367,32 @@ class TestYAMLLoading:
 # --- Panel run tests ---
 
 
+def _mock_synthesis_result():
+    """Create a mock SynthesisResult for CLI integration tests."""
+    from synth_panel.cost import CostEstimate
+    from synth_panel.synthesis import SynthesisResult
+    return SynthesisResult(
+        summary="Test synthesis summary",
+        themes=["theme1"],
+        agreements=["agree1"],
+        disagreements=[],
+        surprises=[],
+        recommendation="Do X",
+        usage=ZERO_USAGE,
+        cost=CostEstimate(),
+        model="sonnet",
+    )
+
+
 class TestPanelRun:
+    @patch("synth_panel.cli.commands.synthesize_panel")
     @patch("synth_panel.orchestrator.AgentRuntime")
     @patch("synth_panel.cli.commands.LLMClient")
-    def test_panel_run_basic(self, mock_client_cls, mock_runtime_cls, capsys, tmp_path):
+    def test_panel_run_basic(self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path):
         mock_runtime = MagicMock()
         mock_runtime.run_turn.return_value = _mock_turn_summary("I think...")
         mock_runtime_cls.return_value = mock_runtime
+        mock_synth.return_value = _mock_synthesis_result()
 
         personas_file = tmp_path / "personas.yaml"
         personas_file.write_text(
@@ -372,13 +416,17 @@ class TestPanelRun:
         out = capsys.readouterr().out
         assert "Alice" in out
         assert "I think..." in out
+        assert "SYNTHESIS" in out
+        assert "Test synthesis summary" in out
 
+    @patch("synth_panel.cli.commands.synthesize_panel")
     @patch("synth_panel.orchestrator.AgentRuntime")
     @patch("synth_panel.cli.commands.LLMClient")
-    def test_panel_run_json(self, mock_client_cls, mock_runtime_cls, capsys, tmp_path):
+    def test_panel_run_json(self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path):
         mock_runtime = MagicMock()
         mock_runtime.run_turn.return_value = _mock_turn_summary("answer")
         mock_runtime_cls.return_value = mock_runtime
+        mock_synth.return_value = _mock_synthesis_result()
 
         personas_file = tmp_path / "personas.yaml"
         personas_file.write_text(
@@ -403,6 +451,60 @@ class TestPanelRun:
         assert data["persona_count"] == 1
         assert data["question_count"] == 1
         assert len(data["results"]) == 1
+        assert data["synthesis"] is not None
+        assert data["synthesis"]["summary"] == "Test synthesis summary"
+        assert "panelist_cost" in data
+
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_panel_run_no_synthesis(self, mock_client_cls, mock_runtime_cls, capsys, tmp_path):
+        """--no-synthesis skips the synthesis step entirely."""
+        mock_runtime = MagicMock()
+        mock_runtime.run_turn.return_value = _mock_turn_summary("answer")
+        mock_runtime_cls.return_value = mock_runtime
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: Q?\n")
+
+        code = main([
+            "--output-format", "json",
+            "panel", "run",
+            "--personas", str(personas_file),
+            "--instrument", str(survey_file),
+            "--no-synthesis",
+        ])
+        assert code == 0
+        data = json.loads(capsys.readouterr().out)
+        assert data["synthesis"] is None
+        assert data["total_cost"] == data["panelist_cost"]
+
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_panel_run_synthesis_model(self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path):
+        """--synthesis-model is passed through to synthesize_panel."""
+        mock_runtime = MagicMock()
+        mock_runtime.run_turn.return_value = _mock_turn_summary("answer")
+        mock_runtime_cls.return_value = mock_runtime
+        mock_synth.return_value = _mock_synthesis_result()
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: Q?\n")
+
+        code = main([
+            "panel", "run",
+            "--personas", str(personas_file),
+            "--instrument", str(survey_file),
+            "--synthesis-model", "opus",
+        ])
+        assert code == 0
+        mock_synth.assert_called_once()
+        _, kwargs = mock_synth.call_args
+        assert kwargs["model"] == "opus"
 
     def test_panel_run_missing_personas(self, capsys, tmp_path):
         survey_file = tmp_path / "survey.yaml"
@@ -596,9 +698,10 @@ class TestPanelRunWithSchema:
         ])
         assert code == 1
 
+    @patch("synth_panel.cli.commands.synthesize_panel")
     @patch("synth_panel.cli.commands.run_panel_parallel")
     @patch("synth_panel.cli.commands.LLMClient")
-    def test_panel_run_passes_schema_to_orchestrator(self, mock_client_cls, mock_run, capsys, tmp_path):
+    def test_panel_run_passes_schema_to_orchestrator(self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path):
         """Verify --schema is loaded and passed to run_panel_parallel."""
         from synth_panel.cost import ZERO_USAGE
         from synth_panel.orchestrator import PanelistResult
@@ -607,6 +710,7 @@ class TestPanelRunWithSchema:
             [PanelistResult(persona_name="X", responses=[{"question": "Q", "response": {"a": 1}, "structured": True}], usage=ZERO_USAGE)],
             MagicMock(),
         )
+        mock_synth.return_value = _mock_synthesis_result()
 
         personas_file = tmp_path / "personas.yaml"
         personas_file.write_text("personas:\n  - name: X\n")

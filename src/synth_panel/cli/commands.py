@@ -14,13 +14,14 @@ from typing import Any
 import yaml
 
 from synth_panel.cli.output import OutputFormat, emit
-from synth_panel.cost import ZERO_USAGE, UsageTracker, estimate_cost, format_summary, lookup_pricing
+from synth_panel.cost import ZERO_USAGE, TokenUsage, UsageTracker, estimate_cost, format_summary, lookup_pricing
 from synth_panel.llm.client import LLMClient
 from synth_panel.llm.models import TextBlock
 from synth_panel.orchestrator import run_panel_parallel
 from synth_panel.persistence import Session
 from synth_panel.prompts import build_question_prompt, persona_system_prompt
 from synth_panel.runtime import AgentRuntime
+from synth_panel.synthesis import synthesize_panel
 
 
 def _resolve_model(args: argparse.Namespace) -> str:
@@ -190,9 +191,9 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         response_schema=response_schema,
     )
 
-    # Build output results and aggregate usage
+    # Build output results and aggregate panelist usage
     results: list[dict[str, Any]] = []
-    total_usage = ZERO_USAGE
+    panelist_usage = ZERO_USAGE
 
     for pr in panelist_results:
         pricing, is_estimated = lookup_pricing(model)
@@ -204,7 +205,38 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             "cost": persona_cost.format_usd(),
             "error": pr.error,
         })
-        total_usage = total_usage + pr.usage
+        panelist_usage = panelist_usage + pr.usage
+
+    # Synthesis step (unless --no-synthesis)
+    skip_synthesis = getattr(args, "no_synthesis", False)
+    synthesis_result = None
+
+    if not skip_synthesis:
+        synthesis_model = getattr(args, "synthesis_model", None)
+        custom_prompt = getattr(args, "synthesis_prompt", None)
+        try:
+            synthesis_result = synthesize_panel(
+                client,
+                panelist_results,
+                questions,
+                model=synthesis_model,
+                custom_prompt=custom_prompt,
+            )
+        except Exception as exc:
+            print(f"Warning: synthesis failed: {exc}", file=sys.stderr)
+
+    # Compute costs
+    pricing, is_estimated = lookup_pricing(model)
+    panelist_cost_est = estimate_cost(panelist_usage, pricing)
+
+    if synthesis_result:
+        total_usage = panelist_usage + synthesis_result.usage
+        total_cost_est = panelist_cost_est + synthesis_result.cost
+    else:
+        total_usage = panelist_usage
+        total_cost_est = panelist_cost_est
+
+    synthesis_dict = synthesis_result.to_dict() if synthesis_result else None
 
     # Output results
     if fmt is OutputFormat.TEXT:
@@ -221,23 +253,53 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 print()
             print(f"  Cost: {r['cost']}")
 
-        # Total cost summary
-        pricing, is_estimated = lookup_pricing(model)
-        total_cost = estimate_cost(total_usage, pricing)
+        # Synthesis output
+        if synthesis_dict:
+            print(f"\n{'='*60}")
+            print("SYNTHESIS")
+            print(f"{'='*60}")
+            print(f"\n  Summary: {synthesis_dict['summary']}")
+            if synthesis_dict.get("themes"):
+                print(f"\n  Themes:")
+                for t in synthesis_dict["themes"]:
+                    print(f"    - {t}")
+            if synthesis_dict.get("agreements"):
+                print(f"\n  Agreements:")
+                for a in synthesis_dict["agreements"]:
+                    print(f"    - {a}")
+            if synthesis_dict.get("disagreements"):
+                print(f"\n  Disagreements:")
+                for d in synthesis_dict["disagreements"]:
+                    print(f"    - {d}")
+            if synthesis_dict.get("surprises"):
+                print(f"\n  Surprises:")
+                for s in synthesis_dict["surprises"]:
+                    print(f"    - {s}")
+            print(f"\n  Recommendation: {synthesis_dict['recommendation']}")
+            print(f"  Synthesis cost: {synthesis_dict['cost']}")
+
+        # Cost summaries
         print(f"\n{'='*60}")
-        print(format_summary("Total", total_usage, total_cost,
+        print(format_summary("Panelist cost", panelist_usage, panelist_cost_est,
+                             model=model, is_estimated=is_estimated))
+        if synthesis_result:
+            synth_pricing, synth_est = lookup_pricing(synthesis_result.model)
+            print(format_summary("Synthesis cost", synthesis_result.usage, synthesis_result.cost,
+                                 model=synthesis_result.model, is_estimated=synth_est))
+        print(format_summary("Total", total_usage, total_cost_est,
                              model=model, is_estimated=is_estimated))
     else:
-        pricing, is_estimated = lookup_pricing(model)
-        total_cost = estimate_cost(total_usage, pricing)
-        emit(fmt, message="Panel complete", extra={
+        extra: dict[str, Any] = {
             "results": results,
+            "panelist_cost": panelist_cost_est.format_usd(),
+            "synthesis": synthesis_dict,
             "total_usage": total_usage.to_dict(),
-            "total_cost": total_cost.format_usd(),
+            "total_cost": total_cost_est.format_usd(),
             "model": model,
             "persona_count": len(personas),
             "question_count": len(questions),
-        })
+        }
+        emit(fmt, message="Panel complete", extra=extra)
 
     return 0
 

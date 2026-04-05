@@ -89,6 +89,24 @@ def build_parser() -> argparse.ArgumentParser:
             "this schema instead of free text."
         ),
     )
+    panel_run_parser.add_argument(
+        "--no-synthesis",
+        action="store_true",
+        default=False,
+        help="Skip the synthesis step after panelist responses are collected.",
+    )
+    panel_run_parser.add_argument(
+        "--synthesis-model",
+        default=None,
+        metavar="MODEL",
+        help="Model to use for synthesis (default: sonnet). Overrides --model for the synthesis step only.",
+    )
+    panel_run_parser.add_argument(
+        "--synthesis-prompt",
+        default=None,
+        metavar="PROMPT",
+        help="Custom synthesis prompt. Replaces the default synthesis prompt entirely.",
+    )
 
     # pack
     pack_parser = subparsers.add_parser(

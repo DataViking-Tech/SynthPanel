@@ -46,6 +46,7 @@ from synth_panel.mcp.data import (
 )
 from synth_panel.orchestrator import PanelistResult, run_panel_parallel
 from synth_panel.prompts import build_question_prompt, persona_system_prompt
+from synth_panel.synthesis import synthesize_panel
 
 # Default model for MCP mode
 MCP_DEFAULT_MODEL = "haiku"
@@ -71,8 +72,12 @@ def _run_panel_sync(
     questions: list[dict[str, Any]],
     model: str,
     response_schema: dict[str, Any] | None = None,
-) -> tuple[list[PanelistResult], dict[str, Any], str]:
-    """Run panel synchronously. Returns (results, total_usage_dict, total_cost)."""
+    *,
+    synthesis: bool = True,
+    synthesis_model: str | None = None,
+    synthesis_prompt: str | None = None,
+) -> tuple[list[PanelistResult], list[dict[str, Any]], CostTokenUsage, Any, dict[str, Any] | None]:
+    """Run panel synchronously. Returns (results, result_dicts, panelist_usage, panelist_cost, synthesis_dict)."""
     client = LLMClient()
     panelist_results, _registry = run_panel_parallel(
         client=client,
@@ -84,7 +89,7 @@ def _run_panel_sync(
         response_schema=response_schema,
     )
 
-    total_usage = ZERO_USAGE
+    panelist_usage = ZERO_USAGE
     result_dicts: list[dict[str, Any]] = []
     for pr in panelist_results:
         pricing, _ = lookup_pricing(model)
@@ -96,12 +101,27 @@ def _run_panel_sync(
             "cost": persona_cost.format_usd(),
             "error": pr.error,
         })
-        total_usage = total_usage + pr.usage
+        panelist_usage = panelist_usage + pr.usage
 
     pricing, _ = lookup_pricing(model)
-    total_cost = estimate_cost(total_usage, pricing)
+    panelist_cost = estimate_cost(panelist_usage, pricing)
 
-    return panelist_results, result_dicts, total_usage, total_cost
+    # Synthesis
+    synthesis_dict: dict[str, Any] | None = None
+    if synthesis:
+        try:
+            synthesis_result = synthesize_panel(
+                client,
+                panelist_results,
+                questions,
+                model=synthesis_model,
+                custom_prompt=synthesis_prompt,
+            )
+            synthesis_dict = synthesis_result.to_dict()
+        except Exception:
+            pass  # Synthesis failure is non-fatal for MCP
+
+    return panelist_results, result_dicts, panelist_usage, panelist_cost, synthesis_dict
 
 
 async def _run_panel_async(
@@ -110,18 +130,38 @@ async def _run_panel_async(
     model: str,
     ctx: Context,
     response_schema: dict[str, Any] | None = None,
+    *,
+    synthesis: bool = True,
+    synthesis_model: str | None = None,
+    synthesis_prompt: str | None = None,
 ) -> dict[str, Any]:
     """Run panel via asyncio.to_thread with progress notifications."""
     total = len(personas)
     await ctx.report_progress(0, total)
 
     # Run the blocking panel execution in a thread
-    panelist_results, result_dicts, total_usage, total_cost = await asyncio.wait_for(
-        asyncio.to_thread(_run_panel_sync, personas, questions, model, response_schema),
+    panelist_results, result_dicts, panelist_usage, panelist_cost, synthesis_dict = await asyncio.wait_for(
+        asyncio.to_thread(
+            _run_panel_sync, personas, questions, model, response_schema,
+            synthesis=synthesis,
+            synthesis_model=synthesis_model,
+            synthesis_prompt=synthesis_prompt,
+        ),
         timeout=PANELIST_TIMEOUT * total,
     )
 
     await ctx.report_progress(total, total)
+
+    # Compute total cost (panelist + synthesis)
+    if synthesis_dict:
+        synthesis_usage = CostTokenUsage.from_dict(synthesis_dict["usage"])
+        synthesis_pricing, _ = lookup_pricing(synthesis_dict.get("model"))
+        synthesis_cost_est = estimate_cost(synthesis_usage, synthesis_pricing)
+        total_usage = panelist_usage + synthesis_usage
+        total_cost = panelist_cost + synthesis_cost_est
+    else:
+        total_usage = panelist_usage
+        total_cost = panelist_cost
 
     # Save result
     result_id = save_panel_result(
@@ -138,6 +178,8 @@ async def _run_panel_async(
         "model": model,
         "persona_count": len(personas),
         "question_count": len(questions),
+        "panelist_cost": panelist_cost.format_usd(),
+        "synthesis": synthesis_dict,
         "total_cost": total_cost.format_usd(),
         "total_usage": total_usage.to_dict(),
         "results": result_dicts,
@@ -193,11 +235,16 @@ async def run_panel(
     pack_id: str | None = None,
     model: str | None = None,
     response_schema: dict[str, Any] | None = None,
+    synthesis: bool = True,
+    synthesis_model: str | None = None,
+    synthesis_prompt: str | None = None,
     ctx: Context = None,
 ) -> str:
     """Run a full synthetic focus group panel.
 
     Each persona answers all questions independently in parallel.
+    After responses are collected, a synthesis step aggregates findings
+    into themes, agreements, disagreements, and recommendations.
     Results are saved and can be retrieved later.
 
     Args:
@@ -212,6 +259,10 @@ async def run_panel(
         response_schema: Optional JSON Schema for structured output. When
             provided, each panelist's responses are extracted as structured
             JSON matching this schema instead of free text.
+        synthesis: Whether to run synthesis after collecting responses.
+            Defaults to true.
+        synthesis_model: Model to use for synthesis. Defaults to sonnet.
+        synthesis_prompt: Custom synthesis prompt. Replaces the default.
     """
     model = model or MCP_DEFAULT_MODEL
     merged = list(personas) if personas else []
@@ -220,7 +271,12 @@ async def run_panel(
         merged.extend(pack.get("personas", []))
     if not merged:
         return json.dumps({"error": "No personas provided. Supply personas and/or pack_id."})
-    result = await _run_panel_async(merged, questions, model, ctx, response_schema)
+    result = await _run_panel_async(
+        merged, questions, model, ctx, response_schema,
+        synthesis=synthesis,
+        synthesis_model=synthesis_model,
+        synthesis_prompt=synthesis_prompt,
+    )
     return json.dumps(result, indent=2)
 
 
@@ -230,11 +286,15 @@ async def run_quick_poll(
     personas: list[dict[str, Any]],
     model: str | None = None,
     response_schema: dict[str, Any] | None = None,
+    synthesis: bool = True,
+    synthesis_model: str | None = None,
+    synthesis_prompt: str | None = None,
     ctx: Context = None,
 ) -> str:
     """Quick single-question poll across personas.
 
     A simplified version of run_panel for quick feedback on one question.
+    Includes synthesis by default.
 
     Args:
         question: The question to ask all personas.
@@ -243,10 +303,19 @@ async def run_quick_poll(
         response_schema: Optional JSON Schema for structured output. When
             provided, responses are extracted as structured JSON matching
             this schema instead of free text.
+        synthesis: Whether to run synthesis after collecting responses.
+            Defaults to true.
+        synthesis_model: Model to use for synthesis. Defaults to sonnet.
+        synthesis_prompt: Custom synthesis prompt. Replaces the default.
     """
     model = model or MCP_DEFAULT_MODEL
     questions = [{"text": question}]
-    result = await _run_panel_async(personas, questions, model, ctx, response_schema)
+    result = await _run_panel_async(
+        personas, questions, model, ctx, response_schema,
+        synthesis=synthesis,
+        synthesis_model=synthesis_model,
+        synthesis_prompt=synthesis_prompt,
+    )
     return json.dumps(result, indent=2)
 
 
