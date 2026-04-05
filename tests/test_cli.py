@@ -78,16 +78,6 @@ class TestParser:
         assert args.personas == "p.yaml"
         assert args.instrument == "i.yaml"
 
-    def test_login_subcommand(self):
-        parser = build_parser()
-        args = parser.parse_args(["login"])
-        assert args.command == "login"
-
-    def test_logout_subcommand(self):
-        parser = build_parser()
-        args = parser.parse_args(["logout"])
-        assert args.command == "logout"
-
     def test_invalid_permission_mode(self):
         parser = build_parser()
         with pytest.raises(SystemExit):
@@ -266,14 +256,6 @@ class TestMain:
 
         code = main(["prompt", "hello"])
         assert code == 1
-
-    def test_login_command(self, capsys):
-        code = main(["login"])
-        assert code == 0
-
-    def test_logout_command(self, capsys):
-        code = main(["logout"])
-        assert code == 0
 
 
 # --- YAML loading tests ---

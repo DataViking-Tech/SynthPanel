@@ -85,16 +85,4 @@ def build_parser() -> argparse.ArgumentParser:
         help="Start the MCP server (stdio transport).",
     )
 
-    # login
-    subparsers.add_parser(
-        "login",
-        help="Start an authentication flow.",
-    )
-
-    # logout
-    subparsers.add_parser(
-        "logout",
-        help="Clear saved authentication credentials.",
-    )
-
     return parser
