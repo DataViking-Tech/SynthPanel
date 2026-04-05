@@ -23,10 +23,14 @@ from synth_panel.mcp.data import (
     get_persona_pack,
     list_panel_results,
     list_persona_packs,
+    load_panel_sessions,
     save_panel_result,
+    save_panel_sessions,
     save_persona_pack,
+    update_panel_result,
     validate_persona_pack,
 )
+from synth_panel.persistence import ConversationMessage, Session
 
 
 # ---------------------------------------------------------------------------
@@ -201,3 +205,163 @@ class TestPanelResults:
     def test_get_nonexistent_raises(self):
         with pytest.raises(FileNotFoundError):
             get_panel_result("does-not-exist")
+
+    def test_pre_extend_excluded_from_list(self):
+        """Pre-extend snapshots should not appear in list_panel_results."""
+        rid = save_panel_result(
+            results=[],
+            model="haiku",
+            total_usage={"input_tokens": 0, "output_tokens": 0},
+            total_cost="$0.00",
+            persona_count=0,
+            question_count=0,
+        )
+        update_panel_result(rid, {"model": "haiku", "extended": True})
+        results = list_panel_results()
+        ids = [r["id"] for r in results]
+        assert rid in ids
+        assert f"{rid}.pre-extend" not in ids
+
+
+# ---------------------------------------------------------------------------
+# Session persistence
+# ---------------------------------------------------------------------------
+
+class TestSessionPersistence:
+
+    def _make_session(self, persona_name: str) -> Session:
+        """Create a session with a user message and assistant reply."""
+        s = Session()
+        s.push_message(ConversationMessage(
+            role="user",
+            content=[{"type": "text", "text": f"Hello {persona_name}"}],
+        ))
+        s.push_message(ConversationMessage(
+            role="assistant",
+            content=[{"type": "text", "text": f"I am {persona_name}"}],
+        ))
+        return s
+
+    def test_save_and_load_round_trip(self):
+        """Sessions round-trip: save → load → messages preserved."""
+        sessions = {
+            "Sarah Chen": self._make_session("Sarah Chen"),
+            "Marcus Johnson": self._make_session("Marcus Johnson"),
+        }
+        rid = save_panel_result(
+            results=[],
+            model="haiku",
+            total_usage={"input_tokens": 0, "output_tokens": 0},
+            total_cost="$0.00",
+            persona_count=2,
+            question_count=1,
+        )
+        save_panel_sessions(rid, sessions)
+        loaded = load_panel_sessions(rid)
+
+        assert len(loaded) == 2
+        for name, session in loaded.items():
+            assert len(session.messages) == 2
+            # Verify assistant message text contains persona name
+            assistant_text = session.messages[1].content[0]["text"]
+            assert "I am" in assistant_text
+
+    def test_load_nonexistent_raises(self):
+        with pytest.raises(FileNotFoundError):
+            load_panel_sessions("no-such-result")
+
+    def test_save_creates_directory(self, tmp_path):
+        """save_panel_sessions creates the sessions directory."""
+        rid = save_panel_result(
+            results=[],
+            model="haiku",
+            total_usage={},
+            total_cost="$0.00",
+            persona_count=1,
+            question_count=0,
+        )
+        sessions = {"Alice": self._make_session("Alice")}
+        path = save_panel_sessions(rid, sessions)
+        assert path.is_dir()
+        assert (path / "Alice.json").exists()
+
+    def test_empty_sessions_dict(self):
+        rid = save_panel_result(
+            results=[],
+            model="haiku",
+            total_usage={},
+            total_cost="$0.00",
+            persona_count=0,
+            question_count=0,
+        )
+        path = save_panel_sessions(rid, {})
+        assert path.is_dir()
+        assert list(path.glob("*.json")) == []
+
+    def test_persona_name_with_slash_sanitised(self):
+        """Persona names with slashes are sanitised in filenames."""
+        sessions = {"Dr. A/B": self._make_session("Dr. A/B")}
+        rid = save_panel_result(
+            results=[],
+            model="haiku",
+            total_usage={},
+            total_cost="$0.00",
+            persona_count=1,
+            question_count=0,
+        )
+        path = save_panel_sessions(rid, sessions)
+        assert (path / "Dr. A_B.json").exists()
+
+
+# ---------------------------------------------------------------------------
+# Update panel result (pre-extend snapshot)
+# ---------------------------------------------------------------------------
+
+class TestUpdatePanelResult:
+
+    def test_creates_pre_extend_snapshot(self, tmp_path):
+        rid = save_panel_result(
+            results=[{"persona": "Alice", "responses": []}],
+            model="haiku",
+            total_usage={"input_tokens": 100, "output_tokens": 50},
+            total_cost="$0.001",
+            persona_count=1,
+            question_count=1,
+        )
+        original = get_panel_result(rid)
+
+        update_panel_result(rid, {"model": "haiku", "extended": True})
+
+        # Snapshot exists with original data
+        from synth_panel.mcp.data import _results_dir
+        snapshot = _results_dir() / f"{rid}.pre-extend.json"
+        assert snapshot.exists()
+        snap_data = json.loads(snapshot.read_text())
+        assert snap_data["model"] == "haiku"
+        assert snap_data["total_cost"] == "$0.001"
+
+        # Main result updated
+        updated = get_panel_result(rid)
+        assert updated.get("extended") is True
+
+    def test_update_nonexistent_raises(self):
+        with pytest.raises(FileNotFoundError):
+            update_panel_result("no-such-result", {})
+
+    def test_overwrites_previous_snapshot(self):
+        rid = save_panel_result(
+            results=[],
+            model="haiku",
+            total_usage={},
+            total_cost="$0.00",
+            persona_count=0,
+            question_count=0,
+        )
+        update_panel_result(rid, {"version": 1})
+        update_panel_result(rid, {"version": 2})
+
+        # Snapshot should be from the version=1 update, not original
+        from synth_panel.mcp.data import _results_dir
+        snapshot = _results_dir() / f"{rid}.pre-extend.json"
+        snap_data = json.loads(snapshot.read_text())
+        assert snap_data.get("version") == 1
