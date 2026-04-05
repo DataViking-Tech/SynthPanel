@@ -76,12 +76,63 @@ def get_persona_pack(pack_id: str) -> dict[str, Any]:
     return data
 
 
+class PackValidationError(ValueError):
+    """Raised when a persona pack fails schema validation."""
+
+
+def validate_persona_pack(personas: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Validate and normalize a list of persona dicts.
+
+    Required fields per persona: ``name``.
+    ``personality_traits`` is normalized to a list of lowercase stripped strings.
+
+    Returns the normalized personas list.
+    Raises :class:`PackValidationError` on invalid data.
+    """
+    if not isinstance(personas, list):
+        raise PackValidationError("personas must be a list")
+    if not personas:
+        raise PackValidationError("personas list must not be empty")
+
+    normalized: list[dict[str, Any]] = []
+    for i, persona in enumerate(personas):
+        if not isinstance(persona, dict):
+            raise PackValidationError(f"persona at index {i} must be a dict")
+        if "name" not in persona or not str(persona["name"]).strip():
+            raise PackValidationError(
+                f"persona at index {i} is missing required field 'name'"
+            )
+
+        p = dict(persona)  # shallow copy to avoid mutating input
+
+        # Normalize personality_traits
+        traits = p.get("personality_traits")
+        if traits is not None:
+            if isinstance(traits, str):
+                traits = [t.strip().lower() for t in traits.split(",") if t.strip()]
+            elif isinstance(traits, list):
+                traits = [str(t).strip().lower() for t in traits if str(t).strip()]
+            else:
+                raise PackValidationError(
+                    f"persona '{p['name']}': personality_traits must be a list or comma-separated string"
+                )
+            p["personality_traits"] = traits
+
+        normalized.append(p)
+    return normalized
+
+
 def save_persona_pack(
     name: str,
     personas: list[dict[str, Any]],
     pack_id: str | None = None,
 ) -> dict[str, Any]:
-    """Save a persona pack and return its metadata."""
+    """Save a persona pack and return its metadata.
+
+    Validates personas before saving. Raises :class:`PackValidationError`
+    on invalid data.
+    """
+    personas = validate_persona_pack(personas)
     pid = pack_id or f"pack-{uuid.uuid4().hex[:8]}"
     p = _packs_dir() / f"{pid}.yaml"
     data = {"name": name, "personas": personas}

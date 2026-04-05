@@ -213,6 +213,87 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     return 0
 
 
+def handle_pack_list(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """List all saved persona packs."""
+    from synth_panel.mcp.data import list_persona_packs
+
+    packs = list_persona_packs()
+
+    if fmt is OutputFormat.TEXT:
+        if not packs:
+            print("No persona packs found.")
+        else:
+            for p in packs:
+                print(f"  {p['id']}  {p['name']}  ({p['persona_count']} personas)")
+    else:
+        emit(fmt, message="Persona packs", extra={"packs": packs})
+
+    return 0
+
+
+def handle_pack_import(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Import a persona pack from a YAML file."""
+    from synth_panel.mcp.data import PackValidationError, save_persona_pack
+
+    try:
+        personas = _load_personas(args.file)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"Error loading file: {exc}", file=sys.stderr)
+        return 1
+
+    # Determine pack name: explicit flag > YAML 'name' key > filename stem
+    pack_name = args.name
+    if not pack_name:
+        data = _load_yaml(args.file)
+        if isinstance(data, dict):
+            pack_name = data.get("name")
+    if not pack_name:
+        pack_name = Path(args.file).stem
+
+    try:
+        result = save_persona_pack(pack_name, personas, pack_id=args.pack_id)
+    except PackValidationError as exc:
+        print(f"Validation error: {exc}", file=sys.stderr)
+        return 1
+
+    if fmt is OutputFormat.TEXT:
+        print(f"Imported pack '{result['name']}' ({result['persona_count']} personas) as {result['id']}")
+    else:
+        emit(fmt, message="Pack imported", extra=result)
+
+    return 0
+
+
+def handle_pack_export(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Export a saved persona pack to stdout or a file."""
+    from synth_panel.mcp.data import get_persona_pack
+
+    try:
+        pack = get_persona_pack(args.pack_id)
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    # Build clean export data (without internal 'id' field)
+    export_data = {k: v for k, v in pack.items() if k != "id"}
+
+    content = yaml.dump(export_data, default_flow_style=False)
+
+    if args.output:
+        Path(args.output).write_text(content, encoding="utf-8")
+        if fmt is OutputFormat.TEXT:
+            print(f"Exported pack '{pack.get('name', args.pack_id)}' to {args.output}")
+        else:
+            emit(fmt, message="Pack exported", extra={"path": args.output, "pack_id": args.pack_id})
+    else:
+        if fmt is OutputFormat.TEXT:
+            print(content, end="")
+        else:
+            emit(fmt, message="Pack exported", extra={"pack_id": args.pack_id, "data": export_data})
+
+    return 0
+
+
 def handle_mcp_serve(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """Start the MCP server on stdio transport."""
     from synth_panel.mcp.server import serve

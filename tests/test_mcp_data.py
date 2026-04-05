@@ -18,12 +18,14 @@ def _data_dir(tmp_path, monkeypatch):
 
 # --- import after env is set so _data_dir() picks it up ---
 from synth_panel.mcp.data import (
+    PackValidationError,
     get_panel_result,
     get_persona_pack,
     list_panel_results,
     list_persona_packs,
     save_panel_result,
     save_persona_pack,
+    validate_persona_pack,
 )
 
 
@@ -68,6 +70,64 @@ class TestPersonaPacks:
         pack = get_persona_pack("ow")
         assert pack["name"] == "V2"
         assert len(pack["personas"]) == 2
+
+
+# ---------------------------------------------------------------------------
+# Pack validation
+# ---------------------------------------------------------------------------
+
+
+class TestPackValidation:
+    def test_valid_minimal(self):
+        result = validate_persona_pack([{"name": "Alice"}])
+        assert result == [{"name": "Alice"}]
+
+    def test_not_a_list(self):
+        with pytest.raises(PackValidationError, match="must be a list"):
+            validate_persona_pack("not a list")
+
+    def test_empty_list(self):
+        with pytest.raises(PackValidationError, match="must not be empty"):
+            validate_persona_pack([])
+
+    def test_persona_not_dict(self):
+        with pytest.raises(PackValidationError, match="must be a dict"):
+            validate_persona_pack(["just a string"])
+
+    def test_missing_name(self):
+        with pytest.raises(PackValidationError, match="missing required field 'name'"):
+            validate_persona_pack([{"age": 30}])
+
+    def test_blank_name(self):
+        with pytest.raises(PackValidationError, match="missing required field 'name'"):
+            validate_persona_pack([{"name": "  "}])
+
+    def test_trait_normalization_list(self):
+        result = validate_persona_pack([{
+            "name": "Alice",
+            "personality_traits": ["Curious", " BOLD ", "shy"],
+        }])
+        assert result[0]["personality_traits"] == ["curious", "bold", "shy"]
+
+    def test_trait_normalization_csv_string(self):
+        result = validate_persona_pack([{
+            "name": "Bob",
+            "personality_traits": "Curious, Bold, shy",
+        }])
+        assert result[0]["personality_traits"] == ["curious", "bold", "shy"]
+
+    def test_trait_invalid_type(self):
+        with pytest.raises(PackValidationError, match="personality_traits must be"):
+            validate_persona_pack([{"name": "X", "personality_traits": 42}])
+
+    def test_no_mutation_of_input(self):
+        original = [{"name": "Alice", "personality_traits": ["LOUD"]}]
+        validate_persona_pack(original)
+        assert original[0]["personality_traits"] == ["LOUD"]
+
+    def test_save_validates(self):
+        with pytest.raises(PackValidationError):
+            save_persona_pack("Bad", [{"age": 30}])
 
 
 # ---------------------------------------------------------------------------
