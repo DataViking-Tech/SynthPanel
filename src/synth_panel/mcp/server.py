@@ -1,17 +1,20 @@
 """MCP server implementation for synth-panel.
 
-Exposes 8 tools, 4 resource URI patterns, and 3 prompt templates.
+Exposes 11 tools, 4 resource URI patterns, and 3 prompt templates.
 Uses stdio transport. Default model is haiku for MCP mode.
 
 Tools:
-    run_prompt          - Send a single prompt to an LLM (no personas)
-    run_panel           - Run a full synthetic focus group panel
-    run_quick_poll      - Quick single-question poll across personas
-    list_persona_packs  - List saved persona packs
-    get_persona_pack    - Get a specific persona pack
-    save_persona_pack   - Save a persona pack
-    list_panel_results  - List saved panel results
-    get_panel_result    - Get a specific panel result
+    run_prompt              - Send a single prompt to an LLM (no personas)
+    run_panel               - Run a full synthetic focus group panel
+    run_quick_poll          - Quick single-question poll across personas
+    list_persona_packs      - List saved persona packs
+    get_persona_pack        - Get a specific persona pack
+    save_persona_pack       - Save a persona pack
+    list_instrument_packs   - List installed instrument packs
+    get_instrument_pack     - Get a specific instrument pack
+    save_instrument_pack    - Save an instrument pack
+    list_panel_results      - List saved panel results
+    get_panel_result        - Get a specific panel result
 
 Resources (URI patterns):
     persona-pack://{pack_id}         - A specific persona pack
@@ -36,15 +39,25 @@ from mcp.server.fastmcp import FastMCP, Context
 from synth_panel.cost import ZERO_USAGE, TokenUsage as CostTokenUsage, UsageTracker, estimate_cost, lookup_pricing
 from synth_panel.llm.client import LLMClient
 from synth_panel.llm.models import CompletionRequest, InputMessage, TextBlock
+from synth_panel.instrument import Instrument, InstrumentError, parse_instrument
 from synth_panel.mcp.data import (
     get_panel_result as _data_get_panel_result,
     get_persona_pack as _data_get_persona_pack,
+    list_instrument_packs as _data_list_instrument_packs,
     list_panel_results as _data_list_panel_results,
     list_persona_packs as _data_list_persona_packs,
+    load_instrument_pack as _data_load_instrument_pack,
+    save_instrument_pack as _data_save_instrument_pack,
     save_panel_result,
     save_persona_pack as _data_save_persona_pack,
 )
-from synth_panel.orchestrator import PanelistResult, run_panel_parallel
+from synth_panel.orchestrator import (
+    MultiRoundResult,
+    PanelistResult,
+    RoundResult,
+    run_multi_round_panel,
+    run_panel_parallel,
+)
 from synth_panel.prompts import build_question_prompt, persona_system_prompt
 from synth_panel.synthesis import synthesize_panel
 
@@ -194,6 +207,134 @@ async def _run_panel_async(
     }
 
 
+def _run_branching_panel_sync(
+    personas: list[dict[str, Any]],
+    instrument: Instrument,
+    model: str,
+    response_schema: dict[str, Any] | None,
+    *,
+    synthesis: bool,
+    synthesis_model: str | None,
+) -> MultiRoundResult:
+    """Execute a multi-round / branching panel run synchronously."""
+    client = LLMClient()
+
+    def _round_synth(client_, panelist_results, qs, model=None):
+        return synthesize_panel(
+            client_, panelist_results, qs, model=synthesis_model
+        )
+
+    final_fn = _round_synth if synthesis else None
+    return run_multi_round_panel(
+        client=client,
+        personas=personas,
+        instrument=instrument,
+        model=model,
+        system_prompt_fn=persona_system_prompt,
+        question_prompt_fn=build_question_prompt,
+        synthesize_round_fn=_round_synth,
+        synthesize_final_fn=final_fn,
+        response_schema=response_schema,
+    )
+
+
+def _round_to_dict(rr: RoundResult, model: str) -> dict[str, Any]:
+    pricing, _ = lookup_pricing(model)
+    panelist_dicts: list[dict[str, Any]] = []
+    for pr in rr.panelist_results:
+        panelist_dicts.append({
+            "persona": pr.persona_name,
+            "responses": pr.responses,
+            "usage": pr.usage.to_dict(),
+            "cost": estimate_cost(pr.usage, pricing).format_usd(),
+            "error": pr.error,
+        })
+    synthesis_dict = (
+        rr.synthesis.to_dict() if rr.synthesis is not None and hasattr(rr.synthesis, "to_dict") else None
+    )
+    return {
+        "name": rr.name,
+        "results": panelist_dicts,
+        "synthesis": synthesis_dict,
+        "usage": rr.usage.to_dict(),
+    }
+
+
+async def _run_branching_panel_async(
+    personas: list[dict[str, Any]],
+    instrument: Instrument,
+    model: str,
+    ctx: Context,
+    response_schema: dict[str, Any] | None,
+    *,
+    synthesis: bool,
+    synthesis_model: str | None,
+) -> dict[str, Any]:
+    """Execute multi-round panel via asyncio.to_thread, build response payload."""
+    total = max(1, len(instrument.rounds)) * len(personas)
+    await ctx.report_progress(0, total)
+
+    multi: MultiRoundResult = await asyncio.wait_for(
+        asyncio.to_thread(
+            _run_branching_panel_sync,
+            personas,
+            instrument,
+            model,
+            response_schema,
+            synthesis=synthesis,
+            synthesis_model=synthesis_model,
+        ),
+        timeout=PANELIST_TIMEOUT * total,
+    )
+
+    await ctx.report_progress(total, total)
+
+    rounds_payload = [_round_to_dict(rr, model) for rr in multi.rounds]
+
+    pricing, _ = lookup_pricing(model)
+    panelist_usage = ZERO_USAGE
+    for rr in multi.rounds:
+        for pr in rr.panelist_results:
+            panelist_usage = panelist_usage + pr.usage
+    panelist_cost = estimate_cost(panelist_usage, pricing)
+
+    final_synth_dict: dict[str, Any] | None = None
+    if multi.final_synthesis is not None and hasattr(multi.final_synthesis, "to_dict"):
+        final_synth_dict = multi.final_synthesis.to_dict()
+
+    total_usage = multi.usage
+    total_cost = estimate_cost(total_usage, pricing)
+
+    # Build a flat results list for save_panel_result (for retrievability).
+    flat_results: list[dict[str, Any]] = []
+    for rp in rounds_payload:
+        for r in rp["results"]:
+            flat_results.append({**r, "round": rp["name"]})
+
+    result_id = save_panel_result(
+        results=flat_results,
+        model=model,
+        total_usage=total_usage.to_dict(),
+        total_cost=total_cost.format_usd(),
+        persona_count=len(personas),
+        question_count=sum(len(r.questions) for r in instrument.rounds),
+    )
+
+    return {
+        "result_id": result_id,
+        "model": model,
+        "persona_count": len(personas),
+        "rounds": rounds_payload,
+        "path": list(multi.path),
+        "warnings": list(multi.warnings),
+        "terminal_round": multi.terminal_round,
+        "synthesis": final_synth_dict,
+        "panelist_cost": panelist_cost.format_usd(),
+        "total_cost": total_cost.format_usd(),
+        "total_usage": total_usage.to_dict(),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Tools
 # ---------------------------------------------------------------------------
@@ -238,9 +379,11 @@ async def run_prompt(
 
 @mcp.tool()
 async def run_panel(
-    questions: list[dict[str, Any]],
+    questions: list[dict[str, Any]] | None = None,
     personas: list[dict[str, Any]] | None = None,
     pack_id: str | None = None,
+    instrument: dict[str, Any] | None = None,
+    instrument_pack: str | None = None,
     model: str | None = None,
     response_schema: dict[str, Any] | None = None,
     synthesis: bool = True,
@@ -250,19 +393,36 @@ async def run_panel(
 ) -> str:
     """Run a full synthetic focus group panel.
 
-    Each persona answers all questions independently in parallel.
-    After responses are collected, a synthesis step aggregates findings
-    into themes, agreements, disagreements, and recommendations.
-    Results are saved and can be retrieved later.
+    Three input shapes are accepted:
+
+    1. ``questions`` — flat v1 list of question dicts (legacy single round).
+    2. ``instrument`` — full instrument body (v1/v2/v3) as a dict. v2 (linear
+       multi-round) and v3 (branching with ``route_when``) execute via the
+       router-driven multi-round runner.
+    3. ``instrument_pack`` — name of an installed instrument pack. Loaded
+       via ``load_instrument_pack`` and parsed exactly like ``instrument``.
+
+    The response always includes ``path`` and ``warnings`` keys. For
+    single-round runs ``path`` has length 1 and ``warnings`` is the parser
+    warning list (may be empty). For multi-round/branching runs ``path``
+    contains one entry per executed round describing the routing decision.
+
+    Note on extension: there is no ``extend_panel`` re-entry into the DAG.
+    If a future ``extend_panel`` tool is added, it will append a single
+    ad-hoc round on top of the executed path — it will *not* re-enter the
+    authored DAG, restart routing, or replay branches (architect note 3).
 
     Args:
-        questions: List of question definitions. Each should have a 'text' key.
-            Optional: follow_ups (list of follow-up question strings).
+        questions: Legacy v1 question list. Each entry should have a 'text'
+            key. Mutually exclusive with ``instrument``/``instrument_pack``.
         personas: List of persona definitions. Each should have at minimum
             a 'name' key. Optional: age, occupation, background, personality_traits.
         pack_id: ID of a saved persona pack to use. Personas from the pack are
             merged with any inline personas (inline personas come first).
             At least one of personas or pack_id must be provided.
+        instrument: Full instrument body (v1/v2/v3) as a dict. Use this for
+            multi-round and branching runs.
+        instrument_pack: Name of an installed instrument pack to load.
         model: LLM model to use. Defaults to haiku.
         response_schema: Optional JSON Schema for structured output. When
             provided, each panelist's responses are extracted as structured
@@ -279,12 +439,68 @@ async def run_panel(
         merged.extend(pack.get("personas", []))
     if not merged:
         return json.dumps({"error": "No personas provided. Supply personas and/or pack_id."})
+
+    # Resolve instrument source: instrument dict > instrument_pack > questions
+    instrument_obj: Instrument | None = None
+    raw_instrument: dict[str, Any] | None = None
+    if instrument is not None:
+        raw_instrument = dict(instrument)
+    elif instrument_pack is not None:
+        try:
+            data = _data_load_instrument_pack(instrument_pack)
+        except FileNotFoundError as exc:
+            return json.dumps({"error": str(exc)})
+        # Pack body may nest the instrument under 'instrument' or live flat.
+        if isinstance(data, dict) and "instrument" in data:
+            raw_instrument = dict(data["instrument"])
+        else:
+            raw_instrument = {
+                k: v for k, v in data.items()
+                if k not in {"id", "name", "version", "description", "author"}
+            }
+
+    if raw_instrument is not None:
+        raw_instrument.setdefault("version", 1)
+        try:
+            instrument_obj = parse_instrument(raw_instrument)
+        except InstrumentError as exc:
+            return json.dumps({"error": f"instrument validation failed: {exc}"})
+
+    if instrument_obj is None and not questions:
+        return json.dumps({
+            "error": "No questions or instrument provided. Supply questions, instrument, or instrument_pack."
+        })
+
+    if instrument_obj is not None and len(instrument_obj.rounds) > 1:
+        # Multi-round / branching path.
+        result = await _run_branching_panel_async(
+            merged, instrument_obj, model, ctx, response_schema,
+            synthesis=synthesis,
+            synthesis_model=synthesis_model,
+        )
+        return json.dumps(result, indent=2)
+
+    # Single-round path: prefer instrument's own questions if provided.
+    effective_questions: list[dict[str, Any]]
+    if instrument_obj is not None:
+        effective_questions = list(instrument_obj.questions)
+    else:
+        effective_questions = list(questions or [])
+
     result = await _run_panel_async(
-        merged, questions, model, ctx, response_schema,
+        merged, effective_questions, model, ctx, response_schema,
         synthesis=synthesis,
         synthesis_model=synthesis_model,
         synthesis_prompt=synthesis_prompt,
     )
+    # Always emit path + warnings keys for shape consistency.
+    if instrument_obj is not None:
+        round_name = instrument_obj.rounds[0].name if instrument_obj.rounds else "default"
+        result["path"] = [{"round": round_name, "branch": "linear", "next": "__end__"}]
+        result["warnings"] = list(getattr(instrument_obj, "warnings", []) or [])
+    else:
+        result["path"] = [{"round": "default", "branch": "linear", "next": "__end__"}]
+        result["warnings"] = []
     return json.dumps(result, indent=2)
 
 
@@ -363,6 +579,75 @@ async def save_persona_pack(
     """
     result = _data_save_persona_pack(name, personas, pack_id)
     return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+async def list_instrument_packs() -> str:
+    """List all installed instrument packs.
+
+    Instrument packs are single-file YAMLs under
+    ``$SYNTH_PANEL_DATA_DIR/packs/instruments/``. Each carries a top-level
+    manifest (name, version, description, author) plus a v1/v2/v3
+    instrument body. The flywheel companion to persona packs.
+    """
+    packs = _data_list_instrument_packs()
+    return json.dumps(packs, indent=2)
+
+
+@mcp.tool()
+async def get_instrument_pack(name: str) -> str:
+    """Get a specific instrument pack by name.
+
+    Returns the full YAML body, including manifest fields and the
+    instrument definition. Pass the result's instrument body to
+    ``run_panel`` via the ``instrument`` argument, or pass ``name``
+    directly via ``instrument_pack``.
+
+    Args:
+        name: The pack name (filename stem under packs/instruments/).
+    """
+    try:
+        pack = _data_load_instrument_pack(name)
+    except FileNotFoundError as exc:
+        return json.dumps({"error": str(exc)})
+    return json.dumps(pack, indent=2)
+
+
+@mcp.tool()
+async def save_instrument_pack(
+    name: str,
+    content: dict[str, Any],
+) -> str:
+    """Save an instrument pack to disk.
+
+    The content is parsed and validated before being written — bad
+    instruments are rejected. The manifest 'name' is forced to match
+    the pack id on disk.
+
+    Args:
+        name: Pack name (used as filename stem).
+        content: Full YAML body — manifest fields at top level, plus an
+            ``instrument`` key (or instrument fields directly at top level).
+    """
+    if not isinstance(content, dict):
+        return json.dumps({"error": "content must be a mapping"})
+
+    # Validate before saving: extract instrument body and parse.
+    if "instrument" in content and isinstance(content["instrument"], dict):
+        raw = dict(content["instrument"])
+    else:
+        raw = {
+            k: v for k, v in content.items()
+            if k not in {"id", "name", "version", "description", "author"}
+        }
+    raw.setdefault("version", 1)
+    try:
+        parse_instrument(raw)
+    except InstrumentError as exc:
+        return json.dumps({"error": f"instrument validation failed: {exc}"})
+
+    meta = _data_save_instrument_pack(name, content)
+    return json.dumps(meta, indent=2)
 
 
 @mcp.tool()
