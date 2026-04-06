@@ -182,7 +182,15 @@ async def _run_panel_async(
         "synthesis": synthesis_dict,
         "total_cost": total_cost.format_usd(),
         "total_usage": total_usage.to_dict(),
-        "results": result_dicts,
+        "rounds": [
+            {
+                "name": "default",
+                "results": result_dicts,
+                "synthesis": None,
+            }
+        ],
+        "path": [],
+        "warnings": [],
     }
 
 

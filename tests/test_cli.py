@@ -452,7 +452,12 @@ class TestPanelRun:
         data = json.loads(capsys.readouterr().out)
         assert data["persona_count"] == 1
         assert data["question_count"] == 1
-        assert len(data["results"]) == 1
+        # New rounds-shaped output (sp-zg4): single-round wraps per-persona
+        # results inside a single round entry. Legacy flat shape requires
+        # --legacy-output and will be removed in 0.6.0.
+        assert "rounds" in data
+        assert len(data["rounds"]) == 1
+        assert len(data["rounds"][0]["results"]) == 1
         assert data["synthesis"] is not None
         assert data["synthesis"]["summary"] == "Test synthesis summary"
         assert "panelist_cost" in data

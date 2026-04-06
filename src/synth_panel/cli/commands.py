@@ -285,19 +285,79 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         print(format_summary("Total", total_usage, total_cost_est,
                              model=model, is_estimated=is_estimated))
     else:
-        extra: dict[str, Any] = {
-            "results": results,
-            "panelist_cost": panelist_cost_est.format_usd(),
-            "synthesis": synthesis_dict,
-            "total_usage": total_usage.to_dict(),
-            "total_cost": total_cost_est.format_usd(),
-            "model": model,
-            "persona_count": len(personas),
-            "question_count": len(questions),
-        }
+        legacy = getattr(args, "legacy_output", False)
+        if legacy:
+            sys.stderr.write(
+                "DeprecationWarning: --legacy-output emits the flat "
+                "single-round shape and will be removed in 0.6.0. Migrate "
+                "consumers to the rounds-shaped output.\n"
+            )
+            extra: dict[str, Any] = {
+                "results": results,
+                "panelist_cost": panelist_cost_est.format_usd(),
+                "synthesis": synthesis_dict,
+                "total_usage": total_usage.to_dict(),
+                "total_cost": total_cost_est.format_usd(),
+                "model": model,
+                "persona_count": len(personas),
+                "question_count": len(questions),
+            }
+        else:
+            extra = _build_rounds_shape(
+                instrument=instrument,
+                results=results,
+                synthesis_dict=synthesis_dict,
+                panelist_cost=panelist_cost_est,
+                total_usage=total_usage,
+                total_cost=total_cost_est,
+                model=model,
+                persona_count=len(personas),
+                question_count=len(questions),
+            )
         emit(fmt, message="Panel complete", extra=extra)
 
     return 0
+
+
+def _build_rounds_shape(
+    *,
+    instrument: Instrument,
+    results: list[dict[str, Any]],
+    synthesis_dict: dict[str, Any] | None,
+    panelist_cost: Any,
+    total_usage: TokenUsage,
+    total_cost: Any,
+    model: str,
+    persona_count: int,
+    question_count: int,
+) -> dict[str, Any]:
+    """Build the rounds-shaped panel output payload.
+
+    Single-round runs surface as one round entry whose ``name`` is the
+    instrument's only round (``"default"`` for v1). Multi-round/branching
+    runs use this same shape with one entry per executed round; that
+    wiring lives in F3-A. Per-round ``synthesis`` is ``null`` for the
+    single-round case — the final synthesis goes at the top level.
+    """
+    round_name = instrument.rounds[0].name if instrument.rounds else "default"
+    return {
+        "rounds": [
+            {
+                "name": round_name,
+                "results": results,
+                "synthesis": None,
+            }
+        ],
+        "path": [],
+        "warnings": list(getattr(instrument, "warnings", []) or []),
+        "synthesis": synthesis_dict,
+        "panelist_cost": panelist_cost.format_usd(),
+        "total_usage": total_usage.to_dict(),
+        "total_cost": total_cost.format_usd(),
+        "model": model,
+        "persona_count": persona_count,
+        "question_count": question_count,
+    }
 
 
 def handle_pack_list(args: argparse.Namespace, fmt: OutputFormat) -> int:
