@@ -1,17 +1,20 @@
 """MCP server implementation for synth-panel.
 
-Exposes 8 tools, 4 resource URI patterns, and 3 prompt templates.
+Exposes 11 tools, 4 resource URI patterns, and 3 prompt templates.
 Uses stdio transport. Default model is haiku for MCP mode.
 
 Tools:
-    run_prompt          - Send a single prompt to an LLM (no personas)
-    run_panel           - Run a full synthetic focus group panel
-    run_quick_poll      - Quick single-question poll across personas
-    list_persona_packs  - List saved persona packs
-    get_persona_pack    - Get a specific persona pack
-    save_persona_pack   - Save a persona pack
-    list_panel_results  - List saved panel results
-    get_panel_result    - Get a specific panel result
+    run_prompt              - Send a single prompt to an LLM (no personas)
+    run_panel               - Run a full synthetic focus group panel
+    run_quick_poll          - Quick single-question poll across personas
+    list_persona_packs      - List saved persona packs
+    get_persona_pack        - Get a specific persona pack
+    save_persona_pack       - Save a persona pack
+    list_instrument_packs   - List saved instrument packs
+    get_instrument_pack     - Get a specific instrument pack
+    save_instrument_pack    - Save an instrument pack
+    list_panel_results      - List saved panel results
+    get_panel_result        - Get a specific panel result
 
 Resources (URI patterns):
     persona-pack://{pack_id}         - A specific persona pack
@@ -39,8 +42,11 @@ from synth_panel.llm.models import CompletionRequest, InputMessage, TextBlock
 from synth_panel.mcp.data import (
     get_panel_result as _data_get_panel_result,
     get_persona_pack as _data_get_persona_pack,
+    list_instrument_packs as _data_list_instrument_packs,
     list_panel_results as _data_list_panel_results,
     list_persona_packs as _data_list_persona_packs,
+    load_instrument_pack as _data_load_instrument_pack,
+    save_instrument_pack as _data_save_instrument_pack,
     save_panel_result,
     save_persona_pack as _data_save_persona_pack,
 )
@@ -173,6 +179,12 @@ async def _run_panel_async(
         question_count=len(questions),
     )
 
+    # path/warnings are surfaced for parity with the CLI rounds-shaped
+    # output (sp-xsu) and the v3 branching contract (F3-B). MCP run_panel
+    # currently executes a single flat round, so path is a single entry
+    # ("default") and warnings is empty. v3 instrument-driven runs would
+    # populate both from the MultiRoundResult; the structural shape here
+    # is forward-compatible with that wiring.
     return {
         "result_id": result_id,
         "model": model,
@@ -183,6 +195,8 @@ async def _run_panel_async(
         "total_cost": total_cost.format_usd(),
         "total_usage": total_usage.to_dict(),
         "results": result_dicts,
+        "path": [{"round": "default", "branch": None, "next": "__end__"}],
+        "warnings": [],
     }
 
 
@@ -354,6 +368,51 @@ async def save_persona_pack(
         pack_id: Optional ID. Auto-generated if not provided.
     """
     result = _data_save_persona_pack(name, personas, pack_id)
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+async def list_instrument_packs() -> str:
+    """List all saved instrument packs.
+
+    Instrument packs are single-file YAML survey definitions stored under
+    ``$SYNTH_PANEL_DATA_DIR/packs/instruments/``. Each pack carries the
+    standard manifest fields (name, version, description, author) at the
+    top level alongside the instrument body.
+    """
+    packs = _data_list_instrument_packs()
+    return json.dumps(packs, indent=2)
+
+
+@mcp.tool()
+async def get_instrument_pack(name: str) -> str:
+    """Get a specific instrument pack by name.
+
+    Args:
+        name: The pack name (filename stem under packs/instruments/).
+    """
+    pack = _data_load_instrument_pack(name)
+    return json.dumps(pack, indent=2)
+
+
+@mcp.tool()
+async def save_instrument_pack(
+    name: str,
+    content: dict[str, Any],
+) -> str:
+    """Save an instrument pack to the local pack directory.
+
+    The ``content`` mapping is the full YAML body — manifest fields
+    (``name``, ``version``, ``description``, ``author``) are expected
+    at the top level alongside the instrument definition (``questions``
+    or ``rounds``). Parser-level validation is the caller's
+    responsibility; this tool only persists the content.
+
+    Args:
+        name: Pack name (becomes the filename stem).
+        content: Full instrument pack body as a mapping.
+    """
+    result = _data_save_instrument_pack(name, content)
     return json.dumps(result, indent=2)
 
 

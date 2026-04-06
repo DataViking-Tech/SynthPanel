@@ -42,6 +42,9 @@ class TestServerRegistration:
             "list_persona_packs",
             "get_persona_pack",
             "save_persona_pack",
+            "list_instrument_packs",
+            "get_instrument_pack",
+            "save_instrument_pack",
             "list_panel_results",
             "get_panel_result",
         }
@@ -243,6 +246,95 @@ class TestRunPanelPackId:
             personas_used = mock_run.call_args[0][0]
             assert len(personas_used) == 1
             assert personas_used[0]["name"] == "Alice"
+
+
+# ---------------------------------------------------------------------------
+# Instrument pack tools (sp-yiz)
+# ---------------------------------------------------------------------------
+
+class TestInstrumentPackTools:
+    """Round-trip the three new instrument-pack MCP tools."""
+
+    @pytest.mark.asyncio
+    async def test_list_empty(self):
+        result = await mcp.call_tool("list_instrument_packs", {})
+        data = json.loads(result[0][0].text)
+        assert data == []
+
+    @pytest.mark.asyncio
+    async def test_save_get_list_round_trip(self):
+        body = {
+            "name": "Pricing Discovery",
+            "version": "1.0",
+            "description": "Branching pricing probe",
+            "author": "test",
+            "questions": [{"text": "What would you pay?"}],
+        }
+        save_result = await mcp.call_tool("save_instrument_pack", {
+            "name": "pricing-discovery",
+            "content": body,
+        })
+        saved = json.loads(save_result[0][0].text)
+        assert saved["id"] == "pricing-discovery"
+        assert saved["version"] == "1.0"
+        assert saved["type"] == "instrument"
+
+        get_result = await mcp.call_tool("get_instrument_pack", {
+            "name": "pricing-discovery",
+        })
+        pack = json.loads(get_result[0][0].text)
+        assert pack["name"] == "Pricing Discovery"
+        assert pack["questions"][0]["text"] == "What would you pay?"
+
+        list_result = await mcp.call_tool("list_instrument_packs", {})
+        listed = json.loads(list_result[0][0].text)
+        assert len(listed) == 1
+        assert listed[0]["id"] == "pricing-discovery"
+
+    @pytest.mark.asyncio
+    async def test_get_missing_raises(self):
+        with pytest.raises(Exception):
+            await mcp.call_tool("get_instrument_pack", {"name": "nope"})
+
+
+# ---------------------------------------------------------------------------
+# run_panel response shape (sp-yiz: path + warnings keys)
+# ---------------------------------------------------------------------------
+
+class TestRunPanelResponseShape:
+    """run_panel return dict gains path + warnings keys (F3-B contract)."""
+
+    @pytest.mark.asyncio
+    async def test_response_has_path_and_warnings(self):
+        from synth_panel.mcp import server as srv
+        from synth_panel.cost import TokenUsage as CTU, ZERO_USAGE
+
+        async def fake_run_panel_async(personas, questions, model, ctx, response_schema, **kw):
+            return {
+                "result_id": "fake",
+                "model": model,
+                "persona_count": len(personas),
+                "question_count": len(questions),
+                "panelist_cost": "$0.00",
+                "synthesis": None,
+                "total_cost": "$0.00",
+                "total_usage": ZERO_USAGE.to_dict(),
+                "results": [],
+                "path": [{"round": "default", "branch": None, "next": "__end__"}],
+                "warnings": [],
+            }
+
+        with patch.object(srv, "_run_panel_async", side_effect=fake_run_panel_async):
+            result = await mcp.call_tool("run_panel", {
+                "personas": [{"name": "Alice"}],
+                "questions": [{"text": "Hi?"}],
+            })
+        data = json.loads(result[0][0].text)
+        assert "path" in data
+        assert "warnings" in data
+        assert isinstance(data["path"], list)
+        assert isinstance(data["warnings"], list)
+        assert len(data["path"]) >= 1
 
 
 # ---------------------------------------------------------------------------
