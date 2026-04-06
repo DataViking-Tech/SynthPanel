@@ -37,6 +37,27 @@ def _packs_dir() -> Path:
     return d
 
 
+def _instrument_packs_dir() -> Path:
+    d = _data_dir() / "packs" / "instruments"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+# Manifest fields shared across pack types (per F2-B spec).
+_MANIFEST_FIELDS = ("name", "version", "description", "author")
+
+
+def _extract_manifest(data: dict[str, Any], pack_id: str) -> dict[str, Any]:
+    """Pull the four shared manifest fields out of a pack dict."""
+    return {
+        "id": pack_id,
+        "name": data.get("name", pack_id),
+        "version": data.get("version", ""),
+        "description": data.get("description", ""),
+        "author": data.get("author", ""),
+    }
+
+
 def _results_dir() -> Path:
     d = _data_dir() / "results"
     d.mkdir(parents=True, exist_ok=True)
@@ -197,6 +218,65 @@ def save_persona_pack(
     data = {"name": name, "personas": personas}
     p.write_text(yaml.dump(data, default_flow_style=False), encoding="utf-8")
     return {"id": pid, "name": name, "persona_count": len(personas), "path": str(p)}
+
+
+# ---------------------------------------------------------------------------
+# Instrument packs (single-file YAML, manifest at top level)
+# ---------------------------------------------------------------------------
+
+def list_instrument_packs() -> list[dict[str, Any]]:
+    """Return manifest metadata for every saved instrument pack.
+
+    Instrument packs live as single ``<name>.yaml`` files under
+    ``$SYNTH_PANEL_DATA_DIR/packs/instruments/``. Each file carries the
+    four manifest fields (``name``, ``version``, ``description``,
+    ``author``) at the top level alongside the instrument body.
+    """
+    out: list[dict[str, Any]] = []
+    for p in sorted(_instrument_packs_dir().glob("*.yaml")):
+        try:
+            data = yaml.safe_load(p.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(data, dict):
+            continue
+        meta = _extract_manifest(data, p.stem)
+        meta["path"] = str(p)
+        meta["type"] = "instrument"
+        out.append(meta)
+    return out
+
+
+def load_instrument_pack(name: str) -> dict[str, Any]:
+    """Load an instrument pack by name. Returns the full YAML body."""
+    p = _instrument_packs_dir() / f"{name}.yaml"
+    if not p.exists():
+        raise FileNotFoundError(f"Instrument pack not found: {name}")
+    data = yaml.safe_load(p.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"Invalid instrument pack format in {name}")
+    data["id"] = name
+    return data
+
+
+def save_instrument_pack(name: str, content: dict[str, Any]) -> dict[str, Any]:
+    """Save an instrument pack to disk and return its manifest metadata.
+
+    ``content`` is the full YAML body — the manifest fields are
+    expected to live at the top level alongside the instrument
+    definition. The caller is responsible for parser-level validation.
+    """
+    if not isinstance(content, dict):
+        raise ValueError("instrument pack content must be a mapping")
+    body = dict(content)
+    # Ensure the manifest 'name' matches the pack id on disk.
+    body.setdefault("name", name)
+    p = _instrument_packs_dir() / f"{name}.yaml"
+    p.write_text(yaml.dump(body, default_flow_style=False, sort_keys=False), encoding="utf-8")
+    meta = _extract_manifest(body, name)
+    meta["path"] = str(p)
+    meta["type"] = "instrument"
+    return meta
 
 
 # ---------------------------------------------------------------------------
