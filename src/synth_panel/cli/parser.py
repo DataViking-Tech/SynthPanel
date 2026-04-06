@@ -171,6 +171,61 @@ def build_parser() -> argparse.ArgumentParser:
         help="Write to file instead of stdout.",
     )
 
+    # instruments
+    instruments_parser = subparsers.add_parser(
+        "instruments",
+        help="Instrument pack management: list, install, show, graph.",
+    )
+    instruments_subparsers = instruments_parser.add_subparsers(
+        dest="instruments_command"
+    )
+
+    instruments_subparsers.add_parser(
+        "list",
+        help="List installed instrument packs.",
+    )
+
+    install_parser = instruments_subparsers.add_parser(
+        "install",
+        help="Install an instrument pack from a YAML file (or by name if bundled).",
+    )
+    install_parser.add_argument(
+        "source",
+        metavar="SOURCE",
+        help="Path to a YAML file or the name of a bundled pack.",
+    )
+    install_parser.add_argument(
+        "--name",
+        default=None,
+        help="Override the installed pack's name (default: from file/manifest).",
+    )
+
+    show_parser = instruments_subparsers.add_parser(
+        "show",
+        help="Print an installed instrument pack's contents.",
+    )
+    show_parser.add_argument(
+        "name",
+        metavar="NAME",
+        help="Pack name (as listed by 'instruments list').",
+    )
+
+    graph_parser = instruments_subparsers.add_parser(
+        "graph",
+        help="Render the round DAG of an instrument file or pack name.",
+    )
+    graph_parser.add_argument(
+        "source",
+        metavar="SOURCE",
+        help="YAML file path or installed pack name.",
+    )
+    graph_parser.add_argument(
+        "--format",
+        choices=["text", "mermaid"],
+        default="text",
+        help="DAG output format (default: text).",
+    )
+
     # mcp-serve
     subparsers.add_parser(
         "mcp-serve",

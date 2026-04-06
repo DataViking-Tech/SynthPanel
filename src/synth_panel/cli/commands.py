@@ -109,19 +109,36 @@ def _load_personas(path: str) -> list[dict[str, Any]]:
     raise ValueError(f"Invalid personas file: expected 'personas' key or a list, got {type(data).__name__}")
 
 
-def _load_instrument(path: str) -> Instrument:
-    """Load an instrument/survey from a YAML file.
+def _load_instrument(path_or_name: str) -> Instrument:
+    """Load an instrument from a file path *or* an installed pack name.
 
-    Supports both v1 (flat questions) and v2 (multi-round) formats.
-    Returns a validated :class:`Instrument` with normalized round definitions.
+    Supports v1 (flat), v2 (linear rounds), v3 (branching). When
+    ``path_or_name`` is not an existing file, falls back to
+    :func:`load_instrument_pack` which looks under
+    ``$SYNTH_PANEL_DATA_DIR/packs/instruments/``. The unified resolver
+    is what makes ``panel run --instrument <name>`` accept pack names
+    in addition to file paths.
     """
-    data = _load_yaml(path)
+    if Path(path_or_name).exists():
+        data = _load_yaml(path_or_name)
+    else:
+        from synth_panel.mcp.data import load_instrument_pack
+        try:
+            data = load_instrument_pack(path_or_name)
+        except FileNotFoundError as exc:
+            raise FileNotFoundError(
+                f"Instrument not found as file or installed pack: "
+                f"{path_or_name}"
+            ) from exc
+
     if isinstance(data, dict) and "instrument" in data:
         raw = data["instrument"]
     elif isinstance(data, dict) and ("questions" in data or "rounds" in data):
         raw = data
     else:
-        raise ValueError("Invalid instrument file: expected 'instrument', 'questions', or 'rounds' key")
+        raise ValueError(
+            "Invalid instrument: expected 'instrument', 'questions', or 'rounds' key"
+        )
     raw.setdefault("version", 1)
     return parse_instrument(raw)
 
@@ -159,6 +176,11 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     except (FileNotFoundError, ValueError, InstrumentError) as exc:
         print(f"Error loading instrument: {exc}", file=sys.stderr)
         return 1
+
+    # Surface parser warnings (e.g. unreachable rounds) to stderr — these
+    # are non-fatal but the user should see them before any LLM call fires.
+    for w in instrument.warnings:
+        print(f"warning: {w}", file=sys.stderr)
 
     questions = instrument.questions
     if not questions:
@@ -446,5 +468,204 @@ def handle_mcp_serve(args: argparse.Namespace, fmt: OutputFormat) -> int:
     from synth_panel.mcp.server import serve
     serve()
     return 0
+
+
+# ---------------------------------------------------------------------------
+# Instruments subcommands (sp-xsu)
+# ---------------------------------------------------------------------------
+
+def handle_instruments_list(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """List installed instrument packs."""
+    from synth_panel.mcp.data import list_instrument_packs
+
+    packs = list_instrument_packs()
+
+    if fmt is OutputFormat.TEXT:
+        if not packs:
+            print("No instrument packs installed.")
+            print(
+                "Install one with: synth-panel instruments install <file.yaml>"
+            )
+        else:
+            for p in packs:
+                version = f" v{p['version']}" if p.get("version") else ""
+                desc = f" — {p['description']}" if p.get("description") else ""
+                print(f"  {p['id']}{version}{desc}")
+    else:
+        emit(fmt, message="Instrument packs", extra={"packs": packs})
+    return 0
+
+
+def handle_instruments_install(
+    args: argparse.Namespace, fmt: OutputFormat
+) -> int:
+    """Install an instrument pack from a YAML file (or bundled name)."""
+    from synth_panel.mcp.data import save_instrument_pack
+
+    source = args.source
+    if not Path(source).exists():
+        print(
+            f"Error: source file not found: {source}\n"
+            f"(bundled instrument packs are not yet shipped — pass a "
+            f"YAML file path)",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        data = _load_yaml(source)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"Error loading file: {exc}", file=sys.stderr)
+        return 1
+
+    if not isinstance(data, dict):
+        print("Error: instrument pack file must be a YAML mapping", file=sys.stderr)
+        return 1
+
+    # Validate by parsing — bad instruments must fail before install.
+    raw = data.get("instrument", data)
+    raw.setdefault("version", 1)
+    try:
+        parse_instrument(raw)
+    except InstrumentError as exc:
+        print(f"Error: instrument validation failed: {exc}", file=sys.stderr)
+        return 1
+
+    pack_name = args.name or data.get("name") or Path(source).stem
+    meta = save_instrument_pack(pack_name, data)
+
+    if fmt is OutputFormat.TEXT:
+        print(f"Installed instrument pack '{meta['id']}' -> {meta['path']}")
+    else:
+        emit(fmt, message="Instrument pack installed", extra=meta)
+    return 0
+
+
+def handle_instruments_show(
+    args: argparse.Namespace, fmt: OutputFormat
+) -> int:
+    """Print an installed instrument pack's contents."""
+    from synth_panel.mcp.data import load_instrument_pack
+
+    try:
+        data = load_instrument_pack(args.name)
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    if fmt is OutputFormat.TEXT:
+        print(yaml.safe_dump(data, default_flow_style=False, sort_keys=False), end="")
+    else:
+        emit(fmt, message="Instrument pack", extra={"name": args.name, "data": data})
+    return 0
+
+
+def handle_instruments_graph(
+    args: argparse.Namespace, fmt: OutputFormat
+) -> int:
+    """Render the round DAG for an instrument file or installed pack name."""
+    try:
+        instrument = _load_instrument(args.source)
+    except (FileNotFoundError, ValueError, InstrumentError) as exc:
+        print(f"Error loading instrument: {exc}", file=sys.stderr)
+        return 1
+
+    for w in instrument.warnings:
+        print(f"warning: {w}", file=sys.stderr)
+
+    rendered = (
+        _render_mermaid(instrument)
+        if getattr(args, "format", "text") == "mermaid"
+        else _render_text_dag(instrument)
+    )
+
+    if fmt is OutputFormat.TEXT:
+        print(rendered)
+    else:
+        emit(
+            fmt,
+            message="Instrument graph",
+            extra={
+                "rounds": [r.name for r in instrument.rounds],
+                "graph": rendered,
+                "warnings": instrument.warnings,
+            },
+        )
+    return 0
+
+
+def _render_text_dag(instrument: Instrument) -> str:
+    """Plain-text node + edge listing of an instrument's round DAG."""
+    from synth_panel.instrument import END_SENTINEL
+
+    lines: list[str] = []
+    lines.append(f"# instrument v{instrument.version}")
+    lines.append(f"# {len(instrument.rounds)} round(s)")
+    lines.append("")
+    for r in instrument.rounds:
+        lines.append(f"[{r.name}] ({len(r.questions)} question(s))")
+        if r.depends_on:
+            lines.append(f"  depends_on: {r.depends_on}")
+        if r.route_when:
+            for entry in r.route_when:
+                if "if" in entry:
+                    pred = entry["if"]
+                    lines.append(
+                        f"  if {pred.get('field')} {pred.get('op')} "
+                        f"{pred.get('value')!r} -> {entry.get('goto')}"
+                    )
+                elif "else" in entry:
+                    lines.append(f"  else -> {entry['else']}")
+    return "\n".join(lines)
+
+
+def _render_mermaid(instrument: Instrument) -> str:
+    """Mermaid flowchart of an instrument's round DAG."""
+    from synth_panel.instrument import END_SENTINEL
+
+    lines = ["flowchart TD"]
+    for r in instrument.rounds:
+        lines.append(f"    {r.name}([{r.name}])")
+    if any(r.route_when or r.depends_on for r in instrument.rounds):
+        for r in instrument.rounds:
+            if r.depends_on:
+                lines.append(f"    {r.depends_on} --> {r.name}")
+            if r.route_when:
+                for entry in r.route_when:
+                    if "if" in entry:
+                        pred = entry["if"]
+                        label = (
+                            f"{pred.get('field')} {pred.get('op')} "
+                            f"{pred.get('value')}"
+                        )
+                        target = entry.get("goto")
+                        lines.append(
+                            f"    {r.name} -->|{label}| {target}"
+                        )
+                    elif "else" in entry:
+                        lines.append(
+                            f"    {r.name} -->|else| {entry['else']}"
+                        )
+    return "\n".join(lines)
+
+
+def _format_path(path: list[dict[str, Any]]) -> str:
+    """Render an executed branching path as a single human line.
+
+    Example: ``exploration -> probe[themes contains pricing] -> probe_pricing -> validation``
+    """
+    if not path:
+        return ""
+    parts: list[str] = []
+    for i, entry in enumerate(path):
+        if i == 0:
+            parts.append(entry["round"])
+        branch = entry.get("branch", "")
+        nxt = entry.get("next", "")
+        if branch and branch not in ("linear",):
+            parts.append(f"[{branch}] -> {nxt}")
+        else:
+            parts.append(f"-> {nxt}")
+    return " ".join(parts)
 
 
