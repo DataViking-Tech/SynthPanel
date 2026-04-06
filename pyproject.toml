@@ -47,6 +47,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "synth_panel.packs" = ["*.yaml"]
+"synth_panel.packs.instruments" = ["*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

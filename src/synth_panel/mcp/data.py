@@ -89,6 +89,27 @@ def _bundled_packs() -> dict[str, dict[str, Any]]:
     return result
 
 
+def _bundled_instrument_packs() -> dict[str, dict[str, Any]]:
+    """Load instrument packs bundled in synth_panel.packs.instruments.
+
+    Returns a dict mapping pack_id (filename stem) to parsed YAML data.
+    """
+    result: dict[str, dict[str, Any]] = {}
+    try:
+        pkg = importlib.resources.files("synth_panel.packs.instruments")
+        for item in pkg.iterdir():
+            if item.name.endswith(".yaml"):
+                try:
+                    data = yaml.safe_load(item.read_text(encoding="utf-8"))
+                    if isinstance(data, dict):
+                        result[item.name.removesuffix(".yaml")] = data
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Persona packs
 # ---------------------------------------------------------------------------
@@ -225,14 +246,17 @@ def save_persona_pack(
 # ---------------------------------------------------------------------------
 
 def list_instrument_packs() -> list[dict[str, Any]]:
-    """Return manifest metadata for every saved instrument pack.
+    """Return manifest metadata for every available instrument pack.
 
-    Instrument packs live as single ``<name>.yaml`` files under
-    ``$SYNTH_PANEL_DATA_DIR/packs/instruments/``. Each file carries the
-    four manifest fields (``name``, ``version``, ``description``,
-    ``author``) at the top level alongside the instrument body.
+    Includes both bundled packs (shipped under
+    ``synth_panel.packs.instruments``) and user-saved packs under
+    ``$SYNTH_PANEL_DATA_DIR/packs/instruments/``. User-saved packs take
+    precedence over bundled packs of the same id.
     """
     out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    # User-saved packs first (take precedence over bundled).
     for p in sorted(_instrument_packs_dir().glob("*.yaml")):
         try:
             data = yaml.safe_load(p.read_text(encoding="utf-8"))
@@ -243,20 +267,43 @@ def list_instrument_packs() -> list[dict[str, Any]]:
         meta = _extract_manifest(data, p.stem)
         meta["path"] = str(p)
         meta["type"] = "instrument"
+        meta["source"] = "user"
+        out.append(meta)
+        seen.add(p.stem)
+
+    # Bundled packs (only those not shadowed by a user-saved pack).
+    for pack_id, data in sorted(_bundled_instrument_packs().items()):
+        if pack_id in seen:
+            continue
+        meta = _extract_manifest(data, pack_id)
+        meta["path"] = f"bundled:{pack_id}"
+        meta["type"] = "instrument"
+        meta["source"] = "bundled"
         out.append(meta)
     return out
 
 
 def load_instrument_pack(name: str) -> dict[str, Any]:
-    """Load an instrument pack by name. Returns the full YAML body."""
+    """Load an instrument pack by name. Returns the full YAML body.
+
+    User-saved packs take precedence over bundled packs of the same id.
+    """
     p = _instrument_packs_dir() / f"{name}.yaml"
-    if not p.exists():
-        raise FileNotFoundError(f"Instrument pack not found: {name}")
-    data = yaml.safe_load(p.read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        raise ValueError(f"Invalid instrument pack format in {name}")
-    data["id"] = name
-    return data
+    if p.exists():
+        data = yaml.safe_load(p.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError(f"Invalid instrument pack format in {name}")
+        data["id"] = name
+        return data
+
+    # Fall back to bundled packs.
+    bundled = _bundled_instrument_packs()
+    if name in bundled:
+        data = dict(bundled[name])
+        data["id"] = name
+        return data
+
+    raise FileNotFoundError(f"Instrument pack not found: {name}")
 
 
 def save_instrument_pack(name: str, content: dict[str, Any]) -> dict[str, Any]:
