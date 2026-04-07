@@ -620,32 +620,58 @@ def _render_text_dag(instrument: Instrument) -> str:
 
 
 def _render_mermaid(instrument: Instrument) -> str:
-    """Mermaid flowchart of an instrument's round DAG."""
+    """Mermaid flowchart of an instrument's round DAG.
+
+    Pure string template — no graphviz dependency. Edges carry the
+    rendered predicate (``field op value`` for ``if`` clauses, the
+    literal ``else`` for the trailing fallback). The reserved
+    ``__end__`` sentinel is rendered as an explicit terminal node
+    whenever any clause targets it. Works for v1, v2, and v3
+    instruments since v1/v2 are degenerate v3.
+    """
     from synth_panel.instrument import END_SENTINEL
 
     lines = ["flowchart TD"]
     for r in instrument.rounds:
         lines.append(f"    {r.name}([{r.name}])")
-    if any(r.route_when or r.depends_on for r in instrument.rounds):
-        for r in instrument.rounds:
-            if r.depends_on:
-                lines.append(f"    {r.depends_on} --> {r.name}")
-            if r.route_when:
-                for entry in r.route_when:
-                    if "if" in entry:
-                        pred = entry["if"]
+
+    # Track whether any edge targets __end__ — if so, declare it as a
+    # terminal node before drawing edges so the diagram is closed.
+    end_used = False
+    edge_lines: list[str] = []
+    fall_through_used = False  # for rounds with no route_when in v3 chains
+
+    for r in instrument.rounds:
+        if r.depends_on:
+            edge_lines.append(f"    {r.depends_on} --> {r.name}")
+        if r.route_when:
+            for entry in r.route_when:
+                if "if" in entry:
+                    pred = entry["if"]
+                    if isinstance(pred, dict):
                         label = (
                             f"{pred.get('field')} {pred.get('op')} "
                             f"{pred.get('value')}"
                         )
-                        target = entry.get("goto")
-                        lines.append(
-                            f"    {r.name} -->|{label}| {target}"
-                        )
-                    elif "else" in entry:
-                        lines.append(
-                            f"    {r.name} -->|else| {entry['else']}"
-                        )
+                    else:
+                        label = str(pred)
+                    target = entry.get("goto")
+                    if target == END_SENTINEL:
+                        end_used = True
+                    edge_lines.append(
+                        f"    {r.name} -->|{label}| {target}"
+                    )
+                elif "else" in entry:
+                    target = entry["else"]
+                    if target == END_SENTINEL:
+                        end_used = True
+                    edge_lines.append(
+                        f"    {r.name} -->|else| {target}"
+                    )
+
+    if end_used:
+        lines.append(f"    {END_SENTINEL}([__end__])")
+    lines.extend(edge_lines)
     return "\n".join(lines)
 
 
