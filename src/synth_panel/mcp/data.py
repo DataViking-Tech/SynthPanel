@@ -37,6 +37,27 @@ def _packs_dir() -> Path:
     return d
 
 
+def _instrument_packs_dir() -> Path:
+    d = _data_dir() / "packs" / "instruments"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+# Manifest fields shared across pack types (per F2-B spec).
+_MANIFEST_FIELDS = ("name", "version", "description", "author")
+
+
+def _extract_manifest(data: dict[str, Any], pack_id: str) -> dict[str, Any]:
+    """Pull the four shared manifest fields out of a pack dict."""
+    return {
+        "id": pack_id,
+        "name": data.get("name", pack_id),
+        "version": data.get("version", ""),
+        "description": data.get("description", ""),
+        "author": data.get("author", ""),
+    }
+
+
 def _results_dir() -> Path:
     d = _data_dir() / "results"
     d.mkdir(parents=True, exist_ok=True)
@@ -56,6 +77,27 @@ def _bundled_packs() -> dict[str, dict[str, Any]]:
     try:
         packs_pkg = importlib.resources.files("synth_panel.packs")
         for item in packs_pkg.iterdir():
+            if item.name.endswith(".yaml"):
+                try:
+                    data = yaml.safe_load(item.read_text(encoding="utf-8"))
+                    if isinstance(data, dict):
+                        result[item.name.removesuffix(".yaml")] = data
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    return result
+
+
+def _bundled_instrument_packs() -> dict[str, dict[str, Any]]:
+    """Load instrument packs bundled in synth_panel.packs.instruments.
+
+    Returns a dict mapping pack_id (filename stem) to parsed YAML data.
+    """
+    result: dict[str, dict[str, Any]] = {}
+    try:
+        pkg = importlib.resources.files("synth_panel.packs.instruments")
+        for item in pkg.iterdir():
             if item.name.endswith(".yaml"):
                 try:
                     data = yaml.safe_load(item.read_text(encoding="utf-8"))
@@ -197,6 +239,91 @@ def save_persona_pack(
     data = {"name": name, "personas": personas}
     p.write_text(yaml.dump(data, default_flow_style=False), encoding="utf-8")
     return {"id": pid, "name": name, "persona_count": len(personas), "path": str(p)}
+
+
+# ---------------------------------------------------------------------------
+# Instrument packs (single-file YAML, manifest at top level)
+# ---------------------------------------------------------------------------
+
+def list_instrument_packs() -> list[dict[str, Any]]:
+    """Return manifest metadata for every available instrument pack.
+
+    Includes both bundled packs (shipped under
+    ``synth_panel.packs.instruments``) and user-saved packs under
+    ``$SYNTH_PANEL_DATA_DIR/packs/instruments/``. User-saved packs take
+    precedence over bundled packs of the same id.
+    """
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    # User-saved packs first (take precedence over bundled).
+    for p in sorted(_instrument_packs_dir().glob("*.yaml")):
+        try:
+            data = yaml.safe_load(p.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(data, dict):
+            continue
+        meta = _extract_manifest(data, p.stem)
+        meta["path"] = str(p)
+        meta["type"] = "instrument"
+        meta["source"] = "user"
+        out.append(meta)
+        seen.add(p.stem)
+
+    # Bundled packs (only those not shadowed by a user-saved pack).
+    for pack_id, data in sorted(_bundled_instrument_packs().items()):
+        if pack_id in seen:
+            continue
+        meta = _extract_manifest(data, pack_id)
+        meta["path"] = f"bundled:{pack_id}"
+        meta["type"] = "instrument"
+        meta["source"] = "bundled"
+        out.append(meta)
+    return out
+
+
+def load_instrument_pack(name: str) -> dict[str, Any]:
+    """Load an instrument pack by name. Returns the full YAML body.
+
+    User-saved packs take precedence over bundled packs of the same id.
+    """
+    p = _instrument_packs_dir() / f"{name}.yaml"
+    if p.exists():
+        data = yaml.safe_load(p.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError(f"Invalid instrument pack format in {name}")
+        data["id"] = name
+        return data
+
+    # Fall back to bundled packs.
+    bundled = _bundled_instrument_packs()
+    if name in bundled:
+        data = dict(bundled[name])
+        data["id"] = name
+        return data
+
+    raise FileNotFoundError(f"Instrument pack not found: {name}")
+
+
+def save_instrument_pack(name: str, content: dict[str, Any]) -> dict[str, Any]:
+    """Save an instrument pack to disk and return its manifest metadata.
+
+    ``content`` is the full YAML body — the manifest fields are
+    expected to live at the top level alongside the instrument
+    definition. The caller is responsible for parser-level validation.
+    """
+    if not isinstance(content, dict):
+        raise ValueError("instrument pack content must be a mapping")
+    body = dict(content)
+    # Ensure the manifest 'name' matches the pack id on disk.
+    body.setdefault("name", name)
+    p = _instrument_packs_dir() / f"{name}.yaml"
+    p.write_text(yaml.dump(body, default_flow_style=False, sort_keys=False), encoding="utf-8")
+    meta = _extract_manifest(body, name)
+    meta["path"] = str(p)
+    meta["type"] = "instrument"
+    return meta
 
 
 # ---------------------------------------------------------------------------

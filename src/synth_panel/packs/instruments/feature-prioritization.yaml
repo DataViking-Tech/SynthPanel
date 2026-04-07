@@ -1,0 +1,75 @@
+# feature-prioritization: route between trade-off probing, must-have
+# clarification, or scope-cut exploration based on what dominates the
+# initial reaction. Canonical theme tags: "tradeoff", "must-have",
+# "scope".
+name: feature-prioritization
+version: 1
+description: >
+  Prioritize a candidate feature set against persona needs. Branches
+  into trade-off probing, must-have validation, or scope-cut
+  exploration depending on the initial reactions.
+author: synth-panel
+
+instrument:
+  version: 3
+  rounds:
+    - name: initial_reaction
+      questions:
+        - text: >
+            Here's the feature set we're considering: {features}. If
+            you could only get three of these in v1, which three?
+        - text: >
+            Which of these would actually change how you do your work,
+            and which are nice-to-haves?
+      route_when:
+        - if:
+            field: themes
+            op: contains
+            value: tradeoff
+          goto: probe_tradeoffs
+        - if:
+            field: themes
+            op: contains
+            value: must-have
+          goto: probe_must_have
+        - else: probe_scope
+
+    - name: probe_tradeoffs
+      questions:
+        - text: >
+            You called out a tension between features. Walk me through
+            the trade-off — what do you give up to get what?
+        - text: >
+            If we could only ship one side of that trade-off in the
+            first release, which would you pick and what would the
+            other half need to look like later?
+      route_when:
+        - else: wrap_up
+
+    - name: probe_must_have
+      questions:
+        - text: >
+            You said one of these is non-negotiable. What happens to
+            your workflow if we ship without it?
+        - text: >
+            Is there a half-version of that feature that would still
+            unblock you, or is it all-or-nothing?
+      route_when:
+        - else: wrap_up
+
+    - name: probe_scope
+      questions:
+        - text: >
+            If we cut the scope in half tomorrow, which features would
+            you fight to keep?
+        - text: >
+            Are any of these features actually a different product in
+            disguise?
+      route_when:
+        - else: wrap_up
+
+    - name: wrap_up
+      questions:
+        - text: >
+            Final ranking, top to bottom. One sentence per feature on
+            why you placed it where you did.

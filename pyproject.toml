@@ -1,6 +1,6 @@
 [project]
 name = "synth-panel"
-version = "0.1.0"
+version = "0.4.0"
 description = "Run synthetic focus groups and user research panels using AI personas. CLI tool, Python library, any LLM."
 requires-python = ">=3.10"
 license = "MIT"
@@ -48,9 +48,11 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "synth_panel.packs" = ["*.yaml"]
+"synth_panel.packs.instruments" = ["*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m 'not acceptance'"
 markers = [
     "acceptance: live API acceptance tests (require ANTHROPIC_API_KEY)",
 ]

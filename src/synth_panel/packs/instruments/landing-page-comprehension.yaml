@@ -1,0 +1,75 @@
+# landing-page-comprehension: routes between jargon-probe, audience-fit
+# probe, or call-to-action probe based on what kind of confusion
+# surfaces. Canonical theme tags: "jargon", "audience", "cta".
+name: landing-page-comprehension
+version: 1
+description: >
+  Test whether a landing page communicates clearly to a target persona.
+  Branches into jargon-probe, audience-fit probe, or CTA-probe based
+  on the dominant confusion in the initial pass.
+author: synth-panel
+
+instrument:
+  version: 3
+  rounds:
+    - name: cold_read
+      questions:
+        - text: >
+            Read the following page exactly once. Then, in your own
+            words: what does this product do, and who is it for?
+
+            ---
+            {landing_page}
+            ---
+        - text: >
+            What was the first thing that confused you, if anything?
+      route_when:
+        - if:
+            field: themes
+            op: contains
+            value: jargon
+          goto: probe_jargon
+        - if:
+            field: themes
+            op: contains
+            value: audience
+          goto: probe_audience
+        - else: probe_cta
+
+    - name: probe_jargon
+      questions:
+        - text: >
+            Which words or phrases on the page felt like insider
+            language? What did you assume they meant?
+        - text: >
+            If we replaced those terms with plain language, what would
+            still be unclear?
+      route_when:
+        - else: wrap_up
+
+    - name: probe_audience
+      questions:
+        - text: >
+            You weren't sure who this is for. What clue would have
+            told you faster?
+        - text: >
+            Imagine you're the wrong audience — what would you need to
+            see to bounce immediately, before wasting your time?
+      route_when:
+        - else: wrap_up
+
+    - name: probe_cta
+      questions:
+        - text: >
+            What did the page want you to do next? How clear was that?
+        - text: >
+            If the call-to-action button changed to {alt_cta}, would
+            you click it? Why or why not?
+      route_when:
+        - else: wrap_up
+
+    - name: wrap_up
+      questions:
+        - text: >
+            One change to this page that would have unblocked you in
+            the first ten seconds — what is it?

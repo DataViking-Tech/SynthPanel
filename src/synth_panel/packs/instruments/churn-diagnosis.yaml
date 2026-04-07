@@ -1,0 +1,73 @@
+# churn-diagnosis: routes between value-failure, friction-failure, or
+# competitive-loss probes based on the dominant churn theme. Canonical
+# theme tags: "value", "friction", "competitor".
+name: churn-diagnosis
+version: 1
+description: >
+  Diagnose why a customer-shaped persona would churn from a product.
+  Branches into value-failure, friction-failure, or competitive-loss
+  probes based on the dominant theme in the initial diagnosis round.
+author: synth-panel
+
+instrument:
+  version: 3
+  rounds:
+    - name: diagnosis
+      questions:
+        - text: >
+            Imagine you've been using {product} for three months and
+            you're about to cancel. What pushed you to that point?
+        - text: >
+            Looking back, when did you first start having second
+            thoughts? What triggered it?
+      route_when:
+        - if:
+            field: themes
+            op: contains
+            value: value
+          goto: probe_value
+        - if:
+            field: themes
+            op: contains
+            value: friction
+          goto: probe_friction
+        - else: probe_competitor
+
+    - name: probe_value
+      questions:
+        - text: >
+            You said the product wasn't paying for itself. What were
+            you expecting it to do for you that it didn't?
+        - text: >
+            If the team called you tomorrow and asked what would have
+            kept you, what would you tell them — and would you mean it?
+      route_when:
+        - else: wrap_up
+
+    - name: probe_friction
+      questions:
+        - text: >
+            Walk me through the exact moment that broke the camel's
+            back. What were you trying to do?
+        - text: >
+            Was it one big problem, or a hundred small ones? Which
+            small ones, if any, would you have tolerated alone?
+      route_when:
+        - else: wrap_up
+
+    - name: probe_competitor
+      questions:
+        - text: >
+            You mentioned switching. What does the alternative do that
+            this didn't?
+        - text: >
+            What would the original product have to change for you to
+            consider coming back in six months?
+      route_when:
+        - else: wrap_up
+
+    - name: wrap_up
+      questions:
+        - text: >
+            If you could leave one note in the founder's inbox on your
+            way out, what would it say?

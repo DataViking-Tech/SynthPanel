@@ -11,6 +11,10 @@ import sys
 from synth_panel.cli.parser import build_parser
 from synth_panel.cli.repl import run_repl
 from synth_panel.cli.commands import (
+    handle_instruments_graph,
+    handle_instruments_install,
+    handle_instruments_list,
+    handle_instruments_show,
     handle_mcp_serve,
     handle_pack_export,
     handle_pack_import,
@@ -46,6 +50,19 @@ def main(argv: list[str] | None = None) -> int:
             return handle_pack_export(args, output_format)
         else:
             parser.parse_args(["pack", "--help"])
+            return 1
+    elif args.command == "instruments":
+        sub = getattr(args, "instruments_command", None)
+        if sub == "list":
+            return handle_instruments_list(args, output_format)
+        elif sub == "install":
+            return handle_instruments_install(args, output_format)
+        elif sub == "show":
+            return handle_instruments_show(args, output_format)
+        elif sub == "graph":
+            return handle_instruments_graph(args, output_format)
+        else:
+            parser.parse_args(["instruments", "--help"])
             return 1
     elif args.command == "mcp-serve":
         return handle_mcp_serve(args, output_format)
