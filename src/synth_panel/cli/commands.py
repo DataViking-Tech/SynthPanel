@@ -258,6 +258,9 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
 
     # Output results
     if fmt is OutputFormat.TEXT:
+        path_line = _format_path(_degenerate_path(instrument))
+        if path_line:
+            print(f"path: {path_line}")
         for r in results:
             print(f"\n{'='*60}")
             print(f"Persona: {r['persona']}")
@@ -658,6 +661,27 @@ def _render_mermaid(instrument: Instrument) -> str:
     if has_end_target:
         lines.append(f"    {END_SENTINEL}(((end)))")
     return "\n".join(lines)
+
+
+def _degenerate_path(instrument: Instrument) -> list[dict[str, Any]]:
+    """Synthesize a path log for non-branching runs.
+
+    Single-round and linear v2 runs do not currently flow through
+    ``run_multi_round_panel`` (they use the legacy single-round path),
+    so they have no real router-emitted path. F3-E still wants the
+    path line rendered for those cases — fall back to a linear walk
+    over the instrument's declared rounds, ending in ``__end__``.
+    """
+    from synth_panel.instrument import END_SENTINEL
+
+    rounds = list(instrument.rounds)
+    if not rounds:
+        return []
+    path: list[dict[str, Any]] = []
+    for i, r in enumerate(rounds):
+        nxt = rounds[i + 1].name if i + 1 < len(rounds) else END_SENTINEL
+        path.append({"round": r.name, "branch": "linear", "next": nxt})
+    return path
 
 
 def _format_path(path: list[dict[str, Any]]) -> str:
