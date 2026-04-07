@@ -48,6 +48,9 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
+# Internal docs (product vision, planning, audits)
+docs/internal/
+
 # Environment / secrets
 .env
 .env.local
