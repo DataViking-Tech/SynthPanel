@@ -51,6 +51,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m 'not acceptance'"
 markers = [
     "acceptance: live API acceptance tests (require ANTHROPIC_API_KEY)",
 ]
