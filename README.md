@@ -111,6 +111,111 @@ instrument:
         type: text
 ```
 
+## Adaptive Research (0.5.0): Branching Instruments
+
+A v3 instrument is a small DAG of *rounds*. After each round, a routing
+predicate decides which round runs next based on the synthesizer's themes
+and recommendation. The panel chooses its own probe path — no human in the
+loop, no hand-coded conditional flows.
+
+```bash
+# The Show HN demo: ~$0.20, one command, the panel decides
+# whether to dig into pain, pricing, or alternatives.
+synth-panel panel run \
+  --personas examples/personas.yaml \
+  --instrument pricing-discovery
+```
+
+`pricing-discovery` is one of five bundled v3 packs (`pricing-discovery`,
+`name-test`, `feature-prioritization`, `landing-page-comprehension`,
+`churn-diagnosis`). List them with `synth-panel instruments list`.
+
+The output now carries a `path` array recording the routing decisions
+that actually fired:
+
+```
+discovery -> probe[themes contains price] -> probe_pricing -> validation
+```
+
+Render the DAG of any instrument:
+
+```bash
+synth-panel instruments graph pricing-discovery --format mermaid
+```
+
+### Predicate Reference
+
+`route_when` is a list of clauses evaluated in order. The first matching
+clause wins; an `else` clause is **mandatory** as the last entry.
+
+```yaml
+route_when:
+  - if: { field: themes, op: contains, value: price }
+    goto: probe_pricing
+  - if: { field: recommendation, op: matches, value: "(?i)wait|delay" }
+    goto: probe_objections
+  - else: __end__
+```
+
+| Field | Source |
+|-------|--------|
+| `themes` | `SynthesisResult.themes` (list, substring match) |
+| `recommendation` | `SynthesisResult.recommendation` (string) |
+| `disagreements`, `agreements`, `surprises` | `SynthesisResult` (lists) |
+| `summary` | `SynthesisResult.summary` (string) |
+
+| Op | Meaning |
+|----|---------|
+| `contains` | Substring match against any list entry or the string |
+| `equals` | Exact string match |
+| `matches` | Python regex match (use `(?i)` for case-insensitive) |
+
+The reserved target `__end__` terminates the run; the path so far feeds
+final synthesis.
+
+### Theme Matching: The R3 Caveat
+
+> **Predicates match against the synthesizer's *exact* theme strings.**
+
+`themes contains price` only fires if the synthesizer actually emitted a
+theme containing the substring `price`. LLM synthesizers paraphrase —
+"cost concerns" or "sticker shock" will not match. The bundled packs
+mitigate this with a comment block at the top of the instrument that
+hints at the canonical theme tags the synthesizer should prefer:
+
+```yaml
+# Synthesizer guidance: when emitting `themes`, prefer the short
+# canonical tags below so route_when predicates match reliably:
+#   - "pain"   (workflow pain, frustration, broken status quo)
+#   - "price"  (cost concerns, perceived value, sticker shock)
+#   - "alternative" (existing tools, workarounds, competitors)
+```
+
+When you author your own v3 packs, **always** add a similar tag-hint
+block. The synthesizer reads it and tends to use the canonical tags;
+your `contains` predicates then route reliably. If you skip this step,
+expect routes to silently fall through to `else` because the
+synthesizer's prose theme labels won't match your predicate values.
+
+Prefer short, lowercase, single-token tags (`price`, `pain`, `confusion`)
+over long phrases. `contains` does substring matching, so `price` will
+also match `pricing`, `priced`, etc.
+
+### `instruments` Subcommand
+
+```bash
+synth-panel instruments list                       # bundled + installed packs
+synth-panel instruments show pricing-discovery     # full YAML body
+synth-panel instruments install ./my-pack.yaml     # add a local pack
+synth-panel instruments graph pricing-discovery    # text DAG
+synth-panel instruments graph pricing-discovery \
+  --format mermaid                                 # mermaid flowchart
+```
+
+The unified instrument resolver (used by `panel run --instrument`) accepts
+either a YAML path *or* an installed pack name, so you can iterate on a
+local file and then `install` it once it's stable.
+
 ## LLM Provider Support
 
 synth-panel works with any LLM provider. Set the appropriate environment variable:
@@ -193,7 +298,16 @@ Add to your editor's MCP config (Claude Code, Cursor, Windsurf, etc.):
 }
 ```
 
-Tools exposed: `run_panel`, `run_quick_poll`, `list_persona_packs`, `get_persona_pack`, `save_persona_pack`, `list_panel_results`, `get_panel_result`.
+Tools exposed (12): `run_prompt`, `run_panel`, `run_quick_poll`, `extend_panel`, `list_persona_packs`, `get_persona_pack`, `save_persona_pack`, `list_instrument_packs`, `get_instrument_pack`, `save_instrument_pack`, `list_panel_results`, `get_panel_result`.
+
+`run_panel` accepts an inline `instrument` dict or an `instrument_pack`
+name, so an agent can offload research-design judgment in a single tool
+call. v3 responses include `rounds`, `path`, `terminal_round`, and
+`warnings` alongside the back-compat `results` array.
+
+`extend_panel` appends a single ad-hoc round to a saved panel result —
+it is **not** a re-entry into the authored DAG. Use it for follow-up
+probes that the original instrument didn't anticipate.
 
 ## Output Formats
 
@@ -228,6 +342,14 @@ Known limitations:
 - Higher-order correlations between variables are poorly replicated
 
 Use synth-panel to pre-screen and iterate, then validate with real participants.
+
+## Versions
+
+| Version | Highlights |
+|---------|-----------|
+| 0.5.0 | v3 branching instruments, router predicates, 5 bundled instrument packs, `instruments` subcommand (list/show/install/graph), MCP `*_instrument_pack` tools, rounds-shaped panel output, `extend_panel` ad-hoc round tool |
+| 0.4.0 | v2 multi-round linear instruments, session reuse across rounds, persona pack registry |
+| 0.3.0 | Structured output via tool-use forcing, cost tracking, MCP server (stdio), persona-pack persistence |
 
 ## License
 

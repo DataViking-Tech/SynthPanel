@@ -24,9 +24,12 @@ src/synth_panel/
 ├── cost.py               # Token tracking, model pricing, budget enforcement
 ├── persistence.py        # Session save/load/fork (JSON + JSONL)
 ├── plugins/              # Manifest-based extension system with hooks
-├── mcp/                  # MCP server (7 tools, stdio transport)
+├── instrument.py         # v1/v2/v3 instrument parser + DAG validator
+├── routing.py            # v3 router predicates (contains/equals/matches)
+├── mcp/                  # MCP server (12 tools, stdio transport)
 │   ├── server.py         # MCP server entry point
-│   └── data.py           # Persona pack and result persistence
+│   └── data.py           # Persona + instrument pack and result persistence
+├── packs/instruments/    # 5 bundled v3 branching instrument packs
 ├── cli/                  # CLI framework
 │   ├── parser.py         # argparse setup
 │   ├── commands.py       # Subcommand handlers (prompt, panel run)
@@ -42,8 +45,13 @@ src/synth_panel/
 # Single prompt
 synth-panel prompt "Say hello"
 
-# Full panel run
+# Full panel run (file path or installed pack name)
 synth-panel panel run --personas examples/personas.yaml --instrument examples/survey.yaml
+synth-panel panel run --personas examples/personas.yaml --instrument pricing-discovery
+
+# v3 branching: list / show / install / graph instrument packs
+synth-panel instruments list
+synth-panel instruments graph pricing-discovery --format mermaid
 
 # MCP server (stdio, for Claude Code / Cursor / Windsurf)
 synth-panel mcp-serve
@@ -109,9 +117,39 @@ instrument:
         - "Can you describe a specific example?"
 ```
 
+### v3 Branching Instruments (0.5.0)
+```yaml
+instrument:
+  version: 3
+  rounds:
+    - name: discovery
+      questions:
+        - text: "What's the most frustrating part?"
+      route_when:
+        - if: { field: themes, op: contains, value: price }
+          goto: probe_pricing
+        - else: __end__
+    - name: probe_pricing
+      questions:
+        - text: "What would feel fair to pay?"
+```
+
+**R3 caveat (theme matching):** `route_when` predicates compare against
+the *exact* strings the synthesizer emits. Always prefix v3 instruments
+with a comment block listing canonical theme tags so the synthesizer
+prefers them — otherwise routes silently fall through to `else`. See
+the README "Theme Matching" section and any bundled pack
+(`src/synth_panel/packs/instruments/`) for the pattern.
+
+Predicate ops: `contains` (substring), `equals` (exact), `matches`
+(regex). Targets: any round name or the reserved `__end__` sentinel.
+`else` clause is mandatory as the last entry.
+
 ## MCP Integration
 
-The MCP server exposes 7 tools: `run_panel`, `run_quick_poll`, `list_persona_packs`, `get_persona_pack`, `save_persona_pack`, `list_panel_results`, `get_panel_result`.
+The MCP server exposes 12 tools: `run_prompt`, `run_panel`, `run_quick_poll`, `extend_panel`, `list_persona_packs`, `get_persona_pack`, `save_persona_pack`, `list_instrument_packs`, `get_instrument_pack`, `save_instrument_pack`, `list_panel_results`, `get_panel_result`.
+
+`run_panel` accepts `instrument` (inline dict) or `instrument_pack` (name) for v3 branching runs. `extend_panel` appends one ad-hoc round to a saved panel result — it is not a re-entry into the authored DAG.
 
 Claude Code plugin: install via `/plugin install synth-panel`. Adds `/focus-group` skill.
 
