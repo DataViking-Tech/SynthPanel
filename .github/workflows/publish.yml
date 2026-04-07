@@ -7,10 +7,15 @@ on:
         required: true
         type: string
   push:
+    branches: [main]
+    paths:
+      - 'src/synth_panel/**'
+      - 'pyproject.toml'
     tags:
       - "v*"
 
 permissions:
+  contents: read
   id-token: write
 
 jobs:
