@@ -109,9 +109,55 @@ instrument:
         - "Can you describe a specific example?"
 ```
 
+### Branching instruments (v3, 0.5.0)
+
+v3 instruments add `rounds` with `route_when` predicates. Predicates are
+**dict form on disk** (no string parser): three operators (`contains`,
+`equals`, `matches`), and `else` is mandatory in every block. `__end__`
+is the reserved terminal sentinel.
+
+```yaml
+instrument:
+  version: 3
+  rounds:
+    - name: discovery
+      questions: [{text: "Walk me through ..."}]
+      route_when:
+        - if: {field: themes, op: contains, value: pricing}
+          goto: probe_pricing
+        - else: __end__
+    - name: probe_pricing
+      questions: [{text: "What would feel fair to pay ..."}]
+```
+
+**Theme-matching gotcha (R3):** `themes contains 'pricing'` matches against
+the synthesizer's exact tag output. If the synthesizer emits
+`"price sensitivity"` instead of `"pricing"`, the predicate fails and the
+router falls through to `else`. Mitigation: list the canonical tag
+vocabulary in a comment near the top of your instrument YAML and (if you
+override `synthesis_prompt`) repeat the list in the prompt text. Bundled
+packs follow this pattern.
+
+### `extend_panel` vs branching
+
+`extend_panel` always **appends a single ad-hoc round** on top of an
+existing panel result. It is *not* a re-entry into the authored DAG —
+routing is not re-evaluated, no branches are replayed, and the original
+instrument's `route_when` clauses are ignored. Use branching when you
+want the panel to choose its own probe path; use `extend_panel` when you
+have a saved result and want to ask one more thing.
+
 ## MCP Integration
 
-The MCP server exposes 7 tools: `run_panel`, `run_quick_poll`, `list_persona_packs`, `get_persona_pack`, `save_persona_pack`, `list_panel_results`, `get_panel_result`.
+The MCP server exposes 12 tools: `run_prompt`, `run_panel`, `run_quick_poll`,
+`extend_panel`, `list_persona_packs`, `get_persona_pack`, `save_persona_pack`,
+`list_instrument_packs`, `get_instrument_pack`, `save_instrument_pack`,
+`list_panel_results`, `get_panel_result`.
+
+`run_panel` accepts either a flat `questions` list (legacy v1) or an
+`instrument` dict / `instrument_pack` name for v2/v3 branching runs. The
+response includes `rounds`, `path` (one entry per executed round) and
+`warnings` (parser + runtime). For v1 single-round runs `path` has length 1.
 
 Claude Code plugin: install via `/plugin install synth-panel`. Adds `/focus-group` skill.
 

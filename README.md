@@ -90,6 +90,124 @@ personas:
       - values personal relationships
 ```
 
+## Branching Instruments (0.5.0)
+
+Instruments can branch. Instead of asking every panelist the same fixed list of
+questions, a v3 instrument lets the panel decide its own probe path based on
+what surfaced in the previous round. The orchestrator runs each round in
+parallel, synthesizes the results, then routes to the next round using a
+predicate over the synthesizer's output.
+
+The "$0.20 adaptive research" demo uses the bundled `pricing-discovery` pack:
+
+```bash
+# List bundled instrument packs
+synth-panel instruments list
+
+# Run the branching pricing-discovery instrument against your personas
+synth-panel panel run \
+  --personas examples/personas.yaml \
+  --instrument pricing-discovery
+```
+
+`pricing-discovery` opens with a discovery round, then routes into one of
+three probes — `probe_pain`, `probe_pricing`, or `probe_alternatives` —
+based on whether the panel's themes mention pain, price, or alternatives.
+Every path converges through `probe_pricing` and ends at `wrap_up`.
+
+The output adds two keys on top of the rounds-shaped payload:
+
+- `path` — one entry per executed round: `{round, branch, next}`. Lets you
+  see which way the panel actually went.
+- `warnings` — parser warnings (e.g. unreachable rounds) plus any runtime
+  routing issues. Empty when everything is clean.
+
+### Predicate reference
+
+Predicates live in YAML as **dict form** (no string parser, no eval):
+
+```yaml
+route_when:
+  - if:
+      field: themes          # dotted path into the round synthesis
+      op: contains           # one of: contains | equals | matches
+      value: pricing
+    goto: probe_pricing
+  - if:
+      field: themes
+      op: contains
+      value: pain
+    goto: probe_pain
+  - else: probe_alternatives  # mandatory — no silent fall-through
+```
+
+Locked rules:
+
+| Rule | Why |
+|------|-----|
+| Three operators only: `contains`, `equals`, `matches` | No grammar, no eval, ~50 LOC predicate engine |
+| `else` is **mandatory** in every `route_when` block | Silent fall-through is a footgun. Use `else: __end__` to terminate explicitly |
+| `__end__` is the reserved terminal sentinel | Any `goto: __end__` ends the run and triggers final synthesis on the executed path |
+| DAG only — no loops, no back-edges | Validated at parse time; cycles are an error, not a warning |
+| Final synthesis sees **executed rounds only** | The report describes what happened, not what could have happened |
+
+### Theme matching expectations (R3)
+
+> ⚠️ **`themes contains 'pricing'` matches against the synthesizer's exact
+> tag output.** If the synthesizer emits `"price sensitivity"` instead of
+> `"pricing"`, the predicate will not match and the router will fall through
+> to `else`. This is the highest-residual UX risk in 0.5.0.
+
+The mitigation is to **tell the synthesizer which tags you want** in your
+round's synthesis prompt. The bundled packs follow this pattern — see the
+`pricing-discovery.yaml` header:
+
+```yaml
+# Synthesizer guidance: when emitting `themes`, prefer the short canonical
+# tags below so route_when predicates match reliably:
+#   - "pain"        (workflow pain, frustration, broken status quo)
+#   - "price"       (cost concerns, perceived value, sticker shock)
+#   - "alternative" (existing tools, workarounds, competitors)
+```
+
+When you author your own branching instrument:
+
+1. Pick canonical short tags up front (one or two words, lowercase).
+2. List them as a comment near the top of the YAML.
+3. Reference them verbatim in `route_when` predicates.
+4. If you override `synthesis_prompt`, repeat the tag list in the prompt
+   text so the model emits the form your predicates expect.
+5. Run the instrument once against a small persona pack and inspect the
+   `path` field — if the branch you expected was skipped, the synthesizer
+   probably emitted a near-miss tag.
+
+`contains` is substring-based, so `"pricing"` will match `"pricing"`,
+`"pricing-sensitive"`, and `"product pricing concerns"`, but not
+`"price"` on its own. Pick the shorter form when in doubt.
+
+## `instruments` subcommand reference
+
+```bash
+# List installed instrument packs (bundled + user)
+synth-panel instruments list
+
+# Show the full YAML body of an installed pack
+synth-panel instruments show pricing-discovery
+
+# Install a pack from a YAML file (parses + validates before saving)
+synth-panel instruments install path/to/my-instrument.yaml
+
+# Render the instrument's branching graph as Mermaid (F3-D)
+synth-panel instruments graph pricing-discovery
+```
+
+Installed packs live as single-file YAMLs under
+`$SYNTH_PANEL_DATA_DIR/packs/instruments/<name>.yaml` (default
+`~/.synth-panel/packs/instruments/`). The same name resolver that backs
+`--instrument <path>` also accepts `--instrument <pack-name>`, so you can
+develop instruments as files and promote them to installed packs without
+changing how they're invoked.
+
 ## Defining Instruments
 
 ```yaml
@@ -193,7 +311,15 @@ Add to your editor's MCP config (Claude Code, Cursor, Windsurf, etc.):
 }
 ```
 
-Tools exposed: `run_panel`, `run_quick_poll`, `list_persona_packs`, `get_persona_pack`, `save_persona_pack`, `list_panel_results`, `get_panel_result`.
+Tools exposed: `run_prompt`, `run_panel`, `run_quick_poll`, `extend_panel`,
+`list_persona_packs`, `get_persona_pack`, `save_persona_pack`,
+`list_instrument_packs`, `get_instrument_pack`, `save_instrument_pack`,
+`list_panel_results`, `get_panel_result`.
+
+`run_panel` accepts either a flat `questions` list (legacy v1) or an
+`instrument` dict / `instrument_pack` name for v2/v3 multi-round and
+branching runs. The response gains `path` and `warnings` keys for
+branching visibility.
 
 ## Output Formats
 
@@ -228,6 +354,14 @@ Known limitations:
 - Higher-order correlations between variables are poorly replicated
 
 Use synth-panel to pre-screen and iterate, then validate with real participants.
+
+## Releases
+
+| Version | Status | Highlights |
+|---------|--------|------------|
+| 0.5.0 | current | Branching v3 instruments, instrument packs (5 bundled), `instruments` subcommand, rounds-shaped output, `path` + `warnings` in MCP/CLI responses |
+| 0.4.0 | shipped | Multi-round v2 instruments, structured response schemas, persona-pack ecosystem |
+| 0.3.0 | shipped | MCP server, plugin system, multi-provider LLM client |
 
 ## License
 
