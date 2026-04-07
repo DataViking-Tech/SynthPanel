@@ -112,6 +112,15 @@ jobs:
           git tag -a "$NEW_TAG" -m "Release $NEW_TAG (PR #${PR_NUMBER}: ${PR_TITLE})"
           git push origin "$NEW_TAG"
 
+      - name: Create GitHub Release
+        if: steps.check.outputs.skipped != 'true'
+        env:
+          NEW_TAG: ${{ steps.bump.outputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${NEW_TAG#v}"
+          gh release create "$NEW_TAG" --generate-notes --title "v$VERSION"
+
   publish:
     needs: auto-tag
     if: needs.auto-tag.outputs.skipped != 'true'
