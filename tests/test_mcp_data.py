@@ -21,9 +21,12 @@ from synth_panel.mcp.data import (
     PackValidationError,
     get_panel_result,
     get_persona_pack,
+    list_instrument_packs,
     list_panel_results,
     list_persona_packs,
+    load_instrument_pack,
     load_panel_sessions,
+    save_instrument_pack,
     save_panel_result,
     save_panel_sessions,
     save_persona_pack,
@@ -365,3 +368,54 @@ class TestUpdatePanelResult:
         snapshot = _results_dir() / f"{rid}.pre-extend.json"
         snap_data = json.loads(snapshot.read_text())
         assert snap_data.get("version") == 1
+
+
+# ---------------------------------------------------------------------------
+# Instrument packs (F2-B)
+# ---------------------------------------------------------------------------
+
+class TestInstrumentPacks:
+    def test_save_list_load_roundtrip(self):
+        body = {
+            "name": "pricing-probe",
+            "version": "1.0.0",
+            "description": "Branching probe for pricing-sensitive panels",
+            "author": "synth-panel",
+            "instrument": {
+                "version": 3,
+                "rounds": [
+                    {"name": "intro", "questions": [{"text": "Q1"}]},
+                ],
+            },
+        }
+        meta = save_instrument_pack("pricing-probe", body)
+        assert meta["name"] == "pricing-probe"
+        assert meta["version"] == "1.0.0"
+        assert meta["type"] == "instrument"
+
+        listing = list_instrument_packs()
+        assert len(listing) == 1
+        assert listing[0]["id"] == "pricing-probe"
+        assert listing[0]["author"] == "synth-panel"
+
+        loaded = load_instrument_pack("pricing-probe")
+        # round-trip preserves the body
+        assert loaded["instrument"]["version"] == 3
+        assert loaded["description"] == body["description"]
+        assert loaded["id"] == "pricing-probe"
+
+    def test_load_missing_raises(self):
+        with pytest.raises(FileNotFoundError):
+            load_instrument_pack("nope")
+
+    def test_save_fills_default_name(self):
+        save_instrument_pack("auto", {"instrument": {"version": 1, "questions": [{"text": "Q"}]}})
+        loaded = load_instrument_pack("auto")
+        assert loaded["name"] == "auto"
+
+    def test_list_empty(self):
+        assert list_instrument_packs() == []
+
+    def test_save_rejects_non_mapping(self):
+        with pytest.raises(ValueError):
+            save_instrument_pack("bad", ["not", "a", "dict"])  # type: ignore[arg-type]

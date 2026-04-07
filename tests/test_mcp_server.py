@@ -39,9 +39,13 @@ class TestServerRegistration:
             "run_prompt",
             "run_panel",
             "run_quick_poll",
+            "extend_panel",
             "list_persona_packs",
             "get_persona_pack",
             "save_persona_pack",
+            "list_instrument_packs",
+            "get_instrument_pack",
+            "save_instrument_pack",
             "list_panel_results",
             "get_panel_result",
         }
@@ -276,3 +280,121 @@ class TestPromptTemplates:
         text = result.messages[0].content.text
         assert "AI-powered code review" in text
         assert "senior developers" in text
+
+
+# ---------------------------------------------------------------------------
+# Instrument-pack tools (F3-B)
+# ---------------------------------------------------------------------------
+
+class TestInstrumentPackTools:
+    """The 3 new instrument-pack tools mirror the persona-pack equivalents."""
+
+    @pytest.mark.asyncio
+    async def test_list_empty(self):
+        result = await mcp.call_tool("list_instrument_packs", {})
+        data = json.loads(result[0][0].text)
+        assert data == []
+
+    @pytest.mark.asyncio
+    async def test_save_then_list_then_get(self):
+        body = {
+            "name": "Demo",
+            "version": "1.0.0",
+            "description": "demo pack",
+            "author": "test",
+            "instrument": {
+                "version": 1,
+                "questions": [{"text": "Hi?"}],
+            },
+        }
+        save_res = await mcp.call_tool("save_instrument_pack", {
+            "name": "demo", "content": body,
+        })
+        meta = json.loads(save_res[0][0].text)
+        assert meta["id"] == "demo"
+        assert meta["version"] == "1.0.0"
+
+        list_res = await mcp.call_tool("list_instrument_packs", {})
+        listed = json.loads(list_res[0][0].text)
+        assert len(listed) == 1 and listed[0]["id"] == "demo"
+
+        get_res = await mcp.call_tool("get_instrument_pack", {"name": "demo"})
+        loaded = json.loads(get_res[0][0].text)
+        assert loaded["id"] == "demo"
+        assert loaded["instrument"]["questions"][0]["text"] == "Hi?"
+
+    @pytest.mark.asyncio
+    async def test_save_rejects_invalid_instrument(self):
+        from mcp.server.fastmcp.exceptions import ToolError
+        bad = {"name": "Bad", "instrument": {"version": 1}}  # no questions/rounds
+        with pytest.raises(ToolError):
+            await mcp.call_tool("save_instrument_pack", {
+                "name": "bad", "content": bad,
+            })
+
+
+# ---------------------------------------------------------------------------
+# run_panel branching surface
+# ---------------------------------------------------------------------------
+
+class TestRunPanelInstrument:
+    """run_panel accepts inline instrument and instrument_pack inputs."""
+
+    @pytest.mark.asyncio
+    async def test_inline_instrument_routes_to_multi_round(self):
+        with patch(
+            "synth_panel.mcp.server._run_panel_async_instrument",
+            new_callable=AsyncMock,
+        ) as mock_run:
+            mock_run.return_value = {"rounds": [], "path": [], "warnings": []}
+            await mcp.call_tool("run_panel", {
+                "personas": [{"name": "A"}],
+                "instrument": {"version": 1, "questions": [{"text": "Hello?"}]},
+            })
+            assert mock_run.called
+            instrument_arg = mock_run.call_args[0][1]
+            from synth_panel.instrument import Instrument
+            assert isinstance(instrument_arg, Instrument)
+            assert len(instrument_arg.rounds) == 1
+
+    @pytest.mark.asyncio
+    async def test_instrument_pack_loads_then_routes(self):
+        # Save a pack first via the data layer.
+        from synth_panel.mcp.data import save_instrument_pack as _save
+        _save("p1", {
+            "name": "P1",
+            "instrument": {"version": 1, "questions": [{"text": "Q?"}]},
+        })
+        with patch(
+            "synth_panel.mcp.server._run_panel_async_instrument",
+            new_callable=AsyncMock,
+        ) as mock_run:
+            mock_run.return_value = {"rounds": [], "path": [], "warnings": []}
+            await mcp.call_tool("run_panel", {
+                "personas": [{"name": "A"}],
+                "instrument_pack": "p1",
+            })
+            assert mock_run.called
+
+    @pytest.mark.asyncio
+    async def test_no_questions_no_instrument_returns_error(self):
+        result = await mcp.call_tool("run_panel", {
+            "personas": [{"name": "A"}],
+        })
+        data = json.loads(result[0][0].text)
+        assert "error" in data
+
+
+# ---------------------------------------------------------------------------
+# extend_panel docstring contract
+# ---------------------------------------------------------------------------
+
+class TestExtendPanelContract:
+    """extend_panel must document the 'ad-hoc round, not DAG re-entry' rule."""
+
+    def test_docstring_spells_out_contract(self):
+        from synth_panel.mcp import server
+        doc = server.extend_panel.__doc__ or ""
+        # Both halves of the contract must be present.
+        assert "ad-hoc" in doc
+        assert "not" in doc and "DAG" in doc

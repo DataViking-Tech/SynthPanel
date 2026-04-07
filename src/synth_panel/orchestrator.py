@@ -16,9 +16,11 @@ from typing import Any, Callable
 
 from synth_panel.conditions import evaluate_condition, normalize_follow_up
 from synth_panel.cost import ZERO_USAGE, TokenUsage, UsageTracker
+from synth_panel.instrument import END_SENTINEL, Instrument, Round
 from synth_panel.llm.client import LLMClient
 from synth_panel.llm.models import InputMessage, TextBlock, TokenUsage as LLMTokenUsage
 from synth_panel.persistence import Session
+from synth_panel.routing import route_round
 from synth_panel.runtime import AgentRuntime, TurnSummary
 from synth_panel.structured.output import StructuredOutputConfig, StructuredOutputEngine
 
@@ -237,6 +239,35 @@ class PanelistResult:
     responses: list[dict[str, Any]]
     usage: TokenUsage
     error: str | None = None
+
+
+@dataclass
+class RoundResult:
+    """Per-round panelist + synthesis bundle for a multi-round run."""
+
+    name: str
+    panelist_results: list[PanelistResult]
+    synthesis: Any  # SynthesisResult; typed as Any to avoid synthesis import cycle
+    usage: TokenUsage = field(default_factory=lambda: ZERO_USAGE)
+
+
+@dataclass
+class MultiRoundResult:
+    """Result of a branching multi-round panel run.
+
+    ``rounds`` contains only the rounds that actually executed (in order).
+    ``path`` records each routing decision: ``{round, branch, next}``.
+    ``terminal_round`` is the last round whose synthesis fed final synthesis.
+    ``warnings`` carries parser warnings (e.g. unreachable rounds) plus any
+    runtime issues observed during the loop.
+    """
+
+    rounds: list[RoundResult]
+    path: list[dict[str, Any]] = field(default_factory=list)
+    terminal_round: str | None = None
+    final_synthesis: Any = None  # SynthesisResult
+    warnings: list[str] = field(default_factory=list)
+    usage: TokenUsage = field(default_factory=lambda: ZERO_USAGE)
 
 
 # ---------------------------------------------------------------------------
@@ -479,3 +510,219 @@ def run_panel_parallel(
 
     # All slots should be filled; cast away None
     return [r for r in results if r is not None], registry, out_sessions
+
+
+# ---------------------------------------------------------------------------
+# Multi-round branching runner (v3 instruments)
+# ---------------------------------------------------------------------------
+
+def _round_lookup(instrument: Instrument) -> dict[str, Round]:
+    return {r.name: r for r in instrument.rounds}
+
+
+def _next_via_depends_on(
+    instrument: Instrument, current: str
+) -> str:
+    """Linear-chain fallback for v2 rounds without route_when.
+
+    Returns the next round whose ``depends_on`` is ``current``, or
+    ``__end__`` if there is no successor.
+    """
+    for r in instrument.rounds:
+        if r.depends_on == current:
+            return r.name
+    return END_SENTINEL
+
+
+def run_multi_round_panel(
+    *,
+    client: LLMClient,
+    personas: list[dict[str, Any]],
+    instrument: Instrument,
+    model: str,
+    system_prompt_fn: Callable[[dict[str, Any]], str],
+    question_prompt_fn: Callable[[dict[str, Any]], str],
+    synthesize_round_fn: Callable[..., Any],
+    synthesize_final_fn: Callable[..., Any] | None = None,
+    response_schema: dict[str, Any] | None = None,
+    max_workers: int | None = None,
+) -> MultiRoundResult:
+    """Execute a (possibly branching) multi-round panel run.
+
+    The loop is router-driven: starting from the first round in the
+    instrument, each round runs all panelists in parallel, synthesizes
+    the round's responses, then asks ``routing.route_round`` for the
+    next target. v2 instruments without ``route_when`` fall through to
+    ``depends_on``-based linear chaining; v1 single-round instruments
+    are a degenerate case that runs once and stops.
+
+    ``synthesize_round_fn`` is called as
+    ``synthesize_round_fn(client, panelist_results, questions, model=...)``
+    and must return a ``SynthesisResult``-shaped object whose ``to_dict``
+    output contains the fields the routing predicates reference.
+
+    ``synthesize_final_fn``, if provided, receives only the executed
+    rounds and is used to tag the *terminal* round of the path rather
+    than the syntactic last round in the file (architect Q6).
+    """
+    if not instrument.rounds:
+        return MultiRoundResult(rounds=[], warnings=list(instrument.warnings))
+
+    by_name = _round_lookup(instrument)
+    sessions: dict[str, Session] = {}
+    executed: list[RoundResult] = []
+    path: list[dict[str, Any]] = []
+    warnings: list[str] = list(instrument.warnings)
+    cumulative = UsageTracker()
+
+    next_round: str | None = instrument.rounds[0].name
+    visited: set[str] = set()
+
+    while next_round and next_round != END_SENTINEL:
+        if next_round in visited:
+            # Belt-and-suspenders: parser already topo-sorts, but a runtime
+            # cycle would loop forever. Stop and warn.
+            warnings.append(
+                f"runtime cycle: round '{next_round}' revisited; halting"
+            )
+            break
+        if next_round not in by_name:
+            warnings.append(
+                f"router target '{next_round}' is not a defined round; halting"
+            )
+            break
+
+        current = by_name[next_round]
+        visited.add(current.name)
+
+        panelist_results, _registry, sessions = run_panel_parallel(
+            client=client,
+            personas=personas,
+            questions=current.questions,
+            model=model,
+            system_prompt_fn=system_prompt_fn,
+            question_prompt_fn=question_prompt_fn,
+            max_workers=max_workers,
+            response_schema=response_schema,
+            sessions=sessions,
+        )
+
+        synthesis = synthesize_round_fn(
+            client, panelist_results, current.questions, model=model
+        )
+
+        round_usage = ZERO_USAGE
+        for pr in panelist_results:
+            round_usage = round_usage + pr.usage
+        if hasattr(synthesis, "usage"):
+            round_usage = round_usage + synthesis.usage
+        cumulative.record_turn(round_usage)
+
+        executed.append(
+            RoundResult(
+                name=current.name,
+                panelist_results=panelist_results,
+                synthesis=synthesis,
+                usage=round_usage,
+            )
+        )
+
+        # ── Router decision ──
+        if current.route_when:
+            context = (
+                synthesis.to_dict() if hasattr(synthesis, "to_dict") else {}
+            )
+            try:
+                target = route_round(current.route_when, context)
+            except Exception as exc:  # pragma: no cover - defensive
+                warnings.append(
+                    f"routing failed for '{current.name}': {exc}; halting"
+                )
+                target = END_SENTINEL
+            # Render a human-readable branch description for the path log.
+            branch_desc = _describe_branch(current.route_when, context, target)
+        else:
+            target = _next_via_depends_on(instrument, current.name)
+            branch_desc = "linear"
+
+        path.append({"round": current.name, "branch": branch_desc, "next": target})
+        next_round = target
+
+    terminal = executed[-1].name if executed else None
+
+    final_synthesis = None
+    if synthesize_final_fn is not None and executed:
+        # Pass only executed rounds to the final synthesis (architect Q6).
+        # Flatten panelist results across executed rounds in order.
+        merged_results = _merge_panelist_results(executed)
+        merged_questions = [
+            q for rr in executed for q in by_name[rr.name].questions
+        ]
+        final_synthesis = synthesize_final_fn(
+            client, merged_results, merged_questions, model=model
+        )
+        if hasattr(final_synthesis, "usage"):
+            cumulative.record_turn(final_synthesis.usage)
+
+    return MultiRoundResult(
+        rounds=executed,
+        path=path,
+        terminal_round=terminal,
+        final_synthesis=final_synthesis,
+        warnings=warnings,
+        usage=cumulative.cumulative_usage,
+    )
+
+
+def _describe_branch(
+    route_when: list[dict[str, Any]],
+    context: dict[str, Any],
+    chosen_target: str,
+) -> str:
+    """Render which clause fired, for the path log entry."""
+    from synth_panel.routing import evaluate_predicate
+
+    for clause in route_when:
+        if "if" in clause:
+            try:
+                if evaluate_predicate(clause["if"], context):
+                    pred = clause["if"]
+                    return (
+                        f"{pred.get('field')} {pred.get('op')} "
+                        f"{pred.get('value')!r} -> {chosen_target}"
+                    )
+            except Exception:
+                continue
+        elif "else" in clause:
+            return f"else -> {chosen_target}"
+    return f"-> {chosen_target}"
+
+
+def _merge_panelist_results(
+    executed: list[RoundResult],
+) -> list[PanelistResult]:
+    """Merge per-round panelist results into one list per persona, in order.
+
+    Each persona ends up with a single ``PanelistResult`` whose
+    ``responses`` are the concatenation of their responses across the
+    executed rounds.
+    """
+    by_name: dict[str, PanelistResult] = {}
+    order: list[str] = []
+    for rr in executed:
+        for pr in rr.panelist_results:
+            if pr.persona_name not in by_name:
+                by_name[pr.persona_name] = PanelistResult(
+                    persona_name=pr.persona_name,
+                    responses=list(pr.responses),
+                    usage=pr.usage,
+                    error=pr.error,
+                )
+                order.append(pr.persona_name)
+            else:
+                merged = by_name[pr.persona_name]
+                merged.responses.extend(pr.responses)
+                merged.usage = merged.usage + pr.usage
+                if pr.error and not merged.error:
+                    merged.error = pr.error
+    return [by_name[n] for n in order]

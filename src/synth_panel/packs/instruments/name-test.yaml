@@ -1,0 +1,74 @@
+# name-test: branching name evaluation. The router decides whether to
+# probe meaning, pronounceability, or memorability based on which
+# concern surfaces first. Canonical theme tags: "confusion",
+# "memorable", "pronounce".
+name: name-test
+version: 1
+description: >
+  Test 1-3 candidate names for a product or feature. Branches into
+  meaning-probe, pronounce-probe, or memorability-probe depending on
+  which concerns dominate the discovery round.
+author: synth-panel
+
+instrument:
+  version: 3
+  rounds:
+    - name: first_impressions
+      questions:
+        - text: >
+            Here are the candidate names: {candidates}. What's your
+            gut reaction to each? Don't think too hard.
+        - text: >
+            Which one would you remember tomorrow? Which one would you
+            forget instantly?
+      route_when:
+        - if:
+            field: themes
+            op: contains
+            value: confusion
+          goto: probe_meaning
+        - if:
+            field: themes
+            op: contains
+            value: pronounce
+          goto: probe_pronounce
+        - else: probe_memorable
+
+    - name: probe_meaning
+      questions:
+        - text: >
+            One or more names didn't land. Which one confused you, and
+            what did you *think* it meant before you heard the
+            description?
+        - text: >
+            If we shipped that name as-is, what category would you
+            assume the product belongs to?
+      route_when:
+        - else: wrap_up
+
+    - name: probe_pronounce
+      questions:
+        - text: >
+            How would you say each name out loud? Where do you stumble?
+        - text: >
+            Would you confidently recommend any of these to a friend
+            in conversation, or would you spell it instead?
+      route_when:
+        - else: wrap_up
+
+    - name: probe_memorable
+      questions:
+        - text: >
+            Quick exercise — without scrolling back, name as many of
+            the candidates as you can remember and what each one does.
+        - text: >
+            Which name would survive being mentioned once at a
+            conference and looked up a week later?
+      route_when:
+        - else: wrap_up
+
+    - name: wrap_up
+      questions:
+        - text: >
+            Final call: pick a winner and a loser, and tell me what
+            tipped each one.

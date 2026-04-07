@@ -1,52 +1,62 @@
 name: Publish to PyPI
 
 on:
-  release:
-    types: [published]
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
   push:
     branches: [main]
     paths:
       - 'src/synth_panel/**'
       - 'pyproject.toml'
+    tags:
+      - "v*"
 
 permissions:
   contents: read
   id-token: write
 
 jobs:
-  build:
+  build-and-publish:
     runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Determine tag ref
+        id: ref
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout at tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.ref.outputs.tag }}
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Update pyproject.toml version to match tag
+        env:
+          TAG: ${{ steps.ref.outputs.tag }}
+        run: |
+          VERSION="${TAG#v}"
+          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" pyproject.toml
+          echo "Set version to ${VERSION}"
+          grep '^version' pyproject.toml
 
       - name: Install build tools
         run: pip install build
 
       - name: Build package
         run: python -m build
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist/
-
-  publish:
-    needs: build
-    runs-on: ubuntu-latest
-    environment: pypi
-    permissions:
-      id-token: write
-    steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: dist/
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

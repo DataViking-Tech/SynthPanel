@@ -1,0 +1,80 @@
+# pricing-discovery: branching instrument that lets the panel choose its
+# own probe path based on what surfaces in the discovery round.
+#
+# This is the Show HN demo: one command, ~$0.20, the panel decides
+# whether to dig into pain, pricing, or alternatives. The router uses
+# substring `contains` predicates over canonical theme tags so fuzzy
+# wording from the synthesizer still routes correctly (R3 mitigation).
+name: pricing-discovery
+version: 1
+description: >
+  Discover how a target persona thinks about price for a product or
+  service. Branches into pain probing, pricing tier exploration, or
+  competitor comparison based on the discovery round's themes.
+author: synth-panel
+
+instrument:
+  version: 3
+  # Synthesizer guidance: when emitting `themes`, prefer the short
+  # canonical tags below so route_when predicates match reliably:
+  #   - "pain"   (workflow pain, frustration, broken status quo)
+  #   - "price"  (cost concerns, perceived value, sticker shock)
+  #   - "alternative" (existing tools, workarounds, competitors)
+  rounds:
+    - name: discovery
+      questions:
+        - text: >
+            Walk me through the last time you tried to solve {problem}.
+            What did you do, and what was the most frustrating part?
+        - text: >
+            If a tool fixed that frustration tomorrow, what would it
+            need to do for you to take it seriously?
+      route_when:
+        - if:
+            field: themes
+            op: contains
+            value: pain
+          goto: probe_pain
+        - if:
+            field: themes
+            op: contains
+            value: price
+          goto: probe_pricing
+        - else: probe_alternatives
+
+    - name: probe_pain
+      questions:
+        - text: >
+            You mentioned the most painful part was the friction itself.
+            How much time do you lose to it in a typical week?
+        - text: >
+            What's stopping you from solving this today?
+      route_when:
+        - else: probe_pricing
+
+    - name: probe_pricing
+      questions:
+        - text: >
+            If a tool reliably fixed this, what would feel fair to pay
+            per month? What price would feel insulting?
+        - text: >
+            Would you rather pay per seat, per usage, or one flat fee?
+            Why?
+      route_when:
+        - else: wrap_up
+
+    - name: probe_alternatives
+      questions:
+        - text: >
+            What are you using today, even if it's a workaround? What
+            keeps you on it?
+        - text: >
+            What would have to be true for you to switch?
+      route_when:
+        - else: probe_pricing
+
+    - name: wrap_up
+      questions:
+        - text: >
+            One last thing — if you had to summarize your relationship
+            with {problem} in a sentence, what would it be?
