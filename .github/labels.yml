@@ -1,0 +1,15 @@
+- name: "semver:major"
+  color: "d93f0b"
+  description: "Bump major version on merge"
+
+- name: "semver:minor"
+  color: "0e8a16"
+  description: "Bump minor version on merge"
+
+- name: "semver:patch"
+  color: "1d76db"
+  description: "Bump patch version on merge"
+
+- name: "semver:skip"
+  color: "e4e669"
+  description: "Skip version bump on merge"
