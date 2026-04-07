@@ -751,3 +751,117 @@ class TestMainModule:
         assert main_path.exists()
         content = main_path.read_text()
         assert "from synth_panel.main import main" in content
+
+
+# ---------------------------------------------------------------------------
+# instruments graph (sp-irf F3-D)
+# ---------------------------------------------------------------------------
+
+class TestInstrumentsGraph:
+    """Render the round DAG of v1, v2, and v3 instruments."""
+
+    def _write(self, tmp_path, body: str):
+        p = tmp_path / "inst.yaml"
+        p.write_text(body)
+        return str(p)
+
+    def test_v1_text(self, tmp_path, capsys):
+        from synth_panel.cli.commands import handle_instruments_graph
+        src = self._write(tmp_path, """
+instrument:
+  questions:
+    - text: What frustrates you?
+""")
+        args = MagicMock(source=src, format="text")
+        rc = handle_instruments_graph(args, OutputFormat.TEXT)
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert "instrument v" in out
+        assert "[default]" in out or "default" in out
+
+    def test_v2_mermaid_linear_chain(self, tmp_path, capsys):
+        from synth_panel.cli.commands import handle_instruments_graph
+        src = self._write(tmp_path, """
+instrument:
+  version: 2
+  rounds:
+    - name: explore
+      questions:
+        - text: What do you use today?
+    - name: probe
+      depends_on: explore
+      questions:
+        - text: Why?
+""")
+        args = MagicMock(source=src, format="mermaid")
+        rc = handle_instruments_graph(args, OutputFormat.TEXT)
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert "flowchart TD" in out
+        assert "explore([explore])" in out
+        assert "probe([probe])" in out
+        assert "explore --> probe" in out
+
+    def test_v3_branching_mermaid_with_end(self, tmp_path, capsys):
+        from synth_panel.cli.commands import handle_instruments_graph
+        src = self._write(tmp_path, """
+instrument:
+  version: 3
+  rounds:
+    - name: explore
+      questions:
+        - text: What concerns you?
+      route_when:
+        - if:
+            field: themes
+            op: contains
+            value: pricing
+          goto: probe_pricing
+        - else: __end__
+    - name: probe_pricing
+      questions:
+        - text: How much?
+""")
+        args = MagicMock(source=src, format="mermaid")
+        rc = handle_instruments_graph(args, OutputFormat.TEXT)
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert "flowchart TD" in out
+        assert "explore -->|themes contains pricing| probe_pricing" in out
+        assert "explore -->|else| __end__" in out
+        # Terminal sentinel must be declared as a node when referenced
+        assert "__end__(((end)))" in out
+
+    def test_v3_branching_text_format(self, tmp_path, capsys):
+        from synth_panel.cli.commands import handle_instruments_graph
+        src = self._write(tmp_path, """
+instrument:
+  version: 3
+  rounds:
+    - name: a
+      questions:
+        - text: Q1?
+      route_when:
+        - if: {field: themes, op: equals, value: x}
+          goto: b
+        - else: __end__
+    - name: b
+      questions:
+        - text: Q2?
+""")
+        args = MagicMock(source=src, format="text")
+        rc = handle_instruments_graph(args, OutputFormat.TEXT)
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert "[a]" in out and "[b]" in out
+        assert "if themes equals" in out
+        assert "-> b" in out
+        assert "else -> __end__" in out
+
+    def test_missing_source(self, tmp_path, capsys):
+        from synth_panel.cli.commands import handle_instruments_graph
+        args = MagicMock(source=str(tmp_path / "nope.yaml"), format="text")
+        rc = handle_instruments_graph(args, OutputFormat.TEXT)
+        err = capsys.readouterr().err
+        assert rc == 1
+        assert "Error" in err

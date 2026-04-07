@@ -626,26 +626,37 @@ def _render_mermaid(instrument: Instrument) -> str:
     lines = ["flowchart TD"]
     for r in instrument.rounds:
         lines.append(f"    {r.name}([{r.name}])")
-    if any(r.route_when or r.depends_on for r in instrument.rounds):
-        for r in instrument.rounds:
-            if r.depends_on:
-                lines.append(f"    {r.depends_on} --> {r.name}")
-            if r.route_when:
-                for entry in r.route_when:
-                    if "if" in entry:
-                        pred = entry["if"]
-                        label = (
-                            f"{pred.get('field')} {pred.get('op')} "
-                            f"{pred.get('value')}"
-                        )
-                        target = entry.get("goto")
-                        lines.append(
-                            f"    {r.name} -->|{label}| {target}"
-                        )
-                    elif "else" in entry:
-                        lines.append(
-                            f"    {r.name} -->|else| {entry['else']}"
-                        )
+
+    # Collect __end__ targets so we can declare the terminal node once
+    # if any route lands there. The terminal sentinel renders as a
+    # double-circle stadium so it's visually distinct from regular rounds.
+    has_end_target = False
+
+    for r in instrument.rounds:
+        if r.depends_on:
+            lines.append(f"    {r.depends_on} --> {r.name}")
+        if r.route_when:
+            for entry in r.route_when:
+                if "if" in entry:
+                    pred = entry["if"]
+                    label = (
+                        f"{pred.get('field')} {pred.get('op')} "
+                        f"{pred.get('value')}"
+                    )
+                    target = entry.get("goto")
+                    if target == END_SENTINEL:
+                        has_end_target = True
+                    lines.append(
+                        f"    {r.name} -->|{label}| {target}"
+                    )
+                elif "else" in entry:
+                    target = entry["else"]
+                    if target == END_SENTINEL:
+                        has_end_target = True
+                    lines.append(f"    {r.name} -->|else| {target}")
+
+    if has_end_target:
+        lines.append(f"    {END_SENTINEL}(((end)))")
     return "\n".join(lines)
 
 
