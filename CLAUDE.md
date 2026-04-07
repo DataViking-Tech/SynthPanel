@@ -151,6 +151,16 @@ The MCP server exposes 12 tools: `run_prompt`, `run_panel`, `run_quick_poll`, `e
 
 `run_panel` accepts `instrument` (inline dict) or `instrument_pack` (name) for v3 branching runs. `extend_panel` appends one ad-hoc round to a saved panel result — it is not a re-entry into the authored DAG.
 
+**`extend_panel` vs branching (architect note 3):** `extend_panel` always
+appends exactly **one** ad-hoc round on top of a saved panel result, reusing
+each panelist's saved session. It is **not** a re-entry into the authored v3
+DAG — the original instrument's `route_when` clauses are not consulted, no
+routing decision is made, and the result's `path` grows by one extension
+entry. If you want adaptive branching, run a fresh `run_panel` against a v3
+instrument (with `route_when` clauses) instead. The boundary is intentional:
+`extend_panel` is for human-in-the-loop follow-ups; v3 routing is for
+agent-driven, instrument-authored adaptivity.
+
 Claude Code plugin: install via `/plugin install synth-panel`. Adds `/focus-group` skill.
 
 Standalone MCP config for any editor:
