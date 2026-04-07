@@ -111,7 +111,16 @@ instrument:
 
 ## MCP Integration
 
-The MCP server exposes 7 tools: `run_panel`, `run_quick_poll`, `list_persona_packs`, `get_persona_pack`, `save_persona_pack`, `list_panel_results`, `get_panel_result`.
+The MCP server exposes 12 tools: `run_prompt`, `run_panel`, `run_quick_poll`, `extend_panel`, `list_persona_packs`, `get_persona_pack`, `save_persona_pack`, `list_instrument_packs`, `get_instrument_pack`, `save_instrument_pack`, `list_panel_results`, `get_panel_result`.
+
+### `extend_panel` vs branching (v3 instruments)
+
+`extend_panel` and v3 branching instruments are **different mechanisms** and are easy to confuse. The contract:
+
+- **`extend_panel`** always appends a single, ad-hoc round on top of an existing saved panel result. It reuses each panelist's saved session so the follow-up sees full conversational context, but it does **not** consult the original instrument's `route_when` clauses, makes no routing decision, and is **not** a re-entry into the authored DAG. Use it when you've read the results and want to ask one improvised follow-up.
+- **v3 branching instruments** (`route_when` + `goto`) describe an authored DAG that `run_panel` walks at execution time. The router picks the next round based on the just-completed round's synthesis. Use this when the branching logic is part of the research design itself.
+
+Rule of thumb: if the next question is decided **by the research design**, author it as a v3 round; if it's decided **by the human reading results**, use `extend_panel`. They are not interchangeable, and `extend_panel` is intentionally not a back-door into the DAG.
 
 Claude Code plugin: install via `/plugin install synth-panel`. Adds `/focus-group` skill.
 
