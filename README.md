@@ -21,8 +21,11 @@ Traditional focus groups cost $5,000-$15,000 and take weeks. Synthetic panels co
 ## Quick Start
 
 ```bash
-# Install
+# Install from PyPI
 pip install synth-panel
+
+# Or install the latest from source (works today even if PyPI is stale)
+pip install git+https://github.com/DataViking-Tech/synth-panel.git@main
 
 # Set your API key (Claude, OpenAI, Gemini, xAI, or any OpenAI-compatible provider)
 export ANTHROPIC_API_KEY="sk-..."
