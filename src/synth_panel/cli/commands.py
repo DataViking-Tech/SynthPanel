@@ -225,8 +225,27 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         })
         panelist_usage = panelist_usage + pr.usage
 
+    # ── Failure analysis (sp-2hg) ──────────────────────────────────────
+    # Count panelist-question pairs and determine how many errored. A pair
+    # is considered errored if its response dict is flagged ``error: True``
+    # OR if the panelist wrapper itself failed (no responses recorded).
+    failure_stats = _analyze_failures(panelist_results, questions)
+    strict = getattr(args, "strict", False)
+    threshold = getattr(args, "failure_threshold", 0.5)
+    try:
+        threshold = float(threshold)
+    except (TypeError, ValueError):
+        threshold = 0.5
+    run_invalid = (
+        failure_stats["total_pairs"] > 0
+        and failure_stats["failure_rate"] > threshold
+    )
+    strict_violation = strict and failure_stats["errored_pairs"] > 0
+
     # Synthesis step (unless --no-synthesis)
     skip_synthesis = getattr(args, "no_synthesis", False)
+    if run_invalid or strict_violation:
+        skip_synthesis = True  # don't synthesize garbage
     synthesis_result = None
 
     if not skip_synthesis:
@@ -257,7 +276,13 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     synthesis_dict = synthesis_result.to_dict() if synthesis_result else None
 
     # Output results
+    banner = _build_invalid_banner(
+        failure_stats, threshold, strict=strict, strict_violation=strict_violation
+    )
+
     if fmt is OutputFormat.TEXT:
+        if banner:
+            print(banner, file=sys.stderr)
         path_line = _format_path(_degenerate_path(instrument))
         if path_line:
             print(f"path: {path_line}")
@@ -309,6 +334,16 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                                  model=synthesis_result.model, is_estimated=synth_est))
         print(format_summary("Total", total_usage, total_cost_est,
                              model=model, is_estimated=is_estimated))
+        if total_cost_est.total_cost == 0 and failure_stats["errored_pairs"] > 0:
+            print(
+                "  \u26a0\ufe0f  no-cost = no-data (every request errored; "
+                "cost line reflects that no tokens were billed)",
+                file=sys.stderr,
+            )
+        if banner:
+            # Repeat the banner at the bottom so a scrolled terminal still
+            # surfaces it — this is the critical fix for sp-2hg.
+            print(banner, file=sys.stderr)
     else:
         legacy = getattr(args, "legacy_output", False)
         if legacy:
@@ -339,9 +374,145 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 persona_count=len(personas),
                 question_count=len(questions),
             )
-        emit(fmt, message="Panel complete", extra=extra)
+        # Surface failure stats + run validity in structured output so
+        # downstream consumers (MCP, CI) can gate on it without parsing text.
+        extra["failure_stats"] = failure_stats
+        extra["run_invalid"] = bool(run_invalid or strict_violation)
+        if run_invalid or strict_violation:
+            extra["message"] = (
+                banner.replace("\n", " ").strip() if banner else "PANEL RUN INVALID"
+            )
+        emit(fmt, message=extra.get("message", "Panel complete"), extra=extra)
 
+    # sp-2hg: exit non-zero when the run is invalid so automation (CI,
+    # refinery, wrapper scripts) can detect silent-failure scenarios.
+    if strict_violation:
+        return 3
+    if run_invalid:
+        return 2
     return 0
+
+
+def _analyze_failures(
+    panelist_results: list[Any],
+    questions: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Count errored panelist-question pairs across a run.
+
+    A pair errors if:
+      - the panelist-level wrapper threw (``pr.error`` set), in which
+        case *every* authored question is counted as an error, even
+        those the panelist never reached, OR
+      - an individual response dict was flagged ``error: True`` (the
+        orchestrator sets this when a per-question call raises).
+
+    Returns a dict with ``total_pairs``, ``errored_pairs``,
+    ``failure_rate`` (0-1), ``failed_panelists`` (panelist-level
+    failures) and ``errored_personas`` (names of affected personas).
+    """
+    total_questions = len(questions) if questions else 0
+    total_pairs = 0
+    errored_pairs = 0
+    failed_panelists = 0
+    errored_personas: set[str] = set()
+
+    for pr in panelist_results:
+        if getattr(pr, "error", None):
+            # Whole panelist exploded — every authored question counts as
+            # an error for the purposes of the failure-rate calculation.
+            failed_panelists += 1
+            errored_pairs += total_questions
+            total_pairs += total_questions
+            errored_personas.add(getattr(pr, "persona_name", "unknown"))
+            continue
+
+        pair_count = 0
+        err_count = 0
+        for resp in getattr(pr, "responses", []) or []:
+            if isinstance(resp, dict) and resp.get("follow_up"):
+                # Follow-ups are not counted as primary QA pairs — they
+                # are second-order and would double-count toward the rate.
+                continue
+            pair_count += 1
+            if isinstance(resp, dict) and resp.get("error"):
+                err_count += 1
+        # If the panelist never produced any primary responses (e.g. a
+        # structured-output path that bailed before recording), treat the
+        # shortfall as errored against the authored question count.
+        if total_questions and pair_count < total_questions:
+            shortfall = total_questions - pair_count
+            err_count += shortfall
+            pair_count += shortfall
+        total_pairs += pair_count
+        errored_pairs += err_count
+        if err_count > 0:
+            errored_personas.add(getattr(pr, "persona_name", "unknown"))
+
+    failure_rate = (errored_pairs / total_pairs) if total_pairs > 0 else 0.0
+    return {
+        "total_pairs": total_pairs,
+        "errored_pairs": errored_pairs,
+        "failure_rate": failure_rate,
+        "failed_panelists": failed_panelists,
+        "errored_personas": sorted(errored_personas),
+    }
+
+
+def _build_invalid_banner(
+    stats: dict[str, Any],
+    threshold: float,
+    *,
+    strict: bool,
+    strict_violation: bool,
+) -> str:
+    """Render the fatal banner printed to stderr on an invalid run.
+
+    Returns an empty string when the run is valid. The banner is
+    intentionally loud — the entire point of sp-2hg is that a user
+    skimming output cannot miss that the panel was not executed
+    successfully.
+    """
+    total = stats["total_pairs"]
+    errored = stats["errored_pairs"]
+    if total == 0:
+        return ""
+    rate = stats["failure_rate"]
+    over_threshold = rate > threshold
+    if not (over_threshold or strict_violation):
+        return ""
+
+    bar = "!" * 70
+    lines = [bar]
+    if strict_violation and not over_threshold:
+        lines.append(
+            f"PANEL RUN INVALID (--strict): {errored}/{total} panelist-question"
+            f" pairs errored."
+        )
+    else:
+        lines.append(
+            f"PANEL RUN INVALID: {errored}/{total} panelist-question pairs"
+            f" errored ({rate:.0%} > threshold {threshold:.0%})."
+        )
+    lines.append("No synthesis was performed — the run produced no usable data.")
+    if stats.get("failed_panelists"):
+        lines.append(
+            f"  {stats['failed_panelists']} panelist(s) failed wholesale"
+            f" (no responses recorded)."
+        )
+    if stats.get("errored_personas"):
+        shown = ", ".join(stats["errored_personas"][:4])
+        extra = len(stats["errored_personas"]) - 4
+        if extra > 0:
+            shown += f", +{extra} more"
+        lines.append(f"  Affected personas: {shown}")
+    lines.append(
+        "Check provider status (e.g. rate-limit / 503), run with a different"
+    )
+    lines.append(
+        "--model, or re-run once the upstream provider is healthy."
+    )
+    lines.append(bar)
+    return "\n".join(lines)
 
 
 def _build_rounds_shape(

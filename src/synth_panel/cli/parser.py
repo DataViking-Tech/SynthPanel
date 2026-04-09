@@ -117,6 +117,27 @@ def build_parser() -> argparse.ArgumentParser:
             "stderr; will be removed in 0.6.0."
         ),
     )
+    panel_run_parser.add_argument(
+        "--strict",
+        action="store_true",
+        default=False,
+        help=(
+            "Treat any panelist-question error as fatal. When any error "
+            "occurs, synthesis is skipped and the run exits non-zero. "
+            "Use this to avoid spending retry budget on a broken run."
+        ),
+    )
+    panel_run_parser.add_argument(
+        "--failure-threshold",
+        type=float,
+        default=0.5,
+        metavar="RATIO",
+        help=(
+            "Fraction of panelist-question pairs that may error before the "
+            "run is declared invalid (default: 0.5). When exceeded, "
+            "synthesis is auto-disabled and the run exits non-zero."
+        ),
+    )
 
     # pack
     pack_parser = subparsers.add_parser(
