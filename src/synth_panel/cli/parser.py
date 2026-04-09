@@ -144,6 +144,29 @@ def build_parser() -> argparse.ArgumentParser:
             "synthesis is auto-disabled and the run exits non-zero."
         ),
     )
+    panel_run_parser.add_argument(
+        "--var",
+        action="append",
+        default=None,
+        metavar="KEY=VALUE",
+        dest="vars",
+        help=(
+            "Substitute template placeholders in the instrument's "
+            "question text. Repeatable. Example: "
+            "--var 'candidates=Name A, Name B' --var theme=pricing. "
+            "The value replaces any literal {KEY} token in a question."
+        ),
+    )
+    panel_run_parser.add_argument(
+        "--vars-file",
+        default=None,
+        metavar="PATH",
+        help=(
+            "YAML file of key: value pairs to substitute into instrument "
+            "templates. Values merge with --var (CLI flag wins on "
+            "conflicts)."
+        ),
+    )
 
     # pack
     pack_parser = subparsers.add_parser(

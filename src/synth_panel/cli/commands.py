@@ -210,6 +210,75 @@ def _load_instrument(path_or_name: str) -> Instrument:
     return parse_instrument(raw)
 
 
+def _collect_template_vars(args: argparse.Namespace) -> dict[str, str]:
+    """Merge ``--vars-file`` and repeated ``--var KEY=VALUE`` flags into a
+    single substitution context.
+
+    CLI ``--var`` entries override matching keys from ``--vars-file``
+    so ad-hoc overrides win on conflict. Both sources stringify their
+    values because the underlying template engine operates on strings.
+    Raises :class:`ValueError` on malformed input so the caller can
+    surface a friendly message.
+    """
+    merged: dict[str, str] = {}
+
+    vars_file = getattr(args, "vars_file", None)
+    if vars_file:
+        try:
+            data = _load_yaml(vars_file)
+        except FileNotFoundError as exc:
+            raise ValueError(str(exc)) from exc
+        if data is None:
+            data = {}
+        if not isinstance(data, dict):
+            raise ValueError(
+                f"--vars-file must be a YAML mapping, got {type(data).__name__}"
+            )
+        for k, v in data.items():
+            merged[str(k)] = _stringify_var(v)
+
+    for entry in getattr(args, "vars", None) or []:
+        if "=" not in entry:
+            raise ValueError(
+                f"--var expects KEY=VALUE, got: {entry!r}"
+            )
+        key, value = entry.split("=", 1)
+        key = key.strip()
+        if not key:
+            raise ValueError(f"--var has empty key: {entry!r}")
+        merged[key] = value
+    return merged
+
+
+def _stringify_var(value: Any) -> str:
+    """Convert a YAML-loaded var value to a string suitable for substitution.
+
+    Lists and tuples are joined with ``", "`` so ``candidates: [A, B, C]``
+    in a vars file renders the way a human would write it inline. Other
+    scalars go through ``str()``.
+    """
+    if isinstance(value, (list, tuple)):
+        return ", ".join(str(item) for item in value)
+    return str(value)
+
+
+def _apply_vars_to_instrument(
+    instrument: Instrument, template_vars: dict[str, str]
+) -> None:
+    """Substitute ``template_vars`` into every round's question text.
+
+    Mutates the instrument in place: each ``Round.questions`` list is
+    replaced with its rendered form. The rendering is routed through
+    :func:`synth_panel.templates.render_questions` so we inherit safe-
+    failure behavior (unknown keys render as literal ``{placeholder}``
+    rather than raising).
+    """
+    from synth_panel.templates import render_questions
+
+    for rnd in instrument.rounds:
+        rnd.questions = render_questions(rnd.questions, template_vars)
+
+
 def _load_schema(value: str) -> dict[str, Any]:
     """Load a JSON Schema from a file path or inline JSON string."""
     p = Path(value)
@@ -249,6 +318,19 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     # are non-fatal but the user should see them before any LLM call fires.
     for w in instrument.warnings:
         print(f"warning: {w}", file=sys.stderr)
+
+    # ── sp-1hb: variable substitution ──────────────────────────────────
+    # Bundled instrument packs ship with {candidates}, {theme_0}, and
+    # similar placeholders so they can be reused as research templates.
+    # Without --var the user had to hand-edit YAML; this resolves the
+    # variables at load time so the panelists see substituted text.
+    try:
+        template_vars = _collect_template_vars(args)
+    except ValueError as exc:
+        print(f"Error parsing --var / --vars-file: {exc}", file=sys.stderr)
+        return 1
+    if template_vars:
+        _apply_vars_to_instrument(instrument, template_vars)
 
     questions = instrument.questions
     if not questions:
