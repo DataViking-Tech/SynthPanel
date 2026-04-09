@@ -867,6 +867,163 @@ class TestDefaultModelResolution:
         assert "--model not specified" not in err
 
 
+# --- sp-1hb: CLI variable passing ---------------------------------------
+
+
+class TestVarSubstitution:
+    """sp-1hb: ``--var KEY=VALUE`` and ``--vars-file`` substitute template
+    placeholders in instrument question text."""
+
+    def test_collect_template_vars_parses_cli_flags(self):
+        from synth_panel.cli.commands import _collect_template_vars
+        import argparse as _ap
+        ns = _ap.Namespace(
+            vars=["candidates=Alpha, Beta", "theme=pricing"], vars_file=None
+        )
+        result = _collect_template_vars(ns)
+        assert result == {"candidates": "Alpha, Beta", "theme": "pricing"}
+
+    def test_collect_template_vars_allows_equals_in_value(self):
+        from synth_panel.cli.commands import _collect_template_vars
+        import argparse as _ap
+        ns = _ap.Namespace(vars=["equation=a=b+c"], vars_file=None)
+        assert _collect_template_vars(ns) == {"equation": "a=b+c"}
+
+    def test_collect_template_vars_rejects_malformed_flag(self):
+        from synth_panel.cli.commands import _collect_template_vars
+        import argparse as _ap
+        ns = _ap.Namespace(vars=["novalue"], vars_file=None)
+        with pytest.raises(ValueError, match="KEY=VALUE"):
+            _collect_template_vars(ns)
+
+    def test_collect_template_vars_rejects_empty_key(self):
+        from synth_panel.cli.commands import _collect_template_vars
+        import argparse as _ap
+        ns = _ap.Namespace(vars=["=hello"], vars_file=None)
+        with pytest.raises(ValueError, match="empty key"):
+            _collect_template_vars(ns)
+
+    def test_collect_template_vars_merges_file_and_cli_flags(self, tmp_path):
+        from synth_panel.cli.commands import _collect_template_vars
+        import argparse as _ap
+        f = tmp_path / "vars.yaml"
+        f.write_text(
+            "candidates:\n"
+            "  - Alpha\n"
+            "  - Beta\n"
+            "theme: memorability\n"
+        )
+        ns = _ap.Namespace(vars=["theme=pricing"], vars_file=str(f))
+        result = _collect_template_vars(ns)
+        # List flattened to comma-joined string
+        assert result["candidates"] == "Alpha, Beta"
+        # CLI overrides file
+        assert result["theme"] == "pricing"
+
+    def test_collect_template_vars_rejects_non_mapping_file(self, tmp_path):
+        from synth_panel.cli.commands import _collect_template_vars
+        import argparse as _ap
+        f = tmp_path / "bad.yaml"
+        f.write_text("- just\n- a\n- list\n")
+        ns = _ap.Namespace(vars=None, vars_file=str(f))
+        with pytest.raises(ValueError, match="YAML mapping"):
+            _collect_template_vars(ns)
+
+    def test_apply_vars_to_instrument_mutates_round_questions(self):
+        from synth_panel.cli.commands import _apply_vars_to_instrument
+        from synth_panel.instrument import parse_instrument
+        inst = parse_instrument({
+            "version": 3,
+            "rounds": [
+                {
+                    "name": "intro",
+                    "questions": [
+                        {"text": "Evaluate: {candidates}. Reaction?"},
+                    ],
+                },
+                {
+                    "name": "followup",
+                    "depends_on": "intro",
+                    "questions": [
+                        {"text": "Which of {candidates} do you remember?"},
+                    ],
+                },
+            ],
+        })
+        _apply_vars_to_instrument(inst, {"candidates": "Alpha, Beta, Gamma"})
+        assert inst.rounds[0].questions[0]["text"] == (
+            "Evaluate: Alpha, Beta, Gamma. Reaction?"
+        )
+        assert inst.rounds[1].questions[0]["text"] == (
+            "Which of Alpha, Beta, Gamma do you remember?"
+        )
+
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_panel_run_cli_var_substitutes_bundled_placeholder(
+        self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path
+    ):
+        """End-to-end: a question containing ``{candidates}`` is passed to
+        ``run_panel_parallel`` already rendered when ``--var candidates=...``
+        is supplied."""
+        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+
+        registry = WorkerRegistry()
+        mock_run.return_value = (
+            [PanelistResult(persona_name="A", responses=[
+                {"question": "rendered", "response": "ok"}],
+                usage=ZERO_USAGE)],
+            registry,
+            {},
+        )
+        mock_synth.return_value = _mock_synthesis_result()
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: A\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text(
+            "instrument:\n"
+            "  questions:\n"
+            "    - text: 'Evaluate: {candidates}'\n"
+        )
+
+        code = main([
+            "panel", "run",
+            "--personas", str(personas_file),
+            "--instrument", str(survey_file),
+            "--var", "candidates=Alpha, Beta, Gamma",
+        ])
+        assert code == 0
+        # Verify the orchestrator saw the rendered question text
+        _, kwargs = mock_run.call_args
+        questions_passed = kwargs["questions"]
+        assert len(questions_passed) == 1
+        assert questions_passed[0]["text"] == "Evaluate: Alpha, Beta, Gamma"
+
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_panel_run_malformed_var_returns_error(
+        self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path
+    ):
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: A\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: Q\n")
+
+        code = main([
+            "panel", "run",
+            "--personas", str(personas_file),
+            "--instrument", str(survey_file),
+            "--var", "badentry",
+        ])
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "KEY=VALUE" in err
+        mock_run.assert_not_called()
+
+
 # --- Pack CLI tests ---
 
 
