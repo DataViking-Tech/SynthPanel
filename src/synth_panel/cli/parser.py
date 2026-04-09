@@ -19,7 +19,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--model",
         default=None,
-        help="LLM model to use (e.g. sonnet, opus, grok). Default: best available.",
+        help=(
+            "LLM model to use (e.g. sonnet, opus, grok, gemini-2.5-flash). "
+            "Default: first provider with credentials in the environment "
+            "(ANTHROPIC_API_KEY > OPENAI_API_KEY > GEMINI_API_KEY > "
+            "XAI_API_KEY). The chosen model is printed to stderr before "
+            "each run so you can cancel and override."
+        ),
     )
     parser.add_argument(
         "--permission-mode",
