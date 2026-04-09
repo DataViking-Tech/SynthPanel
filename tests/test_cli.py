@@ -746,6 +746,127 @@ class TestPanelRun:
         mock_synth.assert_not_called()
 
 
+# --- sp-f4t: default model resolution -----------------------------------
+
+
+class TestDefaultModelResolution:
+    """sp-f4t: ``--model`` default must respect available credentials and
+    surface the chosen model so the user can cancel/override."""
+
+    def test_resolve_default_model_prefers_anthropic(self, monkeypatch):
+        from synth_panel.cli.commands import _resolve_default_model
+        for env in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY",
+                    "GOOGLE_API_KEY", "XAI_API_KEY"):
+            monkeypatch.delenv(env, raising=False)
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+        alias, source = _resolve_default_model()
+        assert alias == "sonnet"
+        assert source == "ANTHROPIC_API_KEY"
+
+    def test_resolve_default_model_falls_through_to_gemini(self, monkeypatch):
+        from synth_panel.cli.commands import _resolve_default_model
+        for env in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY",
+                    "GOOGLE_API_KEY", "XAI_API_KEY"):
+            monkeypatch.delenv(env, raising=False)
+        monkeypatch.setenv("GEMINI_API_KEY", "gemkey")
+        alias, source = _resolve_default_model()
+        assert alias == "gemini-2.5-flash"
+        assert source == "GEMINI_API_KEY"
+
+    def test_resolve_default_model_falls_back_to_sonnet_when_no_creds(self, monkeypatch):
+        from synth_panel.cli.commands import _resolve_default_model
+        for env in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY",
+                    "GOOGLE_API_KEY", "XAI_API_KEY"):
+            monkeypatch.delenv(env, raising=False)
+        alias, source = _resolve_default_model()
+        assert alias == "sonnet"
+        assert source is None
+
+    def test_resolve_default_model_respects_preference_order(self, monkeypatch):
+        """Anthropic beats Gemini even if both keys are set."""
+        from synth_panel.cli.commands import _resolve_default_model
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+        monkeypatch.setenv("GEMINI_API_KEY", "gemkey")
+        alias, source = _resolve_default_model()
+        assert alias == "sonnet"
+        assert source == "ANTHROPIC_API_KEY"
+
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_panel_run_announces_default_model_on_stderr(
+        self, mock_client_cls, mock_run, mock_synth, monkeypatch, capsys, tmp_path
+    ):
+        """When --model is omitted, the chosen default is printed to stderr
+        so an operator can cancel and re-run with an explicit override."""
+        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+
+        for env in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY",
+                    "GOOGLE_API_KEY", "XAI_API_KEY"):
+            monkeypatch.delenv(env, raising=False)
+        monkeypatch.setenv("GEMINI_API_KEY", "gemkey")
+
+        registry = WorkerRegistry()
+        mock_run.return_value = (
+            [PanelistResult(persona_name="A", responses=[
+                {"question": "Q", "response": "ok"}], usage=ZERO_USAGE)],
+            registry,
+            {},
+        )
+        mock_synth.return_value = _mock_synthesis_result()
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: A\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: Q\n")
+
+        code = main([
+            "panel", "run",
+            "--personas", str(personas_file),
+            "--instrument", str(survey_file),
+        ])
+        assert code == 0
+        err = capsys.readouterr().err
+        assert "gemini-2.5-flash" in err
+        assert "GEMINI_API_KEY" in err
+        assert "Override with --model" in err
+
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_panel_run_explicit_model_suppresses_announcement(
+        self, mock_client_cls, mock_run, mock_synth, monkeypatch, capsys, tmp_path
+    ):
+        """When --model is explicit, no auto-select message is printed."""
+        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+
+        monkeypatch.setenv("GEMINI_API_KEY", "gemkey")
+
+        registry = WorkerRegistry()
+        mock_run.return_value = (
+            [PanelistResult(persona_name="A", responses=[
+                {"question": "Q", "response": "ok"}], usage=ZERO_USAGE)],
+            registry,
+            {},
+        )
+        mock_synth.return_value = _mock_synthesis_result()
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: A\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: Q\n")
+
+        code = main([
+            "--model", "gemini-2.5-flash-lite",
+            "panel", "run",
+            "--personas", str(personas_file),
+            "--instrument", str(survey_file),
+        ])
+        assert code == 0
+        err = capsys.readouterr().err
+        assert "--model not specified" not in err
+
+
 # --- Pack CLI tests ---
 
 

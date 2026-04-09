@@ -25,14 +25,81 @@ from synth_panel.runtime import AgentRuntime
 from synth_panel.synthesis import synthesize_panel
 
 
+# Preference chain for --model default (sp-f4t). Each entry is
+# (env var that signals provider availability, model alias or name).
+# Walked in order: the first provider with credentials wins. The alias
+# side prefers the provider's workhorse model so the user gets a
+# sensible default without guessing which canonical ID to type.
+_DEFAULT_MODEL_PREFERENCE: list[tuple[str, str]] = [
+    ("ANTHROPIC_API_KEY", "sonnet"),
+    ("OPENAI_API_KEY", "gpt-4o-mini"),
+    ("GEMINI_API_KEY", "gemini-2.5-flash"),
+    ("GOOGLE_API_KEY", "gemini-2.5-flash"),
+    ("XAI_API_KEY", "grok-3"),
+]
+
+
+def _resolve_default_model() -> tuple[str, str | None]:
+    """Pick a default model alias based on which API keys are present.
+
+    Returns ``(model_alias, source_env_var)``. If no provider credentials
+    are available the fallback is still ``"sonnet"`` (the previous
+    hard-coded default) so the LLM client's own credential check can
+    emit its canonical error message.
+    """
+    import os
+    for env_var, alias in _DEFAULT_MODEL_PREFERENCE:
+        if os.environ.get(env_var, "").strip():
+            return alias, env_var
+    return "sonnet", None
+
+
 def _resolve_model(args: argparse.Namespace) -> str:
-    """Return the model alias from CLI args, defaulting to 'sonnet'."""
-    return args.model or "sonnet"
+    """Return the model alias from CLI args.
+
+    When ``--model`` is not supplied, walk the preference chain in
+    :data:`_DEFAULT_MODEL_PREFERENCE` and pick the first provider with
+    credentials present in the environment. Falls back to ``"sonnet"``
+    if nothing is set so the LLM client's missing-credentials error is
+    still the one the user sees.
+    """
+    if args.model:
+        return args.model
+    alias, _source = _resolve_default_model()
+    return alias
+
+
+def _announce_default_model(args: argparse.Namespace) -> None:
+    """Print the auto-selected default model to stderr.
+
+    sp-f4t: the CLI help claims "Default: best available" but the
+    selection was previously silent — an operator running a panel
+    against the auto-picked model could not tell *which* provider was
+    being used. Surface the selection loudly so the user can ^C and
+    re-run with ``--model`` if the pick is wrong.
+    """
+    if getattr(args, "model", None):
+        return
+    alias, source = _resolve_default_model()
+    if source:
+        print(
+            f"[synth-panel] --model not specified; using '{alias}' "
+            f"(detected {source}). Override with --model <name>.",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            f"[synth-panel] --model not specified and no provider API "
+            f"keys detected; falling back to '{alias}'. Set one of: "
+            f"{', '.join(env for env, _ in _DEFAULT_MODEL_PREFERENCE)}.",
+            file=sys.stderr,
+        )
 
 
 def handle_prompt(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """Run a single non-interactive prompt and exit."""
     prompt_text = " ".join(args.text)
+    _announce_default_model(args)
     model = _resolve_model(args)
 
     client = LLMClient()
@@ -163,6 +230,7 @@ def _load_schema(value: str) -> dict[str, Any]:
 
 def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """Run a panel: load personas + instrument, run panelists in parallel."""
+    _announce_default_model(args)
     model = _resolve_model(args)
 
     try:
