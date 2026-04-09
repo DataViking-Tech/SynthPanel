@@ -535,6 +535,216 @@ class TestPanelRun:
         ])
         assert code == 1
 
+    # --- sp-2hg: silent-failure-on-universal-provider-errors ------------
+
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_panel_run_all_errored_returns_nonzero_and_skips_synthesis(
+        self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path
+    ):
+        """sp-2hg: when every question errors the run must exit non-zero,
+        surface a fatal banner, and NOT call synthesize_panel."""
+        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+
+        registry = WorkerRegistry()
+        mock_run.return_value = (
+            [
+                PanelistResult(
+                    persona_name="Alice",
+                    responses=[
+                        {"question": "Q1", "response": "[error: boom]", "error": True},
+                        {"question": "Q2", "response": "[error: boom]", "error": True},
+                    ],
+                    usage=ZERO_USAGE,
+                ),
+                PanelistResult(
+                    persona_name="Bob",
+                    responses=[
+                        {"question": "Q1", "response": "[error: boom]", "error": True},
+                        {"question": "Q2", "response": "[error: boom]", "error": True},
+                    ],
+                    usage=ZERO_USAGE,
+                ),
+            ],
+            registry,
+            {},
+        )
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n  - name: Bob\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text(
+            "instrument:\n"
+            "  questions:\n"
+            "    - text: Q1\n"
+            "    - text: Q2\n"
+        )
+
+        code = main([
+            "panel", "run",
+            "--personas", str(personas_file),
+            "--instrument", str(survey_file),
+        ])
+        assert code == 2
+        err = capsys.readouterr().err
+        assert "PANEL RUN INVALID" in err
+        assert "4/4" in err
+        # Synthesis MUST not run on a fully-errored panel
+        mock_synth.assert_not_called()
+
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_panel_run_strict_flag_bails_on_any_error(
+        self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path
+    ):
+        """sp-2hg: --strict turns any error into a fatal run (exit 3)."""
+        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+
+        registry = WorkerRegistry()
+        mock_run.return_value = (
+            [
+                PanelistResult(
+                    persona_name="Alice",
+                    responses=[
+                        {"question": "Q1", "response": "good answer"},
+                        {"question": "Q2", "response": "good answer"},
+                    ],
+                    usage=ZERO_USAGE,
+                ),
+                PanelistResult(
+                    persona_name="Bob",
+                    responses=[
+                        {"question": "Q1", "response": "[error: boom]", "error": True},
+                        {"question": "Q2", "response": "good answer"},
+                    ],
+                    usage=ZERO_USAGE,
+                ),
+            ],
+            registry,
+            {},
+        )
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n  - name: Bob\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text(
+            "instrument:\n"
+            "  questions:\n"
+            "    - text: Q1\n"
+            "    - text: Q2\n"
+        )
+
+        code = main([
+            "panel", "run",
+            "--personas", str(personas_file),
+            "--instrument", str(survey_file),
+            "--strict",
+        ])
+        assert code == 3
+        err = capsys.readouterr().err
+        assert "--strict" in err
+        mock_synth.assert_not_called()
+
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_panel_run_partial_errors_below_threshold_still_synthesizes(
+        self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path
+    ):
+        """sp-2hg: a single-error panel (25% failure) should still synthesize
+        when --strict is NOT set and the failure rate is below the default
+        threshold (0.5). Exit code is 0."""
+        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+
+        registry = WorkerRegistry()
+        mock_run.return_value = (
+            [
+                PanelistResult(
+                    persona_name="Alice",
+                    responses=[
+                        {"question": "Q1", "response": "good"},
+                        {"question": "Q2", "response": "good"},
+                    ],
+                    usage=ZERO_USAGE,
+                ),
+                PanelistResult(
+                    persona_name="Bob",
+                    responses=[
+                        {"question": "Q1", "response": "[error: x]", "error": True},
+                        {"question": "Q2", "response": "good"},
+                    ],
+                    usage=ZERO_USAGE,
+                ),
+            ],
+            registry,
+            {},
+        )
+        mock_synth.return_value = _mock_synthesis_result()
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n  - name: Bob\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text(
+            "instrument:\n"
+            "  questions:\n"
+            "    - text: Q1\n"
+            "    - text: Q2\n"
+        )
+
+        code = main([
+            "panel", "run",
+            "--personas", str(personas_file),
+            "--instrument", str(survey_file),
+        ])
+        assert code == 0
+        mock_synth.assert_called_once()
+
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_panel_run_json_output_includes_failure_stats(
+        self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path
+    ):
+        """sp-2hg: structured output must carry failure_stats + run_invalid
+        so MCP/CI consumers can gate without parsing banners."""
+        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+
+        registry = WorkerRegistry()
+        mock_run.return_value = (
+            [
+                PanelistResult(
+                    persona_name="Alice",
+                    responses=[
+                        {"question": "Q1", "response": "[error: x]", "error": True},
+                    ],
+                    usage=ZERO_USAGE,
+                ),
+            ],
+            registry,
+            {},
+        )
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: Q1\n")
+
+        code = main([
+            "--output-format", "json",
+            "panel", "run",
+            "--personas", str(personas_file),
+            "--instrument", str(survey_file),
+        ])
+        assert code == 2
+        data = json.loads(capsys.readouterr().out)
+        assert data["run_invalid"] is True
+        assert data["failure_stats"]["errored_pairs"] == 1
+        assert data["failure_stats"]["total_pairs"] == 1
+        assert data["failure_stats"]["failure_rate"] == 1.0
+        mock_synth.assert_not_called()
+
 
 # --- Pack CLI tests ---
 
