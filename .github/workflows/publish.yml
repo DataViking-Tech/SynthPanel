@@ -1,5 +1,30 @@
 name: Publish to PyPI
 
+# sp-56u: this workflow only fires on release-shaped events (a v* tag
+# push, an explicit call from auto-tag.yml, or a human workflow_dispatch).
+# Previously it also fired on any main push touching src/** — that would
+# try to republish the same pyproject.toml version on every merge and
+# always fail, hiding the real problem that nothing was ever making it
+# to PyPI.
+#
+# ONE-TIME MANUAL SETUP (required before the first successful publish):
+#
+#   1. On https://pypi.org/manage/account/publishing/ add a trusted
+#      publisher with:
+#        project name = synth-panel
+#        owner        = DataViking-Tech
+#        repo         = synth-panel
+#        workflow     = publish.yml
+#        environment  = pypi   (must match the `environment:` key below)
+#   2. In GitHub repo Settings → Environments, create an environment
+#      named `pypi`. Optionally require a reviewer.
+#   3. Use `workflow_dispatch` with tag=v0.4.0 to backfill the first
+#      release from the existing tag, or land a PR with a `semver:`
+#      label to auto-cut a new one via auto-tag.yml.
+#
+# Without the trusted publisher configured, the "Publish to PyPI" step
+# fails with `invalid-publisher: valid token, but no corresponding
+# publisher` — that is the signal the manual step above is missing.
 on:
   workflow_call:
     inputs:
@@ -7,12 +32,14 @@ on:
         required: true
         type: string
   push:
-    branches: [main]
-    paths:
-      - 'src/synth_panel/**'
-      - 'pyproject.toml'
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to (re)publish (e.g. v0.4.0). Must exist in the repo."
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -28,11 +55,22 @@ jobs:
       - name: Determine tag ref
         id: ref
         run: |
+          set -euo pipefail
           if [ -n "${{ inputs.tag }}" ]; then
-            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+            TAG="${{ inputs.tag }}"
           else
-            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+            TAG="${GITHUB_REF#refs/tags/}"
           fi
+          if [ -z "$TAG" ]; then
+            echo "::error::Could not determine release tag from event context"
+            exit 1
+          fi
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]]; then
+            echo "::error::Tag '$TAG' does not look like a semver release (vMAJOR.MINOR.PATCH[-pre])."
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Publishing tag: $TAG"
 
       - name: Checkout at tag
         uses: actions/checkout@v4
@@ -47,6 +85,7 @@ jobs:
         env:
           TAG: ${{ steps.ref.outputs.tag }}
         run: |
+          set -euo pipefail
           VERSION="${TAG#v}"
           sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" pyproject.toml
           echo "Set version to ${VERSION}"
@@ -58,5 +97,20 @@ jobs:
       - name: Build package
         run: python -m build
 
+      - name: Show built artifacts
+        run: ls -lh dist/
+
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Summarize release
+        env:
+          TAG: ${{ steps.ref.outputs.tag }}
+        run: |
+          VERSION="${TAG#v}"
+          {
+            echo "## Published synth-panel ${VERSION}"
+            echo ""
+            echo "- PyPI: https://pypi.org/project/synth-panel/${VERSION}/"
+            echo "- Install: \`pip install synth-panel==${VERSION}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
