@@ -608,6 +608,34 @@ class TestPackCommands:
         code = main(["pack", "export", "nope"])
         assert code == 1
 
+    def test_pack_show_prints_yaml_to_stdout(self, capsys):
+        """sp-oem: `pack show <id>` is an alias for stdout export."""
+        from synth_panel.mcp.data import save_persona_pack
+        save_persona_pack("Show Test", [{"name": "Zoe"}], pack_id="shtest")
+        code = main(["pack", "show", "shtest"])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "Zoe" in out
+        assert "Show Test" in out
+
+    def test_pack_show_matches_pack_export_stdout(self, capsys):
+        """sp-oem: `pack show <id>` must produce the same output as
+        `pack export <id>` with no output file - the whole point of the
+        alias is that they are interchangeable for inspection use."""
+        from synth_panel.mcp.data import save_persona_pack
+        save_persona_pack(
+            "Parity Test", [{"name": "Iris", "age": 40}], pack_id="parity"
+        )
+        main(["pack", "export", "parity"])
+        export_out = capsys.readouterr().out
+        main(["pack", "show", "parity"])
+        show_out = capsys.readouterr().out
+        assert export_out == show_out
+
+    def test_pack_show_nonexistent(self, capsys):
+        code = main(["pack", "show", "nope"])
+        assert code == 1
+
     def test_pack_list_json(self, capsys):
         from synth_panel.mcp.data import save_persona_pack
         save_persona_pack("JSON Pack", [{"name": "X"}], pack_id="jp")

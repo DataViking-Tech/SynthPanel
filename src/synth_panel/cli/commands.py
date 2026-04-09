@@ -466,6 +466,17 @@ def handle_pack_export(args: argparse.Namespace, fmt: OutputFormat) -> int:
     return 0
 
 
+def handle_pack_show(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Print a saved persona pack's YAML to stdout.
+
+    sp-oem: API parity alias for ``instruments show``. Internally
+    delegates to :func:`handle_pack_export` with ``output=None`` so
+    behaviour stays identical to ``pack export <id>`` (no file arg).
+    """
+    args.output = None
+    return handle_pack_export(args, fmt)
+
+
 def handle_mcp_serve(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """Start the MCP server on stdio transport."""
     from synth_panel.mcp.server import serve

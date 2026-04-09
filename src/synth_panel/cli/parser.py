@@ -121,7 +121,7 @@ def build_parser() -> argparse.ArgumentParser:
     # pack
     pack_parser = subparsers.add_parser(
         "pack",
-        help="Persona pack management: list, import, export.",
+        help="Persona pack management: list, import, export, show.",
     )
     pack_subparsers = pack_parser.add_subparsers(dest="pack_command")
 
@@ -169,6 +169,17 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="FILE",
         help="Write to file instead of stdout.",
+    )
+
+    # pack show (sp-oem: API parity with `instruments show`)
+    pack_show_parser = pack_subparsers.add_parser(
+        "show",
+        help="Print a saved persona pack's YAML to stdout.",
+    )
+    pack_show_parser.add_argument(
+        "pack_id",
+        metavar="PACK_ID",
+        help="ID of the persona pack to show.",
     )
 
     # instruments
