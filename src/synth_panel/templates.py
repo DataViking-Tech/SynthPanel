@@ -48,6 +48,7 @@ class _SafeFormatter(string.Formatter):
         first, rest = field_name, iter([])
         try:
             import _string
+
             first, rest = _string.formatter_field_name_split(field_name)
         except (ImportError, ValueError):
             pass
@@ -85,9 +86,7 @@ class _SafeFormatter(string.Formatter):
 _formatter = _SafeFormatter()
 
 
-def render_questions(
-    questions: list[dict[str, Any]], context: dict[str, str]
-) -> list[dict[str, Any]]:
+def render_questions(questions: list[dict[str, Any]], context: dict[str, str]) -> list[dict[str, Any]]:
     """Deep-copy questions and render template placeholders in text fields.
 
     Only string values in 'text' and 'follow_ups' (recursively) are rendered.

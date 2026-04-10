@@ -7,7 +7,7 @@ translates our internal request/response models to the OpenAI chat format.
 from __future__ import annotations
 
 import json
-from typing import Any, Iterator
+from collections.abc import Iterator
 
 import httpx
 
@@ -15,21 +15,14 @@ from synth_panel.llm.errors import LLMError, LLMErrorCategory, classify_http_sta
 from synth_panel.llm.models import (
     CompletionRequest,
     CompletionResponse,
-    ContentBlock,
-    StopReason,
     StreamEvent,
-    StreamEventType,
-    TextBlock,
-    TokenUsage,
-    ToolChoiceKind,
-    ToolInvocationBlock,
 )
-from synth_panel.llm.providers.base import LLMProvider, ProviderConfig
 from synth_panel.llm.providers._openai_format import (
     build_openai_body,
     parse_openai_response,
     parse_openai_sse_stream,
 )
+from synth_panel.llm.providers.base import LLMProvider, ProviderConfig
 
 XAI_CONFIG = ProviderConfig(
     api_key_env="XAI_API_KEY",
@@ -90,7 +83,11 @@ class XAIProvider(LLMProvider):
         body = build_openai_body(request, stream=True)
         try:
             with httpx.stream(
-                "POST", url, headers=self._headers(), json=body, timeout=120.0,
+                "POST",
+                url,
+                headers=self._headers(),
+                json=body,
+                timeout=120.0,
             ) as resp:
                 if resp.status_code != 200:
                     resp.read()

@@ -6,10 +6,9 @@ Entered when no subcommand is given. Supports slash commands per SPEC.md §8.
 from __future__ import annotations
 
 import argparse
-import sys
 
 from synth_panel.cli.output import OutputFormat, emit
-from synth_panel.cli.slash import dispatch_slash, SLASH_COMMANDS
+from synth_panel.cli.slash import dispatch_slash
 from synth_panel.llm.client import LLMClient
 from synth_panel.persistence import Session
 from synth_panel.runtime import AgentRuntime
@@ -18,7 +17,7 @@ from synth_panel.runtime import AgentRuntime
 class SessionState:
     """Mutable state maintained during an interactive session."""
 
-    __slots__ = ("turn_count", "compacted_count", "model", "last_usage", "runtime")
+    __slots__ = ("compacted_count", "last_usage", "model", "runtime", "turn_count")
 
     def __init__(self, model: str | None = None, runtime: AgentRuntime | None = None) -> None:
         self.turn_count: int = 0

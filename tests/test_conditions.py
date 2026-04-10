@@ -1,15 +1,14 @@
 """Tests for condition evaluation module."""
 
-import json
 from unittest.mock import MagicMock
 
 from synth_panel.conditions import evaluate_condition, normalize_follow_up
 from synth_panel.llm.models import CompletionResponse, TextBlock, TokenUsage
 
-
 # ---------------------------------------------------------------------------
 # evaluate_condition — "always"
 # ---------------------------------------------------------------------------
+
 
 class TestAlways:
     def test_always_returns_true(self):
@@ -27,6 +26,7 @@ class TestAlways:
 # evaluate_condition — "never"
 # ---------------------------------------------------------------------------
 
+
 class TestNever:
     def test_never_returns_false(self):
         assert evaluate_condition("never", "anything") is False
@@ -39,6 +39,7 @@ class TestNever:
 # ---------------------------------------------------------------------------
 # evaluate_condition — "response_contains"
 # ---------------------------------------------------------------------------
+
 
 class TestResponseContains:
     def test_match(self):
@@ -66,6 +67,7 @@ class TestResponseContains:
 # evaluate_condition — unknown conditions (forward-compat)
 # ---------------------------------------------------------------------------
 
+
 class TestUnknownCondition:
     def test_completely_unknown_type(self):
         assert evaluate_condition("some_future_condition: arg", "text") is True
@@ -77,6 +79,7 @@ class TestUnknownCondition:
 # ---------------------------------------------------------------------------
 # evaluate_condition — "response_sentiment" (LLM-based)
 # ---------------------------------------------------------------------------
+
 
 def _mock_client(classification: str) -> MagicMock:
     """Create a mock LLMClient that returns *classification* as text."""
@@ -93,40 +96,70 @@ def _mock_client(classification: str) -> MagicMock:
 class TestResponseSentiment:
     def test_positive_match(self):
         client = _mock_client("positive")
-        assert evaluate_condition(
-            "response_sentiment: positive", "I love this product!", client=client,
-        ) is True
+        assert (
+            evaluate_condition(
+                "response_sentiment: positive",
+                "I love this product!",
+                client=client,
+            )
+            is True
+        )
         client.send.assert_called_once()
 
     def test_negative_match(self):
         client = _mock_client("negative")
-        assert evaluate_condition(
-            "response_sentiment: negative", "This is terrible", client=client,
-        ) is True
+        assert (
+            evaluate_condition(
+                "response_sentiment: negative",
+                "This is terrible",
+                client=client,
+            )
+            is True
+        )
 
     def test_neutral_match(self):
         client = _mock_client("neutral")
-        assert evaluate_condition(
-            "response_sentiment: neutral", "It's okay I guess", client=client,
-        ) is True
+        assert (
+            evaluate_condition(
+                "response_sentiment: neutral",
+                "It's okay I guess",
+                client=client,
+            )
+            is True
+        )
 
     def test_mismatch(self):
         client = _mock_client("negative")
-        assert evaluate_condition(
-            "response_sentiment: positive", "This is terrible", client=client,
-        ) is False
+        assert (
+            evaluate_condition(
+                "response_sentiment: positive",
+                "This is terrible",
+                client=client,
+            )
+            is False
+        )
 
     def test_case_insensitive_target(self):
         client = _mock_client("positive")
-        assert evaluate_condition(
-            "response_sentiment: POSITIVE", "great!", client=client,
-        ) is True
+        assert (
+            evaluate_condition(
+                "response_sentiment: POSITIVE",
+                "great!",
+                client=client,
+            )
+            is True
+        )
 
     def test_case_insensitive_classification(self):
         client = _mock_client("  Positive  ")
-        assert evaluate_condition(
-            "response_sentiment: positive", "great!", client=client,
-        ) is True
+        assert (
+            evaluate_condition(
+                "response_sentiment: positive",
+                "great!",
+                client=client,
+            )
+            is True
+        )
 
     def test_no_client_defaults_to_true(self):
         """Graceful degradation: no client means condition passes."""
@@ -136,8 +169,10 @@ class TestResponseSentiment:
         client = _mock_client("positive")
         cache: dict[str, str] = {"I love it": "positive"}
         result = evaluate_condition(
-            "response_sentiment: positive", "I love it",
-            client=client, sentiment_cache=cache,
+            "response_sentiment: positive",
+            "I love it",
+            client=client,
+            sentiment_cache=cache,
         )
         assert result is True
         client.send.assert_not_called()
@@ -146,8 +181,10 @@ class TestResponseSentiment:
         client = _mock_client("negative")
         cache: dict[str, str] = {}
         evaluate_condition(
-            "response_sentiment: negative", "awful experience",
-            client=client, sentiment_cache=cache,
+            "response_sentiment: negative",
+            "awful experience",
+            client=client,
+            sentiment_cache=cache,
         )
         assert cache["awful experience"] == "negative"
 
@@ -156,33 +193,46 @@ class TestResponseSentiment:
         cache: dict[str, str] = {}
         # First call populates cache
         evaluate_condition(
-            "response_sentiment: positive", "great product",
-            client=client, sentiment_cache=cache,
+            "response_sentiment: positive",
+            "great product",
+            client=client,
+            sentiment_cache=cache,
         )
         assert client.send.call_count == 1
         # Second call uses cache
         evaluate_condition(
-            "response_sentiment: positive", "great product",
-            client=client, sentiment_cache=cache,
+            "response_sentiment: positive",
+            "great product",
+            client=client,
+            sentiment_cache=cache,
         )
         assert client.send.call_count == 1  # No additional call
 
     def test_unexpected_classification_defaults_neutral(self):
         client = _mock_client("ambivalent")  # not a valid sentiment
-        assert evaluate_condition(
-            "response_sentiment: neutral", "mixed feelings",
-            client=client,
-        ) is True
+        assert (
+            evaluate_condition(
+                "response_sentiment: neutral",
+                "mixed feelings",
+                client=client,
+            )
+            is True
+        )
         # "ambivalent" → "neutral" (default), matches "neutral" target
-        assert evaluate_condition(
-            "response_sentiment: positive", "mixed feelings",
-            client=client,
-        ) is False
+        assert (
+            evaluate_condition(
+                "response_sentiment: positive",
+                "mixed feelings",
+                client=client,
+            )
+            is False
+        )
 
 
 # ---------------------------------------------------------------------------
 # evaluate_condition — structured responses
 # ---------------------------------------------------------------------------
+
 
 class TestStructuredResponses:
     def test_dict_response_serialized(self):
@@ -210,6 +260,7 @@ class TestStructuredResponses:
 # ---------------------------------------------------------------------------
 # normalize_follow_up
 # ---------------------------------------------------------------------------
+
 
 class TestNormalizeFollowUp:
     def test_string_to_dict(self):

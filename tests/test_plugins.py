@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import json
-import os
-import stat
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from synth_panel.plugins.hooks import ShellHookRunner, run_lifecycle_commands
+from synth_panel.plugins.manager import (
+    PluginInstallError,
+    PluginManager,
+    PluginNotFoundError,
+)
 from synth_panel.plugins.manifest import (
     MANIFEST_FILENAME,
     PluginHooks,
@@ -18,20 +22,12 @@ from synth_panel.plugins.manifest import (
     PluginManifest,
     PluginMetadata,
 )
-from synth_panel.plugins.manager import (
-    PluginError,
-    PluginInstallError,
-    PluginManager,
-    PluginNotFoundError,
-)
 from synth_panel.plugins.registry import PluginRegistry
-from synth_panel.plugins.hooks import ShellHookRunner, run_lifecycle_commands
-from synth_panel.runtime import HookResult
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _write_manifest(plugin_dir: Path, manifest: dict[str, Any]) -> Path:
     """Write a plugin manifest YAML to a directory."""
@@ -196,17 +192,13 @@ class TestPluginManager:
     def test_reinstall_overwrites(self, tmp_path: Path) -> None:
         config_dir = tmp_path / "config"
         source_dir = tmp_path / "source" / "my-plugin"
-        _write_manifest(
-            source_dir, _minimal_manifest(name="my-plugin", version="1.0.0")
-        )
+        _write_manifest(source_dir, _minimal_manifest(name="my-plugin", version="1.0.0"))
 
         mgr = PluginManager(config_dir)
         mgr.install(source_dir)
 
         # Update version and reinstall
-        _write_manifest(
-            source_dir, _minimal_manifest(name="my-plugin", version="2.0.0")
-        )
+        _write_manifest(source_dir, _minimal_manifest(name="my-plugin", version="2.0.0"))
         metadata = mgr.install(source_dir)
         assert metadata.version == "2.0.0"
         assert len(mgr.list_plugins()) == 1
@@ -227,14 +219,20 @@ class TestPluginManager:
         config_dir = tmp_path / "config"
         source1 = tmp_path / "s1" / "p1"
         source2 = tmp_path / "s2" / "p2"
-        _write_manifest(source1, _minimal_manifest(
-            name="p1",
-            hooks={"pre_tool_use": ["echo p1-pre"]},
-        ))
-        _write_manifest(source2, _minimal_manifest(
-            name="p2",
-            hooks={"pre_tool_use": ["echo p2-pre"]},
-        ))
+        _write_manifest(
+            source1,
+            _minimal_manifest(
+                name="p1",
+                hooks={"pre_tool_use": ["echo p1-pre"]},
+            ),
+        )
+        _write_manifest(
+            source2,
+            _minimal_manifest(
+                name="p2",
+                hooks={"pre_tool_use": ["echo p2-pre"]},
+            ),
+        )
 
         mgr = PluginManager(config_dir)
         mgr.install(source1)
@@ -268,19 +266,33 @@ class TestPluginManager:
 class TestPluginRegistry:
     def test_aggregates_hooks(self) -> None:
         m1 = PluginMetadata(
-            id="p1", name="p1", version="1.0.0", description="",
-            kind=PluginKind.EXTERNAL, source_path="", default_enabled=True, root_dir="",
+            id="p1",
+            name="p1",
+            version="1.0.0",
+            description="",
+            kind=PluginKind.EXTERNAL,
+            source_path="",
+            default_enabled=True,
+            root_dir="",
         )
         man1 = PluginManifest(
-            name="p1", version="1.0.0",
+            name="p1",
+            version="1.0.0",
             hooks=PluginHooks(pre_tool_use=["cmd1"], post_tool_use=["cmd2"]),
         )
         m2 = PluginMetadata(
-            id="p2", name="p2", version="1.0.0", description="",
-            kind=PluginKind.EXTERNAL, source_path="", default_enabled=True, root_dir="",
+            id="p2",
+            name="p2",
+            version="1.0.0",
+            description="",
+            kind=PluginKind.EXTERNAL,
+            source_path="",
+            default_enabled=True,
+            root_dir="",
         )
         man2 = PluginManifest(
-            name="p2", version="1.0.0",
+            name="p2",
+            version="1.0.0",
             hooks=PluginHooks(pre_tool_use=["cmd3"], post_tool_use_failure=["cmd4"]),
         )
         registry = PluginRegistry([(m1, man1), (m2, man2)])
@@ -291,11 +303,18 @@ class TestPluginRegistry:
 
     def test_lifecycle_commands(self) -> None:
         m1 = PluginMetadata(
-            id="p1", name="p1", version="1.0.0", description="",
-            kind=PluginKind.EXTERNAL, source_path="", default_enabled=True, root_dir="",
+            id="p1",
+            name="p1",
+            version="1.0.0",
+            description="",
+            kind=PluginKind.EXTERNAL,
+            source_path="",
+            default_enabled=True,
+            root_dir="",
         )
         man1 = PluginManifest(
-            name="p1", version="1.0.0",
+            name="p1",
+            version="1.0.0",
             lifecycle=PluginLifecycle(init=["echo init1"], shutdown=["echo shut1"]),
         )
         registry = PluginRegistry([(m1, man1)])
@@ -340,10 +359,12 @@ class TestShellHookRunner:
         assert "broken" in result.messages[0]
 
     def test_chain_short_circuits_on_deny(self) -> None:
-        hooks = PluginHooks(pre_tool_use=[
-            "echo 'denied' && exit 2",
-            "echo 'should not run'",
-        ])
+        hooks = PluginHooks(
+            pre_tool_use=[
+                "echo 'denied' && exit 2",
+                "echo 'should not run'",
+            ]
+        )
         runner = ShellHookRunner(hooks)
         result = runner.run_pre_tool_use("my_tool", {})
         assert result.denied
@@ -351,10 +372,12 @@ class TestShellHookRunner:
         assert "denied" in result.messages[0]
 
     def test_chain_short_circuits_on_failure(self) -> None:
-        hooks = PluginHooks(pre_tool_use=[
-            "exit 1",
-            "echo 'should not run'",
-        ])
+        hooks = PluginHooks(
+            pre_tool_use=[
+                "exit 1",
+                "echo 'should not run'",
+            ]
+        )
         runner = ShellHookRunner(hooks)
         result = runner.run_pre_tool_use("my_tool", {})
         assert result.failed
@@ -369,9 +392,7 @@ class TestShellHookRunner:
         assert result.messages == ["msg1", "msg2"]
 
     def test_env_vars_passed(self) -> None:
-        hooks = PluginHooks(pre_tool_use=[
-            'echo "$HOOK_EVENT:$HOOK_TOOL_NAME:$HOOK_TOOL_IS_ERROR"'
-        ])
+        hooks = PluginHooks(pre_tool_use=['echo "$HOOK_EVENT:$HOOK_TOOL_NAME:$HOOK_TOOL_IS_ERROR"'])
         runner = ShellHookRunner(hooks)
         result = runner.run_pre_tool_use("search", {"query": "test"})
         assert result.messages == ["pre_tool_use:search:0"]
@@ -393,9 +414,7 @@ class TestShellHookRunner:
         assert result.messages == ["post-ok"]
 
     def test_post_tool_use_failure_event(self) -> None:
-        hooks = PluginHooks(post_tool_use_failure=[
-            'echo "$HOOK_EVENT:$HOOK_TOOL_IS_ERROR"'
-        ])
+        hooks = PluginHooks(post_tool_use_failure=['echo "$HOOK_EVENT:$HOOK_TOOL_IS_ERROR"'])
         runner = ShellHookRunner(hooks)
         result = runner.run_post_tool_use("my_tool", {}, "err", is_error=True)
         assert result.messages == ["post_tool_use_failure:1"]
@@ -433,10 +452,12 @@ class TestLifecycleCommands:
 
     def test_failure_does_not_stop_chain(self, tmp_path: Path) -> None:
         marker = tmp_path / "second_ran"
-        run_lifecycle_commands([
-            "exit 1",
-            f"touch {marker}",
-        ])
+        run_lifecycle_commands(
+            [
+                "exit 1",
+                f"touch {marker}",
+            ]
+        )
         assert marker.exists()
 
     def test_empty_commands(self) -> None:

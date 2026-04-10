@@ -100,9 +100,7 @@ def parse_instrument(data: dict[str, Any]) -> Instrument:
     if "questions" in data:
         return _parse_v1(data, version)
 
-    raise InstrumentError(
-        "Instrument must have either 'questions' (v1) or 'rounds' (v2) key"
-    )
+    raise InstrumentError("Instrument must have either 'questions' (v1) or 'rounds' (v2) key")
 
 
 def _parse_v1(data: dict[str, Any], version: int) -> Instrument:
@@ -128,9 +126,7 @@ def _parse_rounds(data: dict[str, Any], version: int) -> Instrument:
 
     for i, raw in enumerate(raw_rounds):
         if not isinstance(raw, dict):
-            raise InstrumentError(
-                f"Round {i} must be a mapping, got {type(raw).__name__}"
-            )
+            raise InstrumentError(f"Round {i} must be a mapping, got {type(raw).__name__}")
 
         name = raw.get("name")
         if not name or not isinstance(name, str):
@@ -141,28 +137,19 @@ def _parse_rounds(data: dict[str, Any], version: int) -> Instrument:
 
         questions = raw.get("questions")
         if not isinstance(questions, list) or not questions:
-            raise InstrumentError(
-                f"Round '{name}' must have a non-empty 'questions' list"
-            )
+            raise InstrumentError(f"Round '{name}' must have a non-empty 'questions' list")
 
         depends_on = raw.get("depends_on")
         if depends_on is not None and not isinstance(depends_on, str):
-            raise InstrumentError(
-                f"Round '{name}': 'depends_on' must be a string, "
-                f"got {type(depends_on).__name__}"
-            )
+            raise InstrumentError(f"Round '{name}': 'depends_on' must be a string, got {type(depends_on).__name__}")
 
         route_when = raw.get("route_when")
         if route_when is not None:
             if not isinstance(route_when, list) or not route_when:
-                raise InstrumentError(
-                    f"Round '{name}': 'route_when' must be a non-empty list"
-                )
+                raise InstrumentError(f"Round '{name}': 'route_when' must be a non-empty list")
             for j, entry in enumerate(route_when):
                 if not isinstance(entry, dict):
-                    raise InstrumentError(
-                        f"Round '{name}': route_when[{j}] must be a mapping"
-                    )
+                    raise InstrumentError(f"Round '{name}': route_when[{j}] must be a mapping")
 
         name_set.add(name)
         rounds.append(
@@ -177,9 +164,7 @@ def _parse_rounds(data: dict[str, Any], version: int) -> Instrument:
     # ---- Rung 2: Goto resolution (forward refs allowed) ----
     for r in rounds:
         if r.depends_on is not None and r.depends_on not in name_set:
-            raise InstrumentError(
-                f"Round '{r.name}': depends_on '{r.depends_on}' does not exist"
-            )
+            raise InstrumentError(f"Round '{r.name}': depends_on '{r.depends_on}' does not exist")
         if r.route_when:
             _validate_route_when_targets(r, name_set)
 
@@ -187,17 +172,14 @@ def _parse_rounds(data: dict[str, Any], version: int) -> Instrument:
     for r in rounds:
         if r.route_when and "else" not in r.route_when[-1]:
             raise InstrumentError(
-                f"round '{r.name}' has no else clause; "
-                f"add 'else: <round_name>' or 'else: {END_SENTINEL}'"
+                f"round '{r.name}' has no else clause; add 'else: <round_name>' or 'else: {END_SENTINEL}'"
             )
 
     # ---- Rung 3: Acyclicity (topo sort) ----
     edges = _build_edges(rounds)
     cycle = _find_cycle(rounds, edges)
     if cycle is not None:
-        raise InstrumentError(
-            f"Cycle detected in instrument DAG: {' -> '.join(cycle)}"
-        )
+        raise InstrumentError(f"Cycle detected in instrument DAG: {' -> '.join(cycle)}")
 
     # ---- Rung 5: Reachability (warning, not error) ----
     warnings = _reachability_warnings(rounds, edges)
@@ -211,27 +193,17 @@ def _validate_route_when_targets(r: Round, name_set: set[str]) -> None:
         if "else" in entry:
             target = entry["else"]
             if not isinstance(target, str):
-                raise InstrumentError(
-                    f"round '{r.name}' route_when[{j}] else must be a string"
-                )
+                raise InstrumentError(f"round '{r.name}' route_when[{j}] else must be a string")
             if target != END_SENTINEL and target not in name_set:
-                raise InstrumentError(
-                    f"round '{r.name}' goto '{target}' does not exist"
-                )
+                raise InstrumentError(f"round '{r.name}' goto '{target}' does not exist")
         elif "goto" in entry:
             target = entry["goto"]
             if not isinstance(target, str):
-                raise InstrumentError(
-                    f"round '{r.name}' route_when[{j}] goto must be a string"
-                )
+                raise InstrumentError(f"round '{r.name}' route_when[{j}] goto must be a string")
             if target != END_SENTINEL and target not in name_set:
-                raise InstrumentError(
-                    f"round '{r.name}' goto '{target}' does not exist"
-                )
+                raise InstrumentError(f"round '{r.name}' goto '{target}' does not exist")
         else:
-            raise InstrumentError(
-                f"round '{r.name}' route_when[{j}] must have 'goto' or 'else'"
-            )
+            raise InstrumentError(f"round '{r.name}' route_when[{j}] must have 'goto' or 'else'")
 
 
 def _build_edges(rounds: list[Round]) -> dict[str, list[str]]:
@@ -278,15 +250,12 @@ def _find_cycle(rounds: list[Round], edges: dict[str, list[str]]) -> list[str] |
         return False
 
     for r in rounds:
-        if color[r.name] == WHITE:
-            if dfs(r.name):
-                return cycle_path
+        if color[r.name] == WHITE and dfs(r.name):
+            return cycle_path
     return None
 
 
-def _reachability_warnings(
-    rounds: list[Round], edges: dict[str, list[str]]
-) -> list[str]:
+def _reachability_warnings(rounds: list[Round], edges: dict[str, list[str]]) -> list[str]:
     """Return warnings for unreachable rounds.
 
     Entry round is rounds[0]. Traversal follows route_when/depends_on edges,
@@ -313,8 +282,4 @@ def _reachability_warnings(
             if nxt not in seen:
                 stack.append(nxt)
 
-    return [
-        f"unreachable round: '{r.name}'"
-        for r in rounds
-        if r.name not in seen
-    ]
+    return [f"unreachable round: '{r.name}'" for r in rounds if r.name not in seen]

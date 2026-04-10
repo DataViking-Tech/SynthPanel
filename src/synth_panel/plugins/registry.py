@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -21,7 +20,6 @@ class PluginRegistry:
         self,
         enabled_plugins: list[tuple[PluginMetadata, PluginManifest]],
     ) -> None:
-        from synth_panel.plugins.manifest import PluginMetadata, PluginManifest
 
         self._plugins: list[tuple[PluginMetadata, PluginManifest]] = list(enabled_plugins)
         self._aggregated_hooks = self._aggregate_hooks()
@@ -44,7 +42,6 @@ class PluginRegistry:
     @property
     def plugins(self) -> list[PluginMetadata]:
         """All enabled plugins."""
-        from synth_panel.plugins.manifest import PluginMetadata
         return [m for m, _ in self._plugins]
 
     @property

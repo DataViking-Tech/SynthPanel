@@ -8,17 +8,19 @@ from __future__ import annotations
 
 import threading
 import uuid
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Callable
+from typing import Any
 
 from synth_panel.conditions import evaluate_condition, normalize_follow_up
 from synth_panel.cost import ZERO_USAGE, TokenUsage, UsageTracker
 from synth_panel.instrument import END_SENTINEL, Instrument, Round
 from synth_panel.llm.client import LLMClient
-from synth_panel.llm.models import InputMessage, TextBlock, TokenUsage as LLMTokenUsage
+from synth_panel.llm.models import InputMessage, TextBlock
+from synth_panel.llm.models import TokenUsage as LLMTokenUsage
 from synth_panel.persistence import Session
 from synth_panel.routing import route_round
 from synth_panel.runtime import AgentRuntime, TurnSummary
@@ -38,6 +40,7 @@ def _convert_llm_usage(llm_usage: LLMTokenUsage) -> TokenUsage:
 # ---------------------------------------------------------------------------
 # Worker status lifecycle
 # ---------------------------------------------------------------------------
+
 
 class WorkerStatus(Enum):
     """Worker state machine per SPEC.md §4."""
@@ -73,6 +76,7 @@ _VALID_TRANSITIONS: dict[WorkerStatus, set[WorkerStatus]] = {
 # Event log
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class WorkerEvent:
     """A state transition record."""
@@ -87,6 +91,7 @@ class WorkerEvent:
 # Worker
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class Worker:
     """State and metadata for a single orchestrated agent."""
@@ -100,17 +105,20 @@ class Worker:
     usage: TokenUsage = field(default_factory=lambda: ZERO_USAGE)
 
     def __post_init__(self) -> None:
-        self.events.append(WorkerEvent(
-            timestamp=datetime.now(timezone.utc),
-            from_status=None,
-            to_status=WorkerStatus.SPAWNING,
-            detail="created",
-        ))
+        self.events.append(
+            WorkerEvent(
+                timestamp=datetime.now(timezone.utc),
+                from_status=None,
+                to_status=WorkerStatus.SPAWNING,
+                detail="created",
+            )
+        )
 
 
 # ---------------------------------------------------------------------------
 # Errors
 # ---------------------------------------------------------------------------
+
 
 class WorkerNotFoundError(Exception):
     def __init__(self, worker_id: str) -> None:
@@ -120,10 +128,7 @@ class WorkerNotFoundError(Exception):
 
 class InvalidTransitionError(Exception):
     def __init__(self, worker_id: str, from_status: WorkerStatus, to_status: WorkerStatus) -> None:
-        super().__init__(
-            f"Invalid transition for worker {worker_id}: "
-            f"{from_status.value} -> {to_status.value}"
-        )
+        super().__init__(f"Invalid transition for worker {worker_id}: {from_status.value} -> {to_status.value}")
         self.worker_id = worker_id
         self.from_status = from_status
         self.to_status = to_status
@@ -132,6 +137,7 @@ class InvalidTransitionError(Exception):
 # ---------------------------------------------------------------------------
 # Worker Registry (thread-safe)
 # ---------------------------------------------------------------------------
+
 
 class WorkerRegistry:
     """Thread-safe registry tracking the state of spawned workers.
@@ -201,10 +207,7 @@ class WorkerRegistry:
     def all_finished(self) -> bool:
         """True if every worker is in a terminal state (finished or failed)."""
         with self._lock:
-            return all(
-                w.status in (WorkerStatus.FINISHED, WorkerStatus.FAILED)
-                for w in self._workers.values()
-            )
+            return all(w.status in (WorkerStatus.FINISHED, WorkerStatus.FAILED) for w in self._workers.values())
 
     def terminate(self, worker_id: str) -> None:
         """Mark a worker as finished."""
@@ -230,6 +233,7 @@ class WorkerRegistry:
 # ---------------------------------------------------------------------------
 # Panel result types
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class PanelistResult:
@@ -273,6 +277,7 @@ class MultiRoundResult:
 # ---------------------------------------------------------------------------
 # Parallel panel runner
 # ---------------------------------------------------------------------------
+
 
 def _extract_text(summary: TurnSummary) -> str:
     """Extract response text from a TurnSummary."""
@@ -341,9 +346,7 @@ def _run_panelist(
                     tracker.record_turn(summary.usage)
 
                     # Build messages from session history for structured extraction
-                    messages = [
-                        InputMessage(role="user", content=[TextBlock(text=question_text)])
-                    ]
+                    messages = [InputMessage(role="user", content=[TextBlock(text=question_text)])]
                     result = structured_engine.extract(
                         model=model,
                         max_tokens=4096,
@@ -352,26 +355,32 @@ def _run_panelist(
                         system=system_prompt,
                     )
                     tracker.record_turn(_convert_llm_usage(result.response.usage))
-                    responses.append({
-                        "question": question_text,
-                        "response": result.data,
-                        "structured": True,
-                        "is_fallback": result.is_fallback,
-                    })
+                    responses.append(
+                        {
+                            "question": question_text,
+                            "response": result.data,
+                            "structured": True,
+                            "is_fallback": result.is_fallback,
+                        }
+                    )
                 else:
                     summary = runtime.run_turn(question_text)
                     response_text = _extract_text(summary)
-                    responses.append({
-                        "question": question_text,
-                        "response": response_text,
-                    })
+                    responses.append(
+                        {
+                            "question": question_text,
+                            "response": response_text,
+                        }
+                    )
                     tracker.record_turn(summary.usage)
             except Exception as exc:
-                responses.append({
-                    "question": question_text,
-                    "response": f"[error: {exc}]",
-                    "error": True,
-                })
+                responses.append(
+                    {
+                        "question": question_text,
+                        "response": f"[error: {exc}]",
+                        "error": True,
+                    }
+                )
 
             # Handle conditional follow-ups (text mode only)
             raw_follow_ups = question.get("follow_ups", []) if isinstance(question, dict) else []
@@ -381,18 +390,22 @@ def _run_panelist(
                 fu = normalize_follow_up(raw_fu)
                 condition = fu.get("condition", "always")
                 if not evaluate_condition(
-                    condition, last_response,
-                    client=client, sentiment_cache=sentiment_cache,
+                    condition,
+                    last_response,
+                    client=client,
+                    sentiment_cache=sentiment_cache,
                 ):
                     continue
                 try:
                     fu_summary = runtime.run_turn(fu["text"])
                     fu_text = _extract_text(fu_summary)
-                    responses.append({
-                        "question": fu["text"],
-                        "response": fu_text,
-                        "follow_up": True,
-                    })
+                    responses.append(
+                        {
+                            "question": fu["text"],
+                            "response": fu_text,
+                            "follow_up": True,
+                        }
+                    )
                     tracker.record_turn(fu_summary.usage)
                 except Exception:
                     continue
@@ -516,13 +529,12 @@ def run_panel_parallel(
 # Multi-round branching runner (v3 instruments)
 # ---------------------------------------------------------------------------
 
+
 def _round_lookup(instrument: Instrument) -> dict[str, Round]:
     return {r.name: r for r in instrument.rounds}
 
 
-def _next_via_depends_on(
-    instrument: Instrument, current: str
-) -> str:
+def _next_via_depends_on(instrument: Instrument, current: str) -> str:
     """Linear-chain fallback for v2 rounds without route_when.
 
     Returns the next round whose ``depends_on`` is ``current``, or
@@ -582,14 +594,10 @@ def run_multi_round_panel(
         if next_round in visited:
             # Belt-and-suspenders: parser already topo-sorts, but a runtime
             # cycle would loop forever. Stop and warn.
-            warnings.append(
-                f"runtime cycle: round '{next_round}' revisited; halting"
-            )
+            warnings.append(f"runtime cycle: round '{next_round}' revisited; halting")
             break
         if next_round not in by_name:
-            warnings.append(
-                f"router target '{next_round}' is not a defined round; halting"
-            )
+            warnings.append(f"router target '{next_round}' is not a defined round; halting")
             break
 
         current = by_name[next_round]
@@ -607,9 +615,7 @@ def run_multi_round_panel(
             sessions=sessions,
         )
 
-        synthesis = synthesize_round_fn(
-            client, panelist_results, current.questions, model=model
-        )
+        synthesis = synthesize_round_fn(client, panelist_results, current.questions, model=model)
 
         round_usage = ZERO_USAGE
         for pr in panelist_results:
@@ -629,15 +635,11 @@ def run_multi_round_panel(
 
         # ── Router decision ──
         if current.route_when:
-            context = (
-                synthesis.to_dict() if hasattr(synthesis, "to_dict") else {}
-            )
+            context = synthesis.to_dict() if hasattr(synthesis, "to_dict") else {}
             try:
                 target = route_round(current.route_when, context)
             except Exception as exc:  # pragma: no cover - defensive
-                warnings.append(
-                    f"routing failed for '{current.name}': {exc}; halting"
-                )
+                warnings.append(f"routing failed for '{current.name}': {exc}; halting")
                 target = END_SENTINEL
             # Render a human-readable branch description for the path log.
             branch_desc = _describe_branch(current.route_when, context, target)
@@ -655,12 +657,8 @@ def run_multi_round_panel(
         # Pass only executed rounds to the final synthesis (architect Q6).
         # Flatten panelist results across executed rounds in order.
         merged_results = _merge_panelist_results(executed)
-        merged_questions = [
-            q for rr in executed for q in by_name[rr.name].questions
-        ]
-        final_synthesis = synthesize_final_fn(
-            client, merged_results, merged_questions, model=model
-        )
+        merged_questions = [q for rr in executed for q in by_name[rr.name].questions]
+        final_synthesis = synthesize_final_fn(client, merged_results, merged_questions, model=model)
         if hasattr(final_synthesis, "usage"):
             cumulative.record_turn(final_synthesis.usage)
 
@@ -687,10 +685,7 @@ def _describe_branch(
             try:
                 if evaluate_predicate(clause["if"], context):
                     pred = clause["if"]
-                    return (
-                        f"{pred.get('field')} {pred.get('op')} "
-                        f"{pred.get('value')!r} -> {chosen_target}"
-                    )
+                    return f"{pred.get('field')} {pred.get('op')} {pred.get('value')!r} -> {chosen_target}"
             except Exception:
                 continue
         elif "else" in clause:

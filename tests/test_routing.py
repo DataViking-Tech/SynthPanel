@@ -26,19 +26,13 @@ def ctx():
 
 class TestContains:
     def test_list_substring_hit(self, ctx):
-        assert evaluate_predicate(
-            {"field": "themes", "op": "contains", "value": "pricing"}, ctx
-        )
+        assert evaluate_predicate({"field": "themes", "op": "contains", "value": "pricing"}, ctx)
 
     def test_list_substring_miss(self, ctx):
-        assert not evaluate_predicate(
-            {"field": "themes", "op": "contains", "value": "mobile"}, ctx
-        )
+        assert not evaluate_predicate({"field": "themes", "op": "contains", "value": "mobile"}, ctx)
 
     def test_string_field_substring(self, ctx):
-        assert evaluate_predicate(
-            {"field": "summary", "op": "contains", "value": "transparency"}, ctx
-        )
+        assert evaluate_predicate({"field": "summary", "op": "contains", "value": "transparency"}, ctx)
 
 
 class TestEquals:
@@ -53,47 +47,33 @@ class TestEquals:
         )
 
     def test_string_not_substring(self, ctx):
-        assert not evaluate_predicate(
-            {"field": "recommendation", "op": "equals", "value": "pricing"}, ctx
-        )
+        assert not evaluate_predicate({"field": "recommendation", "op": "equals", "value": "pricing"}, ctx)
 
     def test_list_exact_member(self, ctx):
-        assert evaluate_predicate(
-            {"field": "themes", "op": "equals", "value": "pricing pain"}, ctx
-        )
+        assert evaluate_predicate({"field": "themes", "op": "equals", "value": "pricing pain"}, ctx)
 
 
 class TestMatches:
     def test_regex_search_not_match(self, ctx):
         # re.search, not re.match — pattern need not anchor at start
-        assert evaluate_predicate(
-            {"field": "summary", "op": "matches", "value": r"transparen\w+"}, ctx
-        )
+        assert evaluate_predicate({"field": "summary", "op": "matches", "value": r"transparen\w+"}, ctx)
 
     def test_regex_against_list(self, ctx):
-        assert evaluate_predicate(
-            {"field": "themes", "op": "matches", "value": r"^onboard"}, ctx
-        )
+        assert evaluate_predicate({"field": "themes", "op": "matches", "value": r"^onboard"}, ctx)
 
     def test_regex_miss(self, ctx):
-        assert not evaluate_predicate(
-            {"field": "summary", "op": "matches", "value": r"^Nothing"}, ctx
-        )
+        assert not evaluate_predicate({"field": "summary", "op": "matches", "value": r"^Nothing"}, ctx)
 
 
 class TestErrors:
     def test_unknown_field_raises_keyerror_with_name(self, ctx):
         with pytest.raises(KeyError) as exc:
-            evaluate_predicate(
-                {"field": "bogus", "op": "contains", "value": "x"}, ctx
-            )
+            evaluate_predicate({"field": "bogus", "op": "contains", "value": "x"}, ctx)
         assert "bogus" in str(exc.value)
 
     def test_unknown_op_raises(self, ctx):
         with pytest.raises(ValueError, match="unknown predicate op"):
-            evaluate_predicate(
-                {"field": "themes", "op": "weird", "value": "x"}, ctx
-            )
+            evaluate_predicate({"field": "themes", "op": "weird", "value": "x"}, ctx)
 
 
 class TestRouteRound:

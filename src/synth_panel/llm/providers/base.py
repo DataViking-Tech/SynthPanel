@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import os
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Iterator
 
 from synth_panel.llm.errors import LLMError, LLMErrorCategory
 from synth_panel.llm.models import CompletionRequest, CompletionResponse, StreamEvent
@@ -14,6 +14,7 @@ from synth_panel.llm.models import CompletionRequest, CompletionResponse, Stream
 @dataclass(frozen=True)
 class ProviderConfig:
     """Configuration for a provider: env var names and defaults."""
+
     api_key_env: str
     base_url_env: str
     default_base_url: str

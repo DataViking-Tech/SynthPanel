@@ -14,16 +14,14 @@ from typing import Any
 import yaml
 
 from synth_panel.cli.output import OutputFormat, emit
-from synth_panel.cost import ZERO_USAGE, TokenUsage, UsageTracker, estimate_cost, format_summary, lookup_pricing
+from synth_panel.cost import ZERO_USAGE, TokenUsage, estimate_cost, format_summary, lookup_pricing
 from synth_panel.instrument import Instrument, InstrumentError, parse_instrument
 from synth_panel.llm.client import LLMClient
-from synth_panel.llm.models import TextBlock
 from synth_panel.orchestrator import run_panel_parallel
 from synth_panel.persistence import Session
 from synth_panel.prompts import build_question_prompt, persona_system_prompt
 from synth_panel.runtime import AgentRuntime
 from synth_panel.synthesis import synthesize_panel
-
 
 # Preference chain for --model default (sp-f4t). Each entry is
 # (env var that signals provider availability, model alias or name).
@@ -48,6 +46,7 @@ def _resolve_default_model() -> tuple[str, str | None]:
     emit its canonical error message.
     """
     import os
+
     for env_var, alias in _DEFAULT_MODEL_PREFERENCE:
         if os.environ.get(env_var, "").strip():
             return alias, env_var
@@ -83,8 +82,7 @@ def _announce_default_model(args: argparse.Namespace) -> None:
     alias, source = _resolve_default_model()
     if source:
         print(
-            f"[synth-panel] --model not specified; using '{alias}' "
-            f"(detected {source}). Override with --model <name>.",
+            f"[synth-panel] --model not specified; using '{alias}' (detected {source}). Override with --model <name>.",
             file=sys.stderr,
         )
     else:
@@ -130,8 +128,7 @@ def handle_prompt(args: argparse.Namespace, fmt: OutputFormat) -> int:
         print(response_text)
         pricing, is_estimated = lookup_pricing(model)
         cost = estimate_cost(summary.usage, pricing)
-        print(format_summary("Cost", summary.usage, cost, model=model, is_estimated=is_estimated),
-              file=sys.stderr)
+        print(format_summary("Cost", summary.usage, cost, model=model, is_estimated=is_estimated), file=sys.stderr)
     else:
         extra: dict[str, Any] = {}
         pricing, is_estimated = lookup_pricing(model)
@@ -146,6 +143,7 @@ def handle_prompt(args: argparse.Namespace, fmt: OutputFormat) -> int:
 # ---------------------------------------------------------------------------
 # YAML loading helpers
 # ---------------------------------------------------------------------------
+
 
 def _load_yaml(path: str) -> Any:
     """Load and return parsed YAML from *path*."""
@@ -190,22 +188,18 @@ def _load_instrument(path_or_name: str) -> Instrument:
         data = _load_yaml(path_or_name)
     else:
         from synth_panel.mcp.data import load_instrument_pack
+
         try:
             data = load_instrument_pack(path_or_name)
         except FileNotFoundError as exc:
-            raise FileNotFoundError(
-                f"Instrument not found as file or installed pack: "
-                f"{path_or_name}"
-            ) from exc
+            raise FileNotFoundError(f"Instrument not found as file or installed pack: {path_or_name}") from exc
 
     if isinstance(data, dict) and "instrument" in data:
         raw = data["instrument"]
     elif isinstance(data, dict) and ("questions" in data or "rounds" in data):
         raw = data
     else:
-        raise ValueError(
-            "Invalid instrument: expected 'instrument', 'questions', or 'rounds' key"
-        )
+        raise ValueError("Invalid instrument: expected 'instrument', 'questions', or 'rounds' key")
     raw.setdefault("version", 1)
     return parse_instrument(raw)
 
@@ -231,17 +225,13 @@ def _collect_template_vars(args: argparse.Namespace) -> dict[str, str]:
         if data is None:
             data = {}
         if not isinstance(data, dict):
-            raise ValueError(
-                f"--vars-file must be a YAML mapping, got {type(data).__name__}"
-            )
+            raise ValueError(f"--vars-file must be a YAML mapping, got {type(data).__name__}")
         for k, v in data.items():
             merged[str(k)] = _stringify_var(v)
 
     for entry in getattr(args, "vars", None) or []:
         if "=" not in entry:
-            raise ValueError(
-                f"--var expects KEY=VALUE, got: {entry!r}"
-            )
+            raise ValueError(f"--var expects KEY=VALUE, got: {entry!r}")
         key, value = entry.split("=", 1)
         key = key.strip()
         if not key:
@@ -262,9 +252,7 @@ def _stringify_var(value: Any) -> str:
     return str(value)
 
 
-def _apply_vars_to_instrument(
-    instrument: Instrument, template_vars: dict[str, str]
-) -> None:
+def _apply_vars_to_instrument(instrument: Instrument, template_vars: dict[str, str]) -> None:
     """Substitute ``template_vars`` into every round's question text.
 
     Mutates the instrument in place: each ``Round.questions`` list is
@@ -289,9 +277,7 @@ def _load_schema(value: str) -> dict[str, Any]:
     try:
         schema = json.loads(value)
     except json.JSONDecodeError as exc:
-        raise ValueError(
-            f"Schema is not a valid file path or JSON string: {exc}"
-        ) from exc
+        raise ValueError(f"Schema is not a valid file path or JSON string: {exc}") from exc
     if not isinstance(schema, dict):
         raise ValueError(f"Schema must be a JSON object, got {type(schema).__name__}")
     return schema
@@ -366,13 +352,15 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     for pr in panelist_results:
         pricing, is_estimated = lookup_pricing(model)
         persona_cost = estimate_cost(pr.usage, pricing)
-        results.append({
-            "persona": pr.persona_name,
-            "responses": pr.responses,
-            "usage": pr.usage.to_dict(),
-            "cost": persona_cost.format_usd(),
-            "error": pr.error,
-        })
+        results.append(
+            {
+                "persona": pr.persona_name,
+                "responses": pr.responses,
+                "usage": pr.usage.to_dict(),
+                "cost": persona_cost.format_usd(),
+                "error": pr.error,
+            }
+        )
         panelist_usage = panelist_usage + pr.usage
 
     # ── Failure analysis (sp-2hg) ──────────────────────────────────────
@@ -386,10 +374,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         threshold = float(threshold)
     except (TypeError, ValueError):
         threshold = 0.5
-    run_invalid = (
-        failure_stats["total_pairs"] > 0
-        and failure_stats["failure_rate"] > threshold
-    )
+    run_invalid = failure_stats["total_pairs"] > 0 and failure_stats["failure_rate"] > threshold
     strict_violation = strict and failure_stats["errored_pairs"] > 0
 
     # Synthesis step (unless --no-synthesis)
@@ -426,9 +411,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     synthesis_dict = synthesis_result.to_dict() if synthesis_result else None
 
     # Output results
-    banner = _build_invalid_banner(
-        failure_stats, threshold, strict=strict, strict_violation=strict_violation
-    )
+    banner = _build_invalid_banner(failure_stats, threshold, strict=strict, strict_violation=strict_violation)
 
     if fmt is OutputFormat.TEXT:
         if banner:
@@ -437,9 +420,9 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         if path_line:
             print(f"path: {path_line}")
         for r in results:
-            print(f"\n{'='*60}")
+            print(f"\n{'=' * 60}")
             print(f"Persona: {r['persona']}")
-            print(f"{'='*60}")
+            print(f"{'=' * 60}")
             if r.get("error"):
                 print(f"  ERROR: {r['error']}")
             for resp in r["responses"]:
@@ -451,39 +434,46 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
 
         # Synthesis output
         if synthesis_dict:
-            print(f"\n{'='*60}")
+            print(f"\n{'=' * 60}")
             print("SYNTHESIS")
-            print(f"{'='*60}")
+            print(f"{'=' * 60}")
             print(f"\n  Summary: {synthesis_dict['summary']}")
             if synthesis_dict.get("themes"):
-                print(f"\n  Themes:")
+                print("\n  Themes:")
                 for t in synthesis_dict["themes"]:
                     print(f"    - {t}")
             if synthesis_dict.get("agreements"):
-                print(f"\n  Agreements:")
+                print("\n  Agreements:")
                 for a in synthesis_dict["agreements"]:
                     print(f"    - {a}")
             if synthesis_dict.get("disagreements"):
-                print(f"\n  Disagreements:")
+                print("\n  Disagreements:")
                 for d in synthesis_dict["disagreements"]:
                     print(f"    - {d}")
             if synthesis_dict.get("surprises"):
-                print(f"\n  Surprises:")
+                print("\n  Surprises:")
                 for s in synthesis_dict["surprises"]:
                     print(f"    - {s}")
             print(f"\n  Recommendation: {synthesis_dict['recommendation']}")
             print(f"  Synthesis cost: {synthesis_dict['cost']}")
 
         # Cost summaries
-        print(f"\n{'='*60}")
-        print(format_summary("Panelist cost", panelist_usage, panelist_cost_est,
-                             model=model, is_estimated=is_estimated))
+        print(f"\n{'=' * 60}")
+        print(
+            format_summary("Panelist cost", panelist_usage, panelist_cost_est, model=model, is_estimated=is_estimated)
+        )
         if synthesis_result:
-            synth_pricing, synth_est = lookup_pricing(synthesis_result.model)
-            print(format_summary("Synthesis cost", synthesis_result.usage, synthesis_result.cost,
-                                 model=synthesis_result.model, is_estimated=synth_est))
-        print(format_summary("Total", total_usage, total_cost_est,
-                             model=model, is_estimated=is_estimated))
+            _synth_pricing, synth_est = lookup_pricing(synthesis_result.model)
+            print(
+                format_summary(
+                    "Synthesis cost",
+                    synthesis_result.usage,
+                    synthesis_result.cost,
+                    model=synthesis_result.model,
+                    is_estimated=synth_est,
+                )
+            )
+        print(format_summary("Total", total_usage, total_cost_est, model=model, is_estimated=is_estimated))
         if total_cost_est.total_cost == 0 and failure_stats["errored_pairs"] > 0:
             print(
                 "  \u26a0\ufe0f  no-cost = no-data (every request errored; "
@@ -529,9 +519,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         extra["failure_stats"] = failure_stats
         extra["run_invalid"] = bool(run_invalid or strict_violation)
         if run_invalid or strict_violation:
-            extra["message"] = (
-                banner.replace("\n", " ").strip() if banner else "PANEL RUN INVALID"
-            )
+            extra["message"] = banner.replace("\n", " ").strip() if banner else "PANEL RUN INVALID"
         emit(fmt, message=extra.get("message", "Panel complete"), extra=extra)
 
     # sp-2hg: exit non-zero when the run is invalid so automation (CI,
@@ -634,10 +622,7 @@ def _build_invalid_banner(
     bar = "!" * 70
     lines = [bar]
     if strict_violation and not over_threshold:
-        lines.append(
-            f"PANEL RUN INVALID (--strict): {errored}/{total} panelist-question"
-            f" pairs errored."
-        )
+        lines.append(f"PANEL RUN INVALID (--strict): {errored}/{total} panelist-question pairs errored.")
     else:
         lines.append(
             f"PANEL RUN INVALID: {errored}/{total} panelist-question pairs"
@@ -645,22 +630,15 @@ def _build_invalid_banner(
         )
     lines.append("No synthesis was performed — the run produced no usable data.")
     if stats.get("failed_panelists"):
-        lines.append(
-            f"  {stats['failed_panelists']} panelist(s) failed wholesale"
-            f" (no responses recorded)."
-        )
+        lines.append(f"  {stats['failed_panelists']} panelist(s) failed wholesale (no responses recorded).")
     if stats.get("errored_personas"):
         shown = ", ".join(stats["errored_personas"][:4])
         extra = len(stats["errored_personas"]) - 4
         if extra > 0:
             shown += f", +{extra} more"
         lines.append(f"  Affected personas: {shown}")
-    lines.append(
-        "Check provider status (e.g. rate-limit / 503), run with a different"
-    )
-    lines.append(
-        "--model, or re-run once the upstream provider is healthy."
-    )
+    lines.append("Check provider status (e.g. rate-limit / 503), run with a different")
+    lines.append("--model, or re-run once the upstream provider is healthy.")
     lines.append(bar)
     return "\n".join(lines)
 
@@ -801,6 +779,7 @@ def handle_pack_show(args: argparse.Namespace, fmt: OutputFormat) -> int:
 def handle_mcp_serve(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """Start the MCP server on stdio transport."""
     from synth_panel.mcp.server import serve
+
     serve()
     return 0
 
@@ -808,6 +787,7 @@ def handle_mcp_serve(args: argparse.Namespace, fmt: OutputFormat) -> int:
 # ---------------------------------------------------------------------------
 # Instruments subcommands (sp-xsu)
 # ---------------------------------------------------------------------------
+
 
 def handle_instruments_list(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """List installed instrument packs."""
@@ -818,9 +798,7 @@ def handle_instruments_list(args: argparse.Namespace, fmt: OutputFormat) -> int:
     if fmt is OutputFormat.TEXT:
         if not packs:
             print("No instrument packs installed.")
-            print(
-                "Install one with: synth-panel instruments install <file.yaml>"
-            )
+            print("Install one with: synth-panel instruments install <file.yaml>")
         else:
             for p in packs:
                 version = f" v{p['version']}" if p.get("version") else ""
@@ -831,9 +809,7 @@ def handle_instruments_list(args: argparse.Namespace, fmt: OutputFormat) -> int:
     return 0
 
 
-def handle_instruments_install(
-    args: argparse.Namespace, fmt: OutputFormat
-) -> int:
+def handle_instruments_install(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """Install an instrument pack from a YAML file (or bundled name)."""
     from synth_panel.mcp.data import save_instrument_pack
 
@@ -876,9 +852,7 @@ def handle_instruments_install(
     return 0
 
 
-def handle_instruments_show(
-    args: argparse.Namespace, fmt: OutputFormat
-) -> int:
+def handle_instruments_show(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """Print an installed instrument pack's contents."""
     from synth_panel.mcp.data import load_instrument_pack
 
@@ -895,9 +869,7 @@ def handle_instruments_show(
     return 0
 
 
-def handle_instruments_graph(
-    args: argparse.Namespace, fmt: OutputFormat
-) -> int:
+def handle_instruments_graph(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """Render the round DAG for an instrument file or installed pack name."""
     try:
         instrument = _load_instrument(args.source)
@@ -909,9 +881,7 @@ def handle_instruments_graph(
         print(f"warning: {w}", file=sys.stderr)
 
     rendered = (
-        _render_mermaid(instrument)
-        if getattr(args, "format", "text") == "mermaid"
-        else _render_text_dag(instrument)
+        _render_mermaid(instrument) if getattr(args, "format", "text") == "mermaid" else _render_text_dag(instrument)
     )
 
     if fmt is OutputFormat.TEXT:
@@ -931,7 +901,6 @@ def handle_instruments_graph(
 
 def _render_text_dag(instrument: Instrument) -> str:
     """Plain-text node + edge listing of an instrument's round DAG."""
-    from synth_panel.instrument import END_SENTINEL
 
     lines: list[str] = []
     lines.append(f"# instrument v{instrument.version}")
@@ -946,8 +915,7 @@ def _render_text_dag(instrument: Instrument) -> str:
                 if "if" in entry:
                     pred = entry["if"]
                     lines.append(
-                        f"  if {pred.get('field')} {pred.get('op')} "
-                        f"{pred.get('value')!r} -> {entry.get('goto')}"
+                        f"  if {pred.get('field')} {pred.get('op')} {pred.get('value')!r} -> {entry.get('goto')}"
                     )
                 elif "else" in entry:
                     lines.append(f"  else -> {entry['else']}")
@@ -974,16 +942,11 @@ def _render_mermaid(instrument: Instrument) -> str:
             for entry in r.route_when:
                 if "if" in entry:
                     pred = entry["if"]
-                    label = (
-                        f"{pred.get('field')} {pred.get('op')} "
-                        f"{pred.get('value')}"
-                    )
+                    label = f"{pred.get('field')} {pred.get('op')} {pred.get('value')}"
                     target = entry.get("goto")
                     if target == END_SENTINEL:
                         has_end_target = True
-                    lines.append(
-                        f"    {r.name} -->|{label}| {target}"
-                    )
+                    lines.append(f"    {r.name} -->|{label}| {target}")
                 elif "else" in entry:
                     target = entry["else"]
                     if target == END_SENTINEL:
@@ -1034,5 +997,3 @@ def _format_path(path: list[dict[str, Any]]) -> str:
         else:
             parts.append(f"-> {nxt}")
     return " ".join(parts)
-
-

@@ -6,10 +6,10 @@ import pytest
 
 from synth_panel.instrument import Instrument, InstrumentError, Round, parse_instrument
 
-
 # ---------------------------------------------------------------------------
 # v1 (flat questions) → single "default" round
 # ---------------------------------------------------------------------------
+
 
 class TestV1Parsing:
     def test_basic_v1(self):
@@ -47,6 +47,7 @@ class TestV1Parsing:
 # ---------------------------------------------------------------------------
 # v2 (multi-round) parsing
 # ---------------------------------------------------------------------------
+
 
 class TestV2Parsing:
     def test_basic_multi_round(self):
@@ -119,6 +120,7 @@ class TestV2Parsing:
 # Validation errors
 # ---------------------------------------------------------------------------
 
+
 class TestValidation:
     def test_no_questions_or_rounds_raises(self):
         with pytest.raises(InstrumentError, match="'questions'.*or.*'rounds'"):
@@ -154,68 +156,79 @@ class TestValidation:
 
     def test_duplicate_round_name_raises(self):
         with pytest.raises(InstrumentError, match="Duplicate round name"):
-            parse_instrument({
-                "rounds": [
-                    {"name": "a", "questions": [{"text": "Q1"}]},
-                    {"name": "a", "questions": [{"text": "Q2"}]},
-                ],
-            })
+            parse_instrument(
+                {
+                    "rounds": [
+                        {"name": "a", "questions": [{"text": "Q1"}]},
+                        {"name": "a", "questions": [{"text": "Q2"}]},
+                    ],
+                }
+            )
 
     def test_forward_ref_depends_on_allowed(self):
         """v3 relaxes the earlier-only rule; forward refs are valid."""
-        inst = parse_instrument({
-            "rounds": [
-                {
-                    "name": "first",
-                    "depends_on": "second",
-                    "questions": [{"text": "Q1"}],
-                },
-                {"name": "second", "questions": [{"text": "Q2"}]},
-            ],
-        })
+        inst = parse_instrument(
+            {
+                "rounds": [
+                    {
+                        "name": "first",
+                        "depends_on": "second",
+                        "questions": [{"text": "Q1"}],
+                    },
+                    {"name": "second", "questions": [{"text": "Q2"}]},
+                ],
+            }
+        )
         assert inst.rounds[0].depends_on == "second"
 
     def test_self_ref_depends_on_raises(self):
         with pytest.raises(InstrumentError, match="Cycle detected"):
-            parse_instrument({
-                "rounds": [
-                    {
-                        "name": "self_ref",
-                        "depends_on": "self_ref",
-                        "questions": [{"text": "Q1"}],
-                    },
-                ],
-            })
+            parse_instrument(
+                {
+                    "rounds": [
+                        {
+                            "name": "self_ref",
+                            "depends_on": "self_ref",
+                            "questions": [{"text": "Q1"}],
+                        },
+                    ],
+                }
+            )
 
     def test_nonexistent_depends_on_raises(self):
         with pytest.raises(InstrumentError, match="does not exist"):
-            parse_instrument({
-                "rounds": [
-                    {
-                        "name": "a",
-                        "depends_on": "nonexistent",
-                        "questions": [{"text": "Q1"}],
-                    },
-                ],
-            })
+            parse_instrument(
+                {
+                    "rounds": [
+                        {
+                            "name": "a",
+                            "depends_on": "nonexistent",
+                            "questions": [{"text": "Q1"}],
+                        },
+                    ],
+                }
+            )
 
     def test_depends_on_not_string_raises(self):
         with pytest.raises(InstrumentError, match="must be a string"):
-            parse_instrument({
-                "rounds": [
-                    {"name": "a", "questions": [{"text": "Q1"}]},
-                    {
-                        "name": "b",
-                        "depends_on": ["a"],
-                        "questions": [{"text": "Q2"}],
-                    },
-                ],
-            })
+            parse_instrument(
+                {
+                    "rounds": [
+                        {"name": "a", "questions": [{"text": "Q1"}]},
+                        {
+                            "name": "b",
+                            "depends_on": ["a"],
+                            "questions": [{"text": "Q2"}],
+                        },
+                    ],
+                }
+            )
 
 
 # ---------------------------------------------------------------------------
 # Dataclass behavior
 # ---------------------------------------------------------------------------
+
 
 class TestDataclasses:
     def test_round_defaults(self):
@@ -233,11 +246,13 @@ class TestDataclasses:
 # Integration: example YAML file
 # ---------------------------------------------------------------------------
 
+
 class TestExampleYAML:
     def test_multi_round_study_parses(self):
         """Verify the shipped example file parses without errors."""
-        import yaml
         from pathlib import Path
+
+        import yaml
 
         example = Path(__file__).parent.parent / "examples" / "multi-round-study.yaml"
         if not example.exists():
@@ -259,6 +274,7 @@ class TestExampleYAML:
 # ---------------------------------------------------------------------------
 # v3 (branching, route_when) parsing + DAG validation
 # ---------------------------------------------------------------------------
+
 
 class TestV3Branching:
     def test_simple_route_when(self):
@@ -283,109 +299,127 @@ class TestV3Branching:
         assert inst.warnings == []
 
     def test_forward_goto_resolves(self):
-        inst = parse_instrument({
-            "rounds": [
-                {
-                    "name": "a",
-                    "questions": [{"text": "Q"}],
-                    "route_when": [{"else": "probe_pricing"}],
-                },
-                {"name": "probe_pricing", "questions": [{"text": "Q"}]},
-            ],
-        })
+        inst = parse_instrument(
+            {
+                "rounds": [
+                    {
+                        "name": "a",
+                        "questions": [{"text": "Q"}],
+                        "route_when": [{"else": "probe_pricing"}],
+                    },
+                    {"name": "probe_pricing", "questions": [{"text": "Q"}]},
+                ],
+            }
+        )
         assert inst.rounds[1].name == "probe_pricing"
 
     def test_goto_end_sentinel(self):
-        inst = parse_instrument({
-            "rounds": [
-                {
-                    "name": "a",
-                    "questions": [{"text": "Q"}],
-                    "route_when": [{"else": "__end__"}],
-                },
-            ],
-        })
+        inst = parse_instrument(
+            {
+                "rounds": [
+                    {
+                        "name": "a",
+                        "questions": [{"text": "Q"}],
+                        "route_when": [{"else": "__end__"}],
+                    },
+                ],
+            }
+        )
         assert inst.rounds[0].route_when[0]["else"] == "__end__"
 
     def test_missing_else_rejected(self):
         with pytest.raises(InstrumentError, match="no else clause"):
-            parse_instrument({
-                "rounds": [
-                    {
-                        "name": "a",
-                        "questions": [{"text": "Q"}],
-                        "route_when": [{"if": "x", "goto": "b"}],
-                    },
-                    {"name": "b", "questions": [{"text": "Q"}]},
-                ],
-            })
+            parse_instrument(
+                {
+                    "rounds": [
+                        {
+                            "name": "a",
+                            "questions": [{"text": "Q"}],
+                            "route_when": [{"if": "x", "goto": "b"}],
+                        },
+                        {"name": "b", "questions": [{"text": "Q"}]},
+                    ],
+                }
+            )
 
     def test_bad_goto_target_rejected(self):
         with pytest.raises(InstrumentError, match="goto 'nope' does not exist"):
-            parse_instrument({
-                "rounds": [
-                    {
-                        "name": "a",
-                        "questions": [{"text": "Q"}],
-                        "route_when": [{"else": "nope"}],
-                    },
-                ],
-            })
+            parse_instrument(
+                {
+                    "rounds": [
+                        {
+                            "name": "a",
+                            "questions": [{"text": "Q"}],
+                            "route_when": [{"else": "nope"}],
+                        },
+                    ],
+                }
+            )
 
     def test_cycle_detected_with_path(self):
         with pytest.raises(InstrumentError, match="Cycle detected"):
-            parse_instrument({
+            parse_instrument(
+                {
+                    "rounds": [
+                        {
+                            "name": "a",
+                            "questions": [{"text": "Q"}],
+                            "route_when": [{"else": "b"}],
+                        },
+                        {
+                            "name": "b",
+                            "questions": [{"text": "Q"}],
+                            "route_when": [{"else": "a"}],
+                        },
+                    ],
+                }
+            )
+
+    def test_cycle_via_depends_on(self):
+        with pytest.raises(InstrumentError, match="Cycle detected"):
+            parse_instrument(
+                {
+                    "rounds": [
+                        {"name": "a", "depends_on": "b", "questions": [{"text": "Q"}]},
+                        {"name": "b", "depends_on": "a", "questions": [{"text": "Q"}]},
+                    ],
+                }
+            )
+
+    def test_unreachable_round_warns(self):
+        inst = parse_instrument(
+            {
                 "rounds": [
                     {
                         "name": "a",
                         "questions": [{"text": "Q"}],
-                        "route_when": [{"else": "b"}],
+                        "route_when": [{"else": "__end__"}],
                     },
-                    {
-                        "name": "b",
-                        "questions": [{"text": "Q"}],
-                        "route_when": [{"else": "a"}],
-                    },
+                    {"name": "orphan", "questions": [{"text": "Q"}]},
                 ],
-            })
-
-    def test_cycle_via_depends_on(self):
-        with pytest.raises(InstrumentError, match="Cycle detected"):
-            parse_instrument({
-                "rounds": [
-                    {"name": "a", "depends_on": "b", "questions": [{"text": "Q"}]},
-                    {"name": "b", "depends_on": "a", "questions": [{"text": "Q"}]},
-                ],
-            })
-
-    def test_unreachable_round_warns(self):
-        inst = parse_instrument({
-            "rounds": [
-                {
-                    "name": "a",
-                    "questions": [{"text": "Q"}],
-                    "route_when": [{"else": "__end__"}],
-                },
-                {"name": "orphan", "questions": [{"text": "Q"}]},
-            ],
-        })
+            }
+        )
         assert any("orphan" in w for w in inst.warnings)
 
     def test_v2_linear_no_warnings(self):
-        inst = parse_instrument({
-            "version": 2,
-            "rounds": [
-                {"name": "a", "questions": [{"text": "Q1"}]},
-                {"name": "b", "depends_on": "a", "questions": [{"text": "Q2"}]},
-                {"name": "c", "depends_on": "b", "questions": [{"text": "Q3"}]},
-            ],
-        })
+        inst = parse_instrument(
+            {
+                "version": 2,
+                "rounds": [
+                    {"name": "a", "questions": [{"text": "Q1"}]},
+                    {"name": "b", "depends_on": "a", "questions": [{"text": "Q2"}]},
+                    {"name": "c", "depends_on": "b", "questions": [{"text": "Q3"}]},
+                ],
+            }
+        )
         assert inst.warnings == []
 
     def test_route_when_must_be_list(self):
         with pytest.raises(InstrumentError, match="route_when.*non-empty list"):
-            parse_instrument({
-                "rounds": [
-                    {"name": "a", "questions": [{"text": "Q"}], "route_when": "bad"},
-                ],
-            })
+            parse_instrument(
+                {
+                    "rounds": [
+                        {"name": "a", "questions": [{"text": "Q"}], "route_when": "bad"},
+                    ],
+                }
+            )

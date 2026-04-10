@@ -8,8 +8,6 @@ from __future__ import annotations
 
 import sys
 
-from synth_panel.cli.parser import build_parser
-from synth_panel.cli.repl import run_repl
 from synth_panel.cli.commands import (
     handle_instruments_graph,
     handle_instruments_install,
@@ -24,6 +22,8 @@ from synth_panel.cli.commands import (
     handle_prompt,
 )
 from synth_panel.cli.output import OutputFormat
+from synth_panel.cli.parser import build_parser
+from synth_panel.cli.repl import run_repl
 
 
 def main(argv: list[str] | None = None) -> int:

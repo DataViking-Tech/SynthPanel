@@ -35,24 +35,41 @@ import asyncio
 import json
 from typing import Any
 
-from mcp.server.fastmcp import FastMCP, Context
+from mcp.server.fastmcp import Context, FastMCP
 
-from synth_panel.cost import ZERO_USAGE, TokenUsage as CostTokenUsage, UsageTracker, estimate_cost, lookup_pricing
+from synth_panel.cost import ZERO_USAGE, estimate_cost, lookup_pricing
+from synth_panel.cost import TokenUsage as CostTokenUsage
+from synth_panel.instrument import Instrument, parse_instrument
 from synth_panel.llm.client import LLMClient
 from synth_panel.llm.models import CompletionRequest, InputMessage, TextBlock
-from synth_panel.instrument import Instrument, parse_instrument
 from synth_panel.mcp.data import (
     get_panel_result as _data_get_panel_result,
+)
+from synth_panel.mcp.data import (
     get_persona_pack as _data_get_persona_pack,
+)
+from synth_panel.mcp.data import (
     list_instrument_packs as _data_list_instrument_packs,
+)
+from synth_panel.mcp.data import (
     list_panel_results as _data_list_panel_results,
+)
+from synth_panel.mcp.data import (
     list_persona_packs as _data_list_persona_packs,
+)
+from synth_panel.mcp.data import (
     load_instrument_pack as _data_load_instrument_pack,
+)
+from synth_panel.mcp.data import (
     load_panel_sessions,
-    save_instrument_pack as _data_save_instrument_pack,
     save_panel_result,
-    save_persona_pack as _data_save_persona_pack,
     update_panel_result,
+)
+from synth_panel.mcp.data import (
+    save_instrument_pack as _data_save_instrument_pack,
+)
+from synth_panel.mcp.data import (
+    save_persona_pack as _data_save_persona_pack,
 )
 from synth_panel.orchestrator import (
     MultiRoundResult,
@@ -82,6 +99,7 @@ mcp = FastMCP(
 # Internal panel runner (bridges threads to async)
 # ---------------------------------------------------------------------------
 
+
 def _run_panel_sync(
     personas: list[dict[str, Any]],
     questions: list[dict[str, Any]],
@@ -109,13 +127,15 @@ def _run_panel_sync(
     for pr in panelist_results:
         pricing, _ = lookup_pricing(model)
         persona_cost = estimate_cost(pr.usage, pricing)
-        result_dicts.append({
-            "persona": pr.persona_name,
-            "responses": pr.responses,
-            "usage": pr.usage.to_dict(),
-            "cost": persona_cost.format_usd(),
-            "error": pr.error,
-        })
+        result_dicts.append(
+            {
+                "persona": pr.persona_name,
+                "responses": pr.responses,
+                "usage": pr.usage.to_dict(),
+                "cost": persona_cost.format_usd(),
+                "error": pr.error,
+            }
+        )
         panelist_usage = panelist_usage + pr.usage
 
     pricing, _ = lookup_pricing(model)
@@ -211,7 +231,10 @@ async def _run_panel_async_instrument(
     mr: MultiRoundResult = await asyncio.wait_for(
         asyncio.to_thread(
             _run_multi_round_sync,
-            personas, instrument, model, response_schema,
+            personas,
+            instrument,
+            model,
+            response_schema,
             synthesis=synthesis,
             synthesis_model=synthesis_model,
             synthesis_prompt=synthesis_prompt,
@@ -227,16 +250,16 @@ async def _run_panel_async_instrument(
     total_question_count = 0
     for rr in mr.rounds:
         round_dict_results = [_format_panelist_result(pr, model) for pr in rr.panelist_results]
-        questions_for_round = next(
-            (r.questions for r in instrument.rounds if r.name == rr.name), []
-        )
+        questions_for_round = next((r.questions for r in instrument.rounds if r.name == rr.name), [])
         total_question_count += len(questions_for_round)
-        rounds_payload.append({
-            "name": rr.name,
-            "results": round_dict_results,
-            "synthesis": rr.synthesis.to_dict() if hasattr(rr.synthesis, "to_dict") else None,
-            "usage": rr.usage.to_dict(),
-        })
+        rounds_payload.append(
+            {
+                "name": rr.name,
+                "results": round_dict_results,
+                "synthesis": rr.synthesis.to_dict() if hasattr(rr.synthesis, "to_dict") else None,
+                "usage": rr.usage.to_dict(),
+            }
+        )
         # Flat results for back-compat / persistence: use the *last* round per persona.
         flat_results = round_dict_results
 
@@ -292,9 +315,13 @@ async def _run_panel_async(
     await ctx.report_progress(0, total)
 
     # Run the blocking panel execution in a thread
-    panelist_results, result_dicts, panelist_usage, panelist_cost, synthesis_dict = await asyncio.wait_for(
+    _panelist_results, result_dicts, panelist_usage, panelist_cost, synthesis_dict = await asyncio.wait_for(
         asyncio.to_thread(
-            _run_panel_sync, personas, questions, model, response_schema,
+            _run_panel_sync,
+            personas,
+            questions,
+            model,
+            response_schema,
             synthesis=synthesis,
             synthesis_model=synthesis_model,
             synthesis_prompt=synthesis_prompt,
@@ -350,6 +377,7 @@ async def _run_panel_async(
 # Tools
 # ---------------------------------------------------------------------------
 
+
 @mcp.tool()
 async def run_prompt(
     prompt: str,
@@ -380,12 +408,15 @@ async def run_prompt(
     )
     pricing, _ = lookup_pricing(model)
     cost = estimate_cost(usage, pricing)
-    return json.dumps({
-        "response": response.text,
-        "model": response.model,
-        "usage": usage.to_dict(),
-        "cost": cost.format_usd(),
-    }, indent=2)
+    return json.dumps(
+        {
+            "response": response.text,
+            "model": response.model,
+            "usage": usage.to_dict(),
+            "cost": cost.format_usd(),
+        },
+        indent=2,
+    )
 
 
 @mcp.tool()
@@ -470,7 +501,11 @@ async def run_panel(
 
     if instrument_obj is not None:
         result = await _run_panel_async_instrument(
-            merged, instrument_obj, model, ctx, response_schema,
+            merged,
+            instrument_obj,
+            model,
+            ctx,
+            response_schema,
             synthesis=synthesis,
             synthesis_model=synthesis_model,
             synthesis_prompt=synthesis_prompt,
@@ -481,7 +516,11 @@ async def run_panel(
         return json.dumps({"error": "No questions or instrument provided."})
 
     result = await _run_panel_async(
-        merged, questions, model, ctx, response_schema,
+        merged,
+        questions,
+        model,
+        ctx,
+        response_schema,
         synthesis=synthesis,
         synthesis_model=synthesis_model,
         synthesis_prompt=synthesis_prompt,
@@ -520,7 +559,11 @@ async def run_quick_poll(
     model = model or MCP_DEFAULT_MODEL
     questions = [{"text": question}]
     result = await _run_panel_async(
-        personas, questions, model, ctx, response_schema,
+        personas,
+        questions,
+        model,
+        ctx,
+        response_schema,
         synthesis=synthesis,
         synthesis_model=synthesis_model,
         synthesis_prompt=synthesis_prompt,
@@ -650,7 +693,7 @@ async def extend_panel(
 
     # Reuse the original personas (recovered from saved sessions if possible).
     sessions = load_panel_sessions(result_id)
-    personas: list[dict[str, Any]] = [{"name": name} for name in sessions.keys()]
+    personas: list[dict[str, Any]] = [{"name": name} for name in sessions]
     if not personas:
         return json.dumps({"error": f"No sessions found for result {result_id}"})
 
@@ -672,8 +715,11 @@ async def extend_panel(
         if synthesis:
             try:
                 synth = synthesize_panel(
-                    client, results, questions,
-                    model=synthesis_model, custom_prompt=synthesis_prompt,
+                    client,
+                    results,
+                    questions,
+                    model=synthesis_model,
+                    custom_prompt=synthesis_prompt,
                 )
             except Exception:
                 synth = None
@@ -691,18 +737,23 @@ async def extend_panel(
 
     # Append the ad-hoc round to the existing result and persist.
     rounds = existing.get("rounds") or []
-    rounds = list(rounds) + [{
-        "name": f"extension-{len(rounds) + 1}",
-        "results": new_round_results,
-        "synthesis": synth.to_dict() if synth is not None and hasattr(synth, "to_dict") else None,
-        "extension": True,
-    }]
+    rounds = [
+        *list(rounds),
+        {
+            "name": f"extension-{len(rounds) + 1}",
+            "results": new_round_results,
+            "synthesis": synth.to_dict() if synth is not None and hasattr(synth, "to_dict") else None,
+            "extension": True,
+        },
+    ]
     path = list(existing.get("path") or [])
-    path.append({
-        "round": rounds[-1]["name"],
-        "branch": "extension (ad-hoc, not DAG re-entry)",
-        "next": "__end__",
-    })
+    path.append(
+        {
+            "round": rounds[-1]["name"],
+            "branch": "extension (ad-hoc, not DAG re-entry)",
+            "next": "__end__",
+        }
+    )
 
     updated = dict(existing)
     updated["rounds"] = rounds
@@ -711,13 +762,16 @@ async def extend_panel(
     updated["question_count"] = int(existing.get("question_count", 0)) + len(questions)
     update_panel_result(result_id, updated)
 
-    return json.dumps({
-        "result_id": result_id,
-        "appended_round": rounds[-1]["name"],
-        "results": new_round_results,
-        "synthesis": rounds[-1]["synthesis"],
-        "path": path,
-    }, indent=2)
+    return json.dumps(
+        {
+            "result_id": result_id,
+            "appended_round": rounds[-1]["name"],
+            "results": new_round_results,
+            "synthesis": rounds[-1]["synthesis"],
+            "path": path,
+        },
+        indent=2,
+    )
 
 
 @mcp.tool()
@@ -744,6 +798,7 @@ async def get_panel_result(result_id: str) -> str:
 # ---------------------------------------------------------------------------
 # Resources
 # ---------------------------------------------------------------------------
+
 
 @mcp.resource("persona-pack://{pack_id}")
 async def resource_persona_pack(pack_id: str) -> str:
@@ -775,6 +830,7 @@ async def resource_panel_results_list() -> str:
 # Prompt templates
 # ---------------------------------------------------------------------------
 
+
 @mcp.prompt()
 def focus_group(
     topic: str,
@@ -792,10 +848,7 @@ def focus_group(
     """
     follow_up_section = ""
     if follow_up:
-        follow_up_section = (
-            "\n\nAfter each response, ask one follow-up question to dig deeper "
-            "into their perspective."
-        )
+        follow_up_section = "\n\nAfter each response, ask one follow-up question to dig deeper into their perspective."
 
     return (
         f"Run a synthetic focus group with {num_personas} diverse personas "
@@ -848,9 +901,7 @@ def concept_test(
     """
     audience_line = ""
     if target_audience:
-        audience_line = (
-            f"\n\nTarget the personas toward: {target_audience}"
-        )
+        audience_line = f"\n\nTarget the personas toward: {target_audience}"
 
     return (
         f"Test this concept with synthetic personas:\n\n{concept}"
@@ -867,6 +918,7 @@ def concept_test(
 # ---------------------------------------------------------------------------
 # Server entry point
 # ---------------------------------------------------------------------------
+
 
 def serve() -> None:
     """Run the MCP server on stdio transport."""

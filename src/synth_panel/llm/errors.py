@@ -7,6 +7,7 @@ from enum import Enum
 
 class LLMErrorCategory(Enum):
     """Classification of LLM errors, controlling retry behaviour."""
+
     MISSING_CREDENTIALS = "missing_credentials"
     AUTHENTICATION = "authentication"
     TRANSPORT = "transport"
@@ -18,11 +19,13 @@ class LLMErrorCategory(Enum):
 
 
 # Categories that may be retried.
-RETRYABLE_CATEGORIES = frozenset({
-    LLMErrorCategory.TRANSPORT,
-    LLMErrorCategory.RATE_LIMIT,
-    LLMErrorCategory.SERVER_ERROR,
-})
+RETRYABLE_CATEGORIES = frozenset(
+    {
+        LLMErrorCategory.TRANSPORT,
+        LLMErrorCategory.RATE_LIMIT,
+        LLMErrorCategory.SERVER_ERROR,
+    }
+)
 
 
 class LLMError(Exception):
@@ -46,10 +49,7 @@ class LLMError(Exception):
         return self.category in RETRYABLE_CATEGORIES
 
     def __repr__(self) -> str:
-        return (
-            f"LLMError(category={self.category.value!r}, "
-            f"status={self.status_code}, msg={str(self)!r})"
-        )
+        return f"LLMError(category={self.category.value!r}, status={self.status_code}, msg={str(self)!r})"
 
 
 def classify_http_status(status: int) -> LLMErrorCategory:

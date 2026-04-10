@@ -4,16 +4,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Iterator, Literal, Union
-
+from typing import Any, Literal
 
 # ---------------------------------------------------------------------------
 # Content blocks
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class TextBlock:
     """Plain text content."""
+
     text: str
     type: Literal["text"] = "text"
 
@@ -21,6 +22,7 @@ class TextBlock:
 @dataclass(frozen=True)
 class ToolInvocationBlock:
     """A tool call requested by the assistant."""
+
     id: str
     name: str
     input: dict[str, Any]
@@ -30,6 +32,7 @@ class ToolInvocationBlock:
 @dataclass(frozen=True)
 class ToolResultBlock:
     """Result of a tool execution, fed back to the assistant."""
+
     tool_use_id: str
     content: list[TextBlock]
     is_error: bool = False
@@ -39,21 +42,24 @@ class ToolResultBlock:
 @dataclass(frozen=True)
 class ThinkingBlock:
     """Internal reasoning (extended thinking)."""
+
     thinking: str
     signature: str | None = None
     type: Literal["thinking"] = "thinking"
 
 
-ContentBlock = Union[TextBlock, ToolInvocationBlock, ToolResultBlock, ThinkingBlock]
+ContentBlock = TextBlock | ToolInvocationBlock | ToolResultBlock | ThinkingBlock
 
 
 # ---------------------------------------------------------------------------
 # Messages
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class InputMessage:
     """A single message in the conversation."""
+
     role: Literal["user", "assistant"]
     content: list[ContentBlock]
 
@@ -62,9 +68,11 @@ class InputMessage:
 # Token usage
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class TokenUsage:
     """Token consumption counters for a single LLM call."""
+
     input_tokens: int = 0
     output_tokens: int = 0
     cache_write_tokens: int = 0
@@ -72,12 +80,7 @@ class TokenUsage:
 
     @property
     def total_tokens(self) -> int:
-        return (
-            self.input_tokens
-            + self.output_tokens
-            + self.cache_write_tokens
-            + self.cache_read_tokens
-        )
+        return self.input_tokens + self.output_tokens + self.cache_write_tokens + self.cache_read_tokens
 
     def __add__(self, other: TokenUsage) -> TokenUsage:
         return TokenUsage(
@@ -92,9 +95,11 @@ class TokenUsage:
 # Tool definitions & choice
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class ToolDefinition:
     """Schema for a tool the LLM may invoke."""
+
     name: str
     input_schema: dict[str, Any]
     description: str | None = None
@@ -109,6 +114,7 @@ class ToolChoiceKind(Enum):
 @dataclass(frozen=True)
 class ToolChoice:
     """Constraint on which tool the LLM should use."""
+
     kind: ToolChoiceKind
     name: str | None = None  # only for SPECIFIC
 
@@ -129,9 +135,11 @@ class ToolChoice:
 # Completion request
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class CompletionRequest:
     """Everything needed to send one request to an LLM provider."""
+
     model: str
     max_tokens: int
     messages: list[InputMessage]
@@ -145,6 +153,7 @@ class CompletionRequest:
 # Completion response
 # ---------------------------------------------------------------------------
 
+
 class StopReason(Enum):
     END_TURN = "end_turn"
     TOOL_USE = "tool_use"
@@ -155,6 +164,7 @@ class StopReason(Enum):
 @dataclass
 class CompletionResponse:
     """Parsed response from an LLM provider."""
+
     id: str
     model: str
     role: Literal["assistant"] = "assistant"
@@ -177,6 +187,7 @@ class CompletionResponse:
 # Stream events
 # ---------------------------------------------------------------------------
 
+
 class StreamEventType(Enum):
     MESSAGE_START = "message_start"
     CONTENT_BLOCK_START = "content_block_start"
@@ -190,6 +201,7 @@ class StreamEventType(Enum):
 @dataclass
 class StreamEvent:
     """A single event from an SSE stream."""
+
     type: StreamEventType
     index: int | None = None
     data: dict[str, Any] = field(default_factory=dict)

@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from synth_panel.llm.client import LLMClient
@@ -21,6 +22,7 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Evaluator registry
 # ---------------------------------------------------------------------------
+
 
 def _eval_contains(keyword: str, response_text: str) -> bool:
     """Case-insensitive substring match."""
@@ -46,6 +48,7 @@ _VALID_SENTIMENTS = {"positive", "negative", "neutral"}
 # ---------------------------------------------------------------------------
 # Sentiment evaluator (LLM-based)
 # ---------------------------------------------------------------------------
+
 
 def _eval_sentiment(
     target: str,
@@ -88,7 +91,8 @@ def _eval_sentiment(
     if classification not in _VALID_SENTIMENTS:
         log.warning(
             "Unexpected sentiment classification %r for text %r, defaulting to neutral",
-            classification, response_text[:60],
+            classification,
+            response_text[:60],
         )
         classification = "neutral"
 
@@ -102,6 +106,7 @@ def _eval_sentiment(
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def evaluate_condition(
     condition: str,

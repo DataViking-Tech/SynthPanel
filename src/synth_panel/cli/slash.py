@@ -6,8 +6,8 @@ Per SPEC.md §8.
 
 from __future__ import annotations
 
-import sys
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from synth_panel.cli.output import OutputFormat, emit
 

@@ -6,6 +6,7 @@ incremental append, session forking, atomic writes, and file rotation.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shutil
@@ -14,14 +15,14 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
-from synth_panel.cost import ZERO_USAGE, TokenUsage
-
+from synth_panel.cost import TokenUsage
 
 # ---------------------------------------------------------------------------
 # Data model
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class ConversationMessage:
@@ -29,7 +30,7 @@ class ConversationMessage:
 
     role: str  # "system", "user", "assistant", "tool"
     content: list[dict[str, Any]]  # Content blocks (text, tool_use, etc.)
-    usage: Optional[TokenUsage] = None  # Present on assistant messages
+    usage: TokenUsage | None = None  # Present on assistant messages
 
     def to_dict(self) -> dict:
         d: dict[str, Any] = {"role": self.role, "content": self.content}
@@ -96,15 +97,11 @@ class Session:
 
     session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     version: int = 1
-    created_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
-    updated_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     messages: list[ConversationMessage] = field(default_factory=list)
-    compaction: Optional[CompactionMeta] = None
-    fork: Optional[ForkMeta] = None
+    compaction: CompactionMeta | None = None
+    fork: ForkMeta | None = None
 
     # --- Mutation helpers --------------------------------------------------
 
@@ -122,7 +119,7 @@ class Session:
             role="system",
             content=[{"type": "text", "text": summary}],
         )
-        self.messages = [summary_msg] + kept
+        self.messages = [summary_msg, *kept]
         if self.compaction is None:
             self.compaction = CompactionMeta()
         self.compaction.compaction_count += 1
@@ -133,12 +130,7 @@ class Session:
     def fork_session(self, branch_name: str = "") -> Session:
         """Create a new session inheriting all messages from this one."""
         new = Session(
-            messages=[
-                ConversationMessage(
-                    role=m.role, content=list(m.content), usage=m.usage
-                )
-                for m in self.messages
-            ],
+            messages=[ConversationMessage(role=m.role, content=list(m.content), usage=m.usage) for m in self.messages],
             fork=ForkMeta(
                 parent_session_id=self.session_id,
                 branch_name=branch_name,
@@ -150,11 +142,7 @@ class Session:
 
     def iter_usages(self) -> list[TokenUsage]:
         """Extract per-turn token usages from assistant messages."""
-        return [
-            m.usage
-            for m in self.messages
-            if m.role == "assistant" and m.usage is not None
-        ]
+        return [m.usage for m in self.messages if m.role == "assistant" and m.usage is not None]
 
     # --- Serialisation: full JSON -----------------------------------------
 
@@ -185,9 +173,7 @@ class Session:
             version=data.get("version", 1),
             created_at=data["created_at"],
             updated_at=data["updated_at"],
-            messages=[
-                ConversationMessage.from_dict(m) for m in data["messages"]
-            ],
+            messages=[ConversationMessage.from_dict(m) for m in data["messages"]],
             compaction=compaction,
             fork=fork,
         )
@@ -221,7 +207,7 @@ class Session:
     @classmethod
     def from_jsonl(cls, text: str) -> Session:
         """Deserialise from newline-delimited JSON records."""
-        lines = [l for l in text.strip().splitlines() if l.strip()]
+        lines = [line for line in text.strip().splitlines() if line.strip()]
         if not lines:
             raise SessionFormatError("Empty JSONL input")
 
@@ -230,16 +216,14 @@ class Session:
         created_at = ""
         updated_at = ""
         messages: list[ConversationMessage] = []
-        compaction: Optional[CompactionMeta] = None
-        fork: Optional[ForkMeta] = None
+        compaction: CompactionMeta | None = None
+        fork: ForkMeta | None = None
 
         for i, line in enumerate(lines, start=1):
             try:
                 record = json.loads(line)
             except json.JSONDecodeError as exc:
-                raise SessionFormatError(
-                    f"Malformed JSON at line {i}: {exc}"
-                ) from exc
+                raise SessionFormatError(f"Malformed JSON at line {i}: {exc}") from exc
 
             rtype = record.get("type")
             if rtype == "session_meta":
@@ -254,9 +238,7 @@ class Session:
             elif rtype == "compaction":
                 compaction = CompactionMeta.from_dict(record)
             else:
-                raise SessionFormatError(
-                    f"Unknown record type {rtype!r} at line {i}"
-                )
+                raise SessionFormatError(f"Unknown record type {rtype!r} at line {i}")
 
         if not session_id:
             raise SessionFormatError("Missing session_meta record")
@@ -276,6 +258,7 @@ class Session:
 # Errors
 # ---------------------------------------------------------------------------
 
+
 class SessionError(Exception):
     """Base error for session persistence operations."""
 
@@ -292,28 +275,26 @@ class SessionIOError(SessionError):
 # Atomic file writing
 # ---------------------------------------------------------------------------
 
+
 def _atomic_write(path: Path, data: str) -> None:
     """Write *data* to *path* atomically via temp-file + rename."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(
-        dir=str(path.parent), suffix=".tmp", prefix=".sp-"
-    )
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp", prefix=".sp-")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(data)
         shutil.move(tmp, str(path))
     except Exception:
         # Clean up temp file on failure.
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(tmp)
-        except OSError:
-            pass
         raise
 
 
 # ---------------------------------------------------------------------------
 # File rotation
 # ---------------------------------------------------------------------------
+
 
 def _rotate(
     path: Path,
@@ -384,9 +365,7 @@ def load_session(path: str | Path) -> Session:
     try:
         text = p.read_text(encoding="utf-8")
     except OSError as exc:
-        raise SessionIOError(
-            f"Failed to load session from {path}: {exc}"
-        ) from exc
+        raise SessionIOError(f"Failed to load session from {path}: {exc}") from exc
 
     if not text.strip():
         raise SessionFormatError(f"Empty session file: {path}")
@@ -415,14 +394,13 @@ def append_message(
         with open(p, "a", encoding="utf-8") as f:
             f.write(line)
     except OSError as exc:
-        raise SessionIOError(
-            f"Failed to append message to {path}: {exc}"
-        ) from exc
+        raise SessionIOError(f"Failed to append message to {path}: {exc}") from exc
 
 
 # ---------------------------------------------------------------------------
 # Session store (simplified variant per SPEC.md §6)
 # ---------------------------------------------------------------------------
+
 
 class SessionStore:
     """Lightweight session store backed by a directory of JSON files.
@@ -441,15 +419,9 @@ class SessionStore:
     def save(self, session: Session) -> None:
         data = {
             "session_id": session.session_id,
-            "messages": [
-                _extract_text(m) for m in session.messages
-            ],
-            "input_tokens": sum(
-                (u.input_tokens for u in session.iter_usages()), 0
-            ),
-            "output_tokens": sum(
-                (u.output_tokens for u in session.iter_usages()), 0
-            ),
+            "messages": [_extract_text(m) for m in session.messages],
+            "input_tokens": sum((u.input_tokens for u in session.iter_usages()), 0),
+            "output_tokens": sum((u.output_tokens for u in session.iter_usages()), 0),
         }
         _atomic_write(
             self._path_for(session.session_id),
@@ -461,15 +433,11 @@ class SessionStore:
         try:
             text = p.read_text(encoding="utf-8")
         except OSError as exc:
-            raise SessionIOError(
-                f"Session {session_id} not found in store: {exc}"
-            ) from exc
+            raise SessionIOError(f"Session {session_id} not found in store: {exc}") from exc
         return json.loads(text)
 
     def list_sessions(self) -> list[str]:
-        return sorted(
-            p.stem for p in self.directory.glob("*.json")
-        )
+        return sorted(p.stem for p in self.directory.glob("*.json"))
 
 
 def _extract_text(message: ConversationMessage) -> str:

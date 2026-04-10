@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Iterator
+from collections.abc import Iterator
 
 import httpx
 
@@ -18,12 +18,12 @@ from synth_panel.llm.models import (
     CompletionResponse,
     StreamEvent,
 )
-from synth_panel.llm.providers.base import LLMProvider, ProviderConfig
 from synth_panel.llm.providers._openai_format import (
     build_openai_body,
     parse_openai_response,
     parse_openai_sse_stream,
 )
+from synth_panel.llm.providers.base import LLMProvider, ProviderConfig
 
 GEMINI_CONFIG = ProviderConfig(
     api_key_env="GEMINI_API_KEY",
@@ -93,7 +93,11 @@ class GeminiProvider(LLMProvider):
         body = build_openai_body(request, stream=True)
         try:
             with httpx.stream(
-                "POST", url, headers=self._headers(), json=body, timeout=120.0,
+                "POST",
+                url,
+                headers=self._headers(),
+                json=body,
+                timeout=120.0,
             ) as resp:
                 if resp.status_code != 200:
                     resp.read()

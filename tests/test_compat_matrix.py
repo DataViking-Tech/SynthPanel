@@ -16,19 +16,19 @@ from typing import Any
 
 import pytest
 
+from synth_panel import orchestrator
 from synth_panel.cost import ZERO_USAGE, TokenUsage
 from synth_panel.instrument import parse_instrument
-from synth_panel import orchestrator
 from synth_panel.orchestrator import (
     MultiRoundResult,
     PanelistResult,
     run_multi_round_panel,
 )
 
-
 # ---------------------------------------------------------------------------
 # Stub helpers
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class _StubSynthesis:
@@ -66,8 +66,14 @@ def patched_panel(monkeypatch):
     """Stub run_panel_parallel so the matrix needs no real LLM client."""
 
     def fake_run_panel_parallel(
-        client, personas, questions, model, system_prompt_fn,
-        question_prompt_fn, max_workers=None, response_schema=None,
+        client,
+        personas,
+        questions,
+        model,
+        system_prompt_fn,
+        question_prompt_fn,
+        max_workers=None,
+        response_schema=None,
         sessions=None,
     ):
         results = [
@@ -134,6 +140,7 @@ PERSONAS = [{"name": "Alice"}, {"name": "Bob"}]
 # Parsing matrix — all three formats parse through the same entry point
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "raw,expected_round_count",
     [
@@ -152,6 +159,7 @@ def test_parse_matrix(raw, expected_round_count):
 # ---------------------------------------------------------------------------
 # Orchestrator matrix — all three formats execute through the same loop
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize(
     "raw,expected_path_rounds",
@@ -181,9 +189,7 @@ def test_orchestrator_matrix(raw, expected_path_rounds, patched_panel):
     # is reached via routing on the 'pricing pain' stub theme.
     executed_names = [r.name for r in result.rounds]
     for name in expected_path_rounds:
-        assert name in executed_names, (
-            f"expected round {name!r} in executed path, got {executed_names}"
-        )
+        assert name in executed_names, f"expected round {name!r} in executed path, got {executed_names}"
 
     # Path log entries align with executed rounds.
     assert len(result.path) == len(result.rounds)

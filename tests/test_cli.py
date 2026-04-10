@@ -4,35 +4,23 @@ from __future__ import annotations
 
 import io
 import json
-import os
-import tempfile
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from synth_panel.main import main
-from synth_panel.cli.parser import build_parser
-from synth_panel.cli.output import OutputFormat, emit
-from synth_panel.cli.slash import dispatch_slash, SLASH_COMMANDS
-from synth_panel.cli.repl import SessionState
 from synth_panel.cli.commands import (
-    _load_personas,
     _load_instrument,
+    _load_personas,
     _load_schema,
-    handle_pack_list,
-    handle_pack_import,
-    handle_pack_export,
 )
+from synth_panel.cli.output import OutputFormat, emit
+from synth_panel.cli.parser import build_parser
+from synth_panel.cli.repl import SessionState
+from synth_panel.cli.slash import SLASH_COMMANDS, dispatch_slash
+from synth_panel.cost import ZERO_USAGE, TokenUsage
+from synth_panel.main import main
 from synth_panel.prompts import persona_system_prompt
-from synth_panel.llm.models import (
-    CompletionResponse,
-    TextBlock,
-    TokenUsage as LLMTokenUsage,
-    StopReason,
-)
 from synth_panel.runtime import TurnSummary
-from synth_panel.cost import TokenUsage, ZERO_USAGE
-
 
 # --- Parser tests ---
 
@@ -53,12 +41,18 @@ class TestParser:
 
     def test_global_args(self):
         parser = build_parser()
-        args = parser.parse_args([
-            "--model", "opus",
-            "--permission-mode", "read-only",
-            "--output-format", "json",
-            "--config", "/tmp/cfg.toml",
-        ])
+        args = parser.parse_args(
+            [
+                "--model",
+                "opus",
+                "--permission-mode",
+                "read-only",
+                "--output-format",
+                "json",
+                "--config",
+                "/tmp/cfg.toml",
+            ]
+        )
         assert args.model == "opus"
         assert args.permission_mode == "read-only"
         assert args.output_format == "json"
@@ -72,11 +66,16 @@ class TestParser:
 
     def test_panel_run_subcommand(self):
         parser = build_parser()
-        args = parser.parse_args([
-            "panel", "run",
-            "--personas", "p.yaml",
-            "--instrument", "i.yaml",
-        ])
+        args = parser.parse_args(
+            [
+                "panel",
+                "run",
+                "--personas",
+                "p.yaml",
+                "--instrument",
+                "i.yaml",
+            ]
+        )
         assert args.command == "panel"
         assert args.panel_command == "run"
         assert args.personas == "p.yaml"
@@ -84,25 +83,37 @@ class TestParser:
 
     def test_panel_run_synthesis_flags(self):
         parser = build_parser()
-        args = parser.parse_args([
-            "panel", "run",
-            "--personas", "p.yaml",
-            "--instrument", "i.yaml",
-            "--no-synthesis",
-            "--synthesis-model", "opus",
-            "--synthesis-prompt", "Summarize briefly.",
-        ])
+        args = parser.parse_args(
+            [
+                "panel",
+                "run",
+                "--personas",
+                "p.yaml",
+                "--instrument",
+                "i.yaml",
+                "--no-synthesis",
+                "--synthesis-model",
+                "opus",
+                "--synthesis-prompt",
+                "Summarize briefly.",
+            ]
+        )
         assert args.no_synthesis is True
         assert args.synthesis_model == "opus"
         assert args.synthesis_prompt == "Summarize briefly."
 
     def test_panel_run_synthesis_defaults(self):
         parser = build_parser()
-        args = parser.parse_args([
-            "panel", "run",
-            "--personas", "p.yaml",
-            "--instrument", "i.yaml",
-        ])
+        args = parser.parse_args(
+            [
+                "panel",
+                "run",
+                "--personas",
+                "p.yaml",
+                "--instrument",
+                "i.yaml",
+            ]
+        )
         assert args.no_synthesis is False
         assert args.synthesis_model is None
         assert args.synthesis_prompt is None
@@ -233,6 +244,7 @@ class TestSlashCommands:
 def _mock_turn_summary(text: str = "Hello!") -> TurnSummary:
     """Create a TurnSummary with a text response."""
     from synth_panel.persistence import ConversationMessage
+
     usage = TokenUsage(input_tokens=10, output_tokens=20)
     msg = ConversationMessage(
         role="assistant",
@@ -293,22 +305,14 @@ class TestMain:
 class TestYAMLLoading:
     def test_load_personas_with_key(self, tmp_path):
         p = tmp_path / "personas.yaml"
-        p.write_text(
-            "personas:\n"
-            "  - name: Alice\n"
-            "    age: 30\n"
-            "    occupation: Engineer\n"
-        )
+        p.write_text("personas:\n  - name: Alice\n    age: 30\n    occupation: Engineer\n")
         personas = _load_personas(str(p))
         assert len(personas) == 1
         assert personas[0]["name"] == "Alice"
 
     def test_load_personas_as_list(self, tmp_path):
         p = tmp_path / "personas.yaml"
-        p.write_text(
-            "- name: Bob\n"
-            "  age: 25\n"
-        )
+        p.write_text("- name: Bob\n  age: 25\n")
         personas = _load_personas(str(p))
         assert len(personas) == 1
         assert personas[0]["name"] == "Bob"
@@ -325,21 +329,14 @@ class TestYAMLLoading:
 
     def test_load_instrument_with_key(self, tmp_path):
         p = tmp_path / "survey.yaml"
-        p.write_text(
-            "instrument:\n"
-            "  questions:\n"
-            "    - text: What?\n"
-        )
+        p.write_text("instrument:\n  questions:\n    - text: What?\n")
         instr = _load_instrument(str(p))
         assert instr.questions == [{"text": "What?"}]
         assert len(instr.rounds) == 1
 
     def test_load_instrument_questions_key(self, tmp_path):
         p = tmp_path / "survey.yaml"
-        p.write_text(
-            "questions:\n"
-            "  - text: What?\n"
-        )
+        p.write_text("questions:\n  - text: What?\n")
         instr = _load_instrument(str(p))
         assert instr.questions == [{"text": "What?"}]
         assert len(instr.rounds) == 1
@@ -373,6 +370,7 @@ def _mock_synthesis_result():
     """Create a mock SynthesisResult for CLI integration tests."""
     from synth_panel.cost import CostEstimate
     from synth_panel.synthesis import SynthesisResult
+
     return SynthesisResult(
         summary="Test synthesis summary",
         themes=["theme1"],
@@ -397,23 +395,20 @@ class TestPanelRun:
         mock_synth.return_value = _mock_synthesis_result()
 
         personas_file = tmp_path / "personas.yaml"
-        personas_file.write_text(
-            "personas:\n"
-            "  - name: Alice\n"
-            "    age: 30\n"
-        )
+        personas_file.write_text("personas:\n  - name: Alice\n    age: 30\n")
         survey_file = tmp_path / "survey.yaml"
-        survey_file.write_text(
-            "instrument:\n"
-            "  questions:\n"
-            "    - text: What do you think?\n"
-        )
+        survey_file.write_text("instrument:\n  questions:\n    - text: What do you think?\n")
 
-        code = main([
-            "panel", "run",
-            "--personas", str(personas_file),
-            "--instrument", str(survey_file),
-        ])
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+            ]
+        )
         assert code == 0
         out = capsys.readouterr().out
         assert "Alice" in out
@@ -431,23 +426,22 @@ class TestPanelRun:
         mock_synth.return_value = _mock_synthesis_result()
 
         personas_file = tmp_path / "personas.yaml"
-        personas_file.write_text(
-            "personas:\n"
-            "  - name: Bob\n"
-        )
+        personas_file.write_text("personas:\n  - name: Bob\n")
         survey_file = tmp_path / "survey.yaml"
-        survey_file.write_text(
-            "instrument:\n"
-            "  questions:\n"
-            "    - text: Question?\n"
-        )
+        survey_file.write_text("instrument:\n  questions:\n    - text: Question?\n")
 
-        code = main([
-            "--output-format", "json",
-            "panel", "run",
-            "--personas", str(personas_file),
-            "--instrument", str(survey_file),
-        ])
+        code = main(
+            [
+                "--output-format",
+                "json",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+            ]
+        )
         assert code == 0
         data = json.loads(capsys.readouterr().out)
         assert data["persona_count"] == 1
@@ -475,13 +469,19 @@ class TestPanelRun:
         survey_file = tmp_path / "survey.yaml"
         survey_file.write_text("instrument:\n  questions:\n    - text: Q?\n")
 
-        code = main([
-            "--output-format", "json",
-            "panel", "run",
-            "--personas", str(personas_file),
-            "--instrument", str(survey_file),
-            "--no-synthesis",
-        ])
+        code = main(
+            [
+                "--output-format",
+                "json",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--no-synthesis",
+            ]
+        )
         assert code == 0
         data = json.loads(capsys.readouterr().out)
         assert data["synthesis"] is None
@@ -502,12 +502,18 @@ class TestPanelRun:
         survey_file = tmp_path / "survey.yaml"
         survey_file.write_text("instrument:\n  questions:\n    - text: Q?\n")
 
-        code = main([
-            "panel", "run",
-            "--personas", str(personas_file),
-            "--instrument", str(survey_file),
-            "--synthesis-model", "opus",
-        ])
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--synthesis-model",
+                "opus",
+            ]
+        )
         assert code == 0
         mock_synth.assert_called_once()
         _, kwargs = mock_synth.call_args
@@ -517,22 +523,32 @@ class TestPanelRun:
         survey_file = tmp_path / "survey.yaml"
         survey_file.write_text("instrument:\n  questions:\n    - text: Q?\n")
 
-        code = main([
-            "panel", "run",
-            "--personas", "/nonexistent.yaml",
-            "--instrument", str(survey_file),
-        ])
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                "/nonexistent.yaml",
+                "--instrument",
+                str(survey_file),
+            ]
+        )
         assert code == 1
 
     def test_panel_run_missing_instrument(self, capsys, tmp_path):
         personas_file = tmp_path / "personas.yaml"
         personas_file.write_text("personas:\n  - name: X\n")
 
-        code = main([
-            "panel", "run",
-            "--personas", str(personas_file),
-            "--instrument", "/nonexistent.yaml",
-        ])
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                "/nonexistent.yaml",
+            ]
+        )
         assert code == 1
 
     # --- sp-2hg: silent-failure-on-universal-provider-errors ------------
@@ -574,18 +590,18 @@ class TestPanelRun:
         personas_file = tmp_path / "personas.yaml"
         personas_file.write_text("personas:\n  - name: Alice\n  - name: Bob\n")
         survey_file = tmp_path / "survey.yaml"
-        survey_file.write_text(
-            "instrument:\n"
-            "  questions:\n"
-            "    - text: Q1\n"
-            "    - text: Q2\n"
-        )
+        survey_file.write_text("instrument:\n  questions:\n    - text: Q1\n    - text: Q2\n")
 
-        code = main([
-            "panel", "run",
-            "--personas", str(personas_file),
-            "--instrument", str(survey_file),
-        ])
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+            ]
+        )
         assert code == 2
         err = capsys.readouterr().err
         assert "PANEL RUN INVALID" in err
@@ -596,9 +612,7 @@ class TestPanelRun:
     @patch("synth_panel.cli.commands.synthesize_panel")
     @patch("synth_panel.cli.commands.run_panel_parallel")
     @patch("synth_panel.cli.commands.LLMClient")
-    def test_panel_run_strict_flag_bails_on_any_error(
-        self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path
-    ):
+    def test_panel_run_strict_flag_bails_on_any_error(self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path):
         """sp-2hg: --strict turns any error into a fatal run (exit 3)."""
         from synth_panel.orchestrator import PanelistResult, WorkerRegistry
 
@@ -629,19 +643,19 @@ class TestPanelRun:
         personas_file = tmp_path / "personas.yaml"
         personas_file.write_text("personas:\n  - name: Alice\n  - name: Bob\n")
         survey_file = tmp_path / "survey.yaml"
-        survey_file.write_text(
-            "instrument:\n"
-            "  questions:\n"
-            "    - text: Q1\n"
-            "    - text: Q2\n"
-        )
+        survey_file.write_text("instrument:\n  questions:\n    - text: Q1\n    - text: Q2\n")
 
-        code = main([
-            "panel", "run",
-            "--personas", str(personas_file),
-            "--instrument", str(survey_file),
-            "--strict",
-        ])
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--strict",
+            ]
+        )
         assert code == 3
         err = capsys.readouterr().err
         assert "--strict" in err
@@ -686,18 +700,18 @@ class TestPanelRun:
         personas_file = tmp_path / "personas.yaml"
         personas_file.write_text("personas:\n  - name: Alice\n  - name: Bob\n")
         survey_file = tmp_path / "survey.yaml"
-        survey_file.write_text(
-            "instrument:\n"
-            "  questions:\n"
-            "    - text: Q1\n"
-            "    - text: Q2\n"
-        )
+        survey_file.write_text("instrument:\n  questions:\n    - text: Q1\n    - text: Q2\n")
 
-        code = main([
-            "panel", "run",
-            "--personas", str(personas_file),
-            "--instrument", str(survey_file),
-        ])
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+            ]
+        )
         assert code == 0
         mock_synth.assert_called_once()
 
@@ -731,12 +745,18 @@ class TestPanelRun:
         survey_file = tmp_path / "survey.yaml"
         survey_file.write_text("instrument:\n  questions:\n    - text: Q1\n")
 
-        code = main([
-            "--output-format", "json",
-            "panel", "run",
-            "--personas", str(personas_file),
-            "--instrument", str(survey_file),
-        ])
+        code = main(
+            [
+                "--output-format",
+                "json",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+            ]
+        )
         assert code == 2
         data = json.loads(capsys.readouterr().out)
         assert data["run_invalid"] is True
@@ -755,8 +775,8 @@ class TestDefaultModelResolution:
 
     def test_resolve_default_model_prefers_anthropic(self, monkeypatch):
         from synth_panel.cli.commands import _resolve_default_model
-        for env in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY",
-                    "GOOGLE_API_KEY", "XAI_API_KEY"):
+
+        for env in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "XAI_API_KEY"):
             monkeypatch.delenv(env, raising=False)
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
         alias, source = _resolve_default_model()
@@ -765,8 +785,8 @@ class TestDefaultModelResolution:
 
     def test_resolve_default_model_falls_through_to_gemini(self, monkeypatch):
         from synth_panel.cli.commands import _resolve_default_model
-        for env in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY",
-                    "GOOGLE_API_KEY", "XAI_API_KEY"):
+
+        for env in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "XAI_API_KEY"):
             monkeypatch.delenv(env, raising=False)
         monkeypatch.setenv("GEMINI_API_KEY", "gemkey")
         alias, source = _resolve_default_model()
@@ -775,8 +795,8 @@ class TestDefaultModelResolution:
 
     def test_resolve_default_model_falls_back_to_sonnet_when_no_creds(self, monkeypatch):
         from synth_panel.cli.commands import _resolve_default_model
-        for env in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY",
-                    "GOOGLE_API_KEY", "XAI_API_KEY"):
+
+        for env in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "XAI_API_KEY"):
             monkeypatch.delenv(env, raising=False)
         alias, source = _resolve_default_model()
         assert alias == "sonnet"
@@ -785,6 +805,7 @@ class TestDefaultModelResolution:
     def test_resolve_default_model_respects_preference_order(self, monkeypatch):
         """Anthropic beats Gemini even if both keys are set."""
         from synth_panel.cli.commands import _resolve_default_model
+
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
         monkeypatch.setenv("GEMINI_API_KEY", "gemkey")
         alias, source = _resolve_default_model()
@@ -801,15 +822,13 @@ class TestDefaultModelResolution:
         so an operator can cancel and re-run with an explicit override."""
         from synth_panel.orchestrator import PanelistResult, WorkerRegistry
 
-        for env in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY",
-                    "GOOGLE_API_KEY", "XAI_API_KEY"):
+        for env in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "XAI_API_KEY"):
             monkeypatch.delenv(env, raising=False)
         monkeypatch.setenv("GEMINI_API_KEY", "gemkey")
 
         registry = WorkerRegistry()
         mock_run.return_value = (
-            [PanelistResult(persona_name="A", responses=[
-                {"question": "Q", "response": "ok"}], usage=ZERO_USAGE)],
+            [PanelistResult(persona_name="A", responses=[{"question": "Q", "response": "ok"}], usage=ZERO_USAGE)],
             registry,
             {},
         )
@@ -820,11 +839,16 @@ class TestDefaultModelResolution:
         survey_file = tmp_path / "survey.yaml"
         survey_file.write_text("instrument:\n  questions:\n    - text: Q\n")
 
-        code = main([
-            "panel", "run",
-            "--personas", str(personas_file),
-            "--instrument", str(survey_file),
-        ])
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+            ]
+        )
         assert code == 0
         err = capsys.readouterr().err
         assert "gemini-2.5-flash" in err
@@ -844,8 +868,7 @@ class TestDefaultModelResolution:
 
         registry = WorkerRegistry()
         mock_run.return_value = (
-            [PanelistResult(persona_name="A", responses=[
-                {"question": "Q", "response": "ok"}], usage=ZERO_USAGE)],
+            [PanelistResult(persona_name="A", responses=[{"question": "Q", "response": "ok"}], usage=ZERO_USAGE)],
             registry,
             {},
         )
@@ -856,12 +879,18 @@ class TestDefaultModelResolution:
         survey_file = tmp_path / "survey.yaml"
         survey_file.write_text("instrument:\n  questions:\n    - text: Q\n")
 
-        code = main([
-            "--model", "gemini-2.5-flash-lite",
-            "panel", "run",
-            "--personas", str(personas_file),
-            "--instrument", str(survey_file),
-        ])
+        code = main(
+            [
+                "--model",
+                "gemini-2.5-flash-lite",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+            ]
+        )
         assert code == 0
         err = capsys.readouterr().err
         assert "--model not specified" not in err
@@ -875,44 +904,47 @@ class TestVarSubstitution:
     placeholders in instrument question text."""
 
     def test_collect_template_vars_parses_cli_flags(self):
-        from synth_panel.cli.commands import _collect_template_vars
         import argparse as _ap
-        ns = _ap.Namespace(
-            vars=["candidates=Alpha, Beta", "theme=pricing"], vars_file=None
-        )
+
+        from synth_panel.cli.commands import _collect_template_vars
+
+        ns = _ap.Namespace(vars=["candidates=Alpha, Beta", "theme=pricing"], vars_file=None)
         result = _collect_template_vars(ns)
         assert result == {"candidates": "Alpha, Beta", "theme": "pricing"}
 
     def test_collect_template_vars_allows_equals_in_value(self):
-        from synth_panel.cli.commands import _collect_template_vars
         import argparse as _ap
+
+        from synth_panel.cli.commands import _collect_template_vars
+
         ns = _ap.Namespace(vars=["equation=a=b+c"], vars_file=None)
         assert _collect_template_vars(ns) == {"equation": "a=b+c"}
 
     def test_collect_template_vars_rejects_malformed_flag(self):
-        from synth_panel.cli.commands import _collect_template_vars
         import argparse as _ap
+
+        from synth_panel.cli.commands import _collect_template_vars
+
         ns = _ap.Namespace(vars=["novalue"], vars_file=None)
         with pytest.raises(ValueError, match="KEY=VALUE"):
             _collect_template_vars(ns)
 
     def test_collect_template_vars_rejects_empty_key(self):
-        from synth_panel.cli.commands import _collect_template_vars
         import argparse as _ap
+
+        from synth_panel.cli.commands import _collect_template_vars
+
         ns = _ap.Namespace(vars=["=hello"], vars_file=None)
         with pytest.raises(ValueError, match="empty key"):
             _collect_template_vars(ns)
 
     def test_collect_template_vars_merges_file_and_cli_flags(self, tmp_path):
-        from synth_panel.cli.commands import _collect_template_vars
         import argparse as _ap
+
+        from synth_panel.cli.commands import _collect_template_vars
+
         f = tmp_path / "vars.yaml"
-        f.write_text(
-            "candidates:\n"
-            "  - Alpha\n"
-            "  - Beta\n"
-            "theme: memorability\n"
-        )
+        f.write_text("candidates:\n  - Alpha\n  - Beta\ntheme: memorability\n")
         ns = _ap.Namespace(vars=["theme=pricing"], vars_file=str(f))
         result = _collect_template_vars(ns)
         # List flattened to comma-joined string
@@ -921,8 +953,10 @@ class TestVarSubstitution:
         assert result["theme"] == "pricing"
 
     def test_collect_template_vars_rejects_non_mapping_file(self, tmp_path):
-        from synth_panel.cli.commands import _collect_template_vars
         import argparse as _ap
+
+        from synth_panel.cli.commands import _collect_template_vars
+
         f = tmp_path / "bad.yaml"
         f.write_text("- just\n- a\n- list\n")
         ns = _ap.Namespace(vars=None, vars_file=str(f))
@@ -932,31 +966,30 @@ class TestVarSubstitution:
     def test_apply_vars_to_instrument_mutates_round_questions(self):
         from synth_panel.cli.commands import _apply_vars_to_instrument
         from synth_panel.instrument import parse_instrument
-        inst = parse_instrument({
-            "version": 3,
-            "rounds": [
-                {
-                    "name": "intro",
-                    "questions": [
-                        {"text": "Evaluate: {candidates}. Reaction?"},
-                    ],
-                },
-                {
-                    "name": "followup",
-                    "depends_on": "intro",
-                    "questions": [
-                        {"text": "Which of {candidates} do you remember?"},
-                    ],
-                },
-            ],
-        })
+
+        inst = parse_instrument(
+            {
+                "version": 3,
+                "rounds": [
+                    {
+                        "name": "intro",
+                        "questions": [
+                            {"text": "Evaluate: {candidates}. Reaction?"},
+                        ],
+                    },
+                    {
+                        "name": "followup",
+                        "depends_on": "intro",
+                        "questions": [
+                            {"text": "Which of {candidates} do you remember?"},
+                        ],
+                    },
+                ],
+            }
+        )
         _apply_vars_to_instrument(inst, {"candidates": "Alpha, Beta, Gamma"})
-        assert inst.rounds[0].questions[0]["text"] == (
-            "Evaluate: Alpha, Beta, Gamma. Reaction?"
-        )
-        assert inst.rounds[1].questions[0]["text"] == (
-            "Which of Alpha, Beta, Gamma do you remember?"
-        )
+        assert inst.rounds[0].questions[0]["text"] == ("Evaluate: Alpha, Beta, Gamma. Reaction?")
+        assert inst.rounds[1].questions[0]["text"] == ("Which of Alpha, Beta, Gamma do you remember?")
 
     @patch("synth_panel.cli.commands.synthesize_panel")
     @patch("synth_panel.cli.commands.run_panel_parallel")
@@ -971,9 +1004,11 @@ class TestVarSubstitution:
 
         registry = WorkerRegistry()
         mock_run.return_value = (
-            [PanelistResult(persona_name="A", responses=[
-                {"question": "rendered", "response": "ok"}],
-                usage=ZERO_USAGE)],
+            [
+                PanelistResult(
+                    persona_name="A", responses=[{"question": "rendered", "response": "ok"}], usage=ZERO_USAGE
+                )
+            ],
             registry,
             {},
         )
@@ -982,18 +1017,20 @@ class TestVarSubstitution:
         personas_file = tmp_path / "personas.yaml"
         personas_file.write_text("personas:\n  - name: A\n")
         survey_file = tmp_path / "survey.yaml"
-        survey_file.write_text(
-            "instrument:\n"
-            "  questions:\n"
-            "    - text: 'Evaluate: {candidates}'\n"
-        )
+        survey_file.write_text("instrument:\n  questions:\n    - text: 'Evaluate: {candidates}'\n")
 
-        code = main([
-            "panel", "run",
-            "--personas", str(personas_file),
-            "--instrument", str(survey_file),
-            "--var", "candidates=Alpha, Beta, Gamma",
-        ])
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--var",
+                "candidates=Alpha, Beta, Gamma",
+            ]
+        )
         assert code == 0
         # Verify the orchestrator saw the rendered question text
         _, kwargs = mock_run.call_args
@@ -1004,20 +1041,24 @@ class TestVarSubstitution:
     @patch("synth_panel.cli.commands.synthesize_panel")
     @patch("synth_panel.cli.commands.run_panel_parallel")
     @patch("synth_panel.cli.commands.LLMClient")
-    def test_panel_run_malformed_var_returns_error(
-        self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path
-    ):
+    def test_panel_run_malformed_var_returns_error(self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path):
         personas_file = tmp_path / "personas.yaml"
         personas_file.write_text("personas:\n  - name: A\n")
         survey_file = tmp_path / "survey.yaml"
         survey_file.write_text("instrument:\n  questions:\n    - text: Q\n")
 
-        code = main([
-            "panel", "run",
-            "--personas", str(personas_file),
-            "--instrument", str(survey_file),
-            "--var", "badentry",
-        ])
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--var",
+                "badentry",
+            ]
+        )
         assert code == 1
         err = capsys.readouterr().err
         assert "KEY=VALUE" in err
@@ -1042,12 +1083,7 @@ class TestPackCommands:
 
     def test_pack_import_and_list(self, capsys):
         pfile = self._tmp / "personas.yaml"
-        pfile.write_text(
-            "name: My Pack\n"
-            "personas:\n"
-            "  - name: Alice\n"
-            "    age: 30\n"
-        )
+        pfile.write_text("name: My Pack\npersonas:\n  - name: Alice\n    age: 30\n")
         code = main(["pack", "import", str(pfile)])
         assert code == 0
         out = capsys.readouterr().out
@@ -1076,6 +1112,7 @@ class TestPackCommands:
 
     def test_pack_export_stdout(self, capsys):
         from synth_panel.mcp.data import save_persona_pack
+
         save_persona_pack("Export Test", [{"name": "Eve"}], pack_id="exp")
         code = main(["pack", "export", "exp"])
         assert code == 0
@@ -1085,6 +1122,7 @@ class TestPackCommands:
 
     def test_pack_export_to_file(self, capsys):
         from synth_panel.mcp.data import save_persona_pack
+
         save_persona_pack("File Export", [{"name": "Dan"}], pack_id="fexp")
         outfile = self._tmp / "out.yaml"
         code = main(["pack", "export", "fexp", "-o", str(outfile)])
@@ -1099,6 +1137,7 @@ class TestPackCommands:
     def test_pack_show_prints_yaml_to_stdout(self, capsys):
         """sp-oem: `pack show <id>` is an alias for stdout export."""
         from synth_panel.mcp.data import save_persona_pack
+
         save_persona_pack("Show Test", [{"name": "Zoe"}], pack_id="shtest")
         code = main(["pack", "show", "shtest"])
         assert code == 0
@@ -1111,9 +1150,8 @@ class TestPackCommands:
         `pack export <id>` with no output file - the whole point of the
         alias is that they are interchangeable for inspection use."""
         from synth_panel.mcp.data import save_persona_pack
-        save_persona_pack(
-            "Parity Test", [{"name": "Iris", "age": 40}], pack_id="parity"
-        )
+
+        save_persona_pack("Parity Test", [{"name": "Iris", "age": 40}], pack_id="parity")
         main(["pack", "export", "parity"])
         export_out = capsys.readouterr().out
         main(["pack", "show", "parity"])
@@ -1126,6 +1164,7 @@ class TestPackCommands:
 
     def test_pack_list_json(self, capsys):
         from synth_panel.mcp.data import save_persona_pack
+
         save_persona_pack("JSON Pack", [{"name": "X"}], pack_id="jp")
         code = main(["--output-format", "json", "pack", "list"])
         assert code == 0
@@ -1186,21 +1225,32 @@ class TestSchemaLoading:
 class TestParserSchemaFlag:
     def test_schema_flag_accepted(self):
         parser = build_parser()
-        args = parser.parse_args([
-            "panel", "run",
-            "--personas", "p.yaml",
-            "--instrument", "i.yaml",
-            "--schema", '{"type": "object"}',
-        ])
+        args = parser.parse_args(
+            [
+                "panel",
+                "run",
+                "--personas",
+                "p.yaml",
+                "--instrument",
+                "i.yaml",
+                "--schema",
+                '{"type": "object"}',
+            ]
+        )
         assert args.schema == '{"type": "object"}'
 
     def test_schema_flag_default_none(self):
         parser = build_parser()
-        args = parser.parse_args([
-            "panel", "run",
-            "--personas", "p.yaml",
-            "--instrument", "i.yaml",
-        ])
+        args = parser.parse_args(
+            [
+                "panel",
+                "run",
+                "--personas",
+                "p.yaml",
+                "--instrument",
+                "i.yaml",
+            ]
+        )
         assert args.schema is None
 
 
@@ -1213,12 +1263,18 @@ class TestPanelRunWithSchema:
         survey_file = tmp_path / "survey.yaml"
         survey_file.write_text("instrument:\n  questions:\n    - text: Q?\n")
 
-        code = main([
-            "panel", "run",
-            "--personas", str(personas_file),
-            "--instrument", str(survey_file),
-            "--schema", "not valid json {{{",
-        ])
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--schema",
+                "not valid json {{{",
+            ]
+        )
         assert code == 1
 
     @patch("synth_panel.cli.commands.synthesize_panel")
@@ -1230,7 +1286,13 @@ class TestPanelRunWithSchema:
         from synth_panel.orchestrator import PanelistResult
 
         mock_run.return_value = (
-            [PanelistResult(persona_name="X", responses=[{"question": "Q", "response": {"a": 1}, "structured": True}], usage=ZERO_USAGE)],
+            [
+                PanelistResult(
+                    persona_name="X",
+                    responses=[{"question": "Q", "response": {"a": 1}, "structured": True}],
+                    usage=ZERO_USAGE,
+                )
+            ],
             MagicMock(),
             {},
         )
@@ -1243,13 +1305,20 @@ class TestPanelRunWithSchema:
         schema_file = tmp_path / "schema.json"
         schema_file.write_text('{"type": "object", "properties": {"a": {"type": "integer"}}}')
 
-        code = main([
-            "--output-format", "json",
-            "panel", "run",
-            "--personas", str(personas_file),
-            "--instrument", str(survey_file),
-            "--schema", str(schema_file),
-        ])
+        code = main(
+            [
+                "--output-format",
+                "json",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--schema",
+                str(schema_file),
+            ]
+        )
         assert code == 0
         # Verify run_panel_parallel was called with response_schema
         call_kwargs = mock_run.call_args
@@ -1263,6 +1332,7 @@ class TestMainModule:
     def test_main_module_importable(self):
         """Verify __main__.py exists and references main()."""
         from pathlib import Path
+
         main_path = Path(__file__).parent.parent / "src" / "synth_panel" / "__main__.py"
         assert main_path.exists()
         content = main_path.read_text()
@@ -1272,6 +1342,7 @@ class TestMainModule:
 # ---------------------------------------------------------------------------
 # instruments graph (sp-irf F3-D)
 # ---------------------------------------------------------------------------
+
 
 class TestInstrumentsGraph:
     """Render the round DAG of v1, v2, and v3 instruments."""
@@ -1283,11 +1354,15 @@ class TestInstrumentsGraph:
 
     def test_v1_text(self, tmp_path, capsys):
         from synth_panel.cli.commands import handle_instruments_graph
-        src = self._write(tmp_path, """
+
+        src = self._write(
+            tmp_path,
+            """
 instrument:
   questions:
     - text: What frustrates you?
-""")
+""",
+        )
         args = MagicMock(source=src, format="text")
         rc = handle_instruments_graph(args, OutputFormat.TEXT)
         out = capsys.readouterr().out
@@ -1297,7 +1372,10 @@ instrument:
 
     def test_v2_mermaid_linear_chain(self, tmp_path, capsys):
         from synth_panel.cli.commands import handle_instruments_graph
-        src = self._write(tmp_path, """
+
+        src = self._write(
+            tmp_path,
+            """
 instrument:
   version: 2
   rounds:
@@ -1308,7 +1386,8 @@ instrument:
       depends_on: explore
       questions:
         - text: Why?
-""")
+""",
+        )
         args = MagicMock(source=src, format="mermaid")
         rc = handle_instruments_graph(args, OutputFormat.TEXT)
         out = capsys.readouterr().out
@@ -1320,7 +1399,10 @@ instrument:
 
     def test_v3_branching_mermaid_with_end(self, tmp_path, capsys):
         from synth_panel.cli.commands import handle_instruments_graph
-        src = self._write(tmp_path, """
+
+        src = self._write(
+            tmp_path,
+            """
 instrument:
   version: 3
   rounds:
@@ -1337,7 +1419,8 @@ instrument:
     - name: probe_pricing
       questions:
         - text: How much?
-""")
+""",
+        )
         args = MagicMock(source=src, format="mermaid")
         rc = handle_instruments_graph(args, OutputFormat.TEXT)
         out = capsys.readouterr().out
@@ -1350,7 +1433,10 @@ instrument:
 
     def test_v3_branching_text_format(self, tmp_path, capsys):
         from synth_panel.cli.commands import handle_instruments_graph
-        src = self._write(tmp_path, """
+
+        src = self._write(
+            tmp_path,
+            """
 instrument:
   version: 3
   rounds:
@@ -1364,7 +1450,8 @@ instrument:
     - name: b
       questions:
         - text: Q2?
-""")
+""",
+        )
         args = MagicMock(source=src, format="text")
         rc = handle_instruments_graph(args, OutputFormat.TEXT)
         out = capsys.readouterr().out
@@ -1376,6 +1463,7 @@ instrument:
 
     def test_missing_source(self, tmp_path, capsys):
         from synth_panel.cli.commands import handle_instruments_graph
+
         args = MagicMock(source=str(tmp_path / "nope.yaml"), format="text")
         rc = handle_instruments_graph(args, OutputFormat.TEXT)
         err = capsys.readouterr().err

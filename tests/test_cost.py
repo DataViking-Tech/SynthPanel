@@ -1,23 +1,21 @@
 """Tests for synth_panel.cost — SPEC.md Section 7."""
 
+import pytest
+
 from synth_panel.cost import (
+    HAIKU_PRICING,
+    OPUS_PRICING,
+    SONNET_PRICING,
     ZERO_USAGE,
     BudgetError,
     BudgetGate,
     CostEstimate,
-    ModelPricing,
     TokenUsage,
     UsageTracker,
     estimate_cost,
     format_summary,
     lookup_pricing,
-    HAIKU_PRICING,
-    SONNET_PRICING,
-    OPUS_PRICING,
 )
-
-import pytest
-
 
 # --- TokenUsage -----------------------------------------------------------
 
@@ -79,7 +77,7 @@ class TestPricingLookup:
         assert est is True
 
     def test_none_model_defaults(self):
-        p, est = lookup_pricing(None)
+        _p, est = lookup_pricing(None)
         assert est is True
 
 

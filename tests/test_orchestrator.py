@@ -8,19 +8,19 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from synth_panel.cost import ZERO_USAGE, TokenUsage
+from synth_panel.cost import TokenUsage
 from synth_panel.llm.models import (
     CompletionResponse,
     StopReason,
     TextBlock,
-    TokenUsage as LLMTokenUsage,
     ToolInvocationBlock,
+)
+from synth_panel.llm.models import (
+    TokenUsage as LLMTokenUsage,
 )
 from synth_panel.orchestrator import (
     FailureKind,
     InvalidTransitionError,
-    PanelistResult,
-    Worker,
     WorkerNotFoundError,
     WorkerRegistry,
     WorkerStatus,
@@ -30,10 +30,10 @@ from synth_panel.orchestrator import (
 from synth_panel.persistence import ConversationMessage
 from synth_panel.runtime import TurnSummary
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_text_response(text: str = "Hello!", usage: LLMTokenUsage | None = None) -> CompletionResponse:
     return CompletionResponse(
@@ -79,6 +79,7 @@ def _make_mock_client(responses: list[CompletionResponse] | None = None) -> Magi
 # Tests: WorkerStatus transitions
 # ---------------------------------------------------------------------------
 
+
 class TestWorkerStatus:
     def test_all_statuses_defined(self):
         assert len(WorkerStatus) == 6
@@ -121,8 +122,12 @@ class TestWorkerStatus:
             registry.transition(wid, WorkerStatus.RUNNING)
 
     def test_failure_from_any_active_state(self):
-        for start_status in [WorkerStatus.SPAWNING, WorkerStatus.READY_FOR_PROMPT,
-                             WorkerStatus.PROMPT_ACCEPTED, WorkerStatus.RUNNING]:
+        for start_status in [
+            WorkerStatus.SPAWNING,
+            WorkerStatus.READY_FOR_PROMPT,
+            WorkerStatus.PROMPT_ACCEPTED,
+            WorkerStatus.RUNNING,
+        ]:
             registry = WorkerRegistry()
             wid = registry.create_worker("test")
 
@@ -131,7 +136,11 @@ class TestWorkerStatus:
                 WorkerStatus.SPAWNING: [],
                 WorkerStatus.READY_FOR_PROMPT: [WorkerStatus.READY_FOR_PROMPT],
                 WorkerStatus.PROMPT_ACCEPTED: [WorkerStatus.READY_FOR_PROMPT, WorkerStatus.PROMPT_ACCEPTED],
-                WorkerStatus.RUNNING: [WorkerStatus.READY_FOR_PROMPT, WorkerStatus.PROMPT_ACCEPTED, WorkerStatus.RUNNING],
+                WorkerStatus.RUNNING: [
+                    WorkerStatus.READY_FOR_PROMPT,
+                    WorkerStatus.PROMPT_ACCEPTED,
+                    WorkerStatus.RUNNING,
+                ],
             }
             for s in transitions[start_status]:
                 registry.transition(wid, s)
@@ -144,6 +153,7 @@ class TestWorkerStatus:
 # ---------------------------------------------------------------------------
 # Tests: WorkerRegistry
 # ---------------------------------------------------------------------------
+
 
 class TestWorkerRegistry:
     def test_create_and_get(self):
@@ -247,6 +257,7 @@ class TestWorkerRegistry:
 # Tests: Thread safety
 # ---------------------------------------------------------------------------
 
+
 class TestThreadSafety:
     def test_concurrent_creates(self):
         registry = WorkerRegistry()
@@ -297,14 +308,18 @@ class TestThreadSafety:
 # Tests: extract_text helper
 # ---------------------------------------------------------------------------
 
+
 class TestExtractText:
     def test_extracts_text_blocks(self):
         summary = TurnSummary(
             assistant_messages=[
-                ConversationMessage(role="assistant", content=[
-                    {"type": "text", "text": "Hello "},
-                    {"type": "text", "text": "world"},
-                ]),
+                ConversationMessage(
+                    role="assistant",
+                    content=[
+                        {"type": "text", "text": "Hello "},
+                        {"type": "text", "text": "world"},
+                    ],
+                ),
             ],
         )
         assert _extract_text(summary) == "Hello world"
@@ -312,10 +327,13 @@ class TestExtractText:
     def test_ignores_non_text_blocks(self):
         summary = TurnSummary(
             assistant_messages=[
-                ConversationMessage(role="assistant", content=[
-                    {"type": "tool_use", "id": "c1", "name": "search", "input": {}},
-                    {"type": "text", "text": "result"},
-                ]),
+                ConversationMessage(
+                    role="assistant",
+                    content=[
+                        {"type": "tool_use", "id": "c1", "name": "search", "input": {}},
+                        {"type": "text", "text": "result"},
+                    ],
+                ),
             ],
         )
         assert _extract_text(summary) == "result"
@@ -328,6 +346,7 @@ class TestExtractText:
 # ---------------------------------------------------------------------------
 # Tests: run_panel_parallel
 # ---------------------------------------------------------------------------
+
 
 class TestRunPanelParallel:
     def test_single_persona_single_question(self):
@@ -393,7 +412,7 @@ class TestRunPanelParallel:
         personas = [{"name": "Alice"}]
         questions = [{"text": "Main Q", "follow_ups": ["Tell me more"]}]
 
-        results, registry, _sessions = run_panel_parallel(
+        results, _registry, _sessions = run_panel_parallel(
             client=client,
             personas=personas,
             questions=questions,
@@ -446,7 +465,7 @@ class TestRunPanelParallel:
         personas = [{"name": "Alice"}, {"name": "Bob"}]
         questions = [{"text": "Q1"}]
 
-        results, registry, _sessions = run_panel_parallel(
+        results, _registry, _sessions = run_panel_parallel(
             client=client,
             personas=personas,
             questions=questions,
@@ -471,6 +490,7 @@ class TestRunPanelParallel:
                 active["count"] += 1
                 active["peak"] = max(active["peak"], active["count"])
             import time
+
             time.sleep(0.05)  # brief delay to test concurrency
             with lock:
                 active["count"] -= 1
@@ -556,7 +576,8 @@ def _make_tool_response(data: dict, usage: LLMTokenUsage | None = None) -> Compl
 class TestStructuredOutputIntegration:
     def test_structured_output_returns_data_dict(self):
         """When response_schema is provided, responses contain structured data."""
-        from synth_panel.llm.models import CompletionRequest, ToolChoice
+        from synth_panel.llm.models import CompletionRequest
+
         structured_data = {"sentiment": "positive", "summary": "Looks great!"}
 
         def send_side_effect(request):
@@ -571,7 +592,7 @@ class TestStructuredOutputIntegration:
         personas = [{"name": "Alice"}]
         questions = [{"text": "What do you think?"}]
 
-        results, registry, _sessions = run_panel_parallel(
+        results, _registry, _sessions = run_panel_parallel(
             client=client,
             personas=personas,
             questions=questions,
@@ -615,7 +636,7 @@ class TestStructuredOutputIntegration:
         structured_data = {"sentiment": "neutral", "summary": "Interesting"}
 
         def send_side_effect(request):
-            if hasattr(request, 'tool_choice') and request.tool_choice is not None:
+            if hasattr(request, "tool_choice") and request.tool_choice is not None:
                 return _make_tool_response(structured_data)
             return _make_text_response("Some answer")
 
@@ -647,6 +668,7 @@ class TestStructuredOutputIntegration:
 # Tests: Session reuse
 # ---------------------------------------------------------------------------
 
+
 class TestSessionReuse:
     def test_sessions_returned_without_input(self):
         """When no sessions param, fresh sessions are created and returned."""
@@ -654,7 +676,7 @@ class TestSessionReuse:
         personas = [{"name": "Alice"}]
         questions = [{"text": "Hello?"}]
 
-        results, _, sessions = run_panel_parallel(
+        _results, _, sessions = run_panel_parallel(
             client=client,
             personas=personas,
             questions=questions,
@@ -668,7 +690,6 @@ class TestSessionReuse:
 
     def test_session_reuse_preserves_history(self):
         """When a session is passed in, conversation history is preserved."""
-        from synth_panel.persistence import Session
 
         # Round 1: fresh session
         responses_r1 = [_make_text_response("Round 1 answer")]
