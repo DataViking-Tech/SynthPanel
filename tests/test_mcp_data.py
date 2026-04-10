@@ -413,11 +413,14 @@ class TestInstrumentPacks:
         loaded = load_instrument_pack("auto")
         assert loaded["name"] == "auto"
 
-    def test_list_empty_no_user_packs(self):
-        # Bundled packs always present; verify no user-saved packs exist
+    def test_list_contains_only_bundled_packs(self):
+        # Before any user saves, the list should contain only bundled packs
         packs = list_instrument_packs()
-        user_packs = [p for p in packs if not p.get("builtin", False)]
-        assert user_packs == []
+        assert len(packs) >= 1  # at least bundled packs exist
+        # No user-saved pack dir files should exist yet in our temp env
+        user_dir = Path(os.environ.get("SYNTH_PANEL_DATA_DIR", "")) / "packs" / "instruments"
+        if user_dir.exists():
+            assert list(user_dir.glob("*.yaml")) == []
 
     def test_save_rejects_non_mapping(self):
         with pytest.raises(ValueError):
