@@ -3,7 +3,7 @@ name = "synth-panel"
 version = "0.4.0"
 description = "Run synthetic focus groups and user research panels using AI personas. CLI tool, Python library, any LLM."
 requires-python = ">=3.8"
-license = "MIT"
+license = {text = "MIT"}
 authors = [{name = "DataViking", email = "openclaw@dataviking.tech"}]
 readme = "README.md"
 keywords = ["llm", "research", "focus-group", "synthetic", "personas", "user-research", "ai"]
