@@ -950,3 +950,255 @@ class TestExtractionPass:
         resp = results[0].responses[0]
         assert "extraction" not in resp
         assert "extraction_is_fallback" not in resp
+
+
+# ---------------------------------------------------------------------------
+# Tests: Conditional follow-ups (orchestrator wiring)
+# ---------------------------------------------------------------------------
+
+
+class TestConditionalFollowUps:
+    def test_string_follow_ups_backward_compat(self):
+        """Plain string follow-ups normalize to always and execute."""
+        responses = [
+            _make_text_response("Main answer"),
+            _make_text_response("Follow-up answer"),
+        ]
+        client = _make_mock_client(responses)
+        personas = [{"name": "Alice"}]
+        questions = [{"text": "Main Q", "follow_ups": ["Tell me more"]}]
+
+        results, _registry, _sessions = run_panel_parallel(
+            client=client,
+            personas=personas,
+            questions=questions,
+            model="sonnet",
+            system_prompt_fn=_simple_system_prompt,
+            question_prompt_fn=_simple_question_prompt,
+        )
+
+        assert len(results[0].responses) == 2
+        assert results[0].responses[1]["question"] == "Tell me more"
+        assert results[0].responses[1].get("follow_up") is True
+
+    def test_condition_always_fires(self):
+        """Dict follow-up with condition: always fires regardless of response."""
+        responses = [
+            _make_text_response("I disagree completely"),
+            _make_text_response("Follow-up answer"),
+        ]
+        client = _make_mock_client(responses)
+        personas = [{"name": "Alice"}]
+        questions = [
+            {
+                "text": "What do you think?",
+                "follow_ups": [{"text": "Can you elaborate?", "condition": "always"}],
+            }
+        ]
+
+        results, _registry, _sessions = run_panel_parallel(
+            client=client,
+            personas=personas,
+            questions=questions,
+            model="sonnet",
+            system_prompt_fn=_simple_system_prompt,
+            question_prompt_fn=_simple_question_prompt,
+        )
+
+        assert len(results[0].responses) == 2
+        assert results[0].responses[1].get("follow_up") is True
+
+    def test_condition_never_skipped(self):
+        """Follow-up with condition: never is always skipped."""
+        responses = [_make_text_response("Main answer")]
+        client = _make_mock_client(responses)
+        personas = [{"name": "Alice"}]
+        questions = [
+            {
+                "text": "What do you think?",
+                "follow_ups": [{"text": "This should not fire", "condition": "never"}],
+            }
+        ]
+
+        results, _registry, _sessions = run_panel_parallel(
+            client=client,
+            personas=personas,
+            questions=questions,
+            model="sonnet",
+            system_prompt_fn=_simple_system_prompt,
+            question_prompt_fn=_simple_question_prompt,
+        )
+
+        assert len(results[0].responses) == 1
+
+    def test_response_contains_fires_on_match(self):
+        """Follow-up fires when response contains the keyword."""
+        responses = [
+            _make_text_response("Yes, I think so"),
+            _make_text_response("Because reasons"),
+        ]
+        client = _make_mock_client(responses)
+        personas = [{"name": "Alice"}]
+        questions = [
+            {
+                "text": "Do you agree?",
+                "follow_ups": [
+                    {"text": "Why do you agree?", "condition": "response_contains: yes"},
+                ],
+            }
+        ]
+
+        results, _registry, _sessions = run_panel_parallel(
+            client=client,
+            personas=personas,
+            questions=questions,
+            model="sonnet",
+            system_prompt_fn=_simple_system_prompt,
+            question_prompt_fn=_simple_question_prompt,
+        )
+
+        assert len(results[0].responses) == 2
+        assert results[0].responses[1]["question"] == "Why do you agree?"
+
+    def test_response_contains_skipped_on_no_match(self):
+        """Follow-up skipped when response does not contain the keyword."""
+        responses = [_make_text_response("No, I disagree")]
+        client = _make_mock_client(responses)
+        personas = [{"name": "Alice"}]
+        questions = [
+            {
+                "text": "Do you agree?",
+                "follow_ups": [
+                    {"text": "Why do you agree?", "condition": "response_contains: yes"},
+                ],
+            }
+        ]
+
+        results, _registry, _sessions = run_panel_parallel(
+            client=client,
+            personas=personas,
+            questions=questions,
+            model="sonnet",
+            system_prompt_fn=_simple_system_prompt,
+            question_prompt_fn=_simple_question_prompt,
+        )
+
+        assert len(results[0].responses) == 1
+
+    def test_dict_follow_up_without_condition_defaults_always(self):
+        """Dict follow-up missing condition key defaults to always."""
+        responses = [
+            _make_text_response("Main answer"),
+            _make_text_response("Follow-up answer"),
+        ]
+        client = _make_mock_client(responses)
+        personas = [{"name": "Alice"}]
+        questions = [
+            {
+                "text": "Question",
+                "follow_ups": [{"text": "Follow up without condition"}],
+            }
+        ]
+
+        results, _registry, _sessions = run_panel_parallel(
+            client=client,
+            personas=personas,
+            questions=questions,
+            model="sonnet",
+            system_prompt_fn=_simple_system_prompt,
+            question_prompt_fn=_simple_question_prompt,
+        )
+
+        assert len(results[0].responses) == 2
+        assert results[0].responses[1].get("follow_up") is True
+
+    def test_mixed_conditions_instrument(self):
+        """Integration: instrument with mixed condition types across questions."""
+        responses = [
+            _make_text_response("I love using automated tools for testing"),  # Q1
+            _make_text_response("I use pytest mostly"),  # Q1 follow-up (always)
+            _make_text_response("Selenium and Cypress"),  # Q1 follow-up (contains: tools) fires
+            # Q1 follow-up (contains: hate) skipped — not in response
+            # Q1 follow-up (never) skipped
+            _make_text_response("No, efficiency is fine"),  # Q2
+            # Q2 follow-up (never) skipped
+        ]
+        client = _make_mock_client(responses)
+        personas = [{"name": "Tester"}]
+        questions = [
+            {
+                "text": "What's your testing workflow?",
+                "follow_ups": [
+                    {"text": "What frameworks?", "condition": "always"},
+                    {"text": "Which tools?", "condition": "response_contains: tools"},
+                    {"text": "What do you hate?", "condition": "response_contains: hate"},
+                    {"text": "This never fires", "condition": "never"},
+                ],
+            },
+            {
+                "text": "Is there waste in your process?",
+                "follow_ups": [
+                    {"text": "Skipped always", "condition": "never"},
+                ],
+            },
+        ]
+
+        results, _registry, _sessions = run_panel_parallel(
+            client=client,
+            personas=personas,
+            questions=questions,
+            model="sonnet",
+            system_prompt_fn=_simple_system_prompt,
+            question_prompt_fn=_simple_question_prompt,
+        )
+
+        resp = results[0].responses
+        # Q1 main + 2 follow-ups (always + tools match) + Q2 main = 4
+        assert len(resp) == 4
+        assert resp[0]["question"] == "What's your testing workflow?"
+        assert resp[1]["question"] == "What frameworks?"
+        assert resp[1].get("follow_up") is True
+        assert resp[2]["question"] == "Which tools?"
+        assert resp[2].get("follow_up") is True
+        assert resp[3]["question"] == "Is there waste in your process?"
+
+    def test_structured_mode_with_conditional_follow_ups(self):
+        """Follow-ups use text mode and evaluate conditions against serialized structured response."""
+        structured_data = {"sentiment": "positive", "summary": "Looks great!"}
+
+        def send_side_effect(request):
+            if hasattr(request, "tool_choice") and request.tool_choice is not None:
+                return _make_tool_response(structured_data)
+            return _make_text_response("Follow-up answer")
+
+        client = MagicMock()
+        client.send = MagicMock(side_effect=send_side_effect)
+
+        personas = [{"name": "Dana"}]
+        questions = [
+            {
+                "text": "Rate this",
+                "follow_ups": [
+                    {"text": "Why positive?", "condition": "response_contains: positive"},
+                    {"text": "Why negative?", "condition": "response_contains: terrible"},
+                ],
+            }
+        ]
+
+        results, _registry, _sessions = run_panel_parallel(
+            client=client,
+            personas=personas,
+            questions=questions,
+            model="sonnet",
+            system_prompt_fn=_simple_system_prompt,
+            question_prompt_fn=_simple_question_prompt,
+            response_schema=_SENTIMENT_SCHEMA,
+        )
+
+        responses = results[0].responses
+        assert responses[0].get("structured") is True
+        # Structured response serialized contains "positive" → first follow-up fires
+        # "terrible" is not in the serialized response → second follow-up skipped
+        assert len(responses) == 2
+        assert responses[1].get("follow_up") is True
+        assert responses[1]["question"] == "Why positive?"
