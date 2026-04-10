@@ -2,22 +2,19 @@
 
 from __future__ import annotations
 
-import io
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from synth_panel.cli.output import OutputFormat
-from synth_panel.cli.repl import SessionState, run_repl, _extract_response_text
+from synth_panel.cli.repl import SessionState, _extract_response_text, run_repl
 from synth_panel.cli.slash import _cmd_compact, dispatch_slash
-from synth_panel.cost import ZERO_USAGE, TokenUsage
+from synth_panel.cost import TokenUsage
 from synth_panel.persistence import ConversationMessage, Session
 from synth_panel.runtime import AgentRuntime, TurnSummary
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_turn_summary(text: str = "Hello!", compacted: bool = False) -> TurnSummary:
     usage = TokenUsage(input_tokens=10, output_tokens=20)
@@ -46,6 +43,7 @@ def _make_state_with_runtime() -> SessionState:
 # SessionState tests
 # ---------------------------------------------------------------------------
 
+
 class TestSessionState:
     def test_has_runtime_slot(self):
         state = SessionState()
@@ -60,6 +58,7 @@ class TestSessionState:
 # ---------------------------------------------------------------------------
 # _extract_response_text tests
 # ---------------------------------------------------------------------------
+
 
 class TestExtractResponseText:
     def test_single_text_block(self):
@@ -105,6 +104,7 @@ class TestExtractResponseText:
 # REPL wiring tests
 # ---------------------------------------------------------------------------
 
+
 class TestReplWiring:
     @patch("synth_panel.cli.repl.AgentRuntime")
     @patch("synth_panel.cli.repl.LLMClient")
@@ -115,6 +115,7 @@ class TestReplWiring:
         mock_runtime_cls.return_value = mock_runtime
 
         import argparse
+
         args = argparse.Namespace(model="sonnet")
         code = run_repl(args, OutputFormat.TEXT)
 
@@ -132,6 +133,7 @@ class TestReplWiring:
         mock_runtime_cls.return_value = mock_runtime
 
         import argparse
+
         args = argparse.Namespace(model=None)
         run_repl(args, OutputFormat.TEXT)
 
@@ -148,6 +150,7 @@ class TestReplWiring:
         mock_runtime_cls.return_value = mock_runtime
 
         import argparse
+
         args = argparse.Namespace(model="sonnet")
         code = run_repl(args, OutputFormat.TEXT)
 
@@ -164,6 +167,7 @@ class TestReplWiring:
         mock_runtime_cls.return_value = mock_runtime
 
         import argparse
+
         args = argparse.Namespace(model="sonnet")
         # We can't easily check state from outside, but verify run_turn called twice
         run_repl(args, OutputFormat.TEXT)
@@ -178,6 +182,7 @@ class TestReplWiring:
         mock_runtime_cls.return_value = mock_runtime
 
         import argparse
+
         args = argparse.Namespace(model="sonnet")
         # Run repl — it should increment compacted_count internally
         run_repl(args, OutputFormat.TEXT)
@@ -188,6 +193,7 @@ class TestReplWiring:
 # ---------------------------------------------------------------------------
 # /compact slash command tests
 # ---------------------------------------------------------------------------
+
 
 class TestCompactCommand:
     def test_compact_no_runtime(self, capsys):
@@ -208,10 +214,12 @@ class TestCompactCommand:
         session = state.runtime.session
         # Add several messages
         for i in range(5):
-            session.push_message(ConversationMessage(
-                role="user" if i % 2 == 0 else "assistant",
-                content=[{"type": "text", "text": f"Message {i}"}],
-            ))
+            session.push_message(
+                ConversationMessage(
+                    role="user" if i % 2 == 0 else "assistant",
+                    content=[{"type": "text", "text": f"Message {i}"}],
+                )
+            )
         assert len(session.messages) == 5
 
         _cmd_compact(state, [], OutputFormat.TEXT)
@@ -226,10 +234,12 @@ class TestCompactCommand:
         state = _make_state_with_runtime()
         session = state.runtime.session
         for i in range(4):
-            session.push_message(ConversationMessage(
-                role="user" if i % 2 == 0 else "assistant",
-                content=[{"type": "text", "text": f"Msg {i}"}],
-            ))
+            session.push_message(
+                ConversationMessage(
+                    role="user" if i % 2 == 0 else "assistant",
+                    content=[{"type": "text", "text": f"Msg {i}"}],
+                )
+            )
 
         dispatch_slash("/compact", state, OutputFormat.TEXT)
         out = capsys.readouterr().out

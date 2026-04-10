@@ -17,20 +17,21 @@ from synth_panel.llm.models import (
     CompletionRequest,
     CompletionResponse,
     InputMessage,
-    StopReason,
     TextBlock,
     ToolChoice,
     ToolDefinition,
     ToolInvocationBlock,
     ToolResultBlock,
+)
+from synth_panel.llm.models import (
     TokenUsage as LLMTokenUsage,
 )
 from synth_panel.persistence import ConversationMessage, Session
 
-
 # ---------------------------------------------------------------------------
 # Errors
 # ---------------------------------------------------------------------------
+
 
 class RuntimeError_(Exception):
     """Base error for the agent runtime."""
@@ -48,6 +49,7 @@ class IterationLimitError(RuntimeError_):
 # Tool executor protocol
 # ---------------------------------------------------------------------------
 
+
 @runtime_checkable
 class ToolExecutor(Protocol):
     """Any component that can execute a tool by name."""
@@ -58,6 +60,7 @@ class ToolExecutor(Protocol):
 # ---------------------------------------------------------------------------
 # Permission policy
 # ---------------------------------------------------------------------------
+
 
 class PermissionDecision(Enum):
     ALLOW = "allow"
@@ -82,6 +85,7 @@ class AllowAllPolicy:
 # Hook runner
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class HookResult:
     """Result of running a hook chain."""
@@ -95,9 +99,7 @@ class HookResult:
 class HookRunner(Protocol):
     """Pre- and post-tool-use hook interceptor."""
 
-    def run_pre_tool_use(
-        self, tool_name: str, tool_input: dict[str, Any]
-    ) -> HookResult: ...
+    def run_pre_tool_use(self, tool_name: str, tool_input: dict[str, Any]) -> HookResult: ...
 
     def run_post_tool_use(
         self,
@@ -111,9 +113,7 @@ class HookRunner(Protocol):
 class NoOpHookRunner:
     """Default hook runner that does nothing."""
 
-    def run_pre_tool_use(
-        self, tool_name: str, tool_input: dict[str, Any]
-    ) -> HookResult:
+    def run_pre_tool_use(self, tool_name: str, tool_input: dict[str, Any]) -> HookResult:
         return HookResult()
 
     def run_post_tool_use(
@@ -130,6 +130,7 @@ class NoOpHookRunner:
 # Turn summary
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class TurnSummary:
     """Result of a complete conversational turn."""
@@ -145,6 +146,7 @@ class TurnSummary:
 # Usage conversion
 # ---------------------------------------------------------------------------
 
+
 def _convert_usage(llm_usage: LLMTokenUsage) -> TokenUsage:
     """Convert LLM-layer TokenUsage to cost-layer TokenUsage."""
     return TokenUsage(
@@ -159,6 +161,7 @@ def _convert_usage(llm_usage: LLMTokenUsage) -> TokenUsage:
 # Message conversion helpers
 # ---------------------------------------------------------------------------
 
+
 def _session_messages_to_input(messages: list[ConversationMessage]) -> list[InputMessage]:
     """Convert persistence messages to LLM input messages.
 
@@ -172,16 +175,21 @@ def _session_messages_to_input(messages: list[ConversationMessage]) -> list[Inpu
             continue
         if msg.role == "tool":
             # Tool results are sent as user-role messages per API convention
-            result.append(InputMessage(role="user", content=[
-                ToolResultBlock(
-                    tool_use_id=block.get("tool_use_id", ""),
-                    content=[TextBlock(text=block.get("text", ""))],
-                    is_error=block.get("is_error", False),
+            result.append(
+                InputMessage(
+                    role="user",
+                    content=[
+                        ToolResultBlock(
+                            tool_use_id=block.get("tool_use_id", ""),
+                            content=[TextBlock(text=block.get("text", ""))],
+                            is_error=block.get("is_error", False),
+                        )
+                        if block.get("type") == "tool_result"
+                        else TextBlock(text=block.get("text", ""))
+                        for block in msg.content
+                    ],
                 )
-                if block.get("type") == "tool_result"
-                else TextBlock(text=block.get("text", ""))
-                for block in msg.content
-            ]))
+            )
         elif msg.role in ("user", "assistant"):
             content_blocks = []
             for block in msg.content:
@@ -189,17 +197,21 @@ def _session_messages_to_input(messages: list[ConversationMessage]) -> list[Inpu
                 if btype == "text":
                     content_blocks.append(TextBlock(text=block.get("text", "")))
                 elif btype == "tool_use":
-                    content_blocks.append(ToolInvocationBlock(
-                        id=block.get("id", ""),
-                        name=block.get("name", ""),
-                        input=block.get("input", {}),
-                    ))
+                    content_blocks.append(
+                        ToolInvocationBlock(
+                            id=block.get("id", ""),
+                            name=block.get("name", ""),
+                            input=block.get("input", {}),
+                        )
+                    )
                 elif btype == "tool_result":
-                    content_blocks.append(ToolResultBlock(
-                        tool_use_id=block.get("tool_use_id", ""),
-                        content=[TextBlock(text=block.get("text", ""))],
-                        is_error=block.get("is_error", False),
-                    ))
+                    content_blocks.append(
+                        ToolResultBlock(
+                            tool_use_id=block.get("tool_use_id", ""),
+                            content=[TextBlock(text=block.get("text", ""))],
+                            is_error=block.get("is_error", False),
+                        )
+                    )
             result.append(InputMessage(role=msg.role, content=content_blocks))
     return result
 
@@ -214,12 +226,14 @@ def _response_to_conversation_message(
         if isinstance(block, TextBlock):
             content.append({"type": "text", "text": block.text})
         elif isinstance(block, ToolInvocationBlock):
-            content.append({
-                "type": "tool_use",
-                "id": block.id,
-                "name": block.name,
-                "input": block.input,
-            })
+            content.append(
+                {
+                    "type": "tool_use",
+                    "id": block.id,
+                    "name": block.name,
+                    "input": block.input,
+                }
+            )
     return ConversationMessage(role="assistant", content=content, usage=usage)
 
 
@@ -231,12 +245,14 @@ def _tool_result_message(
     """Create a tool result conversation message."""
     return ConversationMessage(
         role="tool",
-        content=[{
-            "type": "tool_result",
-            "tool_use_id": tool_use_id,
-            "text": output,
-            "is_error": is_error,
-        }],
+        content=[
+            {
+                "type": "tool_result",
+                "tool_use_id": tool_use_id,
+                "text": output,
+                "is_error": is_error,
+            }
+        ],
     )
 
 
@@ -379,9 +395,7 @@ class AgentRuntime:
         assert self._tool_executor is not None
 
         # 7a. Pre-tool-use hooks
-        pre_result = self._hook_runner.run_pre_tool_use(
-            tool_call.name, tool_call.input
-        )
+        pre_result = self._hook_runner.run_pre_tool_use(tool_call.name, tool_call.input)
         if pre_result.denied:
             reason = "; ".join(pre_result.messages) if pre_result.messages else "Denied by hook"
             return _tool_result_message(tool_call.id, reason, is_error=True)
@@ -407,9 +421,7 @@ class AgentRuntime:
             is_error = True
 
         # 7d. Post-tool-use hooks
-        self._hook_runner.run_post_tool_use(
-            tool_call.name, tool_call.input, output, is_error
-        )
+        self._hook_runner.run_post_tool_use(tool_call.name, tool_call.input, output, is_error)
 
         # 7e. Push tool result
         return _tool_result_message(tool_call.id, output, is_error=is_error)
@@ -428,8 +440,5 @@ class AgentRuntime:
                     text = block.get("text", "")
                     if text:
                         summary_parts.append(f"[{role}]: {text[:200]}")
-        summary_text = (
-            "Compacted conversation summary:\n"
-            + "\n".join(summary_parts[:20])
-        )
+        summary_text = "Compacted conversation summary:\n" + "\n".join(summary_parts[:20])
         self._session.compact(summary_text, keep_last=2)

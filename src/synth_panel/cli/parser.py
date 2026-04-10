@@ -237,9 +237,7 @@ def build_parser() -> argparse.ArgumentParser:
         "instruments",
         help="Instrument pack management: list, install, show, graph.",
     )
-    instruments_subparsers = instruments_parser.add_subparsers(
-        dest="instruments_command"
-    )
+    instruments_subparsers = instruments_parser.add_subparsers(dest="instruments_command")
 
     instruments_subparsers.add_parser(
         "list",

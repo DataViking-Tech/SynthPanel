@@ -9,17 +9,15 @@ The primary pattern:
 
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from synth_panel.llm.client import LLMClient
-from synth_panel.llm.errors import LLMError, LLMErrorCategory
+from synth_panel.llm.errors import LLMError
 from synth_panel.llm.models import (
     CompletionRequest,
     CompletionResponse,
     InputMessage,
-    TextBlock,
     ToolChoice,
     ToolDefinition,
     ToolInvocationBlock,
@@ -32,6 +30,7 @@ _DEFAULT_RETRY_LIMIT = 2
 @dataclass
 class StructuredOutputConfig:
     """Configuration for structured output extraction."""
+
     schema: dict[str, Any]
     tool_name: str = _DEFAULT_TOOL_NAME
     tool_description: str | None = None
@@ -42,6 +41,7 @@ class StructuredOutputConfig:
 @dataclass
 class StructuredResult:
     """Result of a structured output extraction."""
+
     data: dict[str, Any]
     response: CompletionResponse
     retries_used: int = 0
@@ -87,12 +87,14 @@ class StructuredOutputEngine:
         """Run a completion with tool-use forcing and extract structured data."""
         if not config.enabled:
             # Structured output disabled — do a plain completion
-            response = self._client.send(CompletionRequest(
-                model=model,
-                max_tokens=max_tokens,
-                messages=messages,
-                system=system,
-            ))
+            response = self._client.send(
+                CompletionRequest(
+                    model=model,
+                    max_tokens=max_tokens,
+                    messages=messages,
+                    system=system,
+                )
+            )
             return StructuredResult(data={}, response=response)
 
         tool_def = ToolDefinition(
@@ -127,10 +129,7 @@ class StructuredOutputEngine:
                 )
 
             # No valid tool call found — retry
-            last_error = (
-                f"Attempt {attempt + 1}: LLM did not produce a valid "
-                f"'{config.tool_name}' tool call"
-            )
+            last_error = f"Attempt {attempt + 1}: LLM did not produce a valid '{config.tool_name}' tool call"
 
         # All retries exhausted — return fallback
         return StructuredResult(
@@ -148,7 +147,6 @@ def _extract_tool_data(
 ) -> dict[str, Any] | None:
     """Extract structured data from the first matching tool invocation."""
     for block in response.content:
-        if isinstance(block, ToolInvocationBlock) and block.name == tool_name:
-            if isinstance(block.input, dict):
-                return block.input
+        if isinstance(block, ToolInvocationBlock) and block.name == tool_name and isinstance(block.input, dict):
+            return block.input
     return None

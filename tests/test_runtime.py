@@ -7,14 +7,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from synth_panel.cost import ZERO_USAGE, TokenUsage, UsageTracker
 from synth_panel.llm.models import (
-    CompletionRequest,
     CompletionResponse,
     StopReason,
     TextBlock,
     ToolDefinition,
     ToolInvocationBlock,
+)
+from synth_panel.llm.models import (
     TokenUsage as LLMTokenUsage,
 )
 from synth_panel.persistence import ConversationMessage, Session
@@ -25,14 +25,13 @@ from synth_panel.runtime import (
     IterationLimitError,
     NoOpHookRunner,
     PermissionDecision,
-    TurnSummary,
     _convert_usage,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_text_response(
     text: str = "Hello!",
@@ -56,11 +55,13 @@ def _make_tool_response(
     return CompletionResponse(
         id="resp-2",
         model="claude-sonnet",
-        content=[ToolInvocationBlock(
-            id=tool_id,
-            name=tool_name,
-            input=tool_input or {"query": "test"},
-        )],
+        content=[
+            ToolInvocationBlock(
+                id=tool_id,
+                name=tool_name,
+                input=tool_input or {"query": "test"},
+            )
+        ],
         stop_reason=StopReason.TOOL_USE,
         usage=usage or LLMTokenUsage(input_tokens=15, output_tokens=8),
     )
@@ -102,9 +103,7 @@ class DenyPolicy:
 class DenyHookRunner:
     """Hook runner that denies in pre-tool-use."""
 
-    def run_pre_tool_use(
-        self, tool_name: str, tool_input: dict[str, Any]
-    ) -> HookResult:
+    def run_pre_tool_use(self, tool_name: str, tool_input: dict[str, Any]) -> HookResult:
         return HookResult(denied=True, messages=["Blocked by policy"])
 
     def run_post_tool_use(
@@ -120,9 +119,7 @@ class DenyHookRunner:
 class FailHookRunner:
     """Hook runner that fails in pre-tool-use."""
 
-    def run_pre_tool_use(
-        self, tool_name: str, tool_input: dict[str, Any]
-    ) -> HookResult:
+    def run_pre_tool_use(self, tool_name: str, tool_input: dict[str, Any]) -> HookResult:
         return HookResult(failed=True, messages=["Hook crashed"])
 
     def run_post_tool_use(
@@ -167,6 +164,7 @@ def _make_runtime(
 # Tests: basic turn
 # ---------------------------------------------------------------------------
 
+
 class TestBasicTurn:
     def test_simple_text_response(self):
         runtime = _make_runtime([_make_text_response("Hello world")])
@@ -206,10 +204,12 @@ class TestBasicTurn:
     def test_multiple_turns_accumulate_usage(self):
         usage1 = LLMTokenUsage(input_tokens=100, output_tokens=50)
         usage2 = LLMTokenUsage(input_tokens=200, output_tokens=75)
-        runtime = _make_runtime([
-            _make_text_response("r1", usage=usage1),
-            _make_text_response("r2", usage=usage2),
-        ])
+        runtime = _make_runtime(
+            [
+                _make_text_response("r1", usage=usage1),
+                _make_text_response("r2", usage=usage2),
+            ]
+        )
         runtime.run_turn("Turn 1")
         runtime.run_turn("Turn 2")
 
@@ -221,6 +221,7 @@ class TestBasicTurn:
 # ---------------------------------------------------------------------------
 # Tests: tool execution
 # ---------------------------------------------------------------------------
+
 
 class TestToolExecution:
     def test_tool_call_and_response_loop(self):
@@ -312,6 +313,7 @@ class TestToolExecution:
 # Tests: iteration limit
 # ---------------------------------------------------------------------------
 
+
 class TestIterationLimit:
     def test_iteration_limit_exceeded(self):
         executor = FakeToolExecutor()
@@ -330,6 +332,7 @@ class TestIterationLimit:
 # ---------------------------------------------------------------------------
 # Tests: permission policy
 # ---------------------------------------------------------------------------
+
 
 class TestPermissionPolicy:
     def test_deny_policy_blocks_tool(self):
@@ -357,6 +360,7 @@ class TestPermissionPolicy:
 # ---------------------------------------------------------------------------
 # Tests: hooks
 # ---------------------------------------------------------------------------
+
 
 class TestHooks:
     def test_pre_hook_deny_blocks_tool(self):
@@ -403,6 +407,7 @@ class TestHooks:
 # Tests: auto-compaction
 # ---------------------------------------------------------------------------
 
+
 class TestAutoCompaction:
     def test_compaction_triggered(self):
         # Use a very low threshold
@@ -413,14 +418,18 @@ class TestAutoCompaction:
         )
         # Add some messages to the session so there's something to compact
         for i in range(5):
-            runtime.session.push_message(ConversationMessage(
-                role="user",
-                content=[{"type": "text", "text": f"msg {i}"}],
-            ))
-            runtime.session.push_message(ConversationMessage(
-                role="assistant",
-                content=[{"type": "text", "text": f"reply {i}"}],
-            ))
+            runtime.session.push_message(
+                ConversationMessage(
+                    role="user",
+                    content=[{"type": "text", "text": f"msg {i}"}],
+                )
+            )
+            runtime.session.push_message(
+                ConversationMessage(
+                    role="assistant",
+                    content=[{"type": "text", "text": f"reply {i}"}],
+                )
+            )
 
         summary = runtime.run_turn("Trigger compaction")
         assert summary.compacted is True
@@ -441,6 +450,7 @@ class TestAutoCompaction:
 # Tests: usage conversion
 # ---------------------------------------------------------------------------
 
+
 class TestUsageConversion:
     def test_convert_usage(self):
         llm_usage = LLMTokenUsage(
@@ -460,12 +470,15 @@ class TestUsageConversion:
 # Tests: session state
 # ---------------------------------------------------------------------------
 
+
 class TestSessionState:
     def test_session_grows_with_turns(self):
-        runtime = _make_runtime([
-            _make_text_response("r1"),
-            _make_text_response("r2"),
-        ])
+        runtime = _make_runtime(
+            [
+                _make_text_response("r1"),
+                _make_text_response("r2"),
+            ]
+        )
         runtime.run_turn("Turn 1")
         assert len(runtime.session.messages) == 2  # user + assistant
 

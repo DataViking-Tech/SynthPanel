@@ -1,4 +1,5 @@
 from synth_panel.llm.client import LLMClient
+from synth_panel.llm.errors import LLMError, LLMErrorCategory
 from synth_panel.llm.models import (
     CompletionRequest,
     CompletionResponse,
@@ -11,14 +12,13 @@ from synth_panel.llm.models import (
     ToolInvocationBlock,
     ToolResultBlock,
 )
-from synth_panel.llm.errors import LLMError, LLMErrorCategory
 
 __all__ = [
-    "LLMClient",
     "CompletionRequest",
     "CompletionResponse",
     "ContentBlock",
     "InputMessage",
+    "LLMClient",
     "LLMError",
     "LLMErrorCategory",
     "StreamEvent",

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 import time
-from typing import Iterator
+from collections.abc import Iterator
 
 from synth_panel.llm.aliases import resolve_alias
 from synth_panel.llm.errors import LLMError, LLMErrorCategory
@@ -24,8 +24,8 @@ _PROVIDER_REGISTRY: list[tuple[ProviderConfig, type[LLMProvider]]] = [
 ]
 
 # Default retry policy (SPEC.md §2 — Retry policy).
-_DEFAULT_INITIAL_BACKOFF = 0.2   # 200ms
-_DEFAULT_MAX_BACKOFF = 2.0       # 2s
+_DEFAULT_INITIAL_BACKOFF = 0.2  # 200ms
+_DEFAULT_MAX_BACKOFF = 2.0  # 2s
 _DEFAULT_MAX_RETRIES = 2
 
 
@@ -75,8 +75,7 @@ class LLMClient:
                 return provider
 
         raise LLMError(
-            "No LLM provider credentials found. "
-            "Set ANTHROPIC_API_KEY, GEMINI_API_KEY, XAI_API_KEY, or OPENAI_API_KEY.",
+            "No LLM provider credentials found. Set ANTHROPIC_API_KEY, GEMINI_API_KEY, XAI_API_KEY, or OPENAI_API_KEY.",
             LLMErrorCategory.MISSING_CREDENTIALS,
         )
 

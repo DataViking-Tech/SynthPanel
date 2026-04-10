@@ -12,7 +12,6 @@ from synth_panel.llm.models import (
 from synth_panel.structured.output import (
     StructuredOutputConfig,
     StructuredOutputEngine,
-    StructuredResult,
 )
 
 _SENTIMENT_SCHEMA = {
@@ -53,10 +52,12 @@ class TestStructuredOutputEngine:
     def test_successful_extraction(self):
         """Happy path: LLM responds with valid tool call on first try."""
         mock_client = MagicMock()
-        mock_client.send.return_value = _make_response_with_tool({
-            "sentiment": "positive",
-            "summary": "Great product!",
-        })
+        mock_client.send.return_value = _make_response_with_tool(
+            {
+                "sentiment": "positive",
+                "summary": "Great product!",
+            }
+        )
 
         engine = StructuredOutputEngine(mock_client)
         config = StructuredOutputConfig(schema=_SENTIMENT_SCHEMA)
@@ -83,10 +84,12 @@ class TestStructuredOutputEngine:
         mock_client = MagicMock()
         mock_client.send.side_effect = [
             _make_text_response(),  # Attempt 1: no tool call
-            _make_response_with_tool({  # Attempt 2: valid
-                "sentiment": "neutral",
-                "summary": "OK",
-            }),
+            _make_response_with_tool(
+                {  # Attempt 2: valid
+                    "sentiment": "neutral",
+                    "summary": "OK",
+                }
+            ),
         ]
 
         engine = StructuredOutputEngine(mock_client)

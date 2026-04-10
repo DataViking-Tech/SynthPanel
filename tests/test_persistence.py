@@ -4,16 +4,12 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
-from typing import Optional
 
 import pytest
 
 from synth_panel.cost import TokenUsage
 from synth_panel.persistence import (
     ConversationMessage,
-    CompactionMeta,
-    ForkMeta,
     Session,
     SessionFormatError,
     SessionIOError,
@@ -23,10 +19,10 @@ from synth_panel.persistence import (
     save_session,
 )
 
-
 # --- Helpers ---------------------------------------------------------------
 
-def _text_msg(role: str, text: str, usage: Optional[TokenUsage] = None):
+
+def _text_msg(role: str, text: str, usage: TokenUsage | None = None):
     return ConversationMessage(
         role=role,
         content=[{"type": "text", "text": text}],
@@ -102,13 +98,9 @@ class TestSession:
     def test_iter_usages(self):
         s = Session()
         s.push_message(_text_msg("user", "q"))
-        s.push_message(
-            _text_msg("assistant", "a", usage=TokenUsage(10, 20, 0, 0))
-        )
+        s.push_message(_text_msg("assistant", "a", usage=TokenUsage(10, 20, 0, 0)))
         s.push_message(_text_msg("user", "q2"))
-        s.push_message(
-            _text_msg("assistant", "a2", usage=TokenUsage(5, 15, 0, 0))
-        )
+        s.push_message(_text_msg("assistant", "a2", usage=TokenUsage(5, 15, 0, 0)))
         usages = s.iter_usages()
         assert len(usages) == 2
         assert usages[0].input_tokens == 10
@@ -121,9 +113,7 @@ class TestJsonSerialisation:
     def test_roundtrip(self, tmp_path):
         s = Session()
         s.push_message(_text_msg("user", "hello"))
-        s.push_message(
-            _text_msg("assistant", "hi", usage=TokenUsage(5, 10, 0, 0))
-        )
+        s.push_message(_text_msg("assistant", "hi", usage=TokenUsage(5, 10, 0, 0)))
         path = tmp_path / "session.json"
         save_session(s, path, fmt="json")
         loaded = load_session(path)
@@ -159,9 +149,7 @@ class TestJsonlSerialisation:
     def test_roundtrip(self, tmp_path):
         s = Session()
         s.push_message(_text_msg("user", "q"))
-        s.push_message(
-            _text_msg("assistant", "a", usage=TokenUsage(1, 2, 3, 4))
-        )
+        s.push_message(_text_msg("assistant", "a", usage=TokenUsage(1, 2, 3, 4)))
         path = tmp_path / "session.jsonl"
         save_session(s, path, fmt="jsonl")
         loaded = load_session(path)
@@ -188,19 +176,19 @@ class TestJsonlSerialisation:
             Session.from_jsonl("")
 
     def test_missing_meta(self):
-        line = json.dumps(
-            {"type": "message", "role": "user", "content": []}
-        )
+        line = json.dumps({"type": "message", "role": "user", "content": []})
         with pytest.raises(SessionFormatError, match="Missing session_meta"):
             Session.from_jsonl(line)
 
     def test_unknown_record_type(self):
-        meta = json.dumps({
-            "type": "session_meta",
-            "session_id": "x",
-            "created_at": "t",
-            "updated_at": "t",
-        })
+        meta = json.dumps(
+            {
+                "type": "session_meta",
+                "session_id": "x",
+                "created_at": "t",
+                "updated_at": "t",
+            }
+        )
         bad = json.dumps({"type": "alien"})
         with pytest.raises(SessionFormatError, match="Unknown record type"):
             Session.from_jsonl(meta + "\n" + bad)
@@ -272,7 +260,7 @@ class TestFileRotation:
     def test_max_rotations(self, tmp_path):
         path = tmp_path / "rot.json"
         sessions = []
-        for i in range(5):
+        for _i in range(5):
             s = Session()
             s.push_message(_text_msg("user", f"{'z' * 300}"))
             sessions.append(s)
@@ -317,9 +305,7 @@ class TestSessionStore:
         store = SessionStore(tmp_path / "store")
         s = Session()
         s.push_message(_text_msg("user", "hello"))
-        s.push_message(
-            _text_msg("assistant", "hi", usage=TokenUsage(10, 20, 0, 0))
-        )
+        s.push_message(_text_msg("assistant", "hi", usage=TokenUsage(10, 20, 0, 0)))
         store.save(s)
         data = store.load(s.session_id)
         assert data["session_id"] == s.session_id

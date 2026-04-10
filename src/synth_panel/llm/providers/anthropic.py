@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Iterator
+from collections.abc import Iterator
+from typing import Any
 
 import httpx
 
@@ -51,20 +52,24 @@ def _build_content_blocks(blocks: list[ContentBlock]) -> list[dict[str, Any]]:
         if isinstance(b, TextBlock):
             out.append({"type": "text", "text": b.text})
         elif isinstance(b, ToolInvocationBlock):
-            out.append({
-                "type": "tool_use",
-                "id": b.id,
-                "name": b.name,
-                "input": b.input,
-            })
+            out.append(
+                {
+                    "type": "tool_use",
+                    "id": b.id,
+                    "name": b.name,
+                    "input": b.input,
+                }
+            )
         elif hasattr(b, "tool_use_id"):  # ToolResultBlock
             content = [{"type": "text", "text": c.text} for c in b.content]
-            out.append({
-                "type": "tool_result",
-                "tool_use_id": b.tool_use_id,
-                "content": content,
-                "is_error": b.is_error,
-            })
+            out.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": b.tool_use_id,
+                    "content": content,
+                    "is_error": b.is_error,
+                }
+            )
     return out
 
 
@@ -72,10 +77,12 @@ def _build_messages(request: CompletionRequest) -> list[dict[str, Any]]:
     """Convert InputMessages to Anthropic API format."""
     result = []
     for msg in request.messages:
-        result.append({
-            "role": msg.role,
-            "content": _build_content_blocks(msg.content),
-        })
+        result.append(
+            {
+                "role": msg.role,
+                "content": _build_content_blocks(msg.content),
+            }
+        )
     return result
 
 

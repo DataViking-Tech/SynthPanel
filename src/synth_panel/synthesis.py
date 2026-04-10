@@ -12,9 +12,9 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from synth_panel.cost import (
+    ZERO_USAGE,
     CostEstimate,
     TokenUsage,
-    ZERO_USAGE,
     estimate_cost,
     lookup_pricing,
 )

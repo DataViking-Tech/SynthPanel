@@ -40,8 +40,7 @@ def emit(
         print(message, file=out)
         if usage:
             print(
-                f"  tokens: input={usage.get('input_tokens', 0)} "
-                f"output={usage.get('output_tokens', 0)}",
+                f"  tokens: input={usage.get('input_tokens', 0)} output={usage.get('output_tokens', 0)}",
                 file=out,
             )
     elif fmt is OutputFormat.JSON:

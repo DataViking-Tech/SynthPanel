@@ -6,7 +6,8 @@ Used by both the xAI provider and the generic OpenAI-compatible provider.
 from __future__ import annotations
 
 import json
-from typing import Any, Iterator
+from collections.abc import Iterator
+from typing import Any
 
 from synth_panel.llm.models import (
     CompletionRequest,
@@ -21,10 +22,10 @@ from synth_panel.llm.models import (
     ToolInvocationBlock,
 )
 
-
 # ---------------------------------------------------------------------------
 # Request building
 # ---------------------------------------------------------------------------
+
 
 def _content_to_openai(blocks: list[ContentBlock]) -> str | list[dict[str, Any]]:
     """Serialize content blocks to OpenAI message content format."""
@@ -78,18 +79,18 @@ def build_openai_body(
             ]
         else:
             # Check for tool result blocks
-            tool_results = [
-                b for b in msg.content if hasattr(b, "tool_use_id")
-            ]
+            tool_results = [b for b in msg.content if hasattr(b, "tool_use_id")]
             if tool_results:
                 # OpenAI uses role=tool for tool results
                 for tr in tool_results:
                     content_text = " ".join(c.text for c in tr.content)
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tr.tool_use_id,
-                        "content": content_text,
-                    })
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tr.tool_use_id,
+                            "content": content_text,
+                        }
+                    )
                 continue
             else:
                 entry["content"] = _content_to_openai(msg.content)
@@ -137,6 +138,7 @@ def build_openai_body(
 # Response parsing
 # ---------------------------------------------------------------------------
 
+
 def _parse_openai_stop(reason: str | None) -> StopReason | None:
     if reason is None:
         return None
@@ -166,11 +168,13 @@ def parse_openai_response(
             args = json.loads(fn.get("arguments", "{}"))
         except json.JSONDecodeError:
             args = {"_raw": fn.get("arguments", "")}
-        content.append(ToolInvocationBlock(
-            id=tc.get("id", ""),
-            name=fn.get("name", ""),
-            input=args,
-        ))
+        content.append(
+            ToolInvocationBlock(
+                id=tc.get("id", ""),
+                name=fn.get("name", ""),
+                input=args,
+            )
+        )
 
     usage_raw = data.get("usage", {})
     usage = TokenUsage(
@@ -190,6 +194,7 @@ def parse_openai_response(
 # ---------------------------------------------------------------------------
 # SSE stream parsing
 # ---------------------------------------------------------------------------
+
 
 def parse_openai_sse_stream(lines: Iterator[str]) -> Iterator[StreamEvent]:
     """Parse an OpenAI-compatible SSE stream into StreamEvents."""
@@ -231,7 +236,7 @@ def _openai_chunk_to_event(payload: dict[str, Any]) -> StreamEvent | None:
             data={"stop_reason": finish, **payload},
         )
 
-    if "content" in delta and delta["content"]:
+    if delta.get("content"):
         return StreamEvent(
             type=StreamEventType.CONTENT_BLOCK_DELTA,
             index=choice.get("index", 0),

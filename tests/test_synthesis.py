@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock
 
-from synth_panel.cost import TokenUsage as CostTokenUsage, ZERO_USAGE
+from synth_panel.cost import ZERO_USAGE
 from synth_panel.llm.models import (
     CompletionResponse,
     TextBlock,
@@ -12,12 +12,11 @@ from synth_panel.llm.models import (
 from synth_panel.orchestrator import PanelistResult
 from synth_panel.prompts import SYNTHESIS_PROMPT, SYNTHESIS_PROMPT_VERSION
 from synth_panel.synthesis import (
-    SynthesisResult,
-    synthesize_panel,
-    _format_panelist_data,
     _SYNTHESIS_SCHEMA,
+    SynthesisResult,
+    _format_panelist_data,
+    synthesize_panel,
 )
-
 
 # --- Test fixtures ---
 
@@ -124,9 +123,7 @@ class TestSynthesizePanel:
         mock_client = MagicMock()
         mock_client.send.return_value = _make_synthesis_response(_SYNTHESIS_DATA)
 
-        result = synthesize_panel(
-            mock_client, _PANELIST_RESULTS, _QUESTIONS, model="opus"
-        )
+        result = synthesize_panel(mock_client, _PANELIST_RESULTS, _QUESTIONS, model="opus")
 
         assert result.model == "opus"
         call_args = mock_client.send.call_args[0][0]
@@ -138,9 +135,7 @@ class TestSynthesizePanel:
         mock_client.send.return_value = _make_synthesis_response(_SYNTHESIS_DATA)
         custom = "Summarize this panel in haiku form."
 
-        synthesize_panel(
-            mock_client, _PANELIST_RESULTS, _QUESTIONS, custom_prompt=custom
-        )
+        synthesize_panel(mock_client, _PANELIST_RESULTS, _QUESTIONS, custom_prompt=custom)
 
         call_args = mock_client.send.call_args[0][0]
         user_text = call_args.messages[0].content[0].text

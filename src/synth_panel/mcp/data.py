@@ -19,7 +19,10 @@ import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from synth_panel.persistence import Session
 
 import yaml
 
@@ -68,6 +71,7 @@ def _results_dir() -> Path:
 # Bundled packs (shipped with the package)
 # ---------------------------------------------------------------------------
 
+
 def _bundled_packs() -> dict[str, dict[str, Any]]:
     """Load persona packs bundled in synth_panel.packs.
 
@@ -114,6 +118,7 @@ def _bundled_instrument_packs() -> dict[str, dict[str, Any]]:
 # Persona packs
 # ---------------------------------------------------------------------------
 
+
 def list_persona_packs() -> list[dict[str, Any]]:
     """Return metadata for all persona packs (bundled + user-saved).
 
@@ -130,13 +135,15 @@ def list_persona_packs() -> list[dict[str, Any]]:
             personas = data.get("personas", []) if isinstance(data, dict) else []
             pack_id = p.stem
             seen.add(pack_id)
-            packs.append({
-                "id": pack_id,
-                "name": data.get("name", pack_id) if isinstance(data, dict) else pack_id,
-                "persona_count": len(personas),
-                "path": str(p),
-                "builtin": False,
-            })
+            packs.append(
+                {
+                    "id": pack_id,
+                    "name": data.get("name", pack_id) if isinstance(data, dict) else pack_id,
+                    "persona_count": len(personas),
+                    "path": str(p),
+                    "builtin": False,
+                }
+            )
         except Exception:
             continue
 
@@ -146,12 +153,14 @@ def list_persona_packs() -> list[dict[str, Any]]:
         if pack_id in seen:
             continue
         personas = data.get("personas", [])
-        bundled.append({
-            "id": pack_id,
-            "name": data.get("name", pack_id),
-            "persona_count": len(personas),
-            "builtin": True,
-        })
+        bundled.append(
+            {
+                "id": pack_id,
+                "name": data.get("name", pack_id),
+                "persona_count": len(personas),
+                "builtin": True,
+            }
+        )
 
     return bundled + packs
 
@@ -200,9 +209,7 @@ def validate_persona_pack(personas: list[dict[str, Any]]) -> list[dict[str, Any]
         if not isinstance(persona, dict):
             raise PackValidationError(f"persona at index {i} must be a dict")
         if "name" not in persona or not str(persona["name"]).strip():
-            raise PackValidationError(
-                f"persona at index {i} is missing required field 'name'"
-            )
+            raise PackValidationError(f"persona at index {i} is missing required field 'name'")
 
         p = dict(persona)  # shallow copy to avoid mutating input
 
@@ -244,6 +251,7 @@ def save_persona_pack(
 # ---------------------------------------------------------------------------
 # Instrument packs (single-file YAML, manifest at top level)
 # ---------------------------------------------------------------------------
+
 
 def list_instrument_packs() -> list[dict[str, Any]]:
     """Return manifest metadata for every available instrument pack.
@@ -330,6 +338,7 @@ def save_instrument_pack(name: str, content: dict[str, Any]) -> dict[str, Any]:
 # Panel results
 # ---------------------------------------------------------------------------
 
+
 def _sessions_dir(result_id: str) -> Path:
     """Return the sessions directory for a given result, creating it if needed."""
     d = _results_dir() / f"{result_id}.sessions"
@@ -339,7 +348,7 @@ def _sessions_dir(result_id: str) -> Path:
 
 def save_panel_sessions(
     result_id: str,
-    sessions: dict[str, "Session"],
+    sessions: dict[str, Session],
 ) -> Path:
     """Save per-panelist sessions to disk.
 
@@ -348,7 +357,6 @@ def save_panel_sessions(
 
     Returns the sessions directory path.
     """
-    from synth_panel.persistence import Session  # avoid circular import
 
     sdir = _sessions_dir(result_id)
     for persona_name, session in sessions.items():
@@ -359,7 +367,7 @@ def save_panel_sessions(
     return sdir
 
 
-def load_panel_sessions(result_id: str) -> dict[str, "Session"]:
+def load_panel_sessions(result_id: str) -> dict[str, Session]:
     """Load per-panelist sessions from disk.
 
     Returns a dict mapping persona name to :class:`Session`.
@@ -406,13 +414,15 @@ def list_panel_results() -> list[dict[str, Any]]:
             continue
         try:
             data = json.loads(p.read_text(encoding="utf-8"))
-            results.append({
-                "id": p.stem,
-                "created_at": data.get("created_at", ""),
-                "model": data.get("model", ""),
-                "persona_count": data.get("persona_count", 0),
-                "question_count": data.get("question_count", 0),
-            })
+            results.append(
+                {
+                    "id": p.stem,
+                    "created_at": data.get("created_at", ""),
+                    "model": data.get("model", ""),
+                    "persona_count": data.get("persona_count", 0),
+                    "question_count": data.get("question_count", 0),
+                }
+            )
         except Exception:
             continue
     return results

@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 
 import pytest
-import yaml
 
 
 @pytest.fixture(autouse=True)
@@ -35,10 +34,10 @@ from synth_panel.mcp.data import (
 )
 from synth_panel.persistence import ConversationMessage, Session
 
-
 # ---------------------------------------------------------------------------
 # Persona packs
 # ---------------------------------------------------------------------------
+
 
 class TestPersonaPacks:
     def test_list_includes_bundled(self):
@@ -140,17 +139,25 @@ class TestPackValidation:
             validate_persona_pack([{"name": "  "}])
 
     def test_trait_normalization_list(self):
-        result = validate_persona_pack([{
-            "name": "Alice",
-            "personality_traits": ["Curious", " BOLD ", "shy"],
-        }])
+        result = validate_persona_pack(
+            [
+                {
+                    "name": "Alice",
+                    "personality_traits": ["Curious", " BOLD ", "shy"],
+                }
+            ]
+        )
         assert result[0]["personality_traits"] == ["curious", "bold", "shy"]
 
     def test_trait_normalization_csv_string(self):
-        result = validate_persona_pack([{
-            "name": "Bob",
-            "personality_traits": "Curious, Bold, shy",
-        }])
+        result = validate_persona_pack(
+            [
+                {
+                    "name": "Bob",
+                    "personality_traits": "Curious, Bold, shy",
+                }
+            ]
+        )
         assert result[0]["personality_traits"] == ["curious", "bold", "shy"]
 
     def test_trait_invalid_type(self):
@@ -170,6 +177,7 @@ class TestPackValidation:
 # ---------------------------------------------------------------------------
 # Panel results
 # ---------------------------------------------------------------------------
+
 
 class TestPanelResults:
     def test_list_empty(self):
@@ -230,19 +238,23 @@ class TestPanelResults:
 # Session persistence
 # ---------------------------------------------------------------------------
 
-class TestSessionPersistence:
 
+class TestSessionPersistence:
     def _make_session(self, persona_name: str) -> Session:
         """Create a session with a user message and assistant reply."""
         s = Session()
-        s.push_message(ConversationMessage(
-            role="user",
-            content=[{"type": "text", "text": f"Hello {persona_name}"}],
-        ))
-        s.push_message(ConversationMessage(
-            role="assistant",
-            content=[{"type": "text", "text": f"I am {persona_name}"}],
-        ))
+        s.push_message(
+            ConversationMessage(
+                role="user",
+                content=[{"type": "text", "text": f"Hello {persona_name}"}],
+            )
+        )
+        s.push_message(
+            ConversationMessage(
+                role="assistant",
+                content=[{"type": "text", "text": f"I am {persona_name}"}],
+            )
+        )
         return s
 
     def test_save_and_load_round_trip(self):
@@ -263,7 +275,7 @@ class TestSessionPersistence:
         loaded = load_panel_sessions(rid)
 
         assert len(loaded) == 2
-        for name, session in loaded.items():
+        for _name, session in loaded.items():
             assert len(session.messages) == 2
             # Verify assistant message text contains persona name
             assistant_text = session.messages[1].content[0]["text"]
@@ -320,8 +332,8 @@ class TestSessionPersistence:
 # Update panel result (pre-extend snapshot)
 # ---------------------------------------------------------------------------
 
-class TestUpdatePanelResult:
 
+class TestUpdatePanelResult:
     def test_creates_pre_extend_snapshot(self, tmp_path):
         rid = save_panel_result(
             results=[{"persona": "Alice", "responses": []}],
@@ -331,12 +343,13 @@ class TestUpdatePanelResult:
             persona_count=1,
             question_count=1,
         )
-        original = get_panel_result(rid)
+        get_panel_result(rid)  # verify result exists before update
 
         update_panel_result(rid, {"model": "haiku", "extended": True})
 
         # Snapshot exists with original data
         from synth_panel.mcp.data import _results_dir
+
         snapshot = _results_dir() / f"{rid}.pre-extend.json"
         assert snapshot.exists()
         snap_data = json.loads(snapshot.read_text())
@@ -365,6 +378,7 @@ class TestUpdatePanelResult:
 
         # Snapshot should be from the version=1 update, not original
         from synth_panel.mcp.data import _results_dir
+
         snapshot = _results_dir() / f"{rid}.pre-extend.json"
         snap_data = json.loads(snapshot.read_text())
         assert snap_data.get("version") == 1
@@ -373,6 +387,7 @@ class TestUpdatePanelResult:
 # ---------------------------------------------------------------------------
 # Instrument packs (F2-B)
 # ---------------------------------------------------------------------------
+
 
 class TestInstrumentPacks:
     def test_save_list_load_roundtrip(self):

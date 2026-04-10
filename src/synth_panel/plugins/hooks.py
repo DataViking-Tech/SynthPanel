@@ -9,6 +9,7 @@ and stdin. Exit codes determine the outcome:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import subprocess
@@ -28,9 +29,7 @@ class ShellHookRunner:
         self._hooks = hooks
         self._cwd = cwd
 
-    def run_pre_tool_use(
-        self, tool_name: str, tool_input: dict[str, Any]
-    ) -> HookResult:
+    def run_pre_tool_use(self, tool_name: str, tool_input: dict[str, Any]) -> HookResult:
         return self._run_chain(
             commands=self._hooks.pre_tool_use,
             event="pre_tool_use",
@@ -48,10 +47,7 @@ class ShellHookRunner:
         is_error: bool,
     ) -> HookResult:
         event = "post_tool_use_failure" if is_error else "post_tool_use"
-        commands = (
-            self._hooks.post_tool_use_failure if is_error
-            else self._hooks.post_tool_use
-        )
+        commands = self._hooks.post_tool_use_failure if is_error else self._hooks.post_tool_use
         return self._run_chain(
             commands=commands,
             event=event,
@@ -76,9 +72,7 @@ class ShellHookRunner:
 
         for cmd in commands:
             env = self._build_env(event, tool_name, tool_input, tool_output, is_error)
-            stdin_payload = self._build_stdin(
-                event, tool_name, tool_input, tool_output, is_error
-            )
+            stdin_payload = self._build_stdin(event, tool_name, tool_input, tool_output, is_error)
 
             try:
                 proc = subprocess.run(
@@ -155,7 +149,7 @@ def run_lifecycle_commands(commands: list[str], *, cwd: str | None = None) -> No
     do not prevent subsequent commands from running.
     """
     for cmd in commands:
-        try:
+        with contextlib.suppress(Exception):
             subprocess.run(
                 cmd,
                 shell=True,
@@ -163,5 +157,3 @@ def run_lifecycle_commands(commands: list[str], *, cwd: str | None = None) -> No
                 text=True,
                 cwd=cwd,
             )
-        except Exception:
-            pass

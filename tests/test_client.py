@@ -40,6 +40,7 @@ class TestProviderResolution:
             client = LLMClient()
             provider = client._resolve_provider("claude-sonnet-4-6-20250414")
             from synth_panel.llm.providers.anthropic import AnthropicProvider
+
             assert isinstance(provider, AnthropicProvider)
 
     def test_xai_prefix(self):
@@ -48,20 +49,34 @@ class TestProviderResolution:
             client = LLMClient()
             provider = client._resolve_provider("grok-3")
             from synth_panel.llm.providers.xai import XAIProvider
+
             assert isinstance(provider, XAIProvider)
 
     def test_fallback_to_available_credentials(self):
         """Unknown models fall back to first provider with credentials."""
-        env = {"ANTHROPIC_API_KEY": "", "GEMINI_API_KEY": "", "GOOGLE_API_KEY": "", "XAI_API_KEY": "", "OPENAI_API_KEY": "sk-oai"}
+        env = {
+            "ANTHROPIC_API_KEY": "",
+            "GEMINI_API_KEY": "",
+            "GOOGLE_API_KEY": "",
+            "XAI_API_KEY": "",
+            "OPENAI_API_KEY": "sk-oai",
+        }
         with patch.dict(os.environ, env, clear=False):
             client = LLMClient()
             provider = client._resolve_provider("some-unknown-model")
             from synth_panel.llm.providers.openai_compat import OpenAICompatibleProvider
+
             assert isinstance(provider, OpenAICompatibleProvider)
 
     def test_no_credentials_raises(self):
         """Missing all credentials raises MISSING_CREDENTIALS."""
-        env = {"ANTHROPIC_API_KEY": "", "GEMINI_API_KEY": "", "GOOGLE_API_KEY": "", "XAI_API_KEY": "", "OPENAI_API_KEY": ""}
+        env = {
+            "ANTHROPIC_API_KEY": "",
+            "GEMINI_API_KEY": "",
+            "GOOGLE_API_KEY": "",
+            "XAI_API_KEY": "",
+            "OPENAI_API_KEY": "",
+        }
         with patch.dict(os.environ, env, clear=False):
             client = LLMClient()
             with pytest.raises(LLMError) as exc_info:
@@ -112,9 +127,7 @@ class TestRetry:
             client = LLMClient(max_retries=2)
 
             mock_provider = MagicMock()
-            mock_provider.send.side_effect = LLMError(
-                "invalid key", LLMErrorCategory.AUTHENTICATION
-            )
+            mock_provider.send.side_effect = LLMError("invalid key", LLMErrorCategory.AUTHENTICATION)
             client._provider_cache["claude-sonnet-4-6-20250414"] = mock_provider
 
             with pytest.raises(LLMError) as exc_info:
@@ -128,9 +141,7 @@ class TestRetry:
             client = LLMClient(max_retries=1, initial_backoff=0.001, max_backoff=0.01)
 
             mock_provider = MagicMock()
-            mock_provider.send.side_effect = LLMError(
-                "server error", LLMErrorCategory.SERVER_ERROR, status_code=500
-            )
+            mock_provider.send.side_effect = LLMError("server error", LLMErrorCategory.SERVER_ERROR, status_code=500)
             client._provider_cache["claude-sonnet-4-6-20250414"] = mock_provider
 
             with pytest.raises(LLMError) as exc_info:

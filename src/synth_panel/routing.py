@@ -16,9 +16,7 @@ from typing import Any
 
 END_SENTINEL = "__end__"
 
-_VALID_FIELDS = frozenset(
-    {"themes", "recommendation", "disagreements", "summary", "agreements", "surprises"}
-)
+_VALID_FIELDS = frozenset({"themes", "recommendation", "disagreements", "summary", "agreements", "surprises"})
 
 
 class RoutingError(ValueError):

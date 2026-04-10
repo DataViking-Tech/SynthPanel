@@ -14,7 +14,6 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -22,7 +21,6 @@ import pytest
 from synth_panel.cost import (
     BudgetError,
     BudgetGate,
-    UsageTracker,
     estimate_cost,
     lookup_pricing,
 )
@@ -33,12 +31,10 @@ from synth_panel.llm.models import (
     CompletionRequest,
     CompletionResponse,
     InputMessage,
-    StreamEvent,
     StreamEventType,
     TextBlock,
-    TokenUsage,
 )
-from synth_panel.persistence import Session, save_session, load_session
+from synth_panel.persistence import Session, load_session, save_session
 from synth_panel.runtime import AgentRuntime
 from synth_panel.structured import StructuredOutputConfig, StructuredOutputEngine
 
@@ -224,10 +220,14 @@ class TestStructuredOutput:
             messages=[
                 InputMessage(
                     role="user",
-                    content=[TextBlock(text=(
-                        "Analyze the sentiment of this review: "
-                        "'I absolutely love this product, it changed my life!'"
-                    ))],
+                    content=[
+                        TextBlock(
+                            text=(
+                                "Analyze the sentiment of this review: "
+                                "'I absolutely love this product, it changed my life!'"
+                            )
+                        )
+                    ],
                 )
             ],
             config=config,
@@ -551,11 +551,17 @@ class TestEndToEnd:
 
         result = subprocess.run(
             [
-                sys.executable, "-m", "synth_panel",
-                "panel", "run",
-                "--personas", str(personas_path),
-                "--instrument", str(instrument_path),
-                "--model", "sonnet",
+                sys.executable,
+                "-m",
+                "synth_panel",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_path),
+                "--instrument",
+                str(instrument_path),
+                "--model",
+                "sonnet",
             ],
             capture_output=True,
             text=True,
@@ -564,8 +570,7 @@ class TestEndToEnd:
         )
 
         assert result.returncode == 0, (
-            f"Panel run failed (rc={result.returncode})\n"
-            f"stdout: {result.stdout[:1000]}\nstderr: {result.stderr[:1000]}"
+            f"Panel run failed (rc={result.returncode})\nstdout: {result.stdout[:1000]}\nstderr: {result.stderr[:1000]}"
         )
 
         output = result.stdout + result.stderr
@@ -581,12 +586,19 @@ class TestEndToEnd:
 
         result = subprocess.run(
             [
-                sys.executable, "-m", "synth_panel",
-                "panel", "run",
-                "--personas", str(personas_path),
-                "--instrument", str(instrument_path),
-                "--model", "sonnet",
-                "--output-format", "json",
+                sys.executable,
+                "-m",
+                "synth_panel",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_path),
+                "--instrument",
+                str(instrument_path),
+                "--model",
+                "sonnet",
+                "--output-format",
+                "json",
             ],
             capture_output=True,
             text=True,
@@ -595,8 +607,7 @@ class TestEndToEnd:
         )
 
         assert result.returncode == 0, (
-            f"Panel run (JSON) failed (rc={result.returncode})\n"
-            f"stderr: {result.stderr[:1000]}"
+            f"Panel run (JSON) failed (rc={result.returncode})\nstderr: {result.stderr[:1000]}"
         )
 
         # JSON mode should produce parseable output

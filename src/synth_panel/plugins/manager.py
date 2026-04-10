@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import shutil
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +14,6 @@ from synth_panel.plugins.manifest import (
     PluginMetadata,
 )
 from synth_panel.plugins.registry import PluginRegistry
-
 
 STATE_FILENAME = "plugins.json"
 
@@ -52,9 +50,7 @@ class PluginManager:
         return {"plugins": {}}
 
     def _save_state(self) -> None:
-        self._state_path.write_text(
-            json.dumps(self._state, indent=2) + "\n", encoding="utf-8"
-        )
+        self._state_path.write_text(json.dumps(self._state, indent=2) + "\n", encoding="utf-8")
 
     def install(self, source_dir: str | Path) -> PluginMetadata:
         """Install a plugin from a source directory.
@@ -64,9 +60,7 @@ class PluginManager:
         source = Path(source_dir)
         manifest_path = source / MANIFEST_FILENAME
         if not manifest_path.exists():
-            raise PluginInstallError(
-                f"Plugin manifest not found: {manifest_path}"
-            )
+            raise PluginInstallError(f"Plugin manifest not found: {manifest_path}")
 
         try:
             manifest = PluginManifest.from_file(manifest_path)
@@ -136,16 +130,18 @@ class PluginManager:
             if not manifest_path.exists():
                 continue
             manifest = PluginManifest.from_file(manifest_path)
-            result.append(PluginMetadata(
-                id=plugin_id,
-                name=manifest.name,
-                version=manifest.version,
-                description=manifest.description,
-                kind=PluginKind.EXTERNAL,
-                source_path=info.get("source_path", ""),
-                default_enabled=manifest.default_enabled,
-                root_dir=str(plugin_dir),
-            ))
+            result.append(
+                PluginMetadata(
+                    id=plugin_id,
+                    name=manifest.name,
+                    version=manifest.version,
+                    description=manifest.description,
+                    kind=PluginKind.EXTERNAL,
+                    source_path=info.get("source_path", ""),
+                    default_enabled=manifest.default_enabled,
+                    root_dir=str(plugin_dir),
+                )
+            )
         return result
 
     def is_enabled(self, plugin_id: str) -> bool:

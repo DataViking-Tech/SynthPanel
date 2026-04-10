@@ -7,7 +7,6 @@ cost estimation, budget enforcement, and human-readable summaries.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -21,24 +20,14 @@ class TokenUsage:
 
     @property
     def total_tokens(self) -> int:
-        return (
-            self.input_tokens
-            + self.output_tokens
-            + self.cache_creation_input_tokens
-            + self.cache_read_input_tokens
-        )
+        return self.input_tokens + self.output_tokens + self.cache_creation_input_tokens + self.cache_read_input_tokens
 
     def __add__(self, other: TokenUsage) -> TokenUsage:
         return TokenUsage(
             input_tokens=self.input_tokens + other.input_tokens,
             output_tokens=self.output_tokens + other.output_tokens,
-            cache_creation_input_tokens=(
-                self.cache_creation_input_tokens
-                + other.cache_creation_input_tokens
-            ),
-            cache_read_input_tokens=(
-                self.cache_read_input_tokens + other.cache_read_input_tokens
-            ),
+            cache_creation_input_tokens=(self.cache_creation_input_tokens + other.cache_creation_input_tokens),
+            cache_read_input_tokens=(self.cache_read_input_tokens + other.cache_read_input_tokens),
         )
 
     def to_dict(self) -> dict:
@@ -54,9 +43,7 @@ class TokenUsage:
         return cls(
             input_tokens=data.get("input_tokens", 0),
             output_tokens=data.get("output_tokens", 0),
-            cache_creation_input_tokens=data.get(
-                "cache_creation_input_tokens", 0
-            ),
+            cache_creation_input_tokens=data.get("cache_creation_input_tokens", 0),
             cache_read_input_tokens=data.get("cache_read_input_tokens", 0),
         )
 
@@ -121,7 +108,7 @@ _PRICING_TABLE: dict[str, ModelPricing] = {
 }
 
 
-def lookup_pricing(model: Optional[str] = None) -> tuple[ModelPricing, bool]:
+def lookup_pricing(model: str | None = None) -> tuple[ModelPricing, bool]:
     """Return (pricing, is_estimated) for *model*.
 
     Checks whether any key in ``_PRICING_TABLE`` appears as a substring of
@@ -147,20 +134,13 @@ class CostEstimate:
 
     @property
     def total_cost(self) -> float:
-        return (
-            self.input_cost
-            + self.output_cost
-            + self.cache_creation_cost
-            + self.cache_read_cost
-        )
+        return self.input_cost + self.output_cost + self.cache_creation_cost + self.cache_read_cost
 
     def __add__(self, other: CostEstimate) -> CostEstimate:
         return CostEstimate(
             input_cost=self.input_cost + other.input_cost,
             output_cost=self.output_cost + other.output_cost,
-            cache_creation_cost=(
-                self.cache_creation_cost + other.cache_creation_cost
-            ),
+            cache_creation_cost=(self.cache_creation_cost + other.cache_creation_cost),
             cache_read_cost=self.cache_read_cost + other.cache_read_cost,
         )
 
@@ -170,23 +150,15 @@ class CostEstimate:
 
 def estimate_cost(
     usage: TokenUsage,
-    pricing: Optional[ModelPricing] = None,
+    pricing: ModelPricing | None = None,
 ) -> CostEstimate:
     """Convert a *usage* snapshot to a ``CostEstimate`` using *pricing*."""
     p = pricing or DEFAULT_PRICING
     return CostEstimate(
         input_cost=usage.input_tokens * p.input_cost_per_million / 1_000_000,
         output_cost=usage.output_tokens * p.output_cost_per_million / 1_000_000,
-        cache_creation_cost=(
-            usage.cache_creation_input_tokens
-            * p.cache_creation_cost_per_million
-            / 1_000_000
-        ),
-        cache_read_cost=(
-            usage.cache_read_input_tokens
-            * p.cache_read_cost_per_million
-            / 1_000_000
-        ),
+        cache_creation_cost=(usage.cache_creation_input_tokens * p.cache_creation_cost_per_million / 1_000_000),
+        cache_read_cost=(usage.cache_read_input_tokens * p.cache_read_cost_per_million / 1_000_000),
     )
 
 
@@ -195,7 +167,7 @@ def format_summary(
     usage: TokenUsage,
     cost: CostEstimate,
     *,
-    model: Optional[str] = None,
+    model: str | None = None,
     is_estimated: bool = False,
 ) -> str:
     """Produce the two-line summary described in SPEC.md §7."""
@@ -278,7 +250,7 @@ class UsageTracker:
         self,
         label: str = "Cumulative",
         *,
-        model: Optional[str] = None,
+        model: str | None = None,
     ) -> str:
         pricing, is_estimated = lookup_pricing(model)
         cost = estimate_cost(self._cumulative, pricing)
@@ -297,9 +269,7 @@ class BudgetError(Exception):
     def __init__(self, budget: int, projected: int) -> None:
         self.budget = budget
         self.projected = projected
-        super().__init__(
-            f"Budget exceeded: projected {projected} tokens > budget {budget}"
-        )
+        super().__init__(f"Budget exceeded: projected {projected} tokens > budget {budget}")
 
 
 @dataclass
@@ -332,6 +302,4 @@ class BudgetGate:
 
     @property
     def remaining(self) -> int:
-        return max(
-            0, self.max_tokens - self._tracker.cumulative_usage.total_tokens
-        )
+        return max(0, self.max_tokens - self._tracker.cumulative_usage.total_tokens)

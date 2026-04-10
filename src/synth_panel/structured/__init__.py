@@ -1,3 +1,3 @@
-from synth_panel.structured.output import StructuredOutputEngine, StructuredOutputConfig
+from synth_panel.structured.output import StructuredOutputConfig, StructuredOutputEngine
 
-__all__ = ["StructuredOutputEngine", "StructuredOutputConfig"]
+__all__ = ["StructuredOutputConfig", "StructuredOutputEngine"]
