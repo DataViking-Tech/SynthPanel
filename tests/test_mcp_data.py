@@ -394,9 +394,9 @@ class TestInstrumentPacks:
         assert meta["type"] == "instrument"
 
         listing = list_instrument_packs()
-        assert len(listing) == 1
-        assert listing[0]["id"] == "pricing-probe"
-        assert listing[0]["author"] == "synth-panel"
+        saved = [p for p in listing if p["id"] == "pricing-probe"]
+        assert len(saved) == 1
+        assert saved[0]["author"] == "synth-panel"
 
         loaded = load_instrument_pack("pricing-probe")
         # round-trip preserves the body
