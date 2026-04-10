@@ -8,6 +8,7 @@ into a structured SynthesisResult via an LLM call using tool-use forcing
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -140,13 +141,33 @@ def _format_panelist_data(
     return "\n".join(parts)
 
 
+def _print_cost_estimate(
+    model: str,
+    user_content: str,
+    panelist_cost: CostEstimate | None,
+) -> None:
+    """Print a pre-synthesis cost estimate to stderr."""
+    pricing, _ = lookup_pricing(model)
+    # Rough token estimate: ~4 chars per token for English text
+    est_input_tokens = len(user_content) // 4
+    est_output_tokens = 1000  # typical synthesis output
+    est_usage = TokenUsage(input_tokens=est_input_tokens, output_tokens=est_output_tokens)
+    est = estimate_cost(est_usage, pricing)
+    parts = [f"Synthesis will cost ~{est.format_usd()}"]
+    if panelist_cost is not None:
+        parts.append(f"(panelist cost was {panelist_cost.format_usd()})")
+    print(" ".join(parts), file=sys.stderr)
+
+
 def synthesize_panel(
     client: LLMClient,
     panelist_results: list[Any],
     questions: list[dict[str, Any]],
     *,
     model: str | None = None,
+    panelist_model: str | None = None,
     custom_prompt: str | None = None,
+    panelist_cost: CostEstimate | None = None,
 ) -> SynthesisResult:
     """Synthesize panelist responses into a structured research finding.
 
@@ -154,13 +175,17 @@ def synthesize_panel(
         client: LLM client for the synthesis call.
         panelist_results: List of PanelistResult from run_panel_parallel.
         questions: The questions that were asked.
-        model: Model to use for synthesis (default: sonnet).
+        model: Explicit model for synthesis (e.g. --synthesis-model).
+        panelist_model: Model used for panelists; used as fallback when
+            *model* is not set so synthesis matches panelist cost tier.
         custom_prompt: Override the default synthesis prompt.
+        panelist_cost: Panelist cost estimate, shown in the pre-synthesis
+            cost estimate printed to stderr.
 
     Returns:
         SynthesisResult with structured findings and cost tracking.
     """
-    resolved_model = model or _DEFAULT_MODEL
+    resolved_model = model or panelist_model or _DEFAULT_MODEL
     prompt_text = custom_prompt or SYNTHESIS_PROMPT
 
     # Format the panelist data into a user message
@@ -176,6 +201,9 @@ def synthesize_panel(
         tool_name="synthesize",
         tool_description="Provide structured synthesis of the panel responses.",
     )
+
+    # Pre-synthesis cost estimate (printed to stderr)
+    _print_cost_estimate(resolved_model, user_content, panelist_cost)
 
     engine = StructuredOutputEngine(client)
     result = engine.extract(
