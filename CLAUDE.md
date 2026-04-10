@@ -1,4 +1,4 @@
-# synth-panel
+# synthpanel
 
 A lightweight, LLM-agnostic research harness for running synthetic focus groups using AI personas.
 
@@ -43,26 +43,26 @@ src/synth_panel/
 
 ```bash
 # Single prompt
-synth-panel prompt "Say hello"
+synthpanel prompt "Say hello"
 
 # Full panel run (file path or installed pack name)
-synth-panel panel run --personas examples/personas.yaml --instrument examples/survey.yaml
-synth-panel panel run --personas examples/personas.yaml --instrument pricing-discovery
+synthpanel panel run --personas examples/personas.yaml --instrument examples/survey.yaml
+synthpanel panel run --personas examples/personas.yaml --instrument pricing-discovery
 
 # v3 branching: list / show / install / graph instrument packs
-synth-panel instruments list
-synth-panel instruments graph pricing-discovery --format mermaid
+synthpanel instruments list
+synthpanel instruments graph pricing-discovery --format mermaid
 
 # MCP server (stdio, for Claude Code / Cursor / Windsurf)
-synth-panel mcp-serve
+synthpanel mcp-serve
 
 # With specific model
-synth-panel prompt "Hello" --model haiku
-synth-panel prompt "Hello" --model gemini
+synthpanel prompt "Hello" --model haiku
+synthpanel prompt "Hello" --model gemini
 
 # Output formats
-synth-panel prompt "Hello" --output-format json
-synth-panel prompt "Hello" --output-format ndjson
+synthpanel prompt "Hello" --output-format json
+synthpanel prompt "Hello" --output-format ndjson
 ```
 
 ## Development
@@ -161,14 +161,14 @@ instrument (with `route_when` clauses) instead. The boundary is intentional:
 `extend_panel` is for human-in-the-loop follow-ups; v3 routing is for
 agent-driven, instrument-authored adaptivity.
 
-Claude Code plugin: install via `/plugin install synth-panel`. Adds `/focus-group` skill.
+Claude Code plugin: install via `/plugin install synthpanel`. Adds `/focus-group` skill.
 
 Standalone MCP config for any editor:
 ```json
 {
   "mcpServers": {
     "synth_panel": {
-      "command": "synth-panel",
+      "command": "synthpanel",
       "args": ["mcp-serve"],
       "env": { "ANTHROPIC_API_KEY": "sk-..." }
     }

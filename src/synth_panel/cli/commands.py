@@ -1,4 +1,4 @@
-"""Subcommand handlers for synth-panel CLI.
+"""Subcommand handlers for synthpanel CLI.
 
 Each handler receives parsed args and output format, returns an exit code.
 """
@@ -82,12 +82,12 @@ def _announce_default_model(args: argparse.Namespace) -> None:
     alias, source = _resolve_default_model()
     if source:
         print(
-            f"[synth-panel] --model not specified; using '{alias}' (detected {source}). Override with --model <name>.",
+            f"[synthpanel] --model not specified; using '{alias}' (detected {source}). Override with --model <name>.",
             file=sys.stderr,
         )
     else:
         print(
-            f"[synth-panel] --model not specified and no provider API "
+            f"[synthpanel] --model not specified and no provider API "
             f"keys detected; falling back to '{alias}'. Set one of: "
             f"{', '.join(env for env, _ in _DEFAULT_MODEL_PREFERENCE)}.",
             file=sys.stderr,
@@ -810,7 +810,7 @@ def handle_instruments_list(args: argparse.Namespace, fmt: OutputFormat) -> int:
     if fmt is OutputFormat.TEXT:
         if not packs:
             print("No instrument packs installed.")
-            print("Install one with: synth-panel instruments install <file.yaml>")
+            print("Install one with: synthpanel instruments install <file.yaml>")
         else:
             for p in packs:
                 version = f" v{p['version']}" if p.get("version") else ""

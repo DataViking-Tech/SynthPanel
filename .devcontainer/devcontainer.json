@@ -1,10 +1,10 @@
 {
-	"name": "synth-panel Dev",
+	"name": "synthpanel Dev",
 	"image": "ghcr.io/dataviking-tech/ai-dev-base:edge",
 	"updateRemoteUserUID": false,
 	"containerEnv": {
-		"PYTHONPATH": "/workspaces/synth-panel/src",
-		"VIRTUAL_ENV": "/workspaces/synth-panel/.venv"
+		"PYTHONPATH": "/workspaces/synthpanel/src",
+		"VIRTUAL_ENV": "/workspaces/synthpanel/.venv"
 	},
 	"initializeCommand": "docker pull ghcr.io/dataviking-tech/ai-dev-base:edge || podman pull ghcr.io/dataviking-tech/ai-dev-base:edge || echo No container runtime found, skipping pre-pull",
 	"postCreateCommand": "bash .devcontainer/postCreateCommand.sh",

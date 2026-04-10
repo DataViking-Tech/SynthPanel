@@ -1,5 +1,5 @@
 [project]
-name = "synth-panel"
+name = "synthpanel"
 version = "0.4.0"
 description = "Run synthetic focus groups and user research panels using AI personas. CLI tool, Python library, any LLM."
 requires-python = ">=3.10"
@@ -26,10 +26,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/DataViking-Tech/synth-panel"
-Repository = "https://github.com/DataViking-Tech/synth-panel"
-Issues = "https://github.com/DataViking-Tech/synth-panel/issues"
-Changelog = "https://github.com/DataViking-Tech/synth-panel/releases"
+Homepage = "https://github.com/DataViking-Tech/synthpanel"
+Repository = "https://github.com/DataViking-Tech/synthpanel"
+Issues = "https://github.com/DataViking-Tech/synthpanel/issues"
+Changelog = "https://github.com/DataViking-Tech/synthpanel/releases"
 
 [project.optional-dependencies]
 mcp = [
@@ -45,7 +45,7 @@ dev = [
 ]
 
 [project.scripts]
-synth-panel = "synth_panel.main:main"
+synthpanel = "synth_panel.main:main"
 
 [build-system]
 requires = ["setuptools>=68.0"]

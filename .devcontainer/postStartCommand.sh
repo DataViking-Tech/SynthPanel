@@ -1,33 +1,33 @@
 #!/usr/bin/env bash
 # postStartCommand: runs on EVERY container start.
-# Ensures synth-panel is ready and prints status.
+# Ensures synthpanel is ready and prints status.
 set -euo pipefail
 
 # Ensure every new terminal activates the venv
-BASHRC_SNIPPET='# synth-panel venv activation
-if [ -d "/workspaces/synth-panel/.venv" ]; then
-  export VIRTUAL_ENV="/workspaces/synth-panel/.venv"
+BASHRC_SNIPPET='# synthpanel venv activation
+if [ -d "/workspaces/synthpanel/.venv" ]; then
+  export VIRTUAL_ENV="/workspaces/synthpanel/.venv"
   export PATH="$VIRTUAL_ENV/bin:$PATH"
 fi
-export PYTHONPATH="${PYTHONPATH:-/workspaces/synth-panel/src}"'
+export PYTHONPATH="${PYTHONPATH:-/workspaces/synthpanel/src}"'
 
-if ! grep -q "synth-panel venv activation" ~/.bashrc 2>/dev/null; then
+if ! grep -q "synthpanel venv activation" ~/.bashrc 2>/dev/null; then
   echo "$BASHRC_SNIPPET" >> ~/.bashrc
 fi
 
 # Activate for this script too
-if [ -d "/workspaces/synth-panel/.venv" ]; then
-  export VIRTUAL_ENV="/workspaces/synth-panel/.venv"
+if [ -d "/workspaces/synthpanel/.venv" ]; then
+  export VIRTUAL_ENV="/workspaces/synthpanel/.venv"
   export PATH="$VIRTUAL_ENV/bin:$PATH"
 fi
 
-export PYTHONPATH="${PYTHONPATH:-/workspaces/synth-panel/src}"
+export PYTHONPATH="${PYTHONPATH:-/workspaces/synthpanel/src}"
 
 # Quick health check
 if python3 -m synth_panel --help >/dev/null 2>&1; then
-  echo "synth-panel is ready"
+  echo "synthpanel is ready"
 else
-  echo "Warning: synth-panel not working, try: uv sync"
+  echo "Warning: synthpanel not working, try: uv sync"
 fi
 
 # Check for API keys

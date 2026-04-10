@@ -1,15 +1,15 @@
-# synth-panel
+# synthpanel
 
 Open-source synthetic focus groups. Any LLM. Your terminal or your agent's tool call.
 
 Define personas in YAML. Define your research instrument in YAML. Run against any LLM — from your terminal, from a pipeline, or from an AI agent's MCP tool call. Get structured, reproducible output with full cost transparency.
 
 ```bash
-pip install synth-panel
-synth-panel panel run --personas personas.yaml --instrument survey.yaml
+pip install synthpanel
+synthpanel panel run --personas personas.yaml --instrument survey.yaml
 
 # For MCP server support (Claude Code, Cursor, Windsurf, etc.)
-pip install synth-panel[mcp]
+pip install synthpanel[mcp]
 ```
 
 ## Why
@@ -25,22 +25,22 @@ Traditional focus groups cost $5,000-$15,000 and take weeks. Synthetic panels co
 
 ```bash
 # Install from PyPI (v0.4.0+)
-pip install synth-panel
+pip install synthpanel
 
 # For MCP server support (agent integration)
-pip install synth-panel[mcp]
+pip install synthpanel[mcp]
 
 # Or install from source for the latest unreleased changes
-pip install git+https://github.com/DataViking-Tech/synth-panel.git@main
+pip install git+https://github.com/DataViking-Tech/synthpanel.git@main
 
 # Set your API key (Claude, OpenAI, Gemini, xAI, or any OpenAI-compatible provider)
 export ANTHROPIC_API_KEY="sk-..."
 
 # Run a single prompt
-synth-panel prompt "What do you think of the name Traitprint for a career app?"
+synthpanel prompt "What do you think of the name Traitprint for a career app?"
 
 # Run a full panel
-synth-panel panel run \
+synthpanel panel run \
   --personas examples/personas.yaml \
   --instrument examples/survey.yaml
 ```
@@ -130,14 +130,14 @@ loop, no hand-coded conditional flows.
 ```bash
 # The Show HN demo: ~$0.20, one command, the panel decides
 # whether to dig into pain, pricing, or alternatives.
-synth-panel panel run \
+synthpanel panel run \
   --personas examples/personas.yaml \
   --instrument pricing-discovery
 ```
 
 `pricing-discovery` is one of five bundled v3 packs (`pricing-discovery`,
 `name-test`, `feature-prioritization`, `landing-page-comprehension`,
-`churn-diagnosis`). List them with `synth-panel instruments list`.
+`churn-diagnosis`). List them with `synthpanel instruments list`.
 
 The output now carries a `path` array recording the routing decisions
 that actually fired:
@@ -149,7 +149,7 @@ discovery -> probe[themes contains price] -> probe_pricing -> validation
 Render the DAG of any instrument:
 
 ```bash
-synth-panel instruments graph pricing-discovery --format mermaid
+synthpanel instruments graph pricing-discovery --format mermaid
 ```
 
 ### Predicate Reference
@@ -213,11 +213,11 @@ also match `pricing`, `priced`, etc.
 ### `instruments` Subcommand
 
 ```bash
-synth-panel instruments list                       # bundled + installed packs
-synth-panel instruments show pricing-discovery     # full YAML body
-synth-panel instruments install ./my-pack.yaml     # add a local pack
-synth-panel instruments graph pricing-discovery    # text DAG
-synth-panel instruments graph pricing-discovery \
+synthpanel instruments list                       # bundled + installed packs
+synthpanel instruments show pricing-discovery     # full YAML body
+synthpanel instruments install ./my-pack.yaml     # add a local pack
+synthpanel instruments graph pricing-discovery    # text DAG
+synthpanel instruments graph pricing-discovery \
   --format mermaid                                 # mermaid flowchart
 ```
 
@@ -227,7 +227,7 @@ local file and then `install` it once it's stable.
 
 ## LLM Provider Support
 
-synth-panel works with any LLM provider. Set the appropriate environment variable:
+synthpanel works with any LLM provider. Set the appropriate environment variable:
 
 | Provider | Environment Variable | Model Flag |
 |----------|---------------------|------------|
@@ -239,19 +239,19 @@ synth-panel works with any LLM provider. Set the appropriate environment variabl
 
 ```bash
 # Use Claude (default)
-synth-panel panel run --personas p.yaml --instrument s.yaml
+synthpanel panel run --personas p.yaml --instrument s.yaml
 
 # Use GPT-4o
-synth-panel panel run --personas p.yaml --instrument s.yaml --model gpt-4o
+synthpanel panel run --personas p.yaml --instrument s.yaml --model gpt-4o
 
 # Use a local model via Ollama
 OPENAI_BASE_URL=http://localhost:11434/v1 \
-synth-panel panel run --personas p.yaml --instrument s.yaml --model llama3
+synthpanel panel run --personas p.yaml --instrument s.yaml --model llama3
 ```
 
 ## Architecture
 
-synth-panel is a research harness, not an LLM wrapper. It orchestrates the research workflow:
+synthpanel is a research harness, not an LLM wrapper. It orchestrates the research workflow:
 
 ```
 personas.yaml ──┐
@@ -287,10 +287,10 @@ instrument.yaml ─┘                 ├──> Panelist 2 ──> LLM ──>
 
 ## MCP Server (Agent Integration)
 
-synth-panel includes an MCP server so AI agents can run panels as tool calls:
+synthpanel includes an MCP server so AI agents can run panels as tool calls:
 
 ```bash
-synth-panel mcp-serve
+synthpanel mcp-serve
 ```
 
 Add to your editor's MCP config (Claude Code, Cursor, Windsurf, etc.):
@@ -299,7 +299,7 @@ Add to your editor's MCP config (Claude Code, Cursor, Windsurf, etc.):
 {
   "mcpServers": {
     "synth_panel": {
-      "command": "synth-panel",
+      "command": "synthpanel",
       "args": ["mcp-serve"],
       "env": { "ANTHROPIC_API_KEY": "sk-..." }
     }
@@ -322,20 +322,20 @@ probes that the original instrument didn't anticipate.
 
 ```bash
 # Human-readable (default)
-synth-panel panel run --personas p.yaml --instrument s.yaml
+synthpanel panel run --personas p.yaml --instrument s.yaml
 
 # JSON (pipe to jq, store in database)
-synth-panel panel run --personas p.yaml --instrument s.yaml --output-format json
+synthpanel panel run --personas p.yaml --instrument s.yaml --output-format json
 
 # NDJSON (streaming, one event per line)
-synth-panel panel run --personas p.yaml --instrument s.yaml --output-format ndjson
+synthpanel panel run --personas p.yaml --instrument s.yaml --output-format ndjson
 ```
 
 ## Budget Control
 
 ```bash
 # Set a dollar budget for the panel
-synth-panel panel run --personas p.yaml --instrument s.yaml --config budget.yaml
+synthpanel panel run --personas p.yaml --instrument s.yaml --config budget.yaml
 ```
 
 The cost tracker enforces soft budget limits — the current panelist completes, but no new panelists start if the budget is exceeded.
@@ -350,7 +350,7 @@ Known limitations:
 - Cultural and demographic representation has blind spots
 - Higher-order correlations between variables are poorly replicated
 
-Use synth-panel to pre-screen and iterate, then validate with real participants.
+Use synthpanel to pre-screen and iterate, then validate with real participants.
 
 ## Versions
 

@@ -1,10 +1,10 @@
-# synth-panel 0.5.0 — Execution Plan
+# synthpanel 0.5.0 — Execution Plan
 
-> PM: synth-panel/pm | Date: 2026-04-06
+> PM: synthpanel/pm | Date: 2026-04-06
 > Inputs: `0.5.0-VISION.md` (CPO), `0.5.0-ARCHITECTURE-REVIEW.md` (architect)
 
 The 0.5.0 "Adaptive Release" turns the orchestrator into a router. Branching
-instruments make synth-panel choose its research path from what the panel said.
+instruments make synthpanel choose its research path from what the panel said.
 Instrument packs ship the second ecosystem flywheel alongside persona packs.
 Flat output gets retired before 1.0.0.
 
@@ -190,7 +190,7 @@ Edit `synth_panel/output.py` (~40 LOC delta) plus an audit pass.
    for flat-shape assumptions; update or annotate. Architect risk R6.
 
 **Acceptance criteria:**
-- `synth-panel panel run` (no flag) emits `rounds` shape for single-round instrument
+- `synthpanel panel run` (no flag) emits `rounds` shape for single-round instrument
 - `--legacy-output` emits old shape + stderr warning
 - MCP `run_panel` always emits `rounds` shape for single-round instrument
 - All existing examples and skills work with the new shape
@@ -208,8 +208,8 @@ Edit `synth_panel/mcp/data.py` (~40 LOC delta).
 2. Manifest fields are the same for both types: `name`, `version`, `description`,
    `author`. Persona packs keep these in `manifest.yaml`; instrument packs
    keep them at top level of the instrument YAML
-3. Storage convention: `~/.synth-panel/packs/personas/<name>/` (dir) vs
-   `~/.synth-panel/packs/instruments/<name>.yaml` (file)
+3. Storage convention: `~/.synthpanel/packs/personas/<name>/` (dir) vs
+   `~/.synthpanel/packs/instruments/<name>.yaml` (file)
 4. New helpers in `data.py`: `list_instrument_packs()`, `load_instrument_pack(name)`,
    `save_instrument_pack(name, content)`
 
@@ -229,9 +229,9 @@ Edit `synth_panel/mcp/data.py` (~40 LOC delta).
 Edit `synth_panel/cli/commands.py` and `cli/parser.py` (~120 LOC delta).
 
 **What to build:**
-1. **New subcommand group: `synth-panel instruments`**
+1. **New subcommand group: `synthpanel instruments`**
    - `instruments list` — list installed packs (name, version, description)
-   - `instruments install <name>` — install from `synth-panel/instruments` repo
+   - `instruments install <name>` — install from `synthpanel/instruments` repo
    - `instruments show <name>` — print the YAML
    - `instruments graph <file-or-name>` — render Mermaid DAG to stdout (see F3-D)
 2. **`panel run --instrument <name>` accepts pack names** in addition to file paths
@@ -288,7 +288,7 @@ all five must demonstrate branching to justify the library's existence.
 5. `churn-diagnosis.yaml` — context → branch on churn-driver → probe → validation
 
 Each pack must include:
-- Top-level manifest (`name`, `version`, `description`, `author: synth-panel/community`)
+- Top-level manifest (`name`, `version`, `description`, `author: synthpanel/community`)
 - A v3 instrument with `route_when` clauses
 - Comments explaining the branching logic
 - A theme-tag hint in the synthesis prompt to mitigate R3 (architect risk):
@@ -307,7 +307,7 @@ Each pack must include:
 Add to `cli/commands.py` (~30 LOC).
 
 **What to build:**
-- `synth-panel instruments graph <file-or-name>` reads the instrument, walks
+- `synthpanel instruments graph <file-or-name>` reads the instrument, walks
   the round DAG (depends_on ∪ route_when targets), and emits a Mermaid diagram
   to stdout
 - No graphviz dependency — pure string template

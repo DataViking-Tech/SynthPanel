@@ -8,7 +8,7 @@ description: >
   Test 1-3 candidate names for a product or feature. Branches into
   meaning-probe, pronounce-probe, or memorability-probe depending on
   which concerns dominate the discovery round.
-author: synth-panel
+author: synthpanel
 
 instrument:
   version: 3

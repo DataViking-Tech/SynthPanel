@@ -7,7 +7,7 @@ description: >
   Diagnose why a customer-shaped persona would churn from a product.
   Branches into value-failure, friction-failure, or competitive-loss
   probes based on the dominant theme in the initial diagnosis round.
-author: synth-panel
+author: synthpanel
 
 instrument:
   version: 3

@@ -1,4 +1,4 @@
-"""Output formatting for synth-panel CLI.
+"""Output formatting for synthpanel CLI.
 
 Supports text, json, and ndjson formats per SPEC.md §8.
 """

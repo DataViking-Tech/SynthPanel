@@ -1,6 +1,6 @@
 """Persistence layer for MCP persona packs and panel results.
 
-Data is stored under ~/.synth-panel/ (configurable via SYNTH_PANEL_DATA_DIR).
+Data is stored under ~/.synthpanel/ (configurable via SYNTH_PANEL_DATA_DIR).
 
 Layout::
 
@@ -30,7 +30,7 @@ import yaml
 
 def _data_dir() -> Path:
     """Return the root data directory, creating it if needed."""
-    d = Path(os.environ.get("SYNTH_PANEL_DATA_DIR", "~/.synth-panel")).expanduser()
+    d = Path(os.environ.get("SYNTH_PANEL_DATA_DIR", "~/.synthpanel")).expanduser()
     d.mkdir(parents=True, exist_ok=True)
     return d
 

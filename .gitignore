@@ -34,8 +34,8 @@ state.json
 .devcontainer/.env
 .devcontainer/tmp/
 
-# synth-panel data
-.synth-panel/
+# synthpanel data
+.synthpanel/
 sessions/
 
 # Testing

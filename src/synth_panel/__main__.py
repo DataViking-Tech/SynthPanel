@@ -1,4 +1,4 @@
-"""Allow running synth-panel as ``python -m synth_panel``."""
+"""Allow running synthpanel as ``python -m synth_panel``."""
 
 from __future__ import annotations
 
