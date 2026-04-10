@@ -1,4 +1,4 @@
-"""Tests for synth_panel.stats — sp-5on.7 + sp-5on.8 + sp-5on.9 + sp-5on.12."""
+"""Tests for synth_panel.stats — sp-5on.7 + sp-5on.8 + sp-5on.9 + sp-5on.12 + sp-5on.14."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from synth_panel.stats import (
     kendall_w,
     krippendorff_alpha,
     proportion_stat,
+    robustness_score,
     silhouette_score,
 )
 
@@ -622,3 +623,62 @@ class TestSilhouetteScore:
         labels = [0, 0, 0]
         dist = [[0, 1, 2], [1, 0, 1], [2, 1, 0]]
         assert silhouette_score(labels, dist) == pytest.approx(0.0)
+
+
+# ---------------------------------------------------------------------------
+# robustness_score (sp-5on.14)
+# ---------------------------------------------------------------------------
+
+
+class TestRobustnessScore:
+    def test_perfect_robustness(self):
+        """All variants agree -> R = 1.0."""
+        responses = {
+            "Alice": ["B", "B", "B", "B", "B"],
+            "Bob": ["B", "B", "B", "B", "B"],
+        }
+        result = robustness_score(responses, "B")
+        assert result.overall_robustness == pytest.approx(1.0)
+        assert result.interpretation == "robust"
+
+    def test_zero_robustness(self):
+        """No variants agree -> R = 0.0."""
+        responses = {
+            "Alice": ["A", "C", "D", "A", "C"],
+            "Bob": ["C", "A", "D", "A", "C"],
+        }
+        result = robustness_score(responses, "B")
+        assert result.overall_robustness == pytest.approx(0.0)
+        assert result.interpretation == "fragile"
+
+    def test_partial_robustness(self):
+        """4/5 agree per persona -> R = 0.8."""
+        responses = {
+            "Alice": ["B", "B", "B", "B", "A"],
+            "Bob": ["B", "B", "B", "B", "C"],
+        }
+        result = robustness_score(responses, "B")
+        assert result.overall_robustness == pytest.approx(0.8)
+        assert result.interpretation == "robust"
+
+    def test_mixed_persona_robustness(self):
+        """Different robustness per persona."""
+        responses = {
+            "Alice": ["B", "B", "B", "B", "B"],  # 5/5 = 1.0
+            "Bob": ["B", "A", "A", "A", "A"],  # 1/5 = 0.2
+        }
+        result = robustness_score(responses, "B")
+        assert result.overall_robustness == pytest.approx(0.6)
+        assert result.per_persona["Alice"] == pytest.approx(1.0)
+        assert result.per_persona["Bob"] == pytest.approx(0.2)
+        assert result.interpretation == "moderately robust"
+
+    def test_per_persona_dict(self):
+        responses = {"X": ["B", "B", "A"]}
+        result = robustness_score(responses, "B")
+        assert "X" in result.per_persona
+        assert result.per_persona["X"] == pytest.approx(2 / 3, abs=0.01)
+
+    def test_empty_rejects(self):
+        with pytest.raises(ValueError):
+            robustness_score({}, "B")
