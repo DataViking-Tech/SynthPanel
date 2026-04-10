@@ -482,7 +482,8 @@ class TestConvergenceReport:
             "m2": [["1", "2"], ["1", "2"], ["2", "1"]],
         }
         result = convergence_report(
-            responses, ["Q1", "Q2"],
+            responses,
+            ["Q1", "Q2"],
             level_of_measurement="ordinal",
         )
         assert isinstance(result.overall_alpha, float)

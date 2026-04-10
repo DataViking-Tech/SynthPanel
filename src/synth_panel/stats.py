@@ -882,14 +882,11 @@ def convergence_report(
         for p_idx, persona_responses in enumerate(multi_model_responses[model]):
             if len(persona_responses) != n_questions:
                 raise ValueError(
-                    f"Model {model!r} persona {p_idx} has {len(persona_responses)} "
-                    f"questions, expected {n_questions}"
+                    f"Model {model!r} persona {p_idx} has {len(persona_responses)} questions, expected {n_questions}"
                 )
 
     if len(question_texts) != n_questions:
-        raise ValueError(
-            f"question_texts has {len(question_texts)} entries but data has {n_questions} questions"
-        )
+        raise ValueError(f"question_texts has {len(question_texts)} entries but data has {n_questions} questions")
 
     findings: list[FindingConvergence] = []
 
@@ -937,8 +934,7 @@ def convergence_report(
         # Interpretation
         if level == ConvergenceLevel.STRONG:
             interpretation = (
-                f"Strong convergence (alpha={alpha_q:.2f}). "
-                f"All models agree: {majority_top} is the top choice."
+                f"Strong convergence (alpha={alpha_q:.2f}). All models agree: {majority_top} is the top choice."
             )
         elif level == ConvergenceLevel.MODERATE:
             interpretation = (
