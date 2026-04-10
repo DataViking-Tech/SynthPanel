@@ -7,6 +7,9 @@ Define personas in YAML. Define your research instrument in YAML. Run against an
 ```bash
 pip install synth-panel
 synth-panel panel run --personas personas.yaml --instrument survey.yaml
+
+# For MCP server support (Claude Code, Cursor, Windsurf, etc.)
+pip install synth-panel[mcp]
 ```
 
 ## Why
@@ -23,6 +26,9 @@ Traditional focus groups cost $5,000-$15,000 and take weeks. Synthetic panels co
 ```bash
 # Install from PyPI (v0.4.0+)
 pip install synth-panel
+
+# For MCP server support (agent integration)
+pip install synth-panel[mcp]
 
 # Or install from source for the latest unreleased changes
 pip install git+https://github.com/DataViking-Tech/synth-panel.git@main

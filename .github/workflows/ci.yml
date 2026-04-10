@@ -20,7 +20,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev,mcp]"
 
       - name: Ruff check
         run: ruff check src/ tests/
@@ -38,7 +38,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev,mcp]"
 
       - name: Mypy
         run: mypy src/synth_panel/
@@ -53,7 +53,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev,mcp]"
 
       - name: pip-audit
         run: pip-audit
@@ -77,7 +77,7 @@ jobs:
           allow-prereleases: true
 
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev,mcp]"
 
       - name: Run tests with coverage
         run: pytest tests/ -x --ignore=tests/test_acceptance.py
@@ -92,7 +92,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev,mcp]"
 
       - name: Run tests with coverage
         run: |
