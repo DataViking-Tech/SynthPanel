@@ -34,6 +34,7 @@ mcp = [
 ]
 dev = [
     "pytest>=8.0",
+    "pytest-cov>=6.0",
 ]
 
 [project.scripts]
@@ -52,7 +53,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-m 'not acceptance'"
+addopts = "-m 'not acceptance' --cov=synth_panel --cov-report=term-missing --cov-fail-under=80"
 markers = [
     "acceptance: live API acceptance tests (require ANTHROPIC_API_KEY)",
 ]
