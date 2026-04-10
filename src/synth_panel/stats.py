@@ -11,21 +11,22 @@ from __future__ import annotations
 
 import math
 import random
+from collections.abc import Callable
 from dataclasses import dataclass
 
 __all__ = [
     "BootstrapResult",
-    "bootstrap_ci",
-    "proportion_stat",
+    "BordaResult",
     "ChiSquaredResult",
-    "chi_squared_test",
-    "KendallWResult",
-    "kendall_w",
     "FrequencyRow",
     "FrequencyTable",
-    "frequency_table",
-    "BordaResult",
+    "KendallWResult",
+    "bootstrap_ci",
     "borda_count",
+    "chi_squared_test",
+    "frequency_table",
+    "kendall_w",
+    "proportion_stat",
 ]
 
 # ---------------------------------------------------------------------------
@@ -86,22 +87,22 @@ def _ndtri(p: float) -> float:
     if p < p_low:
         # Lower tail
         q = math.sqrt(-2.0 * math.log(p))
-        return (
-            ((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]
-        ) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1.0)
+        return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / (
+            (((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1.0
+        )
     elif p <= p_high:
         # Central region
         q = p - 0.5
         r = q * q
-        return (
-            (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q
-        ) / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1.0)
+        return ((((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q) / (
+            ((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1.0
+        )
     else:
         # Upper tail
         q = math.sqrt(-2.0 * math.log(1.0 - p))
-        return -(
-            ((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]
-        ) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1.0)
+        return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / (
+            (((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1.0
+        )
 
 
 def _chi2_sf(x: float, df: int) -> float:
@@ -153,7 +154,7 @@ class BootstrapResult:
     method: str = "BCa"
 
 
-def proportion_stat(value) -> callable:
+def proportion_stat(value) -> Callable:
     """Return a stat function that computes the proportion of *value* in data."""
 
     def _fn(data: list) -> float:
@@ -164,7 +165,7 @@ def proportion_stat(value) -> callable:
 
 def bootstrap_ci(
     data: list[float],
-    stat_fn: callable,
+    stat_fn: Callable,
     *,
     confidence: float = 0.95,
     n_resamples: int = 2000,
@@ -246,8 +247,8 @@ def bootstrap_ci(
 
     # 7. Extract CI from sorted bootstrap distribution
     theta_star.sort()
-    ci_lower = theta_star[int(math.floor(a1 * n_resamples))]
-    ci_upper = theta_star[int(math.floor(a2 * n_resamples))]
+    ci_lower = theta_star[math.floor(a1 * n_resamples)]
+    ci_upper = theta_star[math.floor(a2 * n_resamples)]
 
     return BootstrapResult(
         estimate=theta_hat,
@@ -308,10 +309,7 @@ def chi_squared_test(
         expected = {k: exp_val for k in observed}
     else:
         if set(expected.keys()) != set(observed.keys()):
-            raise ValueError(
-                f"expected keys {set(expected.keys())} don't match "
-                f"observed keys {set(observed.keys())}"
-            )
+            raise ValueError(f"expected keys {set(expected.keys())} don't match observed keys {set(observed.keys())}")
 
     # Chi-squared statistic
     chi2 = sum((observed[k] - expected[k]) ** 2 / expected[k] for k in observed)
@@ -329,10 +327,7 @@ def chi_squared_test(
     min_expected = min(expected.values())
     warning = None
     if min_expected < 5:
-        warning = (
-            f"Some expected count(s) < 5 (min={min_expected:.1f}). "
-            "Chi-squared approximation may be unreliable."
-        )
+        warning = f"Some expected count(s) < 5 (min={min_expected:.1f}). Chi-squared approximation may be unreliable."
 
     return ChiSquaredResult(
         statistic=chi2,
@@ -384,9 +379,7 @@ def kendall_w(
 
     for i, r in enumerate(rankings):
         if len(r) != k_items:
-            raise ValueError(
-                f"ranking {i} has length {len(r)}, expected {k_items}"
-            )
+            raise ValueError(f"ranking {i} has length {len(r)}, expected {k_items}")
 
     if k_items < 2:
         raise ValueError("need at least 2 items to compute concordance")
@@ -496,13 +489,15 @@ def frequency_table(
             ci_lo = prop
             ci_hi = prop
 
-        rows.append(FrequencyRow(
-            category=cat,
-            count=cnt,
-            proportion=prop,
-            ci_lower=ci_lo,
-            ci_upper=ci_hi,
-        ))
+        rows.append(
+            FrequencyRow(
+                category=cat,
+                count=cnt,
+                proportion=prop,
+                ci_lower=ci_lo,
+                ci_upper=ci_hi,
+            )
+        )
 
     # Sort by count descending
     rows.sort(key=lambda r: r.count, reverse=True)
@@ -548,9 +543,7 @@ def borda_count(
     items = set(rankings[0].keys())
     for i, r in enumerate(rankings):
         if set(r.keys()) != items:
-            raise ValueError(
-                f"ranking {i} has items {set(r.keys())}, expected {items}"
-            )
+            raise ValueError(f"ranking {i} has items {set(r.keys())}, expected {items}")
 
     k = len(items)
     n_voters = len(rankings)

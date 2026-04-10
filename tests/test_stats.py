@@ -2,16 +2,9 @@
 
 from __future__ import annotations
 
-import math
-
 import pytest
 
 from synth_panel.stats import (
-    BootstrapResult,
-    BordaResult,
-    ChiSquaredResult,
-    FrequencyTable,
-    KendallWResult,
     bootstrap_ci,
     borda_count,
     chi_squared_test,
@@ -19,7 +12,6 @@ from synth_panel.stats import (
     kendall_w,
     proportion_stat,
 )
-
 
 # ---------------------------------------------------------------------------
 # bootstrap_ci
@@ -46,7 +38,7 @@ class TestBootstrapCI:
         data = ["B"] * 40 + ["A"] * 10 + ["C"] * 10 + ["D"] * 10
         result = bootstrap_ci(data, proportion_stat("B"), seed=42)
         assert result.ci_lower < result.estimate < result.ci_upper
-        assert 0 < result.ci_lower
+        assert result.ci_lower > 0
         assert result.ci_upper < 1
 
     def test_narrow_ci_for_large_n(self):
@@ -215,8 +207,7 @@ class TestFrequencyTable:
 
     def test_explicit_categories_includes_zeros(self):
         responses = ["A", "A", "A"]
-        ft = frequency_table(responses, categories=["A", "B", "C"],
-                             bootstrap_ci_conf=None)
+        ft = frequency_table(responses, categories=["A", "B", "C"], bootstrap_ci_conf=None)
         row_map = {r.category: r for r in ft.rows}
         assert row_map["B"].count == 0
         assert row_map["C"].count == 0
