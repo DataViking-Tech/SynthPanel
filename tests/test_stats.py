@@ -6,9 +6,6 @@ import pytest
 
 from synth_panel.stats import (
     ConvergenceLevel,
-    ConvergenceReport,
-    FindingConvergence,
-    ModelDistribution,
     bootstrap_ci,
     borda_count,
     chi_squared_test,
