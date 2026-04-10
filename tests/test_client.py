@@ -97,11 +97,14 @@ class TestAliasResolution:
 
             mock_provider = MagicMock()
             mock_provider.send.return_value = _simple_response()
-            client._provider_cache[canonical] = mock_provider
 
-            client.send(_simple_request(model="sonnet"))
-            call_args = mock_provider.send.call_args[0][0]
-            assert call_args.model == canonical
+            with patch.object(client, "_resolve_provider", return_value=mock_provider) as mock_resolve:
+                client.send(_simple_request(model="sonnet"))
+                # _resolve_provider must receive the canonical name, not the alias
+                mock_resolve.assert_called_once_with(canonical)
+                # Provider receives request with the resolved model name
+                call_args = mock_provider.send.call_args[0][0]
+                assert call_args.model == canonical
 
 
 class TestRetry:
