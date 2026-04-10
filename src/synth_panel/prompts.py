@@ -1,5 +1,7 @@
 """Shared prompt builders for persona system prompts and question formatting."""
 
+from __future__ import annotations
+
 from typing import Any
 
 # Synthesis prompt version — increment when the prompt changes materially.

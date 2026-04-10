@@ -13,9 +13,9 @@ Layout::
 
 from __future__ import annotations
 
-import importlib.resources
 import json
 import os
+import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,6 +23,11 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from synth_panel.persistence import Session
+
+if sys.version_info >= (3, 9):
+    from importlib.resources import files as _resource_files
+else:
+    from importlib_resources import files as _resource_files
 
 import yaml
 
@@ -79,13 +84,14 @@ def _bundled_packs() -> dict[str, dict[str, Any]]:
     """
     result: dict[str, dict[str, Any]] = {}
     try:
-        packs_pkg = importlib.resources.files("synth_panel.packs")
+        packs_pkg = _resource_files("synth_panel.packs")
         for item in packs_pkg.iterdir():
             if item.name.endswith(".yaml"):
                 try:
                     data = yaml.safe_load(item.read_text(encoding="utf-8"))
                     if isinstance(data, dict):
-                        result[item.name.removesuffix(".yaml")] = data
+                        pack_id = item.name[: -len(".yaml")]
+                        result[pack_id] = data
                 except Exception:
                     continue
     except Exception:
@@ -100,13 +106,14 @@ def _bundled_instrument_packs() -> dict[str, dict[str, Any]]:
     """
     result: dict[str, dict[str, Any]] = {}
     try:
-        pkg = importlib.resources.files("synth_panel.packs.instruments")
+        pkg = _resource_files("synth_panel.packs.instruments")
         for item in pkg.iterdir():
             if item.name.endswith(".yaml"):
                 try:
                     data = yaml.safe_load(item.read_text(encoding="utf-8"))
                     if isinstance(data, dict):
-                        result[item.name.removesuffix(".yaml")] = data
+                        pack_id = item.name[: -len(".yaml")]
+                        result[pack_id] = data
                 except Exception:
                     continue
     except Exception:
