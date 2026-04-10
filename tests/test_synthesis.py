@@ -109,16 +109,43 @@ class TestSynthesizePanel:
         assert result.cost.total_cost > 0
 
     def test_default_model_is_sonnet(self):
-        """Default model should be sonnet."""
+        """When neither model nor panelist_model is set, defaults to sonnet."""
         mock_client = MagicMock()
         mock_client.send.return_value = _make_synthesis_response(_SYNTHESIS_DATA)
 
         result = synthesize_panel(mock_client, _PANELIST_RESULTS, _QUESTIONS)
 
         assert result.model == "sonnet"
-        # Verify the model sent to the LLM
         call_args = mock_client.send.call_args[0][0]
         assert call_args.model == "sonnet"
+
+    def test_panelist_model_used_as_default(self):
+        """When no explicit model, synthesis defaults to panelist model."""
+        mock_client = MagicMock()
+        mock_client.send.return_value = _make_synthesis_response(_SYNTHESIS_DATA)
+
+        result = synthesize_panel(mock_client, _PANELIST_RESULTS, _QUESTIONS, panelist_model="haiku")
+
+        assert result.model == "haiku"
+        call_args = mock_client.send.call_args[0][0]
+        assert call_args.model == "haiku"
+
+    def test_explicit_model_overrides_panelist_model(self):
+        """Explicit --synthesis-model overrides panelist model."""
+        mock_client = MagicMock()
+        mock_client.send.return_value = _make_synthesis_response(_SYNTHESIS_DATA)
+
+        result = synthesize_panel(
+            mock_client,
+            _PANELIST_RESULTS,
+            _QUESTIONS,
+            model="opus",
+            panelist_model="haiku",
+        )
+
+        assert result.model == "opus"
+        call_args = mock_client.send.call_args[0][0]
+        assert call_args.model == "opus"
 
     def test_custom_model(self):
         """Can override the synthesis model."""
@@ -194,6 +221,42 @@ class TestSynthesizePanel:
         assert call_args.tools[0].name == "synthesize"
         assert call_args.tool_choice is not None
         assert call_args.tool_choice.name == "synthesize"
+
+
+class TestCostEstimate:
+    def test_cost_estimate_printed_to_stderr(self, capsys):
+        """Pre-synthesis cost estimate is printed to stderr."""
+        mock_client = MagicMock()
+        mock_client.send.return_value = _make_synthesis_response(_SYNTHESIS_DATA)
+
+        synthesize_panel(mock_client, _PANELIST_RESULTS, _QUESTIONS)
+
+        captured = capsys.readouterr()
+        assert "Synthesis will cost ~$" in captured.err
+
+    def test_cost_estimate_includes_panelist_cost(self, capsys):
+        """When panelist_cost is provided, it appears in the estimate."""
+        from synth_panel.cost import CostEstimate
+
+        mock_client = MagicMock()
+        mock_client.send.return_value = _make_synthesis_response(_SYNTHESIS_DATA)
+
+        pc = CostEstimate(input_cost=0.001, output_cost=0.002)
+        synthesize_panel(mock_client, _PANELIST_RESULTS, _QUESTIONS, panelist_cost=pc)
+
+        captured = capsys.readouterr()
+        assert "panelist cost was $" in captured.err
+
+    def test_cost_estimate_without_panelist_cost(self, capsys):
+        """Without panelist_cost, the estimate omits the comparison."""
+        mock_client = MagicMock()
+        mock_client.send.return_value = _make_synthesis_response(_SYNTHESIS_DATA)
+
+        synthesize_panel(mock_client, _PANELIST_RESULTS, _QUESTIONS)
+
+        captured = capsys.readouterr()
+        assert "Synthesis will cost ~$" in captured.err
+        assert "panelist cost" not in captured.err
 
 
 class TestFormatPanelistData:

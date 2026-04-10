@@ -387,6 +387,10 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     run_invalid = failure_stats["total_pairs"] > 0 and failure_stats["failure_rate"] > threshold
     strict_violation = strict and failure_stats["errored_pairs"] > 0
 
+    # Compute panelist costs (needed before synthesis for cost estimate)
+    pricing, is_estimated = lookup_pricing(model)
+    panelist_cost_est = estimate_cost(panelist_usage, pricing)
+
     # Synthesis step (unless --no-synthesis)
     skip_synthesis = getattr(args, "no_synthesis", False)
     if run_invalid or strict_violation:
@@ -402,14 +406,12 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 panelist_results,
                 questions,
                 model=synthesis_model,
+                panelist_model=model,
                 custom_prompt=custom_prompt,
+                panelist_cost=panelist_cost_est,
             )
         except Exception as exc:
             print(f"Warning: synthesis failed: {exc}", file=sys.stderr)
-
-    # Compute costs
-    pricing, is_estimated = lookup_pricing(model)
-    panelist_cost_est = estimate_cost(panelist_usage, pricing)
 
     if synthesis_result:
         total_usage = panelist_usage + synthesis_result.usage

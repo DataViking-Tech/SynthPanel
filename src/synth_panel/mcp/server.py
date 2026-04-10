@@ -150,7 +150,9 @@ def _run_panel_sync(
                 panelist_results,
                 questions,
                 model=synthesis_model,
+                panelist_model=model,
                 custom_prompt=synthesis_prompt,
+                panelist_cost=panelist_cost,
             )
             synthesis_dict = synthesis_result.to_dict()
         except Exception:
@@ -184,6 +186,7 @@ def _run_multi_round_sync(
             panelist_results,
             questions,
             model=synthesis_model,
+            panelist_model=model,
             custom_prompt=synthesis_prompt,
         )
 
@@ -478,7 +481,7 @@ async def run_panel(
             JSON matching this schema instead of free text.
         synthesis: Whether to run synthesis after collecting responses.
             Defaults to true.
-        synthesis_model: Model to use for synthesis. Defaults to sonnet.
+        synthesis_model: Model to use for synthesis. Defaults to panelist model.
         synthesis_prompt: Custom synthesis prompt. Replaces the default.
     """
     model = model or MCP_DEFAULT_MODEL
@@ -553,7 +556,7 @@ async def run_quick_poll(
             this schema instead of free text.
         synthesis: Whether to run synthesis after collecting responses.
             Defaults to true.
-        synthesis_model: Model to use for synthesis. Defaults to sonnet.
+        synthesis_model: Model to use for synthesis. Defaults to panelist model.
         synthesis_prompt: Custom synthesis prompt. Replaces the default.
     """
     model = model or MCP_DEFAULT_MODEL
@@ -685,7 +688,7 @@ async def extend_panel(
             personas as the original run.
         model: LLM model to use for the new round. Defaults to haiku.
         synthesis: Whether to synthesize the new round.
-        synthesis_model: Synthesis model. Defaults to sonnet.
+        synthesis_model: Synthesis model. Defaults to panelist model.
         synthesis_prompt: Custom synthesis prompt for the new round.
     """
     model = model or MCP_DEFAULT_MODEL
@@ -719,6 +722,7 @@ async def extend_panel(
                     results,
                     questions,
                     model=synthesis_model,
+                    panelist_model=model,
                     custom_prompt=synthesis_prompt,
                 )
             except Exception:
