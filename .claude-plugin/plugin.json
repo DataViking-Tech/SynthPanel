@@ -1,10 +1,10 @@
 {
-  "name": "synth-panel",
+  "name": "synthpanel",
   "version": "0.1.0",
   "description": "Run synthetic focus groups and user research panels using AI personas. Define personas in YAML, design survey instruments, and collect structured qualitative feedback — all from Claude Code.",
   "mcp_servers": {
     "synth_panel": {
-      "command": "synth-panel",
+      "command": "synthpanel",
       "args": ["mcp-serve"],
       "env": {}
     }

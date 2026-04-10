@@ -1,11 +1,11 @@
 # MCP Server Reference
 
-synth-panel ships an [MCP](https://modelcontextprotocol.io/) server so AI agents can run synthetic focus groups as tool calls. The server uses stdio transport and defaults to the `haiku` model for cheap, fast iterative use.
+synthpanel ships an [MCP](https://modelcontextprotocol.io/) server so AI agents can run synthetic focus groups as tool calls. The server uses stdio transport and defaults to the `haiku` model for cheap, fast iterative use.
 
 ## Starting the Server
 
 ```bash
-synth-panel mcp-serve
+synthpanel mcp-serve
 ```
 
 The server communicates over stdin/stdout using JSON-RPC (the MCP protocol). It is designed to be launched by an MCP-aware editor or agent framework.
@@ -20,7 +20,7 @@ Add to your MCP config (e.g., `.claude/mcp.json`, `.cursor/mcp.json`):
 {
   "mcpServers": {
     "synth_panel": {
-      "command": "synth-panel",
+      "command": "synthpanel",
       "args": ["mcp-serve"],
       "env": { "ANTHROPIC_API_KEY": "sk-..." }
     }
@@ -33,7 +33,7 @@ Set the environment variable for whichever LLM provider you want to use. See the
 ### Claude Code Plugin
 
 ```
-/plugin install synth-panel
+/plugin install synthpanel
 ```
 
 This adds the `/focus-group` skill to your Claude Code session.
@@ -140,10 +140,10 @@ For v1/v2 instruments and raw `questions` input, `path` is empty or linear and `
 
 ## Data Storage
 
-Panel results, persona packs, and instrument packs are stored under `~/.synth-panel/` (configurable via `SYNTH_PANEL_DATA_DIR`):
+Panel results, persona packs, and instrument packs are stored under `~/.synthpanel/` (configurable via `SYNTH_PANEL_DATA_DIR`):
 
 ```
-~/.synth-panel/
+~/.synthpanel/
 ├── persona_packs/          # Saved persona packs (YAML)
 ├── packs/instruments/      # Installed instrument packs (YAML)
 └── results/                # Panel results (JSON) + session data

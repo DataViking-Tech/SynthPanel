@@ -2,9 +2,9 @@
 
 **Version**: 1.0.0
 **Date**: 2026-04-03
-**Purpose**: Functional specification for a synthetic focus group CLI tool ("synth-panel") that orchestrates multiple LLM-powered personas to generate structured qualitative feedback.
+**Purpose**: Functional specification for a synthetic focus group CLI tool ("synthpanel") that orchestrates multiple LLM-powered personas to generate structured qualitative feedback.
 
-**Audience**: Implementers who will build synth-panel from scratch. This document describes behavioral contracts and data flows only -- no implementation details from any reference codebase.
+**Audience**: Implementers who will build synthpanel from scratch. This document describes behavioral contracts and data flows only -- no implementation details from any reference codebase.
 
 ---
 
@@ -231,7 +231,7 @@ A single turn proceeds as follows:
 
 ### Purpose
 
-Manage the lifecycle of multiple independent agent sessions working in parallel or in a coordinated workflow. For synth-panel, this means spawning one agent per panelist persona and coordinating their execution.
+Manage the lifecycle of multiple independent agent sessions working in parallel or in a coordinated workflow. For synthpanel, this means spawning one agent per panelist persona and coordinating their execution.
 
 ### Interface Contract
 
@@ -307,7 +307,7 @@ Spawning --> ReadyForPrompt --> PromptAccepted --> Running --> Finished
 ### Extension Points
 
 - Detection heuristics (trust prompts, ready cues, running cues, shell prompts) are configurable pattern lists.
-- The registry is an in-memory data structure. For synth-panel, this is sufficient -- persistent orchestration state is handled by the session persistence layer.
+- The registry is an in-memory data structure. For synthpanel, this is sufficient -- persistent orchestration state is handled by the session persistence layer.
 
 ---
 
@@ -344,7 +344,7 @@ The structured output system provides:
 
 ### Behavioral Requirements
 
-For synth-panel, the primary pattern is:
+For synthpanel, the primary pattern is:
 
 1. Define a "respond" tool whose input schema matches the desired panelist response format.
 2. Set tool_choice to "specific" with the respond tool's name.
@@ -540,7 +540,7 @@ Provide the command-line interface through which operators configure and run foc
 - `prompt <text...>`: Run a single non-interactive prompt and exit. All remaining arguments are joined as the prompt text.
 - `login`: Start an authentication flow (e.g., OAuth).
 - `logout`: Clear saved authentication credentials.
-- (Additional subcommands as needed for synth-panel: `panel run`, `panel resume`, etc.)
+- (Additional subcommands as needed for synthpanel: `panel run`, `panel resume`, etc.)
 
 **Interactive Mode** (when no subcommand is given):
 - Enter a REPL loop.
@@ -718,7 +718,7 @@ All registries (worker, team, cron) use interior mutability with mutex guards. T
 
 ### Naming Conventions for Synth-Panel
 
-When implementing these foundations for synth-panel, use domain-appropriate names:
+When implementing these foundations for synthpanel, use domain-appropriate names:
 
 | Foundation Concept | Synth-Panel Term |
 |-------------------|-----------------|
@@ -733,7 +733,7 @@ When implementing these foundations for synth-panel, use domain-appropriate name
 
 ### Minimum Viable Subset
 
-For a first working version of synth-panel, the following components are required in this order:
+For a first working version of synthpanel, the following components are required in this order:
 
 1. **LLM Client Abstraction** -- needed for everything
 2. **Structured Output** -- panelist responses must be schema-conformant
@@ -778,15 +778,15 @@ Each component must be validated against a live LLM API (Claude or OpenAI-compat
 - Verify auto-compaction triggers after exceeding the token threshold (can be set low for testing, e.g., 1000 tokens).
 
 ### CLI Framework
-- `synth-panel prompt "Say hello"` exits 0 and prints a response.
-- `synth-panel prompt "Say hello" --output-format json` outputs valid JSON with message and usage fields.
-- `synth-panel --help` prints usage information.
+- `synthpanel prompt "Say hello"` exits 0 and prints a response.
+- `synthpanel prompt "Say hello" --output-format json` outputs valid JSON with message and usage fields.
+- `synthpanel --help` prints usage information.
 - Invalid subcommand exits non-zero with an error message.
 
 ### Integration (end-to-end)
 - Define 3 personas in YAML (e.g., "skeptical CTO", "enthusiastic intern", "pragmatic PM").
 - Define a survey instrument asking "What do you think of the name 'Traitprint' for a career matching app?"
-- Run `synth-panel run --personas personas.yaml --instrument survey.yaml --model sonnet`.
+- Run `synthpanel run --personas personas.yaml --instrument survey.yaml --model sonnet`.
 - Verify: 3 structured responses returned, each conforming to the schema, each with different content reflecting the persona, total cost printed.
 
 ---

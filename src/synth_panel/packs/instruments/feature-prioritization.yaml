@@ -8,7 +8,7 @@ description: >
   Prioritize a candidate feature set against persona needs. Branches
   into trade-off probing, must-have validation, or scope-cut
   exploration depending on the initial reactions.
-author: synth-panel
+author: synthpanel
 
 instrument:
   version: 3

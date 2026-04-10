@@ -395,7 +395,7 @@ class TestInstrumentPacks:
             "name": "pricing-probe",
             "version": "1.0.0",
             "description": "Branching probe for pricing-sensitive panels",
-            "author": "synth-panel",
+            "author": "synthpanel",
             "instrument": {
                 "version": 3,
                 "rounds": [
@@ -411,7 +411,7 @@ class TestInstrumentPacks:
         listing = list_instrument_packs()
         saved = [p for p in listing if p["id"] == "pricing-probe"]
         assert len(saved) == 1
-        assert saved[0]["author"] == "synth-panel"
+        assert saved[0]["author"] == "synthpanel"
 
         loaded = load_instrument_pack("pricing-probe")
         # round-trip preserves the body

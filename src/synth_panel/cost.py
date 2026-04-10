@@ -1,4 +1,4 @@
-"""Cost and budget tracking for synth-panel.
+"""Cost and budget tracking for synthpanel.
 
 Implements SPEC.md Section 7: token usage accumulation, model-specific
 cost estimation, budget enforcement, and human-readable summaries.
@@ -200,7 +200,7 @@ class UsageTracker:
 
     Thread-safety is *not* provided — callers must synchronise externally
     if the tracker is shared.  (The spec notes that this is sufficient for
-    the synth-panel use case.)
+    the synthpanel use case.)
     """
 
     def __init__(self) -> None:

@@ -1,4 +1,4 @@
-# Releasing synth-panel
+# Releasing synthpanel
 
 ## Release flow (production PyPI)
 
@@ -12,7 +12,7 @@ Releases follow semver and are fully automated via GitHub Actions:
    - Computes the next version from the latest `v*.*.*` tag.
    - Creates and pushes a new git tag (e.g. `v0.5.0`).
    - Creates a GitHub Release with auto-generated notes.
-   - Triggers `publish.yml` which builds and publishes to [PyPI](https://pypi.org/project/synth-panel/).
+   - Triggers `publish.yml` which builds and publishes to [PyPI](https://pypi.org/project/synthpanel/).
 
 ### Manual publish
 
@@ -23,7 +23,7 @@ You can re-publish an existing tag via workflow dispatch:
 
 ## Dev builds (TestPyPI)
 
-Every merge to `main` automatically publishes a dev build to [TestPyPI](https://test.pypi.org/project/synth-panel/):
+Every merge to `main` automatically publishes a dev build to [TestPyPI](https://test.pypi.org/project/synthpanel/):
 
 - Version format: `{base_version}.dev{run_number}` (e.g. `0.4.0.dev42`).
 - Workflow: `publish-test.yml`.
@@ -33,29 +33,29 @@ Every merge to `main` automatically publishes a dev build to [TestPyPI](https://
 
 ```bash
 # Latest dev build from TestPyPI
-pip install -i https://test.pypi.org/simple/ synth-panel
+pip install -i https://test.pypi.org/simple/ synthpanel
 
 # Specific dev version
-pip install -i https://test.pypi.org/simple/ synth-panel==0.4.0.dev42
+pip install -i https://test.pypi.org/simple/ synthpanel==0.4.0.dev42
 ```
 
 > **Note:** TestPyPI may not have all dependencies. If installation fails due to
-> missing deps, install them from real PyPI first, then install synth-panel from
+> missing deps, install them from real PyPI first, then install synthpanel from
 > TestPyPI:
 >
 > ```bash
 > pip install httpx pyyaml
-> pip install -i https://test.pypi.org/simple/ --no-deps synth-panel==0.4.0.dev42
+> pip install -i https://test.pypi.org/simple/ --no-deps synthpanel==0.4.0.dev42
 > ```
 
 ## Install a release
 
 ```bash
 # Latest stable release from PyPI
-pip install synth-panel
+pip install synthpanel
 
 # Specific version
-pip install synth-panel==0.4.0
+pip install synthpanel==0.4.0
 ```
 
 ## GitHub environments

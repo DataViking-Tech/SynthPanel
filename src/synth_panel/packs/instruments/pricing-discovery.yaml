@@ -11,7 +11,7 @@ description: >
   Discover how a target persona thinks about price for a product or
   service. Branches into pain probing, pricing tier exploration, or
   competitor comparison based on the discovery round's themes.
-author: synth-panel
+author: synthpanel
 
 instrument:
   version: 3

@@ -1,8 +1,8 @@
 # Changelog
 
-All notable changes to synth-panel are documented here.
+All notable changes to synthpanel are documented here.
 
-For auto-generated release notes, see [GitHub Releases](https://github.com/DataViking-Tech/synth-panel/releases).
+For auto-generated release notes, see [GitHub Releases](https://github.com/DataViking-Tech/synthpanel/releases).
 
 ## [Unreleased]
 
@@ -30,7 +30,7 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [0.4.0] - 2026-04-10
 
-First published release on [PyPI](https://pypi.org/project/synth-panel/).
+First published release on [PyPI](https://pypi.org/project/synthpanel/).
 
 ### Added
 - v2 multi-round linear instruments with session reuse across rounds
@@ -57,6 +57,6 @@ First published release on [PyPI](https://pypi.org/project/synth-panel/).
 - Persona-pack persistence (`save_persona_pack`, `get_persona_pack`, `list_persona_packs`)
 - Panel result persistence and retrieval
 
-[Unreleased]: https://github.com/DataViking-Tech/synth-panel/compare/v0.4.0...HEAD
-[0.4.0]: https://github.com/DataViking-Tech/synth-panel/releases/tag/v0.4.0
-[0.3.0]: https://github.com/DataViking-Tech/synth-panel/releases/tag/v0.3.0
+[Unreleased]: https://github.com/DataViking-Tech/synthpanel/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/DataViking-Tech/synthpanel/releases/tag/v0.4.0
+[0.3.0]: https://github.com/DataViking-Tech/synthpanel/releases/tag/v0.3.0

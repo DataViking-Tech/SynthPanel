@@ -1,4 +1,4 @@
-"""Tests for the synth-panel CLI framework."""
+"""Tests for the synthpanel CLI framework."""
 
 from __future__ import annotations
 

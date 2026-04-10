@@ -8,7 +8,7 @@ allowed-tools:
   - mcp__synth_panel__list_instruments
 ---
 
-You are orchestrating a **synthetic focus group** using the synth-panel MCP tools.
+You are orchestrating a **synthetic focus group** using the synthpanel MCP tools.
 
 ## What You Do
 

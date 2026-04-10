@@ -7,9 +7,9 @@ name: Publish Dev to TestPyPI
 #
 #   1. On https://test.pypi.org/manage/account/publishing/ add a trusted
 #      publisher with:
-#        project name = synth-panel
+#        project name = synthpanel
 #        owner        = DataViking-Tech
-#        repo         = synth-panel
+#        repo         = synthpanel
 #        workflow     = publish-test.yml
 #        environment  = pypi-test   (must match the `environment:` key below)
 #   2. In GitHub repo Settings -> Environments, create an environment
@@ -65,8 +65,8 @@ jobs:
           DEV_VERSION: ${{ steps.version.outputs.version }}
         run: |
           {
-            echo "## Published synth-panel ${DEV_VERSION} (dev)"
+            echo "## Published synthpanel ${DEV_VERSION} (dev)"
             echo ""
-            echo "- TestPyPI: https://test.pypi.org/project/synth-panel/${DEV_VERSION}/"
-            echo "- Install: \`pip install -i https://test.pypi.org/simple/ synth-panel==${DEV_VERSION}\`"
+            echo "- TestPyPI: https://test.pypi.org/project/synthpanel/${DEV_VERSION}/"
+            echo "- Install: \`pip install -i https://test.pypi.org/simple/ synthpanel==${DEV_VERSION}\`"
           } >> "$GITHUB_STEP_SUMMARY"

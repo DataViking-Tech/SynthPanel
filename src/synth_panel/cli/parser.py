@@ -1,4 +1,4 @@
-"""Argument parser for synth-panel CLI.
+"""Argument parser for synthpanel CLI.
 
 Defines global arguments and subcommands per SPEC.md §8.
 """
@@ -11,7 +11,7 @@ import argparse
 def build_parser() -> argparse.ArgumentParser:
     """Build the top-level argument parser with global args and subcommands."""
     parser = argparse.ArgumentParser(
-        prog="synth-panel",
+        prog="synthpanel",
         description="Synthetic focus group CLI — orchestrate LLM-powered personas for structured qualitative feedback.",
     )
 

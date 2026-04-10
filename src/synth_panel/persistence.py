@@ -1,4 +1,4 @@
-"""Session persistence for synth-panel.
+"""Session persistence for synthpanel.
 
 Implements SPEC.md Section 6: save/load in JSON and JSONL formats,
 incremental append, session forking, atomic writes, and file rotation.

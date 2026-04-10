@@ -1,4 +1,4 @@
-"""MCP server implementation for synth-panel.
+"""MCP server implementation for synthpanel.
 
 Exposes 12 tools, 4 resource URI patterns, and 3 prompt templates.
 Uses stdio transport. Default model is haiku for MCP mode.
@@ -87,7 +87,7 @@ MCP_DEFAULT_MODEL = "haiku"
 PANELIST_TIMEOUT = 30
 
 mcp = FastMCP(
-    "synth-panel",
+    "synthpanel",
     instructions=(
         "Synthetic focus group server. Run panels of AI personas to get "
         "structured qualitative feedback on products, concepts, and names."

@@ -11,9 +11,9 @@ name: Publish to PyPI
 #
 #   1. On https://pypi.org/manage/account/publishing/ add a trusted
 #      publisher with:
-#        project name = synth-panel
+#        project name = synthpanel
 #        owner        = DataViking-Tech
-#        repo         = synth-panel
+#        repo         = synthpanel
 #        workflow     = publish.yml
 #        environment  = pypi   (must match the `environment:` key below)
 #   2. In GitHub repo Settings → Environments, create an environment
@@ -110,8 +110,8 @@ jobs:
         run: |
           VERSION="${TAG#v}"
           {
-            echo "## Published synth-panel ${VERSION}"
+            echo "## Published synthpanel ${VERSION}"
             echo ""
-            echo "- PyPI: https://pypi.org/project/synth-panel/${VERSION}/"
-            echo "- Install: \`pip install synth-panel==${VERSION}\`"
+            echo "- PyPI: https://pypi.org/project/synthpanel/${VERSION}/"
+            echo "- Install: \`pip install synthpanel==${VERSION}\`"
           } >> "$GITHUB_STEP_SUMMARY"

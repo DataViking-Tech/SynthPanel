@@ -1,4 +1,4 @@
-"""Interactive REPL for synth-panel.
+"""Interactive REPL for synthpanel.
 
 Entered when no subcommand is given. Supports slash commands per SPEC.md §8.
 """
@@ -50,7 +50,7 @@ def run_repl(args: argparse.Namespace, fmt: OutputFormat) -> int:
     runtime = AgentRuntime(client=client, session=session, model=model)
     state = SessionState(model=model, runtime=runtime)
 
-    print("synth-panel interactive mode. Type /help for commands, Ctrl-D to exit.")
+    print("synthpanel interactive mode. Type /help for commands, Ctrl-D to exit.")
 
     while True:
         try:

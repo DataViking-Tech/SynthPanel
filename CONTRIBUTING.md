@@ -1,11 +1,11 @@
-# Contributing to synth-panel
+# Contributing to synthpanel
 
 ## Development Setup
 
 ```bash
 # Clone the repository
-git clone https://github.com/DataViking-Tech/synth-panel.git
-cd synth-panel
+git clone https://github.com/DataViking-Tech/synthpanel.git
+cd synthpanel
 
 # Create a virtual environment (using uv or standard venv)
 uv venv .venv && source .venv/bin/activate
@@ -55,7 +55,7 @@ mypy src/synth_panel/
 The MCP server uses stdio transport and is designed to be launched by an MCP-aware editor (Claude Code, Cursor, Windsurf, etc.):
 
 ```bash
-synth-panel mcp-serve
+synthpanel mcp-serve
 ```
 
 For testing outside an editor, you can pipe JSON-RPC messages to stdin. See [docs/mcp.md](docs/mcp.md) for the full tool/resource/prompt reference.

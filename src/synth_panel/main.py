@@ -1,4 +1,4 @@
-"""synth-panel CLI entry point.
+"""synthpanel CLI entry point.
 
 Implements the CLI framework from SPEC.md §8: argparse CLI, REPL loop,
 slash commands, and output formatting.

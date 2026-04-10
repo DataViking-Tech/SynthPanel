@@ -7,7 +7,7 @@ description: >
   Test whether a landing page communicates clearly to a target persona.
   Branches into jargon-probe, audience-fit probe, or CTA-probe based
   on the dominant confusion in the initial pass.
-author: synth-panel
+author: synthpanel
 
 instrument:
   version: 3
