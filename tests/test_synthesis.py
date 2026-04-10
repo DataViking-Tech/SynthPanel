@@ -124,9 +124,7 @@ class TestSynthesizePanel:
         mock_client = MagicMock()
         mock_client.send.return_value = _make_synthesis_response(_SYNTHESIS_DATA)
 
-        result = synthesize_panel(
-            mock_client, _PANELIST_RESULTS, _QUESTIONS, panelist_model="haiku"
-        )
+        result = synthesize_panel(mock_client, _PANELIST_RESULTS, _QUESTIONS, panelist_model="haiku")
 
         assert result.model == "haiku"
         call_args = mock_client.send.call_args[0][0]
@@ -244,9 +242,7 @@ class TestCostEstimate:
         mock_client.send.return_value = _make_synthesis_response(_SYNTHESIS_DATA)
 
         pc = CostEstimate(input_cost=0.001, output_cost=0.002)
-        synthesize_panel(
-            mock_client, _PANELIST_RESULTS, _QUESTIONS, panelist_cost=pc
-        )
+        synthesize_panel(mock_client, _PANELIST_RESULTS, _QUESTIONS, panelist_cost=pc)
 
         captured = capsys.readouterr()
         assert "panelist cost was $" in captured.err
