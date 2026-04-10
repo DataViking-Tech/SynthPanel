@@ -175,8 +175,14 @@ _PERTURBATION_EXTRACTION_SCHEMA: dict[str, Any] = {
         },
     },
     "required": [
-        "name", "age", "occupation", "background", "personality_traits",
-        "change_description", "original_field", "original_value",
+        "name",
+        "age",
+        "occupation",
+        "background",
+        "personality_traits",
+        "change_description",
+        "original_field",
+        "original_value",
     ],
 }
 
@@ -252,7 +258,10 @@ def generate_variants(
         if result.is_fallback:
             logger.warning(
                 "Variant %d/%d for %r (axis=%s) failed extraction, skipping",
-                i, k, source_name, axis.value,
+                i,
+                k,
+                source_name,
+                axis.value,
             )
             continue
 

@@ -113,10 +113,7 @@ def _valid_extraction(
 def _mock_client_for_axes(axes_sequence: list[PerturbationAxis]) -> MagicMock:
     """Build a mock LLMClient that returns valid extractions for a sequence of axes."""
     client = MagicMock()
-    responses = [
-        _make_extraction_response(_valid_extraction(axis=ax))
-        for ax in axes_sequence
-    ]
+    responses = [_make_extraction_response(_valid_extraction(axis=ax)) for ax in axes_sequence]
     client.send.side_effect = responses
     return client
 
@@ -207,9 +204,7 @@ class TestGenerateVariants:
 
     def test_single_axis_mode(self):
         """When axes=[TRAIT_SWAP], all K variants should use TRAIT_SWAP."""
-        client = _mock_client_for_axes(
-            [PerturbationAxis.TRAIT_SWAP] * 3
-        )
+        client = _mock_client_for_axes([PerturbationAxis.TRAIT_SWAP] * 3)
 
         result = generate_variants(
             dict(_BASE_PERSONA),
@@ -246,9 +241,7 @@ class TestGenerateVariants:
                 responses.append(_make_fallback_response())
                 responses.append(_make_fallback_response())
             else:
-                responses.append(
-                    _make_extraction_response(_valid_extraction(axis=ax))
-                )
+                responses.append(_make_extraction_response(_valid_extraction(axis=ax)))
 
         client = MagicMock()
         client.send.side_effect = responses
@@ -275,9 +268,7 @@ class TestGenerateVariants:
 
     def test_variant_set_properties(self):
         """VariantSet source_name and k track correctly."""
-        client = _mock_client_for_axes(
-            [PerturbationAxis.TRAIT_SWAP, PerturbationAxis.MOOD_CONTEXT]
-        )
+        client = _mock_client_for_axes([PerturbationAxis.TRAIT_SWAP, PerturbationAxis.MOOD_CONTEXT])
 
         result = generate_variants(dict(_BASE_PERSONA), client, k=2)
 
