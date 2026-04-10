@@ -413,8 +413,11 @@ class TestInstrumentPacks:
         loaded = load_instrument_pack("auto")
         assert loaded["name"] == "auto"
 
-    def test_list_empty(self):
-        assert list_instrument_packs() == []
+    def test_list_empty_no_user_packs(self):
+        # Bundled packs always present; verify no user-saved packs exist
+        packs = list_instrument_packs()
+        user_packs = [p for p in packs if not p.get("builtin", False)]
+        assert user_packs == []
 
     def test_save_rejects_non_mapping(self):
         with pytest.raises(ValueError):
