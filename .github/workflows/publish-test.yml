@@ -1,0 +1,72 @@
+name: Publish Dev to TestPyPI
+
+# Every merge to main publishes a dev build to test.pypi.org.
+# Version is auto-generated: {pyproject.toml version}.dev{run_number}
+#
+# ONE-TIME MANUAL SETUP (required before the first successful publish):
+#
+#   1. On https://test.pypi.org/manage/account/publishing/ add a trusted
+#      publisher with:
+#        project name = synth-panel
+#        owner        = DataViking-Tech
+#        repo         = synth-panel
+#        workflow     = publish-test.yml
+#        environment  = pypi-test   (must match the `environment:` key below)
+#   2. In GitHub repo Settings -> Environments, create an environment
+#      named `pypi-test`.
+#
+# The trusted publisher + environment are already configured by the founder.
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  publish-dev:
+    runs-on: ubuntu-latest
+    environment: pypi-test
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Generate dev version
+        id: version
+        run: |
+          set -euo pipefail
+          BASE=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          DEV_VERSION="${BASE}.dev${GITHUB_RUN_NUMBER}"
+          sed -i "s/^version = \".*\"/version = \"${DEV_VERSION}\"/" pyproject.toml
+          echo "version=$DEV_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Dev version: $DEV_VERSION"
+
+      - name: Install build tools
+        run: pip install build
+
+      - name: Build package
+        run: python -m build
+
+      - name: Show built artifacts
+        run: ls -lh dist/
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+      - name: Summarize
+        env:
+          DEV_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          {
+            echo "## Published synth-panel ${DEV_VERSION} (dev)"
+            echo ""
+            echo "- TestPyPI: https://test.pypi.org/project/synth-panel/${DEV_VERSION}/"
+            echo "- Install: \`pip install -i https://test.pypi.org/simple/ synth-panel==${DEV_VERSION}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
