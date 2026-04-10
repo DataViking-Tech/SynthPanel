@@ -41,6 +41,7 @@ __all__ = [
     "kendall_w",
     "krippendorff_alpha",
     "proportion_stat",
+    "robustness_score",
     "silhouette_score",
 ]
 
@@ -1333,4 +1334,84 @@ def cluster_personas(
         silhouette_score=best_score,
         persona_assignments=assignments,
         k_range_tested=(min_k, max_k),
+    )
+
+
+# ---------------------------------------------------------------------------
+# robustness_score
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class RobustnessResult:
+    """Robustness score for a finding across persona variants."""
+
+    finding_value: str
+    overall_robustness: float
+    per_persona: dict[str, float]
+    n_personas: int
+    k_variants_per_persona: int
+    interpretation: str
+
+
+def _interpret_robustness(r: float) -> str:
+    if r >= 0.8:
+        return "robust"
+    elif r >= 0.6:
+        return "moderately robust"
+    elif r >= 0.4:
+        return "sensitive"
+    else:
+        return "fragile"
+
+
+def robustness_score(
+    variant_responses: dict[str, list[str]],
+    finding_value: str,
+) -> RobustnessResult:
+    """Compute robustness score for a finding across persona variants.
+
+    Args:
+        variant_responses: Mapping from source persona name to a list of
+            responses from that persona's variants.
+        finding_value: The value to test robustness for.
+
+    Returns:
+        RobustnessResult with per-persona and overall robustness scores.
+
+    Raises:
+        ValueError: If variant_responses is empty.
+    """
+    if not variant_responses:
+        raise ValueError("variant_responses must not be empty")
+
+    per_persona: dict[str, float] = {}
+    k_values: list[int] = []
+
+    for name, responses in variant_responses.items():
+        k_i = len(responses)
+        k_values.append(k_i)
+        if k_i == 0:
+            per_persona[name] = 0.0
+        else:
+            per_persona[name] = sum(1 for r in responses if r == finding_value) / k_i
+
+    n = len(per_persona)
+    overall = sum(per_persona.values()) / n
+
+    # Median K across personas
+    sorted_k = sorted(k_values)
+    mid = len(sorted_k) // 2
+    if len(sorted_k) % 2 == 0:
+        median_k = (sorted_k[mid - 1] + sorted_k[mid]) // 2
+    else:
+        median_k = sorted_k[mid]
+
+    return RobustnessResult(
+        finding_value=finding_value,
+        overall_robustness=overall,
+        per_persona=per_persona,
+        n_personas=n,
+        k_variants_per_persona=median_k,
+        interpretation=_interpret_robustness(overall),
     )
