@@ -1,4 +1,4 @@
-"""Tests for synth_panel.stats — sp-5on.7 + sp-5on.8 + sp-5on.12."""
+"""Tests for synth_panel.stats — sp-5on.7 + sp-5on.8 + sp-5on.9 + sp-5on.12."""
 
 from __future__ import annotations
 
@@ -9,11 +9,13 @@ from synth_panel.stats import (
     bootstrap_ci,
     borda_count,
     chi_squared_test,
+    cluster_personas,
     convergence_report,
     frequency_table,
     kendall_w,
     krippendorff_alpha,
     proportion_stat,
+    silhouette_score,
 )
 
 # ---------------------------------------------------------------------------
@@ -523,3 +525,100 @@ class TestConvergenceReport:
         result = convergence_report(responses, ["Q1"])
         assert result.n_models == 2
         assert set(result.model_names) == {"gemini", "haiku"}
+
+
+# ---------------------------------------------------------------------------
+# cluster_personas (sp-5on.9)
+# ---------------------------------------------------------------------------
+
+
+class TestClusterPersonas:
+    def test_two_obvious_clusters(self):
+        """Two groups with completely different response patterns."""
+        responses = {
+            "A1": ["X", "X", "X"],
+            "A2": ["X", "X", "X"],
+            "A3": ["X", "X", "X"],
+            "A4": ["X", "X", "X"],
+            "B1": ["Y", "Y", "Y"],
+            "B2": ["Y", "Y", "Y"],
+            "B3": ["Y", "Y", "Y"],
+            "B4": ["Y", "Y", "Y"],
+        }
+        result = cluster_personas(responses, min_k=2, max_k=3)
+        assert result.n_clusters == 2
+        assert result.silhouette_score > 0.5
+        # A-group and B-group should be in different clusters
+        assert result.persona_assignments["A1"] == result.persona_assignments["A2"]
+        assert result.persona_assignments["B1"] == result.persona_assignments["B2"]
+        assert result.persona_assignments["A1"] != result.persona_assignments["B1"]
+
+    def test_uniform_responses_low_silhouette(self):
+        """All personas respond identically -> no cluster structure."""
+        responses = {f"P{i}": ["A", "B", "C"] for i in range(10)}
+        result = cluster_personas(responses, min_k=2, max_k=3)
+        assert result.silhouette_score <= 0.0
+
+    def test_dominant_responses_reported(self):
+        """Cluster dominant response should reflect the majority."""
+        responses = {
+            "A1": ["X", "Y"],
+            "A2": ["X", "Y"],
+            "A3": ["X", "Z"],
+            "B1": ["Y", "X"],
+            "B2": ["Y", "X"],
+            "B3": ["Y", "X"],
+        }
+        result = cluster_personas(responses, min_k=2, max_k=2)
+        for cluster in result.clusters:
+            if "A1" in cluster.persona_names:
+                assert cluster.dominant_responses[0] == "X"
+            if "B1" in cluster.persona_names:
+                assert cluster.dominant_responses[0] == "Y"
+
+    def test_max_k_capped_at_n_minus_1(self):
+        """max_k silently capped if it exceeds N-1."""
+        responses = {f"P{i}": ["A"] for i in range(4)}
+        result = cluster_personas(responses, min_k=2, max_k=10)
+        assert result.k_range_tested[1] <= 3  # N-1 = 3
+
+    def test_too_few_personas_rejects(self):
+        """Need at least 2*min_k personas."""
+        responses = {"P1": ["A"], "P2": ["B"]}
+        with pytest.raises(ValueError):
+            cluster_personas(responses, min_k=2)
+
+    def test_inconsistent_response_lengths_rejects(self):
+        responses = {"P1": ["A", "B"], "P2": ["A"]}
+        with pytest.raises(ValueError):
+            cluster_personas(responses)
+
+    def test_persona_assignments_complete(self):
+        """Every persona should appear in assignments."""
+        responses = {f"P{i}": ["A" if i < 5 else "B"] for i in range(10)}
+        result = cluster_personas(responses)
+        assert set(result.persona_assignments.keys()) == set(responses.keys())
+
+
+# ---------------------------------------------------------------------------
+# silhouette_score (sp-5on.9)
+# ---------------------------------------------------------------------------
+
+
+class TestSilhouetteScore:
+    def test_perfect_clusters(self):
+        """Two well-separated clusters -> high silhouette."""
+        labels = [0, 0, 1, 1]
+        dist = [
+            [0, 1, 200, 201],
+            [1, 0, 201, 202],
+            [200, 201, 0, 1],
+            [201, 202, 1, 0],
+        ]
+        score = silhouette_score(labels, dist)
+        assert score > 0.9
+
+    def test_single_cluster_returns_zero(self):
+        labels = [0, 0, 0]
+        dist = [[0, 1, 2], [1, 0, 1], [2, 1, 0]]
+        assert silhouette_score(labels, dist) == pytest.approx(0.0)
