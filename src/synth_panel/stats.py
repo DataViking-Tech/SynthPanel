@@ -607,9 +607,7 @@ def _ordinal_delta(
     i_k = sorted_values.index(k)
     if i_c > i_k:
         i_c, i_k = i_k, i_c
-    running_sum = sum(
-        value_counts[sorted_values[g]] for g in range(i_c, i_k + 1)
-    )
+    running_sum = sum(value_counts[sorted_values[g]] for g in range(i_c, i_k + 1))
     running_sum -= (value_counts[c] + value_counts[k]) / 2
     return running_sum**2
 
@@ -657,10 +655,7 @@ def krippendorff_alpha(
         raise ValueError("reliability_data must not be empty")
 
     if level_of_measurement not in _VALID_LEVELS:
-        raise ValueError(
-            f"level_of_measurement must be one of {sorted(_VALID_LEVELS)}, "
-            f"got {level_of_measurement!r}"
-        )
+        raise ValueError(f"level_of_measurement must be one of {sorted(_VALID_LEVELS)}, got {level_of_measurement!r}")
 
     n_raters = len(reliability_data)
     n_items = len(reliability_data[0])
@@ -669,8 +664,7 @@ def krippendorff_alpha(
     for i, row in enumerate(reliability_data):
         if len(row) != n_items:
             raise ValueError(
-                f"All rater lists must have the same length; "
-                f"rater 0 has {n_items} items but rater {i} has {len(row)}"
+                f"All rater lists must have the same length; rater 0 has {n_items} items but rater {i} has {len(row)}"
             )
 
     # --- Collect all non-None values and discover categories ---
@@ -694,9 +688,7 @@ def krippendorff_alpha(
 
     for item_idx in range(n_items):
         values_for_item = [
-            reliability_data[r][item_idx]
-            for r in range(n_raters)
-            if reliability_data[r][item_idx] is not None
+            reliability_data[r][item_idx] for r in range(n_raters) if reliability_data[r][item_idx] is not None
         ]
         m_u = len(values_for_item)
         if m_u < 2:
@@ -716,9 +708,7 @@ def krippendorff_alpha(
     n = sum(n_c.values())
 
     if n < 2:
-        raise ValueError(
-            "Fewer than 2 pairable values — cannot compute alpha"
-        )
+        raise ValueError("Fewer than 2 pairable values — cannot compute alpha")
 
     # --- Build delta function ---
     if level_of_measurement == "nominal":
