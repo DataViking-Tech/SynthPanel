@@ -5,6 +5,8 @@ hook interception (pre-tool-use, post-tool-use, post-tool-use-failure),
 and lifecycle commands (init/shutdown).
 """
 
+from __future__ import annotations
+
 from synth_panel.plugins.hooks import ShellHookRunner
 from synth_panel.plugins.manager import PluginManager
 from synth_panel.plugins.manifest import (

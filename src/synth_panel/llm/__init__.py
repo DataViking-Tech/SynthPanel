@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from synth_panel.llm.client import LLMClient
 from synth_panel.llm.errors import LLMError, LLMErrorCategory
 from synth_panel.llm.models import (

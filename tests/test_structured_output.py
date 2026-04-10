@@ -1,5 +1,7 @@
 """Tests for structured output engine (SPEC.md §5)."""
 
+from __future__ import annotations
+
 from unittest.mock import MagicMock
 
 from synth_panel.llm.models import (

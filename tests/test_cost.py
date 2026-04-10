@@ -1,5 +1,7 @@
 """Tests for synth_panel.cost — SPEC.md Section 7."""
 
+from __future__ import annotations
+
 import pytest
 
 from synth_panel.cost import (

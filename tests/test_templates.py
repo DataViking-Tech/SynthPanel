@@ -1,5 +1,7 @@
 """Tests for synth_panel.templates — template engine for dynamic questions."""
 
+from __future__ import annotations
+
 from synth_panel.synthesis import SynthesisResult
 from synth_panel.templates import (
     build_template_context,

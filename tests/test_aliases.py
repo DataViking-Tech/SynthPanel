@@ -1,5 +1,7 @@
 """Tests for model alias resolution."""
 
+from __future__ import annotations
+
 from synth_panel.llm.aliases import resolve_alias
 
 

@@ -1,5 +1,7 @@
 """Tests for condition evaluation module."""
 
+from __future__ import annotations
+
 from unittest.mock import MagicMock
 
 from synth_panel.conditions import evaluate_condition, normalize_follow_up
