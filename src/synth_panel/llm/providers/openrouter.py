@@ -1,6 +1,7 @@
-"""Generic OpenAI-compatible provider (SPEC.md §2).
+"""OpenRouter provider (OpenAI-compatible).
 
-This is the fallback for models that don't match Anthropic or xAI prefixes.
+Routes requests to any model via OpenRouter's unified API.
+Requires OPENROUTER_API_KEY.
 """
 
 from __future__ import annotations
@@ -23,27 +24,22 @@ from synth_panel.llm.providers._openai_format import (
 )
 from synth_panel.llm.providers.base import LLMProvider, ProviderConfig
 
-OPENAI_COMPAT_CONFIG = ProviderConfig(
-    api_key_env="OPENAI_API_KEY",
-    base_url_env="OPENAI_BASE_URL",
-    default_base_url="https://api.openai.com",
-    model_prefixes=(),  # No prefix — this is the fallback
+OPENROUTER_CONFIG = ProviderConfig(
+    api_key_env="OPENROUTER_API_KEY",
+    base_url_env="OPENROUTER_BASE_URL",
+    default_base_url="https://openrouter.ai/api",
+    model_prefixes=("openrouter/",),
 )
 
 
-class OpenAICompatibleProvider(LLMProvider):
-    """Generic OpenAI-compatible chat completions provider."""
+class OpenRouterProvider(LLMProvider):
+    """OpenRouter provider (OpenAI-compatible chat completions)."""
 
-    config = OPENAI_COMPAT_CONFIG
+    config = OPENROUTER_CONFIG
 
-    def __init__(
-        self,
-        *,
-        base_url: str | None = None,
-        api_key: str | None = None,
-    ) -> None:
-        self._api_key = api_key if api_key is not None else self.config.get_api_key()
-        self._base_url = base_url if base_url is not None else self.config.get_base_url()
+    def __init__(self) -> None:
+        self._api_key = self.config.get_api_key()
+        self._base_url = self.config.get_base_url()
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -66,7 +62,7 @@ class OpenAICompatibleProvider(LLMProvider):
         if resp.status_code != 200:
             cat = classify_http_status(resp.status_code)
             raise LLMError(
-                f"OpenAI API error {resp.status_code}: {resp.text[:500]}",
+                f"OpenRouter API error {resp.status_code}: {resp.text[:500]}",
                 cat,
                 status_code=resp.status_code,
             )
@@ -75,7 +71,7 @@ class OpenAICompatibleProvider(LLMProvider):
             data = resp.json()
         except (json.JSONDecodeError, ValueError) as exc:
             raise LLMError(
-                "Failed to parse OpenAI response",
+                "Failed to parse OpenRouter response",
                 LLMErrorCategory.DESERIALIZATION,
                 cause=exc,
             ) from exc
@@ -97,7 +93,7 @@ class OpenAICompatibleProvider(LLMProvider):
                     resp.read()
                     cat = classify_http_status(resp.status_code)
                     raise LLMError(
-                        f"OpenAI API error {resp.status_code}: {resp.text[:500]}",
+                        f"OpenRouter API error {resp.status_code}: {resp.text[:500]}",
                         cat,
                         status_code=resp.status_code,
                     )

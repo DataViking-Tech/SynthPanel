@@ -6,13 +6,14 @@ import random
 import time
 from collections.abc import Callable, Iterator
 
-from synth_panel.llm.aliases import resolve_alias
+from synth_panel.llm.aliases import get_base_url_override, resolve_alias
 from synth_panel.llm.errors import LLMError, LLMErrorCategory
 from synth_panel.llm.models import CompletionRequest, CompletionResponse, StreamEvent
 from synth_panel.llm.providers.anthropic import ANTHROPIC_CONFIG, AnthropicProvider
 from synth_panel.llm.providers.base import LLMProvider, ProviderConfig
 from synth_panel.llm.providers.gemini import GEMINI_CONFIG, GeminiProvider
 from synth_panel.llm.providers.openai_compat import OPENAI_COMPAT_CONFIG, OpenAICompatibleProvider
+from synth_panel.llm.providers.openrouter import OPENROUTER_CONFIG, OpenRouterProvider
 from synth_panel.llm.providers.xai import XAI_CONFIG, XAIProvider
 
 # Provider detection order (SPEC.md §2 — Provider Resolution).
@@ -20,6 +21,7 @@ _PROVIDER_REGISTRY: list[tuple[ProviderConfig, type[LLMProvider]]] = [
     (ANTHROPIC_CONFIG, AnthropicProvider),
     (GEMINI_CONFIG, GeminiProvider),
     (XAI_CONFIG, XAIProvider),
+    (OPENROUTER_CONFIG, OpenRouterProvider),
     (OPENAI_COMPAT_CONFIG, OpenAICompatibleProvider),
 ]
 
@@ -75,14 +77,24 @@ class LLMClient:
                 return provider
 
         raise LLMError(
-            "No LLM provider credentials found. Set ANTHROPIC_API_KEY, GEMINI_API_KEY, XAI_API_KEY, or OPENAI_API_KEY.",
+            "No LLM provider credentials found. Set ANTHROPIC_API_KEY, GEMINI_API_KEY, XAI_API_KEY, OPENROUTER_API_KEY, or OPENAI_API_KEY.",
             LLMErrorCategory.MISSING_CREDENTIALS,
         )
 
     def _prepare(self, request: CompletionRequest) -> CompletionRequest:
-        """Resolve aliases on the request model."""
-        canonical = resolve_alias(request.model)
-        if canonical != request.model:
+        """Resolve aliases and local model prefixes on the request model."""
+        original = request.model
+        base_url = get_base_url_override(original)
+        canonical = resolve_alias(original)
+
+        # For local models (ollama:*, local:*), cache a provider with the
+        # correct base URL so _resolve_provider finds it.
+        if base_url is not None and canonical not in self._provider_cache:
+            self._provider_cache[canonical] = OpenAICompatibleProvider(
+                base_url=base_url, api_key="no-key-required"
+            )
+
+        if canonical != original:
             return CompletionRequest(
                 model=canonical,
                 max_tokens=request.max_tokens,
