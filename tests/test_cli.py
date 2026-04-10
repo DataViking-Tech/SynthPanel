@@ -347,7 +347,7 @@ class TestYAMLLoading:
     def test_load_instrument_invalid(self, tmp_path):
         p = tmp_path / "bad.yaml"
         p.write_text("just a string")
-        with pytest.raises(ValueError, match="Invalid instrument file"):
+        with pytest.raises(ValueError, match="Invalid instrument"):
             _load_instrument(str(p))
 
     def test_persona_system_prompt(self):

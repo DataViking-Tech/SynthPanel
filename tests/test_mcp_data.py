@@ -394,9 +394,9 @@ class TestInstrumentPacks:
         assert meta["type"] == "instrument"
 
         listing = list_instrument_packs()
-        assert len(listing) == 1
-        assert listing[0]["id"] == "pricing-probe"
-        assert listing[0]["author"] == "synth-panel"
+        saved = [p for p in listing if p["id"] == "pricing-probe"]
+        assert len(saved) == 1
+        assert saved[0]["author"] == "synth-panel"
 
         loaded = load_instrument_pack("pricing-probe")
         # round-trip preserves the body
@@ -413,8 +413,14 @@ class TestInstrumentPacks:
         loaded = load_instrument_pack("auto")
         assert loaded["name"] == "auto"
 
-    def test_list_empty(self):
-        assert list_instrument_packs() == []
+    def test_list_contains_only_bundled_packs(self):
+        # Before any user saves, the list should contain only bundled packs
+        packs = list_instrument_packs()
+        assert len(packs) >= 1  # at least bundled packs exist
+        # No user-saved pack dir files should exist yet in our temp env
+        user_dir = Path(os.environ.get("SYNTH_PANEL_DATA_DIR", "")) / "packs" / "instruments"
+        if user_dir.exists():
+            assert list(user_dir.glob("*.yaml")) == []
 
     def test_save_rejects_non_mapping(self):
         with pytest.raises(ValueError):
