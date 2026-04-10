@@ -1,4 +1,4 @@
-"""Tests for synth_panel.stats — sp-5on.7."""
+"""Tests for synth_panel.stats — sp-5on.7 + sp-5on.8."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from synth_panel.stats import (
     chi_squared_test,
     frequency_table,
     kendall_w,
+    krippendorff_alpha,
     proportion_stat,
 )
 
@@ -275,3 +276,117 @@ class TestBordaCount:
     def test_inconsistent_items_rejects(self):
         with pytest.raises(ValueError):
             borda_count([{"A": 1, "B": 2}, {"A": 1, "C": 2}])
+
+
+# ---------------------------------------------------------------------------
+# krippendorff_alpha
+# ---------------------------------------------------------------------------
+
+
+class TestKrippendorffAlpha:
+    def test_perfect_agreement_nominal(self):
+        """All raters agree on every item -> alpha = 1.0."""
+        data = [
+            ["A", "B", "C", "A", "B"],
+            ["A", "B", "C", "A", "B"],
+            ["A", "B", "C", "A", "B"],
+        ]
+        result = krippendorff_alpha(data, "nominal")
+        assert result.alpha == pytest.approx(1.0)
+        assert result.level == "nominal"
+
+    def test_no_agreement_nominal(self):
+        """Systematic disagreement -> alpha near 0 or negative."""
+        data = [
+            ["A", "B", "C"],
+            ["B", "C", "A"],
+            ["C", "A", "B"],
+        ]
+        result = krippendorff_alpha(data, "nominal")
+        assert result.alpha < 0.1
+
+    def test_known_alpha_nominal(self):
+        """4 raters, 12 items, some missing data.
+        Verified against krippendorff 0.8.1 reference package: alpha = 0.871."""
+        data = [
+            [None, None, None, None, None, 3, 4, 1, 2, 1, 1, 3],
+            [1, None, 2, 1, 3, 3, 4, 3, None, None, None, None],
+            [None, None, 2, 1, 3, 3, 4, 2, 2, 1, 1, 3],
+            [1, None, 2, 1, 3, 3, 4, 2, 2, 1, 1, 3],
+        ]
+        result = krippendorff_alpha(data, "nominal")
+        assert result.alpha == pytest.approx(0.871, abs=0.01)
+        assert result.n_raters == 4
+        assert result.n_items == 12
+
+    def test_ordinal_level(self):
+        """Ordinal alpha should differ from nominal for ordered data."""
+        data = [
+            [1, 2, 3, 4, 5],
+            [1, 2, 3, 4, 5],
+            [1, 2, 3, 5, 4],  # swapped last two
+        ]
+        result_nom = krippendorff_alpha(data, "nominal")
+        result_ord = krippendorff_alpha(data, "ordinal")
+        # Ordinal should be higher: swapping adjacent ranks is a smaller
+        # disagreement in ordinal than in nominal
+        assert result_ord.alpha > result_nom.alpha
+
+    def test_interval_level(self):
+        """Interval alpha for numeric data."""
+        data = [
+            [1.0, 2.0, 3.0, 4.0],
+            [1.1, 2.1, 2.9, 4.1],
+            [0.9, 1.9, 3.1, 3.9],
+        ]
+        result = krippendorff_alpha(data, "interval")
+        assert result.alpha > 0.9  # Very close agreement
+        assert result.level == "interval"
+
+    def test_handles_missing_data(self):
+        """None values should be skipped, not crash."""
+        data = [
+            ["A", None, "C"],
+            [None, "B", "C"],
+            ["A", "B", None],
+        ]
+        result = krippendorff_alpha(data, "nominal")
+        assert isinstance(result.alpha, float)
+        assert result.n_raters == 3
+        assert result.n_items == 3
+
+    def test_all_same_value(self):
+        """All values identical -> alpha = 1.0 (D_e = 0 special case)."""
+        data = [
+            ["X", "X", "X"],
+            ["X", "X", "X"],
+        ]
+        result = krippendorff_alpha(data, "nominal")
+        assert result.alpha == pytest.approx(1.0)
+
+    def test_invalid_level_rejects(self):
+        with pytest.raises(ValueError, match="level"):
+            krippendorff_alpha([["A"]], "ratio")
+
+    def test_empty_rejects(self):
+        with pytest.raises(ValueError):
+            krippendorff_alpha([])
+
+    def test_mismatched_lengths_rejects(self):
+        with pytest.raises(ValueError):
+            krippendorff_alpha([["A", "B"], ["A"]])
+
+    def test_interpretation_strong(self):
+        data = [["A", "B", "C"]] * 5
+        result = krippendorff_alpha(data, "nominal")
+        assert "Strong" in result.interpretation or "reliable" in result.interpretation
+
+    def test_interpretation_weak(self):
+        """Low agreement should flag as weak/unreliable."""
+        data = [
+            ["A", "B", "C", "A"],
+            ["B", "C", "A", "B"],
+            ["C", "A", "B", "C"],
+        ]
+        result = krippendorff_alpha(data, "nominal")
+        assert "caution" in result.interpretation.lower() or "No meaningful" in result.interpretation

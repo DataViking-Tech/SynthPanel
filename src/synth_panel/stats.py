@@ -21,11 +21,13 @@ __all__ = [
     "FrequencyRow",
     "FrequencyTable",
     "KendallWResult",
+    "KrippendorffResult",
     "bootstrap_ci",
     "borda_count",
     "chi_squared_test",
     "frequency_table",
     "kendall_w",
+    "krippendorff_alpha",
     "proportion_stat",
 ]
 
@@ -561,3 +563,197 @@ def borda_count(
     ranking = sorted(scores.keys(), key=lambda x: (-scores[x], x))
 
     return BordaResult(scores=scores, ranking=ranking, n_voters=n_voters)
+
+
+# ---------------------------------------------------------------------------
+# Krippendorff's alpha
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class KrippendorffResult:
+    """Result of Krippendorff's alpha computation."""
+
+    alpha: float  # Alpha coefficient [-1, 1], typically [0, 1]
+    n_raters: int  # Number of raters (models)
+    n_items: int  # Number of items (personas)
+    n_categories: int  # Number of distinct values observed
+    level: str  # Measurement level used ("nominal", "ordinal", "interval")
+    interpretation: str  # Human-readable interpretation
+
+
+def _nominal_delta(c: object, k: object) -> float:
+    """Nominal distance: 0 if equal, 1 if different."""
+    return 0.0 if c == k else 1.0
+
+
+def _interval_delta(c: object, k: object) -> float:
+    """Interval distance: squared difference."""
+    return (float(c) - float(k)) ** 2
+
+
+def _ordinal_delta(
+    c: object,
+    k: object,
+    sorted_values: list,
+    value_counts: dict[object, float],
+) -> float:
+    """Ordinal distance per Krippendorff (2011).
+
+    d_ord(c, k) = (sum of n_g for all g where c <= g <= k
+                   - (n_c + n_k) / 2) ^ 2
+    """
+    i_c = sorted_values.index(c)
+    i_k = sorted_values.index(k)
+    if i_c > i_k:
+        i_c, i_k = i_k, i_c
+    running_sum = sum(value_counts[sorted_values[g]] for g in range(i_c, i_k + 1))
+    running_sum -= (value_counts[c] + value_counts[k]) / 2
+    return running_sum**2
+
+
+def _interpret_alpha(alpha: float) -> str:
+    if alpha >= 0.80:
+        return "Strong agreement — reliable for drawing conclusions"
+    elif alpha >= 0.667:
+        return "Moderate agreement — tentative conclusions only"
+    elif alpha >= 0.40:
+        return "Weak agreement — interpret with caution"
+    else:
+        return "No meaningful agreement — model choice dominates"
+
+
+_VALID_LEVELS = frozenset({"nominal", "ordinal", "interval"})
+
+
+def krippendorff_alpha(
+    reliability_data: list[list[str | int | float | None]],
+    level_of_measurement: str = "nominal",
+) -> KrippendorffResult:
+    """Compute Krippendorff's alpha inter-rater reliability coefficient.
+
+    Uses the coincidence matrix method from Krippendorff (2011), which
+    handles missing data correctly.
+
+    Args:
+        reliability_data: Rater-by-item matrix.  Each inner list represents
+            one rater's codings across all items.  ``None`` indicates a
+            missing value.  Shape: ``[n_raters][n_items]``.
+        level_of_measurement: One of ``"nominal"``, ``"ordinal"``,
+            ``"interval"``.
+
+    Returns:
+        :class:`KrippendorffResult` with alpha, metadata, interpretation.
+
+    Raises:
+        ValueError: If *reliability_data* is empty, all values are ``None``,
+            *level_of_measurement* is invalid, or rater lists have different
+            lengths.
+    """
+    # --- Validation ---
+    if not reliability_data:
+        raise ValueError("reliability_data must not be empty")
+
+    if level_of_measurement not in _VALID_LEVELS:
+        raise ValueError(f"level_of_measurement must be one of {sorted(_VALID_LEVELS)}, got {level_of_measurement!r}")
+
+    n_raters = len(reliability_data)
+    n_items = len(reliability_data[0])
+    if n_items == 0:
+        raise ValueError("reliability_data contains empty rater lists")
+    for i, row in enumerate(reliability_data):
+        if len(row) != n_items:
+            raise ValueError(
+                f"All rater lists must have the same length; rater 0 has {n_items} items but rater {i} has {len(row)}"
+            )
+
+    # --- Collect all non-None values and discover categories ---
+    all_values: list[object] = []
+    for row in reliability_data:
+        for v in row:
+            if v is not None:
+                all_values.append(v)
+
+    if not all_values:
+        raise ValueError("reliability_data contains only None values")
+
+    categories = sorted(set(all_values), key=lambda x: (isinstance(x, str), x))
+    n_categories = len(categories)
+
+    # --- Step 1: Build coincidence matrix ---
+    o: dict[tuple[object, object], float] = {}
+    for c in categories:
+        for k_val in categories:
+            o[(c, k_val)] = 0.0
+
+    for item_idx in range(n_items):
+        values_for_item = [
+            reliability_data[r][item_idx] for r in range(n_raters) if reliability_data[r][item_idx] is not None
+        ]
+        m_u = len(values_for_item)
+        if m_u < 2:
+            continue
+
+        for i in range(m_u):
+            for j in range(m_u):
+                if i == j:
+                    continue
+                o[(values_for_item[i], values_for_item[j])] += 1.0 / (m_u - 1)
+
+    # --- Step 2: Compute marginals ---
+    n_c: dict[object, float] = {}
+    for c in categories:
+        n_c[c] = sum(o[(c, k_val)] for k_val in categories)
+
+    n = sum(n_c.values())
+
+    if n < 2:
+        raise ValueError("Fewer than 2 pairable values — cannot compute alpha")
+
+    # --- Build delta function ---
+    if level_of_measurement == "nominal":
+
+        def delta(c: object, k_val: object) -> float:
+            return _nominal_delta(c, k_val)
+
+    elif level_of_measurement == "interval":
+
+        def delta(c: object, k_val: object) -> float:
+            return _interval_delta(c, k_val)
+
+    elif level_of_measurement == "ordinal":
+        sorted_values = sorted(categories, key=lambda x: (isinstance(x, str), x))
+
+        def delta(c: object, k_val: object) -> float:
+            return _ordinal_delta(c, k_val, sorted_values, n_c)
+
+    # --- Step 3: D_observed ---
+    d_observed = 0.0
+    for c in categories:
+        for k_val in categories:
+            if c != k_val:
+                d_observed += o[(c, k_val)] * delta(c, k_val)
+    d_observed /= n
+
+    # --- Step 4: D_expected ---
+    d_expected = 0.0
+    for c in categories:
+        for k_val in categories:
+            if c != k_val:
+                d_expected += n_c[c] * n_c[k_val] * delta(c, k_val)
+    d_expected /= n * (n - 1)
+
+    # --- Step 5: Alpha ---
+    if d_expected == 0.0:
+        alpha = 1.0  # All values identical
+    else:
+        alpha = 1.0 - d_observed / d_expected
+
+    return KrippendorffResult(
+        alpha=alpha,
+        n_raters=n_raters,
+        n_items=n_items,
+        n_categories=n_categories,
+        level=level_of_measurement,
+        interpretation=_interpret_alpha(alpha),
+    )
