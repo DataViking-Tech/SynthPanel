@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 from synth_panel.llm.aliases import resolve_alias
 from synth_panel.llm.errors import LLMError, LLMErrorCategory
@@ -108,7 +108,7 @@ class LLMClient:
 
     def _with_retry(
         self,
-        fn: callable,
+        fn: Callable[[CompletionRequest], CompletionResponse],
         request: CompletionRequest,
     ) -> CompletionResponse:
         """Execute *fn* with exponential backoff + jitter on retryable errors."""

@@ -63,13 +63,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        # 3.8/3.9 omitted until Phase 1 (sp-d7i.1) lowers requires-python to >=3.8
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
         include:
-          # 3.8/3.9 are experimental until Phase 1 (sp-d7i.1) lands Python 3.8 compat
-          - python-version: "3.8"
-            experimental: true
-          - python-version: "3.9"
-            experimental: true
           - python-version: "3.14"
             experimental: true
     continue-on-error: ${{ matrix.experimental || false }}
