@@ -1,5 +1,7 @@
 """Tests for LLM error classification."""
 
+from __future__ import annotations
+
 from synth_panel.llm.errors import LLMError, LLMErrorCategory, classify_http_status
 
 

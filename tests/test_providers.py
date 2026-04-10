@@ -15,18 +15,15 @@ import pytest
 from synth_panel.llm.errors import LLMError, LLMErrorCategory
 from synth_panel.llm.models import (
     CompletionRequest,
-    CompletionResponse,
     InputMessage,
     StopReason,
     StreamEventType,
     TextBlock,
-    TokenUsage,
     ToolChoice,
     ToolDefinition,
     ToolInvocationBlock,
     ToolResultBlock,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

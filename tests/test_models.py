@@ -1,5 +1,7 @@
 """Tests for LLM data models."""
 
+from __future__ import annotations
+
 from synth_panel.llm.models import (
     CompletionResponse,
     TextBlock,

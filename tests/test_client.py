@@ -1,5 +1,7 @@
 """Tests for LLMClient — provider resolution and retry logic."""
 
+from __future__ import annotations
+
 import os
 from unittest.mock import MagicMock, patch
 

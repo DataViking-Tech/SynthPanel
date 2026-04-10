@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,10 +23,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from synth_panel.persistence import Session
 
-if sys.version_info >= (3, 9):
-    from importlib.resources import files as _resource_files
-else:
-    from importlib_resources import files as _resource_files
+from importlib.resources import files as _resource_files
 
 import yaml
 
