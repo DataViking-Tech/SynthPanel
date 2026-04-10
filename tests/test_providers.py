@@ -29,6 +29,7 @@ from synth_panel.llm.models import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _simple_request(model: str = "test-model") -> CompletionRequest:
     return CompletionRequest(
         model=model,
@@ -41,10 +42,12 @@ def _openai_json_response(text: str = "Hi there") -> dict:
     return {
         "id": "chatcmpl-123",
         "model": "test-model",
-        "choices": [{
-            "message": {"content": text, "role": "assistant"},
-            "finish_reason": "stop",
-        }],
+        "choices": [
+            {
+                "message": {"content": text, "role": "assistant"},
+                "finish_reason": "stop",
+            }
+        ],
         "usage": {"prompt_tokens": 10, "completion_tokens": 5},
     }
 
@@ -71,11 +74,13 @@ def _mock_httpx_response(data: dict, status_code: int = 200) -> MagicMock:
 # Tests: _openai_format.py — build_openai_body
 # ---------------------------------------------------------------------------
 
+
 class TestBuildOpenaiBody:
     """Test OpenAI request body serialization."""
 
     def test_simple_message(self):
         from synth_panel.llm.providers._openai_format import build_openai_body
+
         req = _simple_request()
         body = build_openai_body(req)
         assert body["model"] == "test-model"
@@ -86,8 +91,10 @@ class TestBuildOpenaiBody:
 
     def test_system_prompt(self):
         from synth_panel.llm.providers._openai_format import build_openai_body
+
         req = CompletionRequest(
-            model="test", max_tokens=100,
+            model="test",
+            max_tokens=100,
             messages=[InputMessage(role="user", content=[TextBlock(text="Hi")])],
             system="You are helpful.",
         )
@@ -97,12 +104,17 @@ class TestBuildOpenaiBody:
 
     def test_assistant_with_tool_calls(self):
         from synth_panel.llm.providers._openai_format import build_openai_body
+
         req = CompletionRequest(
-            model="test", max_tokens=100,
+            model="test",
+            max_tokens=100,
             messages=[
-                InputMessage(role="assistant", content=[
-                    ToolInvocationBlock(id="tc_1", name="search", input={"q": "test"}),
-                ]),
+                InputMessage(
+                    role="assistant",
+                    content=[
+                        ToolInvocationBlock(id="tc_1", name="search", input={"q": "test"}),
+                    ],
+                ),
             ],
         )
         body = build_openai_body(req)
@@ -115,13 +127,18 @@ class TestBuildOpenaiBody:
 
     def test_assistant_tool_calls_with_text(self):
         from synth_panel.llm.providers._openai_format import build_openai_body
+
         req = CompletionRequest(
-            model="test", max_tokens=100,
+            model="test",
+            max_tokens=100,
             messages=[
-                InputMessage(role="assistant", content=[
-                    TextBlock(text="Let me search."),
-                    ToolInvocationBlock(id="tc_1", name="search", input={"q": "x"}),
-                ]),
+                InputMessage(
+                    role="assistant",
+                    content=[
+                        TextBlock(text="Let me search."),
+                        ToolInvocationBlock(id="tc_1", name="search", input={"q": "x"}),
+                    ],
+                ),
             ],
         )
         body = build_openai_body(req)
@@ -131,15 +148,20 @@ class TestBuildOpenaiBody:
 
     def test_tool_result_messages(self):
         from synth_panel.llm.providers._openai_format import build_openai_body
+
         req = CompletionRequest(
-            model="test", max_tokens=100,
+            model="test",
+            max_tokens=100,
             messages=[
-                InputMessage(role="user", content=[
-                    ToolResultBlock(
-                        tool_use_id="tc_1",
-                        content=[TextBlock(text="Result data")],
-                    ),
-                ]),
+                InputMessage(
+                    role="user",
+                    content=[
+                        ToolResultBlock(
+                            tool_use_id="tc_1",
+                            content=[TextBlock(text="Result data")],
+                        ),
+                    ],
+                ),
             ],
         )
         body = build_openai_body(req)
@@ -150,8 +172,10 @@ class TestBuildOpenaiBody:
 
     def test_tools_serialized(self):
         from synth_panel.llm.providers._openai_format import build_openai_body
+
         req = CompletionRequest(
-            model="test", max_tokens=100,
+            model="test",
+            max_tokens=100,
             messages=[InputMessage(role="user", content=[TextBlock(text="Hi")])],
             tools=[ToolDefinition(name="calc", input_schema={"type": "object"}, description="A calculator")],
         )
@@ -162,8 +186,10 @@ class TestBuildOpenaiBody:
 
     def test_tool_choice_auto(self):
         from synth_panel.llm.providers._openai_format import build_openai_body
+
         req = CompletionRequest(
-            model="test", max_tokens=100,
+            model="test",
+            max_tokens=100,
             messages=[InputMessage(role="user", content=[TextBlock(text="Hi")])],
             tool_choice=ToolChoice.auto(),
         )
@@ -172,8 +198,10 @@ class TestBuildOpenaiBody:
 
     def test_tool_choice_any(self):
         from synth_panel.llm.providers._openai_format import build_openai_body
+
         req = CompletionRequest(
-            model="test", max_tokens=100,
+            model="test",
+            max_tokens=100,
             messages=[InputMessage(role="user", content=[TextBlock(text="Hi")])],
             tool_choice=ToolChoice.any(),
         )
@@ -182,8 +210,10 @@ class TestBuildOpenaiBody:
 
     def test_tool_choice_specific(self):
         from synth_panel.llm.providers._openai_format import build_openai_body
+
         req = CompletionRequest(
-            model="test", max_tokens=100,
+            model="test",
+            max_tokens=100,
             messages=[InputMessage(role="user", content=[TextBlock(text="Hi")])],
             tool_choice=ToolChoice.specific("calc"),
         )
@@ -192,11 +222,13 @@ class TestBuildOpenaiBody:
 
     def test_stream_flag(self):
         from synth_panel.llm.providers._openai_format import build_openai_body
+
         body = build_openai_body(_simple_request(), stream=True)
         assert body["stream"] is True
 
     def test_no_stream_flag_by_default(self):
         from synth_panel.llm.providers._openai_format import build_openai_body
+
         body = build_openai_body(_simple_request())
         assert "stream" not in body
 
@@ -205,11 +237,13 @@ class TestBuildOpenaiBody:
 # Tests: _openai_format.py — parse_openai_response
 # ---------------------------------------------------------------------------
 
+
 class TestParseOpenaiResponse:
     """Test OpenAI response parsing."""
 
     def test_text_response(self):
         from synth_panel.llm.providers._openai_format import parse_openai_response
+
         data = _openai_json_response("Hello!")
         resp = parse_openai_response(data, "test-model")
         assert resp.id == "chatcmpl-123"
@@ -220,22 +254,27 @@ class TestParseOpenaiResponse:
 
     def test_tool_call_response(self):
         from synth_panel.llm.providers._openai_format import parse_openai_response
+
         data = {
             "id": "chatcmpl-456",
             "model": "test-model",
-            "choices": [{
-                "message": {
-                    "content": None,
-                    "tool_calls": [{
-                        "id": "call_1",
-                        "function": {
-                            "name": "search",
-                            "arguments": '{"query": "test"}',
-                        },
-                    }],
-                },
-                "finish_reason": "tool_calls",
-            }],
+            "choices": [
+                {
+                    "message": {
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call_1",
+                                "function": {
+                                    "name": "search",
+                                    "arguments": '{"query": "test"}',
+                                },
+                            }
+                        ],
+                    },
+                    "finish_reason": "tool_calls",
+                }
+            ],
             "usage": {"prompt_tokens": 15, "completion_tokens": 8},
         }
         resp = parse_openai_response(data, "test-model")
@@ -246,11 +285,18 @@ class TestParseOpenaiResponse:
 
     def test_malformed_tool_arguments(self):
         from synth_panel.llm.providers._openai_format import parse_openai_response
+
         data = {
-            "id": "x", "model": "m",
-            "choices": [{"message": {
-                "tool_calls": [{"id": "c1", "function": {"name": "f", "arguments": "not-json"}}],
-            }, "finish_reason": "tool_calls"}],
+            "id": "x",
+            "model": "m",
+            "choices": [
+                {
+                    "message": {
+                        "tool_calls": [{"id": "c1", "function": {"name": "f", "arguments": "not-json"}}],
+                    },
+                    "finish_reason": "tool_calls",
+                }
+            ],
             "usage": {},
         }
         resp = parse_openai_response(data, "m")
@@ -258,8 +304,10 @@ class TestParseOpenaiResponse:
 
     def test_max_tokens_stop(self):
         from synth_panel.llm.providers._openai_format import parse_openai_response
+
         data = {
-            "id": "x", "model": "m",
+            "id": "x",
+            "model": "m",
             "choices": [{"message": {"content": "trunc"}, "finish_reason": "length"}],
             "usage": {},
         }
@@ -271,20 +319,24 @@ class TestParseOpenaiResponse:
 # Tests: _openai_format.py — parse_openai_sse_stream
 # ---------------------------------------------------------------------------
 
+
 class TestParseOpenaiSseStream:
     """Test OpenAI SSE stream parsing."""
 
     def test_text_stream(self):
         from synth_panel.llm.providers._openai_format import parse_openai_sse_stream
-        lines = iter([
-            'data: {"choices":[{"delta":{"content":"Hel"},"index":0}]}',
-            '',
-            'data: {"choices":[{"delta":{"content":"lo"},"index":0}]}',
-            '',
-            'data: {"choices":[{"finish_reason":"stop","delta":{}}]}',
-            '',
-            'data: [DONE]',
-        ])
+
+        lines = iter(
+            [
+                'data: {"choices":[{"delta":{"content":"Hel"},"index":0}]}',
+                "",
+                'data: {"choices":[{"delta":{"content":"lo"},"index":0}]}',
+                "",
+                'data: {"choices":[{"finish_reason":"stop","delta":{}}]}',
+                "",
+                "data: [DONE]",
+            ]
+        )
         events = list(parse_openai_sse_stream(lines))
         assert events[0].type == StreamEventType.CONTENT_BLOCK_DELTA
         assert events[0].data["text"] == "Hel"
@@ -295,45 +347,57 @@ class TestParseOpenaiSseStream:
 
     def test_tool_call_stream(self):
         from synth_panel.llm.providers._openai_format import parse_openai_sse_stream
-        lines = iter([
-            'data: {"choices":[{"delta":{"tool_calls":[{"id":"c1","function":{"name":"f"}}]},"index":0}]}',
-            '',
-            'data: [DONE]',
-        ])
+
+        lines = iter(
+            [
+                'data: {"choices":[{"delta":{"tool_calls":[{"id":"c1","function":{"name":"f"}}]},"index":0}]}',
+                "",
+                "data: [DONE]",
+            ]
+        )
         events = list(parse_openai_sse_stream(lines))
         assert events[0].type == StreamEventType.CONTENT_BLOCK_DELTA
         assert "tool_calls" in events[0].data
 
     def test_comment_lines_ignored(self):
         from synth_panel.llm.providers._openai_format import parse_openai_sse_stream
-        lines = iter([
-            ': keepalive',
-            'data: {"choices":[{"delta":{"content":"Hi"},"index":0}]}',
-            '',
-            'data: [DONE]',
-        ])
+
+        lines = iter(
+            [
+                ": keepalive",
+                'data: {"choices":[{"delta":{"content":"Hi"},"index":0}]}',
+                "",
+                "data: [DONE]",
+            ]
+        )
         events = list(parse_openai_sse_stream(lines))
         assert events[0].type == StreamEventType.CONTENT_BLOCK_DELTA
 
     def test_no_choices_emits_message_start(self):
         from synth_panel.llm.providers._openai_format import parse_openai_sse_stream
-        lines = iter([
-            'data: {"id":"chatcmpl-abc","object":"chat.completion.chunk"}',
-            '',
-            'data: [DONE]',
-        ])
+
+        lines = iter(
+            [
+                'data: {"id":"chatcmpl-abc","object":"chat.completion.chunk"}',
+                "",
+                "data: [DONE]",
+            ]
+        )
         events = list(parse_openai_sse_stream(lines))
         assert events[0].type == StreamEventType.MESSAGE_START
 
     def test_malformed_json_skipped(self):
         from synth_panel.llm.providers._openai_format import parse_openai_sse_stream
-        lines = iter([
-            'data: {not valid json}',
-            '',
-            'data: {"choices":[{"delta":{"content":"ok"},"index":0}]}',
-            '',
-            'data: [DONE]',
-        ])
+
+        lines = iter(
+            [
+                "data: {not valid json}",
+                "",
+                'data: {"choices":[{"delta":{"content":"ok"},"index":0}]}',
+                "",
+                "data: [DONE]",
+            ]
+        )
         events = list(parse_openai_sse_stream(lines))
         assert len(events) >= 1
         assert events[0].data["text"] == "ok"
@@ -343,11 +407,13 @@ class TestParseOpenaiSseStream:
 # Tests: Anthropic provider
 # ---------------------------------------------------------------------------
 
+
 class TestAnthropicProvider:
     """Test the Anthropic provider send/stream and helpers."""
 
     def test_send_success(self):
         from synth_panel.llm.providers.anthropic import AnthropicProvider
+
         mock_resp = _mock_httpx_response(_anthropic_json_response("Hello!"))
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-test"}):
             provider = AnthropicProvider()
@@ -358,8 +424,10 @@ class TestAnthropicProvider:
 
     def test_send_with_tool_use_response(self):
         from synth_panel.llm.providers.anthropic import AnthropicProvider
+
         data = {
-            "id": "msg_1", "model": "claude-sonnet-4-6-20250414",
+            "id": "msg_1",
+            "model": "claude-sonnet-4-6-20250414",
             "content": [{"type": "tool_use", "id": "tu_1", "name": "calc", "input": {"x": 1}}],
             "stop_reason": "tool_use",
             "usage": {"input_tokens": 5, "output_tokens": 10},
@@ -375,8 +443,10 @@ class TestAnthropicProvider:
 
     def test_send_with_thinking_block(self):
         from synth_panel.llm.providers.anthropic import AnthropicProvider
+
         data = {
-            "id": "msg_2", "model": "claude-sonnet-4-6-20250414",
+            "id": "msg_2",
+            "model": "claude-sonnet-4-6-20250414",
             "content": [
                 {"type": "thinking", "thinking": "Let me think...", "signature": "sig123"},
                 {"type": "text", "text": "Answer"},
@@ -394,6 +464,7 @@ class TestAnthropicProvider:
 
     def test_send_transport_error(self):
         from synth_panel.llm.providers.anthropic import AnthropicProvider
+
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-test"}):
             provider = AnthropicProvider()
         with patch("httpx.post", side_effect=httpx.ConnectError("timeout")):
@@ -403,6 +474,7 @@ class TestAnthropicProvider:
 
     def test_send_non_200_status(self):
         from synth_panel.llm.providers.anthropic import AnthropicProvider
+
         mock_resp = _mock_httpx_response({}, status_code=429)
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-test"}):
             provider = AnthropicProvider()
@@ -413,6 +485,7 @@ class TestAnthropicProvider:
 
     def test_send_json_decode_error(self):
         from synth_panel.llm.providers.anthropic import AnthropicProvider
+
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.side_effect = json.JSONDecodeError("bad", "", 0)
@@ -425,6 +498,7 @@ class TestAnthropicProvider:
 
     def test_missing_api_key(self):
         from synth_panel.llm.providers.anthropic import AnthropicProvider
+
         with patch.dict(os.environ, {}, clear=True):
             os.environ.pop("ANTHROPIC_API_KEY", None)
             with pytest.raises(LLMError) as exc_info:
@@ -433,8 +507,10 @@ class TestAnthropicProvider:
 
     def test_cache_token_usage(self):
         from synth_panel.llm.providers.anthropic import AnthropicProvider
+
         data = {
-            "id": "msg_3", "model": "claude-sonnet-4-6-20250414",
+            "id": "msg_3",
+            "model": "claude-sonnet-4-6-20250414",
             "content": [{"type": "text", "text": "Cached response"}],
             "stop_reason": "end_turn",
             "usage": {
@@ -454,8 +530,10 @@ class TestAnthropicProvider:
 
     def test_build_body_with_system_and_tools(self):
         from synth_panel.llm.providers.anthropic import AnthropicProvider
+
         req = CompletionRequest(
-            model="claude-sonnet-4-6-20250414", max_tokens=100,
+            model="claude-sonnet-4-6-20250414",
+            max_tokens=100,
             messages=[InputMessage(role="user", content=[TextBlock(text="Hi")])],
             system="Be helpful.",
             tools=[ToolDefinition(name="calc", input_schema={"type": "object"})],
@@ -473,19 +551,23 @@ class TestAnthropicProvider:
 # Tests: Anthropic SSE stream parsing
 # ---------------------------------------------------------------------------
 
+
 class TestAnthropicStream:
     """Test Anthropic SSE stream parsing."""
 
     def test_parse_sse_stream(self):
         from synth_panel.llm.providers.anthropic import _parse_sse_stream
-        lines = iter([
-            'data: {"type":"message_start","message":{"id":"msg_1"}}',
-            '',
-            'data: {"type":"content_block_delta","index":0,"delta":{"text":"Hi"}}',
-            '',
-            'data: {"type":"message_stop"}',
-            '',
-        ])
+
+        lines = iter(
+            [
+                'data: {"type":"message_start","message":{"id":"msg_1"}}',
+                "",
+                'data: {"type":"content_block_delta","index":0,"delta":{"text":"Hi"}}',
+                "",
+                'data: {"type":"message_stop"}',
+                "",
+            ]
+        )
         events = list(_parse_sse_stream(lines))
         assert events[0].type == StreamEventType.MESSAGE_START
         assert events[1].type == StreamEventType.CONTENT_BLOCK_DELTA
@@ -493,37 +575,47 @@ class TestAnthropicStream:
 
     def test_ping_events_skipped(self):
         from synth_panel.llm.providers.anthropic import _parse_sse_stream
-        lines = iter([
-            'data: {"type":"ping"}',
-            '',
-            'data: {"type":"message_stop"}',
-            '',
-        ])
+
+        lines = iter(
+            [
+                'data: {"type":"ping"}',
+                "",
+                'data: {"type":"message_stop"}',
+                "",
+            ]
+        )
         events = list(_parse_sse_stream(lines))
         assert len(events) == 1
         assert events[0].type == StreamEventType.MESSAGE_STOP
 
     def test_done_sentinel(self):
         from synth_panel.llm.providers.anthropic import _parse_sse_stream
-        lines = iter([
-            'data: [DONE]',
-            '',
-        ])
+
+        lines = iter(
+            [
+                "data: [DONE]",
+                "",
+            ]
+        )
         events = list(_parse_sse_stream(lines))
         assert events == []
 
     def test_comment_keepalive_ignored(self):
         from synth_panel.llm.providers.anthropic import _parse_sse_stream
-        lines = iter([
-            ': keepalive',
-            'data: {"type":"message_stop"}',
-            '',
-        ])
+
+        lines = iter(
+            [
+                ": keepalive",
+                'data: {"type":"message_stop"}',
+                "",
+            ]
+        )
         events = list(_parse_sse_stream(lines))
         assert len(events) == 1
 
     def test_unknown_event_type_skipped(self):
         from synth_panel.llm.providers.anthropic import _sse_payload_to_event
+
         result = _sse_payload_to_event({"type": "unknown_event_xyz"})
         assert result is None
 
@@ -532,32 +624,41 @@ class TestAnthropicStream:
 # Tests: Anthropic helper functions
 # ---------------------------------------------------------------------------
 
+
 class TestAnthropicHelpers:
     """Test Anthropic serialization helpers."""
 
     def test_build_tool_choice_auto(self):
         from synth_panel.llm.providers.anthropic import _build_tool_choice
+
         req = CompletionRequest(
-            model="m", max_tokens=1,
-            messages=[], tool_choice=ToolChoice.auto(),
+            model="m",
+            max_tokens=1,
+            messages=[],
+            tool_choice=ToolChoice.auto(),
         )
         assert _build_tool_choice(req) == {"type": "auto"}
 
     def test_build_tool_choice_specific(self):
         from synth_panel.llm.providers.anthropic import _build_tool_choice
+
         req = CompletionRequest(
-            model="m", max_tokens=1,
-            messages=[], tool_choice=ToolChoice.specific("calc"),
+            model="m",
+            max_tokens=1,
+            messages=[],
+            tool_choice=ToolChoice.specific("calc"),
         )
         assert _build_tool_choice(req) == {"type": "tool", "name": "calc"}
 
     def test_build_tool_choice_none(self):
         from synth_panel.llm.providers.anthropic import _build_tool_choice
+
         req = CompletionRequest(model="m", max_tokens=1, messages=[])
         assert _build_tool_choice(req) is None
 
     def test_build_content_blocks_with_tool_result(self):
         from synth_panel.llm.providers.anthropic import _build_content_blocks
+
         blocks = [
             TextBlock(text="Hello"),
             ToolResultBlock(
@@ -574,16 +675,19 @@ class TestAnthropicHelpers:
 
     def test_parse_content_block_unknown_type(self):
         from synth_panel.llm.providers.anthropic import _parse_content_block
+
         block = _parse_content_block({"type": "mystery", "data": 42})
         assert isinstance(block, TextBlock)
         assert "mystery" in block.text
 
     def test_parse_stop_reason_unknown(self):
         from synth_panel.llm.providers.anthropic import _parse_stop_reason
+
         assert _parse_stop_reason("something_weird") == StopReason.END_TURN
 
     def test_parse_stop_reason_none(self):
         from synth_panel.llm.providers.anthropic import _parse_stop_reason
+
         assert _parse_stop_reason(None) is None
 
 
@@ -591,11 +695,13 @@ class TestAnthropicHelpers:
 # Tests: Gemini provider
 # ---------------------------------------------------------------------------
 
+
 class TestGeminiProvider:
     """Test the Gemini provider."""
 
     def test_send_success(self):
         from synth_panel.llm.providers.gemini import GeminiProvider
+
         mock_resp = _mock_httpx_response(_openai_json_response("Gemini says hi"))
         with patch.dict(os.environ, {"GEMINI_API_KEY": "gk-test"}, clear=False):
             provider = GeminiProvider()
@@ -605,6 +711,7 @@ class TestGeminiProvider:
 
     def test_google_api_key_fallback(self):
         from synth_panel.llm.providers.gemini import GeminiProvider
+
         env = {"GOOGLE_API_KEY": "google-key"}
         with patch.dict(os.environ, env, clear=True):
             provider = GeminiProvider()
@@ -612,6 +719,7 @@ class TestGeminiProvider:
 
     def test_missing_both_keys(self):
         from synth_panel.llm.providers.gemini import GeminiProvider
+
         with patch.dict(os.environ, {}, clear=True):
             with pytest.raises(LLMError) as exc_info:
                 GeminiProvider()
@@ -619,6 +727,7 @@ class TestGeminiProvider:
 
     def test_send_transport_error(self):
         from synth_panel.llm.providers.gemini import GeminiProvider
+
         with patch.dict(os.environ, {"GEMINI_API_KEY": "gk-test"}, clear=False):
             provider = GeminiProvider()
         with patch("httpx.post", side_effect=httpx.ConnectError("fail")):
@@ -628,6 +737,7 @@ class TestGeminiProvider:
 
     def test_send_non_200(self):
         from synth_panel.llm.providers.gemini import GeminiProvider
+
         mock_resp = _mock_httpx_response({}, status_code=500)
         with patch.dict(os.environ, {"GEMINI_API_KEY": "gk-test"}, clear=False):
             provider = GeminiProvider()
@@ -638,6 +748,7 @@ class TestGeminiProvider:
 
     def test_send_json_error(self):
         from synth_panel.llm.providers.gemini import GeminiProvider
+
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.side_effect = json.JSONDecodeError("bad", "", 0)
@@ -650,6 +761,7 @@ class TestGeminiProvider:
 
     def test_headers_use_bearer(self):
         from synth_panel.llm.providers.gemini import GeminiProvider
+
         with patch.dict(os.environ, {"GEMINI_API_KEY": "gk-test"}, clear=False):
             provider = GeminiProvider()
         headers = provider._headers()
@@ -660,11 +772,13 @@ class TestGeminiProvider:
 # Tests: OpenAI-compatible provider
 # ---------------------------------------------------------------------------
 
+
 class TestOpenAICompatProvider:
     """Test the OpenAI-compatible provider."""
 
     def test_send_success(self):
         from synth_panel.llm.providers.openai_compat import OpenAICompatibleProvider
+
         mock_resp = _mock_httpx_response(_openai_json_response("OpenAI says hi"))
         with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-oai"}, clear=False):
             provider = OpenAICompatibleProvider()
@@ -674,6 +788,7 @@ class TestOpenAICompatProvider:
 
     def test_missing_api_key(self):
         from synth_panel.llm.providers.openai_compat import OpenAICompatibleProvider
+
         with patch.dict(os.environ, {}, clear=True):
             with pytest.raises(LLMError) as exc_info:
                 OpenAICompatibleProvider()
@@ -681,6 +796,7 @@ class TestOpenAICompatProvider:
 
     def test_send_transport_error(self):
         from synth_panel.llm.providers.openai_compat import OpenAICompatibleProvider
+
         with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-oai"}, clear=False):
             provider = OpenAICompatibleProvider()
         with patch("httpx.post", side_effect=httpx.ConnectError("fail")):
@@ -690,6 +806,7 @@ class TestOpenAICompatProvider:
 
     def test_send_non_200(self):
         from synth_panel.llm.providers.openai_compat import OpenAICompatibleProvider
+
         mock_resp = _mock_httpx_response({}, status_code=401)
         with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-oai"}, clear=False):
             provider = OpenAICompatibleProvider()
@@ -700,6 +817,7 @@ class TestOpenAICompatProvider:
 
     def test_send_json_error(self):
         from synth_panel.llm.providers.openai_compat import OpenAICompatibleProvider
+
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.side_effect = json.JSONDecodeError("bad", "", 0)
@@ -712,7 +830,10 @@ class TestOpenAICompatProvider:
 
     def test_custom_base_url(self):
         from synth_panel.llm.providers.openai_compat import OpenAICompatibleProvider
-        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-oai", "OPENAI_BASE_URL": "http://localhost:8080"}, clear=False):
+
+        with patch.dict(
+            os.environ, {"OPENAI_API_KEY": "sk-oai", "OPENAI_BASE_URL": "http://localhost:8080"}, clear=False
+        ):
             provider = OpenAICompatibleProvider()
         assert provider._base_url == "http://localhost:8080"
 
@@ -721,11 +842,13 @@ class TestOpenAICompatProvider:
 # Tests: xAI provider
 # ---------------------------------------------------------------------------
 
+
 class TestXAIProvider:
     """Test the xAI / Grok provider."""
 
     def test_send_success(self):
         from synth_panel.llm.providers.xai import XAIProvider
+
         mock_resp = _mock_httpx_response(_openai_json_response("Grok says hi"))
         with patch.dict(os.environ, {"XAI_API_KEY": "xk-test"}, clear=False):
             provider = XAIProvider()
@@ -735,6 +858,7 @@ class TestXAIProvider:
 
     def test_missing_api_key(self):
         from synth_panel.llm.providers.xai import XAIProvider
+
         with patch.dict(os.environ, {}, clear=True):
             with pytest.raises(LLMError) as exc_info:
                 XAIProvider()
@@ -742,6 +866,7 @@ class TestXAIProvider:
 
     def test_send_transport_error(self):
         from synth_panel.llm.providers.xai import XAIProvider
+
         with patch.dict(os.environ, {"XAI_API_KEY": "xk-test"}, clear=False):
             provider = XAIProvider()
         with patch("httpx.post", side_effect=httpx.ConnectError("fail")):
@@ -751,6 +876,7 @@ class TestXAIProvider:
 
     def test_send_non_200(self):
         from synth_panel.llm.providers.xai import XAIProvider
+
         mock_resp = _mock_httpx_response({}, status_code=500)
         with patch.dict(os.environ, {"XAI_API_KEY": "xk-test"}, clear=False):
             provider = XAIProvider()
@@ -761,6 +887,7 @@ class TestXAIProvider:
 
     def test_send_json_error(self):
         from synth_panel.llm.providers.xai import XAIProvider
+
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.side_effect = json.JSONDecodeError("bad", "", 0)
@@ -773,6 +900,7 @@ class TestXAIProvider:
 
     def test_headers_use_bearer(self):
         from synth_panel.llm.providers.xai import XAIProvider
+
         with patch.dict(os.environ, {"XAI_API_KEY": "xk-test"}, clear=False):
             provider = XAIProvider()
         headers = provider._headers()
