@@ -301,6 +301,7 @@ def _run_panelist(
     response_schema: dict[str, Any] | None = None,
     session: Session | None = None,
     sentiment_cache: dict[str, str] | None = None,
+    extract_schema: dict[str, Any] | None = None,
 ) -> tuple[PanelistResult, Session]:
     """Execute a single panelist's full interview. Runs in a worker thread.
 
@@ -335,6 +336,13 @@ def _run_panelist(
             structured_engine = StructuredOutputEngine(client)
             structured_config = StructuredOutputConfig(schema=response_schema)
 
+        # Set up extraction engine for post-hoc structured extraction
+        extract_engine: StructuredOutputEngine | None = None
+        extract_config: StructuredOutputConfig | None = None
+        if extract_schema:
+            extract_engine = StructuredOutputEngine(client)
+            extract_config = StructuredOutputConfig(schema=extract_schema)
+
         for question in questions:
             question_text = question_prompt_fn(question)
 
@@ -366,13 +374,41 @@ def _run_panelist(
                 else:
                     summary = runtime.run_turn(question_text)
                     response_text = _extract_text(summary)
-                    responses.append(
-                        {
-                            "question": question_text,
-                            "response": response_text,
-                        }
-                    )
+                    resp_dict: dict[str, Any] = {
+                        "question": question_text,
+                        "response": response_text,
+                    }
                     tracker.record_turn(summary.usage)
+
+                    # Extraction pass: extract structured data from the
+                    # free-text response (--extract-schema).
+                    if extract_engine and extract_config:
+                        try:
+                            extract_messages = [
+                                InputMessage(
+                                    role="user",
+                                    content=[TextBlock(text=question_text)],
+                                ),
+                                InputMessage(
+                                    role="assistant",
+                                    content=[TextBlock(text=response_text)],
+                                ),
+                            ]
+                            extract_result = extract_engine.extract(
+                                model=model,
+                                max_tokens=4096,
+                                messages=extract_messages,
+                                config=extract_config,
+                                system=system_prompt,
+                            )
+                            tracker.record_turn(_convert_llm_usage(extract_result.response.usage))
+                            resp_dict["extraction"] = extract_result.data
+                            resp_dict["extraction_is_fallback"] = extract_result.is_fallback
+                        except Exception as extract_exc:
+                            resp_dict["extraction"] = None
+                            resp_dict["extraction_error"] = str(extract_exc)
+
+                    responses.append(resp_dict)
             except Exception as exc:
                 responses.append(
                     {
@@ -447,6 +483,7 @@ def run_panel_parallel(
     max_workers: int | None = None,
     response_schema: dict[str, Any] | None = None,
     sessions: dict[str, Session] | None = None,
+    extract_schema: dict[str, Any] | None = None,
 ) -> tuple[list[PanelistResult], WorkerRegistry, dict[str, Session]]:
     """Run all panelists in parallel and return ordered results.
 
@@ -464,6 +501,11 @@ def run_panel_parallel(
         sessions: Optional mapping of persona names to existing sessions.
             When provided, panelists reuse their session (conversation history
             preserved). When None, each panelist gets a fresh session.
+        extract_schema: Optional JSON Schema for post-hoc extraction from
+            free-text responses. When provided (and response_schema is not),
+            each text response is followed by a second LLM call that extracts
+            structured data matching this schema. The result is stored under
+            an ``extraction`` key alongside the raw ``response``.
 
     Returns:
         Tuple of (ordered results matching persona order, registry,
@@ -502,6 +544,7 @@ def run_panel_parallel(
                 response_schema,
                 existing_session,
                 sentiment_cache,
+                extract_schema,
             )
             future_to_index[future] = idx
 
@@ -558,6 +601,7 @@ def run_multi_round_panel(
     synthesize_final_fn: Callable[..., Any] | None = None,
     response_schema: dict[str, Any] | None = None,
     max_workers: int | None = None,
+    extract_schema: dict[str, Any] | None = None,
 ) -> MultiRoundResult:
     """Execute a (possibly branching) multi-round panel run.
 
@@ -613,6 +657,7 @@ def run_multi_round_panel(
             max_workers=max_workers,
             response_schema=response_schema,
             sessions=sessions,
+            extract_schema=extract_schema,
         )
 
         synthesis = synthesize_round_fn(client, panelist_results, current.questions, model=model)
