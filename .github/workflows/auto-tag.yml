@@ -127,5 +127,3 @@ jobs:
     uses: ./.github/workflows/publish.yml
     with:
       tag: ${{ needs.auto-tag.outputs.tag }}
-    permissions:
-      id-token: write
