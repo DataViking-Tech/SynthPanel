@@ -96,6 +96,20 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     panel_run_parser.add_argument(
+        "--extract-schema",
+        default=None,
+        metavar="SCHEMA",
+        help=(
+            "JSON Schema for post-hoc extraction from free-text responses. "
+            "Can be a file path (e.g. extract.json) or inline JSON string. "
+            "Each panelist responds in free text, then a second LLM call "
+            "extracts structured data matching this schema. The result is "
+            "stored under an 'extraction' key alongside the raw 'response'. "
+            "Unlike --schema (which forces structured-only output), this "
+            "flag preserves the full text response."
+        ),
+    )
+    panel_run_parser.add_argument(
         "--no-synthesis",
         action="store_true",
         default=False,

@@ -332,6 +332,15 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             print(f"Error loading schema: {exc}", file=sys.stderr)
             return 1
 
+    # Load optional extraction schema (--extract-schema)
+    extract_schema: dict[str, Any] | None = None
+    if getattr(args, "extract_schema", None):
+        try:
+            extract_schema = _load_schema(args.extract_schema)
+        except (FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
+            print(f"Error loading extract-schema: {exc}", file=sys.stderr)
+            return 1
+
     client = LLMClient()
 
     # Run all panelists in parallel via the orchestrator
@@ -343,6 +352,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         system_prompt_fn=persona_system_prompt,
         question_prompt_fn=build_question_prompt,
         response_schema=response_schema,
+        extract_schema=extract_schema,
     )
 
     # Build output results and aggregate panelist usage

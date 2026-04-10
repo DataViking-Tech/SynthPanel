@@ -773,3 +773,180 @@ class TestSessionReuse:
         # Bob got a fresh session
         assert "Bob" in sessions
         assert sessions["Bob"] is not existing_session
+
+
+# ---------------------------------------------------------------------------
+# Tests: Extraction pass (--extract-schema)
+# ---------------------------------------------------------------------------
+
+_EXTRACT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "themes": {"type": "array", "items": {"type": "string"}},
+        "sentiment": {"type": "string", "enum": ["positive", "negative", "neutral"]},
+    },
+    "required": ["themes", "sentiment"],
+}
+
+
+class TestExtractionPass:
+    def test_extract_schema_adds_extraction_key(self):
+        """When extract_schema is provided, responses include 'extraction' alongside 'response'."""
+        from synth_panel.llm.models import CompletionRequest
+
+        extracted_data = {"themes": ["usability", "pricing"], "sentiment": "negative"}
+
+        def send_side_effect(request):
+            if isinstance(request, CompletionRequest) and request.tool_choice is not None:
+                return _make_tool_response(extracted_data)
+            return _make_text_response("The product is hard to use and too expensive.")
+
+        client = MagicMock()
+        client.send = MagicMock(side_effect=send_side_effect)
+
+        personas = [{"name": "Alice"}]
+        questions = [{"text": "What frustrates you?"}]
+
+        results, _registry, _sessions = run_panel_parallel(
+            client=client,
+            personas=personas,
+            questions=questions,
+            model="sonnet",
+            system_prompt_fn=_simple_system_prompt,
+            question_prompt_fn=_simple_question_prompt,
+            extract_schema=_EXTRACT_SCHEMA,
+        )
+
+        assert len(results) == 1
+        resp = results[0].responses[0]
+        # Free-text response preserved
+        assert isinstance(resp["response"], str)
+        assert "hard to use" in resp["response"]
+        # Extraction present
+        assert resp["extraction"] == extracted_data
+        assert resp["extraction_is_fallback"] is False
+        # Not structured mode
+        assert "structured" not in resp
+
+    def test_extract_schema_ignored_when_response_schema_set(self):
+        """When both --schema and --extract-schema are set, structured mode wins (no extraction)."""
+        from synth_panel.llm.models import CompletionRequest
+
+        structured_data = {"sentiment": "positive", "summary": "Great!"}
+
+        def send_side_effect(request):
+            if isinstance(request, CompletionRequest) and request.tool_choice is not None:
+                return _make_tool_response(structured_data)
+            return _make_text_response("I like it")
+
+        client = MagicMock()
+        client.send = MagicMock(side_effect=send_side_effect)
+
+        personas = [{"name": "Alice"}]
+        questions = [{"text": "What do you think?"}]
+
+        results, _, _ = run_panel_parallel(
+            client=client,
+            personas=personas,
+            questions=questions,
+            model="sonnet",
+            system_prompt_fn=_simple_system_prompt,
+            question_prompt_fn=_simple_question_prompt,
+            response_schema=_SENTIMENT_SCHEMA,
+            extract_schema=_EXTRACT_SCHEMA,
+        )
+
+        resp = results[0].responses[0]
+        # Structured mode took over — no extraction key
+        assert resp["structured"] is True
+        assert "extraction" not in resp
+
+    def test_extract_schema_with_multiple_questions(self):
+        """Each question in text mode gets its own extraction call."""
+        from synth_panel.llm.models import CompletionRequest
+
+        call_count = {"text": 0, "extract": 0}
+        lock = threading.Lock()
+
+        def send_side_effect(request):
+            with lock:
+                if isinstance(request, CompletionRequest) and request.tool_choice is not None:
+                    call_count["extract"] += 1
+                    return _make_tool_response({"themes": [f"theme-{call_count['extract']}"], "sentiment": "neutral"})
+                call_count["text"] += 1
+                return _make_text_response(f"Answer {call_count['text']}")
+
+        client = MagicMock()
+        client.send = MagicMock(side_effect=send_side_effect)
+
+        personas = [{"name": "Alice"}]
+        questions = [{"text": "Q1"}, {"text": "Q2"}]
+
+        results, _, _ = run_panel_parallel(
+            client=client,
+            personas=personas,
+            questions=questions,
+            model="sonnet",
+            system_prompt_fn=_simple_system_prompt,
+            question_prompt_fn=_simple_question_prompt,
+            extract_schema=_EXTRACT_SCHEMA,
+        )
+
+        responses = results[0].responses
+        assert len(responses) == 2
+        for resp in responses:
+            assert "extraction" in resp
+            assert isinstance(resp["extraction"], dict)
+            assert "themes" in resp["extraction"]
+
+    def test_extract_schema_error_captured_gracefully(self):
+        """If the extraction call fails, the response still has text and an error marker."""
+        from synth_panel.llm.models import CompletionRequest
+
+        def send_side_effect(request):
+            if isinstance(request, CompletionRequest) and request.tool_choice is not None:
+                raise ConnectionError("extraction API down")
+            return _make_text_response("Normal text response")
+
+        client = MagicMock()
+        client.send = MagicMock(side_effect=send_side_effect)
+
+        personas = [{"name": "Alice"}]
+        questions = [{"text": "What do you think?"}]
+
+        results, _, _ = run_panel_parallel(
+            client=client,
+            personas=personas,
+            questions=questions,
+            model="sonnet",
+            system_prompt_fn=_simple_system_prompt,
+            question_prompt_fn=_simple_question_prompt,
+            extract_schema=_EXTRACT_SCHEMA,
+        )
+
+        resp = results[0].responses[0]
+        # Text response preserved despite extraction failure
+        assert isinstance(resp["response"], str)
+        assert resp["response"] == "Normal text response"
+        # Extraction error captured
+        assert resp["extraction"] is None
+        assert "extraction_error" in resp
+
+    def test_no_extract_schema_no_extraction_key(self):
+        """Without extract_schema, responses have no extraction key."""
+        client = _make_mock_client([_make_text_response("Plain answer")])
+        personas = [{"name": "Alice"}]
+        questions = [{"text": "Tell me something"}]
+
+        results, _, _ = run_panel_parallel(
+            client=client,
+            personas=personas,
+            questions=questions,
+            model="sonnet",
+            system_prompt_fn=_simple_system_prompt,
+            question_prompt_fn=_simple_question_prompt,
+        )
+
+        resp = results[0].responses[0]
+        assert "extraction" not in resp
+        assert "extraction_is_fallback" not in resp

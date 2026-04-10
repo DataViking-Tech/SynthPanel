@@ -75,6 +75,7 @@ def patched_panel(monkeypatch):
         max_workers=None,
         response_schema=None,
         sessions=None,
+        extract_schema=None,
     ):
         results = [
             PanelistResult(
