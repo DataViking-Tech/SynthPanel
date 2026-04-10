@@ -137,12 +137,13 @@ class TestDataTools:
     """Test tools that don't require LLM calls."""
 
     @pytest.mark.asyncio
-    async def test_list_persona_packs_empty(self):
+    async def test_list_persona_packs_builtins_only(self):
         result = await mcp.call_tool("list_persona_packs", {})
         # call_tool returns a list of content blocks
         text = result[0][0].text
         data = json.loads(text)
-        assert data == []
+        assert all(p["builtin"] for p in data)
+        assert len(data) >= 1  # at least one bundled pack
 
     @pytest.mark.asyncio
     async def test_save_and_get_persona_pack(self):
@@ -165,10 +166,11 @@ class TestDataTools:
         assert pack["name"] == "Test Pack"
         assert len(pack["personas"]) == 2
 
-        # List
+        # List — saved pack should appear alongside builtins
         list_result = await mcp.call_tool("list_persona_packs", {})
         packs = json.loads(list_result[0][0].text)
-        assert len(packs) == 1
+        saved_ids = [p["id"] for p in packs if not p.get("builtin")]
+        assert "test-1" in saved_ids
 
     @pytest.mark.asyncio
     async def test_list_panel_results_empty(self):
@@ -320,10 +322,11 @@ class TestInstrumentPackTools:
     """The 3 new instrument-pack tools mirror the persona-pack equivalents."""
 
     @pytest.mark.asyncio
-    async def test_list_empty(self):
+    async def test_list_builtins_only(self):
         result = await mcp.call_tool("list_instrument_packs", {})
         data = json.loads(result[0][0].text)
-        assert data == []
+        assert all(p.get("source") == "bundled" for p in data)
+        assert len(data) >= 1  # at least one bundled pack
 
     @pytest.mark.asyncio
     async def test_save_then_list_then_get(self):
@@ -350,7 +353,8 @@ class TestInstrumentPackTools:
 
         list_res = await mcp.call_tool("list_instrument_packs", {})
         listed = json.loads(list_res[0][0].text)
-        assert len(listed) == 1 and listed[0]["id"] == "demo"
+        saved_ids = [p["id"] for p in listed if p.get("source") != "bundled"]
+        assert "demo" in saved_ids
 
         get_res = await mcp.call_tool("get_instrument_pack", {"name": "demo"})
         loaded = json.loads(get_res[0][0].text)
