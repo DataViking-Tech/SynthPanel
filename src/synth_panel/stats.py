@@ -11,20 +11,27 @@ from __future__ import annotations
 
 import math
 import random
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
+from enum import Enum
 
 __all__ = [
     "BootstrapResult",
     "BordaResult",
     "ChiSquaredResult",
+    "ConvergenceLevel",
+    "ConvergenceReport",
+    "FindingConvergence",
     "FrequencyRow",
     "FrequencyTable",
     "KendallWResult",
     "KrippendorffResult",
+    "ModelDistribution",
     "bootstrap_ci",
     "borda_count",
     "chi_squared_test",
+    "convergence_report",
     "frequency_table",
     "kendall_w",
     "krippendorff_alpha",
@@ -756,4 +763,220 @@ def krippendorff_alpha(
         n_categories=n_categories,
         level=level_of_measurement,
         interpretation=_interpret_alpha(alpha),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Cross-model convergence/divergence classification (sp-5on.12)
+# ---------------------------------------------------------------------------
+
+
+class ConvergenceLevel(Enum):
+    """Classification of cross-model agreement on a finding."""
+
+    STRONG = "strong"  # alpha >= 0.80
+    MODERATE = "moderate"  # 0.60 <= alpha < 0.80
+    WEAK = "weak"  # 0.40 <= alpha < 0.60
+    NONE = "none"  # alpha < 0.40
+
+
+@dataclass(frozen=True)
+class ModelDistribution:
+    """Per-model response distribution for one finding."""
+
+    model: str
+    distribution: dict[str, float]  # category -> proportion
+    n: int  # Number of responses from this model
+    top_choice: str  # Modal response
+
+
+@dataclass(frozen=True)
+class FindingConvergence:
+    """Convergence assessment for a single finding/question."""
+
+    question_index: int
+    question_text: str
+    alpha: float  # Krippendorff's alpha
+    level: ConvergenceLevel
+    per_model: list[ModelDistribution]  # One per model
+    top_choice_agreement: bool  # Do all models agree on the top choice?
+    divergent_models: list[str]  # Models whose top choice differs from majority
+    interpretation: str  # Human-readable summary
+
+
+@dataclass(frozen=True)
+class ConvergenceReport:
+    """Full convergence analysis across all questions in a multi-model run."""
+
+    findings: list[FindingConvergence]
+    overall_alpha: float  # Mean alpha across all questions
+    overall_level: ConvergenceLevel  # Classification of overall alpha
+    n_convergent: int  # Findings with alpha >= 0.60
+    n_divergent: int  # Findings with alpha < 0.40
+    n_models: int
+    model_names: list[str]
+
+
+def _classify_alpha(alpha: float) -> ConvergenceLevel:
+    """Classify an alpha value into a convergence level."""
+    if alpha >= 0.80:
+        return ConvergenceLevel.STRONG
+    elif alpha >= 0.60:
+        return ConvergenceLevel.MODERATE
+    elif alpha >= 0.40:
+        return ConvergenceLevel.WEAK
+    else:
+        return ConvergenceLevel.NONE
+
+
+def convergence_report(
+    multi_model_responses: dict[str, list[list[str]]],
+    question_texts: list[str],
+    *,
+    level_of_measurement: str = "nominal",
+) -> ConvergenceReport:
+    """Classify cross-model convergence for each question in a multi-model run.
+
+    Args:
+        multi_model_responses: model_name -> list of lists.
+            Outer list: one entry per persona (length N).
+            Inner list: one response per question (length Q).
+            All models must have the same N and Q.
+
+        question_texts: List of Q question text strings (for reporting).
+
+        level_of_measurement: Passed to krippendorff_alpha.
+            "nominal" for pick-one-of-N, "ordinal" for rankings/Likert.
+
+    Returns:
+        ConvergenceReport with per-question and overall convergence.
+
+    Raises:
+        ValueError: If models have inconsistent N or Q, fewer than 2 models,
+                    or question_texts length doesn't match Q.
+    """
+    model_names = list(multi_model_responses.keys())
+    n_models = len(model_names)
+
+    if n_models < 2:
+        raise ValueError(f"Need at least 2 models, got {n_models}")
+
+    # Validate consistent shapes
+    first_model = model_names[0]
+    n_personas = len(multi_model_responses[first_model])
+
+    for model in model_names:
+        if len(multi_model_responses[model]) != n_personas:
+            raise ValueError(
+                f"Model {model!r} has {len(multi_model_responses[model])} personas, "
+                f"expected {n_personas} (from {first_model!r})"
+            )
+
+    # Determine Q from first persona of first model
+    if n_personas == 0:
+        raise ValueError("Models must have at least 1 persona")
+
+    n_questions = len(multi_model_responses[first_model][0])
+
+    for model in model_names:
+        for p_idx, persona_responses in enumerate(multi_model_responses[model]):
+            if len(persona_responses) != n_questions:
+                raise ValueError(
+                    f"Model {model!r} persona {p_idx} has {len(persona_responses)} questions, expected {n_questions}"
+                )
+
+    if len(question_texts) != n_questions:
+        raise ValueError(f"question_texts has {len(question_texts)} entries but data has {n_questions} questions")
+
+    findings: list[FindingConvergence] = []
+
+    for q in range(n_questions):
+        # Build ratings matrix: [M raters][N items]
+        reliability_data: list[list[str]] = []
+        for model in model_names:
+            rater_row = [multi_model_responses[model][n][q] for n in range(n_personas)]
+            reliability_data.append(rater_row)
+
+        # Compute alpha
+        alpha_result = krippendorff_alpha(reliability_data, level_of_measurement)
+        alpha_q = alpha_result.alpha
+
+        # Classify
+        level = _classify_alpha(alpha_q)
+
+        # Per-model distributions
+        per_model: list[ModelDistribution] = []
+        model_top_choices: dict[str, str] = {}
+
+        for model in model_names:
+            responses_m = [multi_model_responses[model][n][q] for n in range(n_personas)]
+            counts = Counter(responses_m)
+            total = len(responses_m)
+            distribution = {cat: cnt / total for cat, cnt in sorted(counts.items())}
+            top_choice = counts.most_common(1)[0][0]
+            model_top_choices[model] = top_choice
+
+            per_model.append(
+                ModelDistribution(
+                    model=model,
+                    distribution=distribution,
+                    n=total,
+                    top_choice=top_choice,
+                )
+            )
+
+        # Divergent model detection: majority top choice
+        top_choice_counts = Counter(model_top_choices.values())
+        majority_top = top_choice_counts.most_common(1)[0][0]
+        divergent = [m for m in model_names if model_top_choices[m] != majority_top]
+        top_choice_agreement = len(divergent) == 0
+
+        # Interpretation
+        if level == ConvergenceLevel.STRONG:
+            interpretation = (
+                f"Strong convergence (alpha={alpha_q:.2f}). All models agree: {majority_top} is the top choice."
+            )
+        elif level == ConvergenceLevel.MODERATE:
+            interpretation = (
+                f"Moderate convergence (alpha={alpha_q:.2f}). "
+                f"Models mostly agree on {majority_top} but with some variation."
+            )
+        elif level == ConvergenceLevel.WEAK:
+            interpretation = (
+                f"Weak convergence (alpha={alpha_q:.2f}). "
+                f"Interpret with caution. {divergent} disagree with the majority."
+            )
+        else:
+            interpretation = (
+                f"No convergence (alpha={alpha_q:.2f}). "
+                f"Model choice dominates this finding. {divergent} diverge. Not reliable."
+            )
+
+        findings.append(
+            FindingConvergence(
+                question_index=q,
+                question_text=question_texts[q],
+                alpha=alpha_q,
+                level=level,
+                per_model=per_model,
+                top_choice_agreement=top_choice_agreement,
+                divergent_models=divergent,
+                interpretation=interpretation,
+            )
+        )
+
+    # Overall metrics
+    overall_alpha = sum(f.alpha for f in findings) / len(findings)
+    overall_level = _classify_alpha(overall_alpha)
+    n_convergent = sum(1 for f in findings if f.alpha >= 0.60)
+    n_divergent = sum(1 for f in findings if f.alpha < 0.40)
+
+    return ConvergenceReport(
+        findings=findings,
+        overall_alpha=overall_alpha,
+        overall_level=overall_level,
+        n_convergent=n_convergent,
+        n_divergent=n_divergent,
+        n_models=n_models,
+        model_names=model_names,
     )

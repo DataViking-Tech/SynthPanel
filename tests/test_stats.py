@@ -1,13 +1,15 @@
-"""Tests for synth_panel.stats — sp-5on.7 + sp-5on.8."""
+"""Tests for synth_panel.stats — sp-5on.7 + sp-5on.8 + sp-5on.12."""
 
 from __future__ import annotations
 
 import pytest
 
 from synth_panel.stats import (
+    ConvergenceLevel,
     bootstrap_ci,
     borda_count,
     chi_squared_test,
+    convergence_report,
     frequency_table,
     kendall_w,
     krippendorff_alpha,
@@ -390,3 +392,134 @@ class TestKrippendorffAlpha:
         ]
         result = krippendorff_alpha(data, "nominal")
         assert "caution" in result.interpretation.lower() or "No meaningful" in result.interpretation
+
+
+# ---------------------------------------------------------------------------
+# convergence_report (sp-5on.12)
+# ---------------------------------------------------------------------------
+
+
+class TestConvergenceReport:
+    def test_perfect_agreement(self):
+        """All models give identical responses -> strong convergence."""
+        responses = {
+            "model_a": [["B", "A"], ["B", "A"], ["B", "A"]],
+            "model_b": [["B", "A"], ["B", "A"], ["B", "A"]],
+            "model_c": [["B", "A"], ["B", "A"], ["B", "A"]],
+        }
+        result = convergence_report(
+            responses,
+            ["Q1", "Q2"],
+        )
+        assert result.overall_level == ConvergenceLevel.STRONG
+        assert result.overall_alpha == pytest.approx(1.0)
+        assert result.n_convergent == 2
+        assert result.n_divergent == 0
+        for f in result.findings:
+            assert f.top_choice_agreement is True
+            assert f.divergent_models == []
+
+    def test_total_disagreement(self):
+        """Models systematically disagree -> no convergence."""
+        # 3 models, 6 personas, 1 question.
+        # Model A always says X, Model B always says Y, Model C always says Z.
+        responses = {
+            "model_a": [["X"]] * 6,
+            "model_b": [["Y"]] * 6,
+            "model_c": [["Z"]] * 6,
+        }
+        result = convergence_report(responses, ["Q1"])
+        assert result.overall_level == ConvergenceLevel.NONE
+        assert result.overall_alpha < 0.1
+        assert result.n_divergent == 1
+
+    def test_partial_convergence(self):
+        """Two models agree, one diverges on some questions."""
+        # Q1: all agree on B. Q2: model_c diverges.
+        responses = {
+            "model_a": [["B", "X"], ["B", "X"], ["B", "X"], ["B", "X"]],
+            "model_b": [["B", "X"], ["B", "X"], ["B", "X"], ["B", "X"]],
+            "model_c": [["B", "Y"], ["B", "Y"], ["B", "Y"], ["B", "Y"]],
+        }
+        result = convergence_report(responses, ["Q1", "Q2"])
+        # Q1: all agree, alpha = 1.0
+        assert result.findings[0].level == ConvergenceLevel.STRONG
+        assert result.findings[0].top_choice_agreement is True
+        # Q2: model_c diverges completely
+        assert result.findings[1].alpha < 0.5
+        assert "model_c" in result.findings[1].divergent_models
+
+    def test_divergent_model_identified(self):
+        """The divergent model should be named."""
+        responses = {
+            "gemini": [["A"]] * 5,
+            "haiku": [["A"]] * 5,
+            "gpt4o": [["B"]] * 5,
+        }
+        result = convergence_report(responses, ["Q1"])
+        assert "gpt4o" in result.findings[0].divergent_models
+        assert "gemini" not in result.findings[0].divergent_models
+
+    def test_per_model_distributions(self):
+        """Per-model distribution should reflect actual response proportions."""
+        responses = {
+            "model_a": [["X"], ["X"], ["Y"], ["X"]],
+            "model_b": [["X"], ["Y"], ["Y"], ["Y"]],
+        }
+        result = convergence_report(responses, ["Q1"])
+        for md in result.findings[0].per_model:
+            if md.model == "model_a":
+                assert md.distribution["X"] == pytest.approx(0.75)
+                assert md.top_choice == "X"
+            if md.model == "model_b":
+                assert md.distribution["Y"] == pytest.approx(0.75)
+                assert md.top_choice == "Y"
+
+    def test_ordinal_level(self):
+        """Should pass ordinal level_of_measurement through to alpha."""
+        responses = {
+            "m1": [["1", "2"], ["1", "2"], ["1", "2"]],
+            "m2": [["1", "2"], ["1", "2"], ["2", "1"]],
+        }
+        result = convergence_report(
+            responses,
+            ["Q1", "Q2"],
+            level_of_measurement="ordinal",
+        )
+        assert isinstance(result.overall_alpha, float)
+
+    def test_fewer_than_2_models_rejects(self):
+        with pytest.raises(ValueError, match="model"):
+            convergence_report({"only_one": [["A"]]}, ["Q1"])
+
+    def test_inconsistent_n_rejects(self):
+        """Models must have the same number of personas."""
+        with pytest.raises(ValueError):
+            convergence_report(
+                {"m1": [["A"], ["A"]], "m2": [["A"]]},
+                ["Q1"],
+            )
+
+    def test_inconsistent_q_rejects(self):
+        """Models must have the same number of questions per persona."""
+        with pytest.raises(ValueError):
+            convergence_report(
+                {"m1": [["A", "B"]], "m2": [["A"]]},
+                ["Q1", "Q2"],
+            )
+
+    def test_question_texts_length_mismatch_rejects(self):
+        with pytest.raises(ValueError):
+            convergence_report(
+                {"m1": [["A"]], "m2": [["A"]]},
+                ["Q1", "Q2"],  # 2 texts but only 1 question in data
+            )
+
+    def test_report_metadata(self):
+        responses = {
+            "gemini": [["A"], ["B"]],
+            "haiku": [["A"], ["B"]],
+        }
+        result = convergence_report(responses, ["Q1"])
+        assert result.n_models == 2
+        assert set(result.model_names) == {"gemini", "haiku"}
