@@ -1254,9 +1254,7 @@ def cluster_personas(
     q = len(persona_responses[names[0]])
     for name in names:
         if len(persona_responses[name]) != q:
-            raise ValueError(
-                f"Persona {name!r} has {len(persona_responses[name])} responses, expected {q}"
-            )
+            raise ValueError(f"Persona {name!r} has {len(persona_responses[name])} responses, expected {q}")
 
     # Cap max_k at N-1
     max_k = min(max_k, n - 1)
