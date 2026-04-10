@@ -90,9 +90,7 @@ class LLMClient:
         # For local models (ollama:*, local:*), cache a provider with the
         # correct base URL so _resolve_provider finds it.
         if base_url is not None and canonical not in self._provider_cache:
-            self._provider_cache[canonical] = OpenAICompatibleProvider(
-                base_url=base_url, api_key="no-key-required"
-            )
+            self._provider_cache[canonical] = OpenAICompatibleProvider(base_url=base_url, api_key="no-key-required")
 
         if canonical != original:
             return CompletionRequest(

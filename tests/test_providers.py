@@ -1002,18 +1002,14 @@ class TestOpenAICompatOverrides:
     def test_explicit_base_url(self):
         from synth_panel.llm.providers.openai_compat import OpenAICompatibleProvider
 
-        provider = OpenAICompatibleProvider(
-            base_url="http://localhost:11434", api_key="no-key-required"
-        )
+        provider = OpenAICompatibleProvider(base_url="http://localhost:11434", api_key="no-key-required")
         assert provider._base_url == "http://localhost:11434"
         assert provider._api_key == "no-key-required"
 
     def test_send_with_overrides(self):
         from synth_panel.llm.providers.openai_compat import OpenAICompatibleProvider
 
-        provider = OpenAICompatibleProvider(
-            base_url="http://localhost:11434", api_key="no-key-required"
-        )
+        provider = OpenAICompatibleProvider(base_url="http://localhost:11434", api_key="no-key-required")
         mock_resp = _mock_httpx_response(_openai_json_response("Local model says hi"))
         with patch("httpx.post", return_value=mock_resp) as mock_post:
             result = provider.send(_simple_request("llama3"))
