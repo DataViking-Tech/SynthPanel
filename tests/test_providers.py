@@ -905,3 +905,114 @@ class TestXAIProvider:
             provider = XAIProvider()
         headers = provider._headers()
         assert headers["Authorization"] == "Bearer xk-test"
+
+
+# ---------------------------------------------------------------------------
+# Tests: OpenRouter provider
+# ---------------------------------------------------------------------------
+
+
+class TestOpenRouterProvider:
+    """Test the OpenRouter provider."""
+
+    def test_send_success(self):
+        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+
+        mock_resp = _mock_httpx_response(_openai_json_response("OpenRouter says hi"))
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}, clear=False):
+            provider = OpenRouterProvider()
+        with patch("httpx.post", return_value=mock_resp):
+            result = provider.send(_simple_request("openrouter/meta-llama/llama-3"))
+        assert result.text == "OpenRouter says hi"
+
+    def test_missing_api_key(self):
+        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+
+        with patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(LLMError) as exc_info:
+                OpenRouterProvider()
+            assert exc_info.value.category == LLMErrorCategory.MISSING_CREDENTIALS
+
+    def test_send_transport_error(self):
+        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}, clear=False):
+            provider = OpenRouterProvider()
+        with patch("httpx.post", side_effect=httpx.ConnectError("fail")):
+            with pytest.raises(LLMError) as exc_info:
+                provider.send(_simple_request("openrouter/meta-llama/llama-3"))
+            assert exc_info.value.category == LLMErrorCategory.TRANSPORT
+
+    def test_send_non_200(self):
+        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+
+        mock_resp = _mock_httpx_response({}, status_code=500)
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}, clear=False):
+            provider = OpenRouterProvider()
+        with patch("httpx.post", return_value=mock_resp):
+            with pytest.raises(LLMError) as exc_info:
+                provider.send(_simple_request("openrouter/meta-llama/llama-3"))
+            assert exc_info.value.category == LLMErrorCategory.SERVER_ERROR
+
+    def test_send_json_error(self):
+        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.side_effect = json.JSONDecodeError("bad", "", 0)
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}, clear=False):
+            provider = OpenRouterProvider()
+        with patch("httpx.post", return_value=mock_resp):
+            with pytest.raises(LLMError) as exc_info:
+                provider.send(_simple_request("openrouter/meta-llama/llama-3"))
+            assert exc_info.value.category == LLMErrorCategory.DESERIALIZATION
+
+    def test_default_base_url(self):
+        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}, clear=False):
+            provider = OpenRouterProvider()
+        assert provider._base_url == "https://openrouter.ai/api"
+
+    def test_custom_base_url(self):
+        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+
+        env = {"OPENROUTER_API_KEY": "or-test", "OPENROUTER_BASE_URL": "http://custom:8080"}
+        with patch.dict(os.environ, env, clear=False):
+            provider = OpenRouterProvider()
+        assert provider._base_url == "http://custom:8080"
+
+    def test_headers_use_bearer(self):
+        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}, clear=False):
+            provider = OpenRouterProvider()
+        headers = provider._headers()
+        assert headers["Authorization"] == "Bearer or-test"
+
+
+# ---------------------------------------------------------------------------
+# Tests: OpenAI-compatible provider — constructor overrides (for local models)
+# ---------------------------------------------------------------------------
+
+
+class TestOpenAICompatOverrides:
+    """Test OpenAICompatibleProvider with explicit base_url/api_key overrides."""
+
+    def test_explicit_base_url(self):
+        from synth_panel.llm.providers.openai_compat import OpenAICompatibleProvider
+
+        provider = OpenAICompatibleProvider(base_url="http://localhost:11434", api_key="no-key-required")
+        assert provider._base_url == "http://localhost:11434"
+        assert provider._api_key == "no-key-required"
+
+    def test_send_with_overrides(self):
+        from synth_panel.llm.providers.openai_compat import OpenAICompatibleProvider
+
+        provider = OpenAICompatibleProvider(base_url="http://localhost:11434", api_key="no-key-required")
+        mock_resp = _mock_httpx_response(_openai_json_response("Local model says hi"))
+        with patch("httpx.post", return_value=mock_resp) as mock_post:
+            result = provider.send(_simple_request("llama3"))
+        assert result.text == "Local model says hi"
+        called_url = mock_post.call_args[0][0]
+        assert called_url == "http://localhost:11434/v1/chat/completions"

@@ -54,6 +54,15 @@ class TestProviderResolution:
 
             assert isinstance(provider, XAIProvider)
 
+    def test_openrouter_prefix(self):
+        """openrouter/* models resolve to OpenRouterProvider."""
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}):
+            client = LLMClient()
+            provider = client._resolve_provider("openrouter/meta-llama/llama-3")
+            from synth_panel.llm.providers.openrouter import OpenRouterProvider
+
+            assert isinstance(provider, OpenRouterProvider)
+
     def test_fallback_to_available_credentials(self):
         """Unknown models fall back to first provider with credentials."""
         env = {
@@ -61,6 +70,7 @@ class TestProviderResolution:
             "GEMINI_API_KEY": "",
             "GOOGLE_API_KEY": "",
             "XAI_API_KEY": "",
+            "OPENROUTER_API_KEY": "",
             "OPENAI_API_KEY": "sk-oai",
         }
         with patch.dict(os.environ, env, clear=False):
@@ -77,6 +87,7 @@ class TestProviderResolution:
             "GEMINI_API_KEY": "",
             "GOOGLE_API_KEY": "",
             "XAI_API_KEY": "",
+            "OPENROUTER_API_KEY": "",
             "OPENAI_API_KEY": "",
         }
         with patch.dict(os.environ, env, clear=False):
@@ -105,6 +116,52 @@ class TestAliasResolution:
                 # Provider receives request with the resolved model name
                 call_args = mock_provider.send.call_args[0][0]
                 assert call_args.model == canonical
+
+
+class TestLocalModelResolution:
+    def test_ollama_prefix_creates_local_provider(self):
+        """ollama:llama3 creates an OpenAI-compat provider with Ollama base URL."""
+        from synth_panel.llm.providers.openai_compat import OpenAICompatibleProvider
+
+        client = LLMClient()
+        mock_provider = MagicMock()
+        mock_provider.send.return_value = _simple_response()
+
+        # _prepare should cache a local provider
+        prepared = client._prepare(_simple_request(model="ollama:llama3"))
+        assert prepared.model == "llama3"
+        assert "llama3" in client._provider_cache
+        provider = client._provider_cache["llama3"]
+        assert isinstance(provider, OpenAICompatibleProvider)
+        assert provider._base_url == "http://localhost:11434"
+
+    def test_local_prefix_creates_lmstudio_provider(self):
+        """local:phi3 creates an OpenAI-compat provider with LM Studio base URL."""
+        from synth_panel.llm.providers.openai_compat import OpenAICompatibleProvider
+
+        client = LLMClient()
+        prepared = client._prepare(_simple_request(model="local:phi3"))
+        assert prepared.model == "phi3"
+        provider = client._provider_cache["phi3"]
+        assert isinstance(provider, OpenAICompatibleProvider)
+        assert provider._base_url == "http://localhost:1234"
+
+    def test_ollama_send_uses_correct_url(self):
+        """End-to-end: ollama:llama3 sends to localhost:11434."""
+        client = LLMClient()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "id": "x",
+            "model": "llama3",
+            "choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 3},
+        }
+        with patch("httpx.post", return_value=mock_resp) as mock_post:
+            result = client.send(_simple_request(model="ollama:llama3"))
+        assert result.text == "hi"
+        called_url = mock_post.call_args[0][0]
+        assert called_url == "http://localhost:11434/v1/chat/completions"
 
 
 class TestRetry:
