@@ -6,8 +6,8 @@ Per SPEC.md §8.
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import TYPE_CHECKING
+import sys
+from typing import TYPE_CHECKING, Callable, List
 
 from synth_panel.cli.output import OutputFormat, emit
 
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 # Type alias for slash command handlers
-SlashHandler = Callable[["SessionState", list[str], OutputFormat], None]
+SlashHandler = Callable[["SessionState", List[str], OutputFormat], None]
 
 
 def _cmd_help(state: SessionState, argv: list[str], fmt: OutputFormat) -> None:
