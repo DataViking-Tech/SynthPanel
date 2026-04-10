@@ -4,7 +4,9 @@ All functions use only ``math``, ``random``, and ``dataclasses`` from stdlib.
 No scipy or numpy required.
 
 Implements: bootstrap BCa confidence intervals, chi-squared goodness-of-fit,
-Kendall's W concordance, frequency tables, and Borda count ranking.
+Kendall's W concordance, frequency tables, Borda count ranking,
+persona cluster analysis (agglomerative + silhouette), cross-model
+convergence/divergence classification, and Krippendorff's alpha.
 """
 
 from __future__ import annotations
@@ -20,6 +22,8 @@ __all__ = [
     "BootstrapResult",
     "BordaResult",
     "ChiSquaredResult",
+    "Cluster",
+    "ClusterResult",
     "ConvergenceLevel",
     "ConvergenceReport",
     "FindingConvergence",
@@ -31,11 +35,13 @@ __all__ = [
     "bootstrap_ci",
     "borda_count",
     "chi_squared_test",
+    "cluster_personas",
     "convergence_report",
     "frequency_table",
     "kendall_w",
     "krippendorff_alpha",
     "proportion_stat",
+    "silhouette_score",
 ]
 
 # ---------------------------------------------------------------------------
@@ -979,4 +985,354 @@ def convergence_report(
         n_divergent=n_divergent,
         n_models=n_models,
         model_names=model_names,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Persona cluster analysis (agglomerative clustering + silhouette scoring)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Cluster:
+    """A single cluster of personas."""
+
+    cluster_id: int
+    persona_names: list[str]
+    size: int
+    dominant_responses: dict[int, str]  # question_index -> most common response
+    dominant_proportions: dict[int, float]
+
+
+@dataclass(frozen=True)
+class ClusterResult:
+    """Result of persona cluster analysis."""
+
+    clusters: list[Cluster]
+    n_clusters: int
+    silhouette_score: float
+    persona_assignments: dict[str, int]  # persona_name -> cluster_id
+    k_range_tested: tuple[int, int]
+
+
+def _encode_responses(
+    persona_responses: dict[str, list[str]],
+    categories: list[str],
+) -> dict[str, list[float]]:
+    """Encode categorical responses as one-hot feature vectors.
+
+    For Q questions and C categories, vector length = Q * C.
+    Each question contributes a one-hot block of length C.
+    """
+    cat_index = {c: i for i, c in enumerate(categories)}
+    c = len(categories)
+    result: dict[str, list[float]] = {}
+    for name, responses in persona_responses.items():
+        vec: list[float] = []
+        for resp in responses:
+            block = [0.0] * c
+            if resp in cat_index:
+                block[cat_index[resp]] = 1.0
+            vec.extend(block)
+        result[name] = vec
+    return result
+
+
+def _sq_euclidean(a: list[float], b: list[float]) -> float:
+    """Squared Euclidean distance between two vectors."""
+    return sum((ai - bi) ** 2 for ai, bi in zip(a, b))
+
+
+def _agglomerative_ward(
+    names: list[str],
+    vectors: list[list[float]],
+) -> list[tuple[int, int, float, int]]:
+    """Agglomerative clustering with Ward's method.
+
+    Returns a linkage list of (cluster_i, cluster_j, distance, new_size)
+    with N-1 entries.
+    """
+    n = len(names)
+
+    # Initialize: each point is its own cluster
+    # Active clusters tracked by id; ids 0..n-1 are initial singletons
+    sizes: dict[int, int] = {i: 1 for i in range(n)}
+    active: set[int] = set(range(n))
+
+    # Pairwise squared Euclidean distance matrix (stored as dict for easy update)
+    dist: dict[tuple[int, int], float] = {}
+    for i in range(n):
+        for j in range(i + 1, n):
+            dist[(i, j)] = _sq_euclidean(vectors[i], vectors[j])
+
+    def _get_dist(a: int, b: int) -> float:
+        if a > b:
+            a, b = b, a
+        return dist[(a, b)]
+
+    linkage: list[tuple[int, int, float, int]] = []
+    next_id = n
+
+    for _ in range(n - 1):
+        # Find minimum distance pair among active clusters
+        best_dist = float("inf")
+        best_i = -1
+        best_j = -1
+        active_list = sorted(active)
+        for idx_a in range(len(active_list)):
+            for idx_b in range(idx_a + 1, len(active_list)):
+                ci, cj = active_list[idx_a], active_list[idx_b]
+                d = _get_dist(ci, cj)
+                if d < best_dist:
+                    best_dist = d
+                    best_i = ci
+                    best_j = cj
+
+        # Record merge
+        new_size = sizes[best_i] + sizes[best_j]
+        linkage.append((best_i, best_j, best_dist, new_size))
+
+        # Update distances using Lance-Williams formula for Ward's method
+        new_id = next_id
+        next_id += 1
+        n_i = sizes[best_i]
+        n_j = sizes[best_j]
+        d_ij = best_dist
+
+        for k in active:
+            if k in (best_i, best_j):
+                continue
+            n_k = sizes[k]
+            d_ik = _get_dist(best_i, k)
+            d_jk = _get_dist(best_j, k)
+            # Ward's Lance-Williams:
+            # d(new, k) = ((n_k + n_i)*d(i,k) + (n_k + n_j)*d(j,k) - n_k*d(i,j)) / (n_k + n_i + n_j)
+            d_new = ((n_k + n_i) * d_ik + (n_k + n_j) * d_jk - n_k * d_ij) / (n_k + n_i + n_j)
+            key = (min(new_id, k), max(new_id, k))
+            dist[key] = d_new
+
+        # Remove merged clusters, add new one
+        active.discard(best_i)
+        active.discard(best_j)
+        active.add(new_id)
+        sizes[new_id] = new_size
+
+    return linkage
+
+
+def _cut_dendrogram(
+    linkage: list[tuple[int, int, float, int]],
+    n: int,
+    k: int,
+) -> list[int]:
+    """Cut a dendrogram to produce k clusters.
+
+    Returns a list of cluster labels (length n), one per original point.
+    """
+    # Take the first (n - k) merges. The remaining k groups are the clusters.
+    # Build a union-find to track which original points end up together.
+    parent: dict[int, int] = {i: i for i in range(n)}
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: int, b: int, new_id: int) -> None:
+        parent[new_id] = new_id
+        ra, rb = find(a), find(b)
+        parent[ra] = new_id
+        parent[rb] = new_id
+
+    # Apply the first (n - k) merges
+    n_merges = n - k
+    for merge_idx in range(n_merges):
+        ci, cj, _d, _s = linkage[merge_idx]
+        new_id = n + merge_idx
+        union(ci, cj, new_id)
+
+    # Assign cluster labels
+    root_to_label: dict[int, int] = {}
+    labels: list[int] = []
+    next_label = 0
+    for i in range(n):
+        root = find(i)
+        if root not in root_to_label:
+            root_to_label[root] = next_label
+            next_label += 1
+        labels.append(root_to_label[root])
+
+    return labels
+
+
+def silhouette_score(
+    labels: list[int],
+    distance_matrix: list[list[float]],
+) -> float:
+    """Compute mean silhouette coefficient.
+
+    Args:
+        labels: Cluster assignment for each point. Length N.
+        distance_matrix: N x N symmetric distance matrix.
+
+    Returns:
+        Mean silhouette score in [-1, 1]. Higher is better.
+        Returns 0.0 if all points are in one cluster.
+    """
+    n = len(labels)
+    unique_labels = set(labels)
+    if len(unique_labels) <= 1:
+        return 0.0
+
+    # Group points by cluster
+    clusters: dict[int, list[int]] = {}
+    for i, lab in enumerate(labels):
+        clusters.setdefault(lab, []).append(i)
+
+    silhouettes: list[float] = []
+    for i in range(n):
+        ci = labels[i]
+        members_ci = clusters[ci]
+
+        # a(i): mean distance to other members of same cluster
+        if len(members_ci) <= 1:
+            a_i = 0.0
+        else:
+            a_i = sum(distance_matrix[i][j] for j in members_ci if j != i) / (len(members_ci) - 1)
+
+        # b(i): min mean distance to any other cluster
+        b_i = float("inf")
+        for lab, members in clusters.items():
+            if lab == ci:
+                continue
+            mean_dist = sum(distance_matrix[i][j] for j in members) / len(members)
+            if mean_dist < b_i:
+                b_i = mean_dist
+
+        denom = max(a_i, b_i)
+        if denom == 0:
+            s_i = 0.0
+        else:
+            s_i = (b_i - a_i) / denom
+        silhouettes.append(s_i)
+
+    return sum(silhouettes) / len(silhouettes)
+
+
+def cluster_personas(
+    persona_responses: dict[str, list[str]],
+    *,
+    categories: list[str] | None = None,
+    min_k: int = 2,
+    max_k: int = 5,
+) -> ClusterResult:
+    """Cluster personas by response patterns using agglomerative clustering.
+
+    Uses Ward's method with one-hot encoded response vectors. Optimal k
+    selected by maximum mean silhouette score.
+
+    Args:
+        persona_responses: persona_name -> list of responses (one per question).
+        categories: Explicit category list. If None, inferred from data.
+        min_k: Minimum number of clusters to test. Default 2.
+        max_k: Maximum number of clusters to test. Default 5.
+
+    Returns:
+        ClusterResult with optimal clustering, silhouette score, assignments.
+
+    Raises:
+        ValueError: If fewer than 2*min_k personas, or inconsistent response lengths.
+    """
+    names = sorted(persona_responses.keys())
+    n = len(names)
+
+    if n < 2 * min_k:
+        raise ValueError(f"Need at least {2 * min_k} personas (2*min_k), got {n}")
+
+    # Validate consistent response lengths
+    q = len(persona_responses[names[0]])
+    for name in names:
+        if len(persona_responses[name]) != q:
+            raise ValueError(
+                f"Persona {name!r} has {len(persona_responses[name])} responses, expected {q}"
+            )
+
+    # Cap max_k at N-1
+    max_k = min(max_k, n - 1)
+    if max_k < min_k:
+        max_k = min_k
+
+    # 1. Encode
+    if categories is None:
+        cats: set[str] = set()
+        for resps in persona_responses.values():
+            cats.update(resps)
+        categories = sorted(cats)
+    encoded = _encode_responses(persona_responses, categories)
+    vectors = [encoded[name] for name in names]
+
+    # 2. Full pairwise distance matrix (squared Euclidean)
+    full_dist: list[list[float]] = [[0.0] * n for _ in range(n)]
+    for i in range(n):
+        for j in range(i + 1, n):
+            d = _sq_euclidean(vectors[i], vectors[j])
+            full_dist[i][j] = d
+            full_dist[j][i] = d
+
+    # 3. Agglomerative clustering
+    linkage = _agglomerative_ward(names, vectors)
+
+    # 4-6. Try each k, compute silhouette, pick best
+    best_k = min_k
+    best_score = -2.0
+    best_labels: list[int] = []
+
+    for k in range(min_k, max_k + 1):
+        labels = _cut_dendrogram(linkage, n, k)
+        score = silhouette_score(labels, full_dist)
+        if score > best_score:
+            best_score = score
+            best_k = k
+            best_labels = labels
+
+    # 7. Build result
+    assignments = {names[i]: best_labels[i] for i in range(n)}
+
+    # Group personas by cluster
+    cluster_groups: dict[int, list[str]] = {}
+    for i, name in enumerate(names):
+        cluster_groups.setdefault(best_labels[i], []).append(name)
+
+    clusters: list[Cluster] = []
+    for cid in sorted(cluster_groups.keys()):
+        members = cluster_groups[cid]
+        # Dominant response per question (mode)
+        dominant_responses: dict[int, str] = {}
+        dominant_proportions: dict[int, float] = {}
+        for qi in range(q):
+            counts: dict[str, int] = {}
+            for name in members:
+                resp = persona_responses[name][qi]
+                counts[resp] = counts.get(resp, 0) + 1
+            mode = max(counts, key=lambda x: counts[x])
+            dominant_responses[qi] = mode
+            dominant_proportions[qi] = counts[mode] / len(members)
+
+        clusters.append(
+            Cluster(
+                cluster_id=cid,
+                persona_names=members,
+                size=len(members),
+                dominant_responses=dominant_responses,
+                dominant_proportions=dominant_proportions,
+            )
+        )
+
+    return ClusterResult(
+        clusters=clusters,
+        n_clusters=best_k,
+        silhouette_score=best_score,
+        persona_assignments=assignments,
+        k_range_tested=(min_k, max_k),
     )
