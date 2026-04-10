@@ -21,10 +21,10 @@ Traditional focus groups cost $5,000-$15,000 and take weeks. Synthetic panels co
 ## Quick Start
 
 ```bash
-# Install from PyPI
+# Install from PyPI (v0.4.0+)
 pip install synth-panel
 
-# Or install the latest from source (works today even if PyPI is stale)
+# Or install from source for the latest unreleased changes
 pip install git+https://github.com/DataViking-Tech/synth-panel.git@main
 
 # Set your API key (Claude, OpenAI, Gemini, xAI, or any OpenAI-compatible provider)
@@ -351,8 +351,18 @@ Use synth-panel to pre-screen and iterate, then validate with real participants.
 | Version | Highlights |
 |---------|-----------|
 | 0.5.0 | v3 branching instruments, router predicates, 5 bundled instrument packs, `instruments` subcommand (list/show/install/graph), MCP `*_instrument_pack` tools, rounds-shaped panel output, `extend_panel` ad-hoc round tool |
-| 0.4.0 | v2 multi-round linear instruments, session reuse across rounds, persona pack registry |
+| 0.4.0 | `--var KEY=VALUE` and `--vars-file` for instrument templates, fail-loud on all-provider errors, default `--model` respects available credentials, `pack show <id>` alias, publish workflow fix |
 | 0.3.0 | Structured output via tool-use forcing, cost tracking, MCP server (stdio), persona-pack persistence |
+
+See [CHANGELOG.md](CHANGELOG.md) for detailed release notes.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, and how to submit changes.
+
+## MCP Server Documentation
+
+For detailed MCP server documentation (all 12 tools, 4 resources, 3 prompt templates), see [docs/mcp.md](docs/mcp.md).
 
 ## License
 
