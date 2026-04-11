@@ -333,6 +333,44 @@ def build_parser() -> argparse.ArgumentParser:
         help="ID of the persona pack to show.",
     )
 
+    # pack generate (sp-5on.18: LLM-based persona generation)
+    pack_generate_parser = pack_subparsers.add_parser(
+        "generate",
+        help="Generate a persona pack using an LLM.",
+    )
+    pack_generate_parser.add_argument(
+        "--product",
+        required=True,
+        help="Description of the product or service being researched.",
+    )
+    pack_generate_parser.add_argument(
+        "--audience",
+        required=True,
+        help="Target audience for the personas.",
+    )
+    pack_generate_parser.add_argument(
+        "--count",
+        type=int,
+        default=5,
+        help="Number of personas to generate (default: 5).",
+    )
+    pack_generate_parser.add_argument(
+        "--model",
+        default=None,
+        help="LLM model to use (default: auto-detect from available API keys).",
+    )
+    pack_generate_parser.add_argument(
+        "--name",
+        default=None,
+        help="Name for the generated pack (default: derived from product).",
+    )
+    pack_generate_parser.add_argument(
+        "--id",
+        default=None,
+        dest="pack_id",
+        help="Custom pack ID (default: auto-generated).",
+    )
+
     # instruments
     instruments_parser = subparsers.add_parser(
         "instruments",
