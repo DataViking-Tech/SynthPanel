@@ -1,0 +1,40 @@
+# product_feedback: NPS + feature satisfaction + open-ended follow-up.
+#
+# Usage:
+#   synthpanel panel run --personas examples/personas.yaml --instrument examples/instruments/product_feedback.yaml --var product="Acme Widget"
+#
+# Also available as a bundled pack:
+#   synthpanel panel run --personas examples/personas.yaml --instrument product-feedback --var product="Acme Widget"
+instrument:
+  version: 3
+  rounds:
+    - name: feedback
+      questions:
+        - text: >
+            On a scale of 0 to 10, how likely are you to recommend
+            {product} to a friend or colleague?  Please explain your
+            score.
+          response_schema:
+            type: text
+        - text: >
+            How satisfied are you with the core functionality of
+            {product}?  What works well and what feels incomplete?
+          response_schema:
+            type: text
+        - text: >
+            How would you rate the onboarding experience?  Was it
+            easy to get started, or did you hit friction?
+          response_schema:
+            type: text
+        - text: >
+            Think about the last time {product} saved you significant
+            time or effort.  What were you doing?
+          response_schema:
+            type: text
+        - text: >
+            If you could wave a magic wand and change one thing about
+            {product}, what would it be and why?
+          response_schema:
+            type: text
+      route_when:
+        - else: __end__

@@ -1,0 +1,46 @@
+# product-feedback: NPS + feature satisfaction + open-ended follow-up.
+#
+# Single-round v3 instrument (no branching).  Covers Net Promoter Score,
+# three feature-level satisfaction probes, and one open-ended improvement
+# question.  Suitable for post-launch or quarterly check-in panels.
+name: product-feedback
+version: 1
+description: >
+  NPS question, three feature satisfaction probes, and one open-ended
+  improvement question.  Ideal for post-launch or quarterly product
+  check-ins.
+author: synthpanel
+
+instrument:
+  version: 3
+  rounds:
+    - name: feedback
+      questions:
+        - text: >
+            On a scale of 0 to 10, how likely are you to recommend
+            {product} to a friend or colleague?  Please explain your
+            score.
+          response_schema:
+            type: text
+        - text: >
+            How satisfied are you with the core functionality of
+            {product}?  What works well and what feels incomplete?
+          response_schema:
+            type: text
+        - text: >
+            How would you rate the onboarding experience?  Was it
+            easy to get started, or did you hit friction?
+          response_schema:
+            type: text
+        - text: >
+            Think about the last time {product} saved you significant
+            time or effort.  What were you doing?
+          response_schema:
+            type: text
+        - text: >
+            If you could wave a magic wand and change one thing about
+            {product}, what would it be and why?
+          response_schema:
+            type: text
+      route_when:
+        - else: __end__

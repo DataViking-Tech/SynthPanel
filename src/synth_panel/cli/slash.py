@@ -75,13 +75,23 @@ def _cmd_model(state: SessionState, argv: list[str], fmt: OutputFormat) -> None:
         emit(fmt, message=f"Current model: {state.model or '(default)'}")
 
 
+_VALID_PERMISSION_MODES = {"read-only", "workspace-write", "full-access"}
+
+
 def _cmd_permissions(state: SessionState, argv: list[str], fmt: OutputFormat) -> None:
     """Show or switch the permission mode."""
-    # TODO: wire to permission state
     if argv:
-        emit(fmt, message=f"[stub] Permission mode set to: {argv[0]}")
+        mode = argv[0]
+        if mode not in _VALID_PERMISSION_MODES:
+            emit(
+                fmt,
+                message=(f"Invalid permission mode: {mode}\nValid modes: {', '.join(sorted(_VALID_PERMISSION_MODES))}"),
+            )
+            return
+        state.permission_mode = mode
+        emit(fmt, message=f"Permission mode set to: {mode}")
     else:
-        emit(fmt, message="[stub] Current permission mode: full-access")
+        emit(fmt, message=f"Current permission mode: {state.permission_mode}")
 
 
 def _cmd_config(state: SessionState, argv: list[str], fmt: OutputFormat) -> None:
@@ -124,8 +134,25 @@ def _cmd_config(state: SessionState, argv: list[str], fmt: OutputFormat) -> None
 
 def _cmd_memory(state: SessionState, argv: list[str], fmt: OutputFormat) -> None:
     """Show loaded instruction/memory files."""
-    # TODO: wire to memory system
-    emit(fmt, message="[stub] No instruction/memory files loaded.")
+    from pathlib import Path
+
+    files: list[str] = []
+
+    if state.config_path:
+        p = Path(state.config_path)
+        if p.exists():
+            files.append(f"  --config: {p} ({p.stat().st_size} bytes)")
+        else:
+            files.append(f"  --config: {state.config_path} (not found)")
+
+    claude_md = Path.cwd() / "CLAUDE.md"
+    if claude_md.exists():
+        files.append(f"  CLAUDE.md: {claude_md} ({claude_md.stat().st_size} bytes)")
+
+    if files:
+        emit(fmt, message="Loaded configuration files:\n" + "\n".join(files))
+    else:
+        emit(fmt, message="No configuration files loaded.")
 
 
 def _cmd_clear(state: SessionState, argv: list[str], fmt: OutputFormat) -> None:
