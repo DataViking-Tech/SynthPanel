@@ -249,6 +249,36 @@ OPENAI_BASE_URL=http://localhost:11434/v1 \
 synthpanel panel run --personas p.yaml --instrument s.yaml --model llama3
 ```
 
+### Model Aliases
+
+synthpanel ships with short aliases (`sonnet`, `opus`, `haiku`, `grok`,
+`gemini`, `gemini-pro`) that map to canonical model identifiers. You can
+override or extend these without changing code:
+
+**Resolution order (highest priority wins):**
+
+1. **`SYNTHPANEL_MODEL_ALIASES` env var** — JSON string of alias→model pairs
+2. **`~/.synthpanel/aliases.yaml`** — YAML file
+3. **Hardcoded defaults** — built into the package
+
+```bash
+# Override via env var (JSON)
+export SYNTHPANEL_MODEL_ALIASES='{"sonnet": "claude-sonnet-4-6-20250414", "fast": "claude-haiku-4-5-20251001"}'
+synthpanel prompt "Hello" --model fast
+```
+
+```yaml
+# ~/.synthpanel/aliases.yaml
+aliases:
+  fast: claude-haiku-4-5-20251001
+  smart: claude-opus-4-6
+  sonnet: claude-sonnet-4-6-20250414
+```
+
+Env var entries override file entries, which override hardcoded defaults.
+Aliases from all tiers are merged, so you only need to specify the ones you
+want to add or change.
+
 ## Architecture
 
 synthpanel is a research harness, not an LLM wrapper. It orchestrates the research workflow:
