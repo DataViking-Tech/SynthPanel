@@ -1039,6 +1039,109 @@ def handle_pack_show(args: argparse.Namespace, fmt: OutputFormat) -> int:
     return handle_pack_export(args, fmt)
 
 
+def handle_pack_generate(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Generate a persona pack using an LLM."""
+    from synth_panel.llm.models import InputMessage, TextBlock
+    from synth_panel.mcp.data import PackValidationError, save_persona_pack
+    from synth_panel.structured.output import StructuredOutputConfig, StructuredOutputEngine
+
+    count = args.count
+    if count < 1 or count > 50:
+        print("Error: --count must be between 1 and 50.", file=sys.stderr)
+        return 1
+
+    model = _resolve_model(args)
+
+    schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "personas": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "Full name."},
+                        "age": {"type": "integer", "description": "Age in years."},
+                        "occupation": {"type": "string", "description": "Job title or role."},
+                        "background": {
+                            "type": "string",
+                            "description": "One-paragraph professional and personal background.",
+                        },
+                        "personality_traits": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "3-5 personality traits relevant to their product usage.",
+                        },
+                    },
+                    "required": ["name", "age", "occupation", "background", "personality_traits"],
+                },
+            },
+        },
+        "required": ["personas"],
+    }
+
+    prompt = (
+        f"Generate exactly {count} diverse, realistic personas for a synthetic focus group.\n\n"
+        f"Product/service: {args.product}\n"
+        f"Target audience: {args.audience}\n\n"
+        "Requirements:\n"
+        f"- Generate exactly {count} personas\n"
+        "- Each persona needs: name, age, occupation, background (one paragraph), "
+        "and 3-5 personality_traits\n"
+        "- Personas should be diverse in age, occupation, background, and perspective\n"
+        "- Backgrounds should be specific and relevant to the product/audience context\n"
+        "- Personality traits should reflect how they'd engage with the product\n"
+        "- Names should reflect diverse cultural backgrounds"
+    )
+
+    client = LLMClient()
+    engine = StructuredOutputEngine(client)
+    config = StructuredOutputConfig(
+        schema=schema,
+        tool_name="generate_personas",
+        tool_description="Generate a list of diverse personas for a synthetic focus group.",
+    )
+
+    try:
+        result = engine.extract(
+            model=model,
+            max_tokens=4096,
+            messages=[InputMessage(role="user", content=[TextBlock(text=prompt)])],
+            config=config,
+            temperature=1.0,
+        )
+    except Exception as exc:
+        print(f"Error calling LLM: {exc}", file=sys.stderr)
+        return 1
+
+    if result.is_fallback:
+        print(f"Error: LLM did not produce valid structured output: {result.error}", file=sys.stderr)
+        return 1
+
+    personas = result.data.get("personas", [])
+    if not personas:
+        print("Error: LLM returned no personas.", file=sys.stderr)
+        return 1
+
+    pack_name = args.name or f"{args.product[:60]} personas"
+
+    try:
+        saved = save_persona_pack(pack_name, personas, pack_id=args.pack_id)
+    except PackValidationError as exc:
+        print(f"Validation error: {exc}", file=sys.stderr)
+        return 1
+
+    if fmt is OutputFormat.TEXT:
+        print(
+            f"Generated pack '{saved['name']}' ({saved['persona_count']} personas) as {saved['id']}"
+        )
+        print(f"Saved to: {saved['path']}")
+    else:
+        emit(fmt, message="Pack generated", extra=saved)
+
+    return 0
+
+
 def handle_mcp_serve(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """Start the MCP server on stdio transport."""
     from synth_panel.mcp.server import serve
