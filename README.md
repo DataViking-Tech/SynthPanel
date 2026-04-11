@@ -370,6 +370,25 @@ synthpanel panel run --personas p.yaml --instrument s.yaml --config budget.yaml
 
 The cost tracker enforces soft budget limits — the current panelist completes, but no new panelists start if the budget is exceeded.
 
+## Persona Prompt Template Variants
+
+The `templates/` directory contains four prompt template variants for benchmarking how persona prompt construction affects response quality:
+
+| Template | File | Fields | Purpose |
+|----------|------|--------|---------|
+| **Current** | `templates/current.txt` | name, age, occupation, background, personality_traits | Control — documents the default prompt style |
+| **Demo** | `templates/demo.txt` | name, age, occupation, education_level, income_bracket, urban_rural, political_leaning, background | Demographic-enriched — adds SubPOP/OpinionsQA stratification axes |
+| **Values** | `templates/values.txt` | name, age, occupation, background, core_values, decision_style | Values-enriched — adds belief and decision-making context |
+| **Minimal** | `templates/minimal.txt` | name, age, occupation | Ablation control — tests how much narrative matters |
+
+Usage:
+
+```bash
+synthpanel panel run --personas personas.yaml --instrument survey.yaml --prompt-template templates/demo.txt
+```
+
+Templates use Python format-string syntax (`{field_name}`). Missing persona fields are left as literal `{field_name}` in the output.
+
 ## Methodology Notes
 
 Synthetic research is useful for exploration, hypothesis generation, and rapid iteration. It is **not** a replacement for talking to real humans.
