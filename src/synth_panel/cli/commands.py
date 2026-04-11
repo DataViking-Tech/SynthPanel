@@ -1132,9 +1132,7 @@ def handle_pack_generate(args: argparse.Namespace, fmt: OutputFormat) -> int:
         return 1
 
     if fmt is OutputFormat.TEXT:
-        print(
-            f"Generated pack '{saved['name']}' ({saved['persona_count']} personas) as {saved['id']}"
-        )
+        print(f"Generated pack '{saved['name']}' ({saved['persona_count']} personas) as {saved['id']}")
         print(f"Saved to: {saved['path']}")
     else:
         emit(fmt, message="Pack generated", extra=saved)

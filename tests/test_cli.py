@@ -1221,12 +1221,18 @@ class TestPackCommands:
         mock_client.send.return_value = mock_response
         monkeypatch.setattr("synth_panel.cli.commands.LLMClient", lambda: mock_client)
 
-        code = main([
-            "pack", "generate",
-            "--product", "project management tool",
-            "--audience", "engineering teams",
-            "--count", "2",
-        ])
+        code = main(
+            [
+                "pack",
+                "generate",
+                "--product",
+                "project management tool",
+                "--audience",
+                "engineering teams",
+                "--count",
+                "2",
+            ]
+        )
         assert code == 0
         out = capsys.readouterr().out
         assert "2 personas" in out
@@ -1245,8 +1251,17 @@ class TestPackCommands:
                 ToolInvocationBlock(
                     id="tc1",
                     name="generate_personas",
-                    input={"personas": [{"name": "Eve", "age": 40, "occupation": "CTO",
-                                         "background": "Led teams.", "personality_traits": ["bold"]}]},
+                    input={
+                        "personas": [
+                            {
+                                "name": "Eve",
+                                "age": 40,
+                                "occupation": "CTO",
+                                "background": "Led teams.",
+                                "personality_traits": ["bold"],
+                            }
+                        ]
+                    },
                 ),
             ],
             usage=TokenUsage(input_tokens=10, output_tokens=20),
@@ -1256,14 +1271,22 @@ class TestPackCommands:
         mock_client.send.return_value = mock_response
         monkeypatch.setattr("synth_panel.cli.commands.LLMClient", lambda: mock_client)
 
-        code = main([
-            "pack", "generate",
-            "--product", "CRM",
-            "--audience", "sales teams",
-            "--count", "1",
-            "--name", "Sales Personas",
-            "--id", "sales-gen",
-        ])
+        code = main(
+            [
+                "pack",
+                "generate",
+                "--product",
+                "CRM",
+                "--audience",
+                "sales teams",
+                "--count",
+                "1",
+                "--name",
+                "Sales Personas",
+                "--id",
+                "sales-gen",
+            ]
+        )
         assert code == 0
         out = capsys.readouterr().out
         assert "Sales Personas" in out
@@ -1286,23 +1309,34 @@ class TestPackCommands:
         mock_client.send.return_value = mock_response
         monkeypatch.setattr("synth_panel.cli.commands.LLMClient", lambda: mock_client)
 
-        code = main([
-            "pack", "generate",
-            "--product", "widget",
-            "--audience", "everyone",
-        ])
+        code = main(
+            [
+                "pack",
+                "generate",
+                "--product",
+                "widget",
+                "--audience",
+                "everyone",
+            ]
+        )
         assert code == 1
         err = capsys.readouterr().err
         assert "structured output" in err.lower() or "tool call" in err.lower()
 
     def test_pack_generate_invalid_count(self, capsys):
         """pack generate rejects count outside 1-50."""
-        code = main([
-            "pack", "generate",
-            "--product", "x",
-            "--audience", "y",
-            "--count", "0",
-        ])
+        code = main(
+            [
+                "pack",
+                "generate",
+                "--product",
+                "x",
+                "--audience",
+                "y",
+                "--count",
+                "0",
+            ]
+        )
         assert code == 1
         assert "count" in capsys.readouterr().err.lower()
 
@@ -1319,8 +1353,17 @@ class TestPackCommands:
                 ToolInvocationBlock(
                     id="tc1",
                     name="generate_personas",
-                    input={"personas": [{"name": "Zara", "age": 25, "occupation": "Designer",
-                                         "background": "UX designer.", "personality_traits": ["creative"]}]},
+                    input={
+                        "personas": [
+                            {
+                                "name": "Zara",
+                                "age": 25,
+                                "occupation": "Designer",
+                                "background": "UX designer.",
+                                "personality_traits": ["creative"],
+                            }
+                        ]
+                    },
                 ),
             ],
             usage=TokenUsage(input_tokens=10, output_tokens=20),
@@ -1330,13 +1373,20 @@ class TestPackCommands:
         mock_client.send.return_value = mock_response
         monkeypatch.setattr("synth_panel.cli.commands.LLMClient", lambda: mock_client)
 
-        code = main([
-            "--output-format", "json",
-            "pack", "generate",
-            "--product", "design tool",
-            "--audience", "designers",
-            "--count", "1",
-        ])
+        code = main(
+            [
+                "--output-format",
+                "json",
+                "pack",
+                "generate",
+                "--product",
+                "design tool",
+                "--audience",
+                "designers",
+                "--count",
+                "1",
+            ]
+        )
         assert code == 0
         data = json.loads(capsys.readouterr().out)
         assert data["persona_count"] == 1
@@ -1355,12 +1405,18 @@ class TestPackCommands:
         assert args.pack_command == "export"
         assert args.pack_id == "my-pack"
 
-        args = parser.parse_args([
-            "pack", "generate",
-            "--product", "test product",
-            "--audience", "test audience",
-            "--count", "3",
-        ])
+        args = parser.parse_args(
+            [
+                "pack",
+                "generate",
+                "--product",
+                "test product",
+                "--audience",
+                "test audience",
+                "--count",
+                "3",
+            ]
+        )
         assert args.pack_command == "generate"
         assert args.product == "test product"
         assert args.audience == "test audience"
