@@ -306,6 +306,7 @@ def _run_panelist(
     response_schema: dict[str, Any] | None = None,
     session: Session | None = None,
     sentiment_cache: dict[str, str] | None = None,
+    sentiment_cache_lock: threading.Lock | None = None,
     extract_schema: dict[str, Any] | None = None,
     temperature: float | None = None,
     top_p: float | None = None,
@@ -441,6 +442,7 @@ def _run_panelist(
                     last_response,
                     client=client,
                     sentiment_cache=sentiment_cache,
+                    sentiment_cache_lock=sentiment_cache_lock,
                 ):
                     continue
                 try:
@@ -542,6 +544,7 @@ def run_panel_parallel(
     registry = WorkerRegistry()
     effective_workers = max_workers or len(personas)
     sentiment_cache: dict[str, str] = {}
+    sentiment_cache_lock = threading.Lock()
     request_id = uuid.uuid4().hex[:12]
     logger.info(
         "[%s] panel starting: %d personas, %d questions, model=%s, workers=%d",
@@ -583,6 +586,7 @@ def run_panel_parallel(
                 response_schema,
                 existing_session,
                 sentiment_cache,
+                sentiment_cache_lock,
                 extract_schema,
                 temperature,
                 top_p,

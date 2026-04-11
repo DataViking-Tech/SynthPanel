@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from unittest.mock import MagicMock
 
 from synth_panel.conditions import evaluate_condition, normalize_follow_up
@@ -209,6 +210,30 @@ class TestResponseSentiment:
             sentiment_cache=cache,
         )
         assert client.send.call_count == 1  # No additional call
+
+    def test_cache_with_lock(self):
+        """Cache works correctly when a lock is supplied."""
+        client = _mock_client("positive")
+        cache: dict[str, str] = {}
+        lock = threading.Lock()
+        evaluate_condition(
+            "response_sentiment: positive",
+            "great stuff",
+            client=client,
+            sentiment_cache=cache,
+            sentiment_cache_lock=lock,
+        )
+        assert cache["great stuff"] == "positive"
+        assert client.send.call_count == 1
+        # Second call uses cache (via lock)
+        evaluate_condition(
+            "response_sentiment: positive",
+            "great stuff",
+            client=client,
+            sentiment_cache=cache,
+            sentiment_cache_lock=lock,
+        )
+        assert client.send.call_count == 1
 
     def test_unexpected_classification_defaults_neutral(self):
         client = _mock_client("ambivalent")  # not a valid sentiment
