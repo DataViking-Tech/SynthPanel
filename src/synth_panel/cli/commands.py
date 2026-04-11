@@ -81,31 +81,48 @@ def _resolve_model(args: argparse.Namespace) -> str:
 def parse_models_spec(spec: str) -> list[tuple[str, float]]:
     """Parse a --models spec string into [(model, weight)] pairs.
 
-    Format: "haiku:0.5,gemini-2.5-flash:0.5"
-    Weights must be positive and are normalized to sum to 1.0.
+    Accepted formats:
+
+    * **Weighted** (per-persona assignment): ``"haiku:0.5,gemini:0.5"``
+    * **Ensemble** (no weights): ``"haiku,sonnet"`` — each model gets weight 1.0
+
+    When no entry contains ``:``, the spec is treated as an ensemble list.
+    Weights must be positive and are normalized to sum to 1.0 by the caller.
     """
-    pairs: list[tuple[str, float]] = []
-    for entry in spec.split(","):
-        entry = entry.strip()
-        if not entry:
-            continue
-        if ":" not in entry:
-            raise ValueError(f"Invalid model spec entry '{entry}': expected 'model:weight' (e.g. 'haiku:0.5')")
-        model_part, weight_str = entry.rsplit(":", 1)
-        model_part = model_part.strip()
-        weight_str = weight_str.strip()
-        if not model_part:
-            raise ValueError(f"Empty model name in spec entry '{entry}'")
-        try:
-            weight = float(weight_str)
-        except ValueError as exc:
-            raise ValueError(f"Invalid weight '{weight_str}' in spec entry '{entry}': must be a number") from exc
-        if weight <= 0:
-            raise ValueError(f"Weight must be positive, got {weight} for model '{model_part}'")
-        pairs.append((model_part, weight))
-    if not pairs:
+    entries = [e.strip() for e in spec.split(",") if e.strip()]
+    if not entries:
         raise ValueError("Empty --models spec")
+
+    # Detect ensemble vs weighted: ensemble if *no* entry contains ':'
+    is_ensemble = all(":" not in e for e in entries)
+
+    pairs: list[tuple[str, float]] = []
+    for entry in entries:
+        if is_ensemble:
+            if not entry:
+                raise ValueError("Empty model name in spec")
+            pairs.append((entry, 1.0))
+        else:
+            if ":" not in entry:
+                raise ValueError(f"Invalid model spec entry '{entry}': expected 'model:weight' (e.g. 'haiku:0.5')")
+            model_part, weight_str = entry.rsplit(":", 1)
+            model_part = model_part.strip()
+            weight_str = weight_str.strip()
+            if not model_part:
+                raise ValueError(f"Empty model name in spec entry '{entry}'")
+            try:
+                weight = float(weight_str)
+            except ValueError as exc:
+                raise ValueError(f"Invalid weight '{weight_str}' in spec entry '{entry}': must be a number") from exc
+            if weight <= 0:
+                raise ValueError(f"Weight must be positive, got {weight} for model '{model_part}'")
+            pairs.append((model_part, weight))
     return pairs
+
+
+def is_ensemble_spec(spec: str) -> bool:
+    """Return True when *spec* is a weight-free ensemble list (e.g. ``"haiku,sonnet"``)."""
+    return all(":" not in e for e in spec.split(",") if e.strip())
 
 
 def assign_models_to_personas(
@@ -505,18 +522,21 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
 
     # ── sp-blend: multi-model ensemble ───────────────────────────────────
     # Parse --models spec and build per-persona model assignments.
-    # Resolution order: persona YAML 'model' > --models weighted > --model.
+    # Two modes: ensemble (no weights) vs weighted (per-persona assignment).
     persona_models: dict[str, str] | None = None
+    ensemble_mode = has_models and is_ensemble_spec(has_models)
+
     if has_models:
         try:
             model_spec = parse_models_spec(has_models)
         except ValueError as exc:
             print(f"Error parsing --models: {exc}", file=sys.stderr)
             return 1
-        persona_models = assign_models_to_personas(personas, model_spec, model)
-        # Use the first model in the spec as the "primary" for cost fallback
-        if not has_model:
-            model = model_spec[0][0]
+        if not ensemble_mode:
+            persona_models = assign_models_to_personas(personas, model_spec, model)
+            # Use the first model in the spec as the "primary" for cost fallback
+            if not has_model:
+                model = model_spec[0][0]
     elif not has_models:
         # Even without --models, respect per-persona YAML model overrides
         yaml_overrides = {p.get("name", "Anonymous"): p["model"] for p in personas if p.get("model")}
@@ -554,6 +574,36 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             f"Variant expansion complete: {len(personas)} variant personas ready.",
             file=sys.stderr,
         )
+
+    # ── Ensemble mode: run with each model, compare across models ────────
+    if ensemble_mode:
+        from synth_panel.ensemble import ensemble_run
+
+        ensemble_models = [m for m, _w in model_spec]
+        ens_result = ensemble_run(
+            personas,
+            questions,
+            ensemble_models,
+            client,
+            system_prompt_fn=system_prompt_fn,
+            question_prompt_fn=build_question_prompt,
+            response_schema=response_schema,
+            extract_schema=extract_schema,
+            temperature=temperature,
+            top_p=top_p,
+        )
+        timer.stop()
+        output = {
+            "per_model_results": {
+                mr.model: [{"persona": pr.persona_name, "responses": pr.responses} for pr in mr.panelist_results]
+                for mr in ens_result.model_results
+            },
+            "cost_breakdown": ens_result.per_model_cost,
+            "models": ens_result.models,
+            "total_usage": ens_result.total_usage.to_dict(),
+        }
+        emit(fmt, message="Ensemble complete", extra=output)
+        return 0
 
     # Run all panelists in parallel via the orchestrator
     panelist_results, _registry, _sessions = run_panel_parallel(

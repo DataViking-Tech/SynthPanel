@@ -89,9 +89,23 @@ class TestParseModelsSpec:
         result = parse_models_spec(" haiku : 0.5 , gemini : 0.5 ")
         assert result == [("haiku", 0.5), ("gemini", 0.5)]
 
-    def test_missing_weight_raises(self):
+    def test_ensemble_no_weights(self):
+        """Model names without weights are treated as ensemble spec."""
+        result = parse_models_spec("haiku,sonnet")
+        assert result == [("haiku", 1.0), ("sonnet", 1.0)]
+
+    def test_ensemble_single_model(self):
+        result = parse_models_spec("haiku")
+        assert result == [("haiku", 1.0)]
+
+    def test_ensemble_three_models(self):
+        result = parse_models_spec("haiku,sonnet,gemini")
+        assert result == [("haiku", 1.0), ("sonnet", 1.0), ("gemini", 1.0)]
+
+    def test_mixed_raises(self):
+        """Mixing weighted and unweighted entries raises."""
         with pytest.raises(ValueError, match="expected 'model:weight'"):
-            parse_models_spec("haiku")
+            parse_models_spec("haiku,sonnet:0.5")
 
     def test_invalid_weight_raises(self):
         with pytest.raises(ValueError, match="must be a number"):
@@ -280,6 +294,29 @@ class TestPanelistResultModel:
 
 
 # ---------------------------------------------------------------------------
+# Tests: is_ensemble_spec
+# ---------------------------------------------------------------------------
+
+
+class TestIsEnsembleSpec:
+    def test_ensemble_spec(self):
+        from synth_panel.cli.commands import is_ensemble_spec
+
+        assert is_ensemble_spec("haiku,sonnet") is True
+        assert is_ensemble_spec("haiku") is True
+
+    def test_weighted_spec(self):
+        from synth_panel.cli.commands import is_ensemble_spec
+
+        assert is_ensemble_spec("haiku:0.5,sonnet:0.5") is False
+
+    def test_mixed_spec(self):
+        from synth_panel.cli.commands import is_ensemble_spec
+
+        assert is_ensemble_spec("haiku,sonnet:0.5") is False
+
+
+# ---------------------------------------------------------------------------
 # Tests: ensemble_run (multi-model runner loop)
 # ---------------------------------------------------------------------------
 
@@ -440,3 +477,17 @@ class TestEnsembleRun:
         assert result.persona_count == 3
         assert result.question_count == 2
         assert result.models == ["haiku"]
+
+
+# ---------------------------------------------------------------------------
+# Tests: CLI parser --models ensemble format
+# ---------------------------------------------------------------------------
+
+
+class TestParserEnsembleModels:
+    def test_models_ensemble_flag_parsed(self):
+        parser = build_parser()
+        args = parser.parse_args(
+            ["panel", "run", "--personas", "p.yaml", "--instrument", "i.yaml", "--models", "haiku,sonnet"]
+        )
+        assert args.models == "haiku,sonnet"
