@@ -458,3 +458,188 @@ class TestExtendPanelContract:
         # Both halves of the contract must be present.
         assert "ad-hoc" in doc
         assert "not" in doc and "DAG" in doc
+
+
+# ---------------------------------------------------------------------------
+# run_panel variants parameter
+# ---------------------------------------------------------------------------
+
+
+class TestRunPanelVariants:
+    """Test run_panel's variants parameter for robustness analysis."""
+
+    @pytest.mark.asyncio
+    async def test_variants_param_accepted(self):
+        """run_panel should accept variants param and forward to _run_panel_async."""
+        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = {"results": []}
+            await mcp.call_tool(
+                "run_panel",
+                {
+                    "personas": [{"name": "Alice"}],
+                    "questions": [{"text": "Hello?"}],
+                    "variants": 3,
+                },
+            )
+            # variants should be forwarded as keyword argument
+            kwargs = mock_run.call_args[1]
+            assert kwargs.get("variants") == 3
+
+    @pytest.mark.asyncio
+    async def test_variants_zero_no_robustness(self):
+        """variants=0 (default) should not include robustness data."""
+        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = {"results": [], "rounds": []}
+            await mcp.call_tool(
+                "run_panel",
+                {
+                    "personas": [{"name": "Alice"}],
+                    "questions": [{"text": "Hello?"}],
+                },
+            )
+            kwargs = mock_run.call_args[1]
+            assert kwargs.get("variants", 0) == 0
+
+    @pytest.mark.asyncio
+    async def test_variants_invalid_returns_error(self):
+        """variants > 20 should return an error."""
+        result = await mcp.call_tool(
+            "run_panel",
+            {
+                "personas": [{"name": "Alice"}],
+                "questions": [{"text": "Hello?"}],
+                "variants": 25,
+            },
+        )
+        data = json.loads(result[0][0].text)
+        assert "error" in data
+        assert "variants" in data["error"].lower()
+
+    @pytest.mark.asyncio
+    async def test_variants_negative_returns_error(self):
+        """variants < 0 should return an error."""
+        result = await mcp.call_tool(
+            "run_panel",
+            {
+                "personas": [{"name": "Alice"}],
+                "questions": [{"text": "Hello?"}],
+                "variants": -1,
+            },
+        )
+        data = json.loads(result[0][0].text)
+        assert "error" in data
+
+
+# ---------------------------------------------------------------------------
+# list_panel_results variant_count
+# ---------------------------------------------------------------------------
+
+
+class TestListPanelResultsVariantCount:
+    """list_panel_results should include variant_count when present."""
+
+    @pytest.mark.asyncio
+    async def test_variant_count_in_listing(self):
+        """Results saved with variant_count should include it in listing."""
+        from synth_panel.mcp.data import save_panel_result
+
+        save_panel_result(
+            results=[{"persona": "A", "responses": [], "usage": {}, "cost": "$0", "error": None}],
+            model="haiku",
+            total_usage={"input_tokens": 0, "output_tokens": 0},
+            total_cost="$0.00",
+            persona_count=1,
+            question_count=1,
+            variant_count=5,
+        )
+        result = await mcp.call_tool("list_panel_results", {})
+        data = json.loads(result[0][0].text)
+        assert len(data) == 1
+        assert data[0]["variant_count"] == 5
+
+    @pytest.mark.asyncio
+    async def test_no_variant_count_when_zero(self):
+        """Results without variants should not include variant_count."""
+        from synth_panel.mcp.data import save_panel_result
+
+        save_panel_result(
+            results=[{"persona": "A", "responses": [], "usage": {}, "cost": "$0", "error": None}],
+            model="haiku",
+            total_usage={"input_tokens": 0, "output_tokens": 0},
+            total_cost="$0.00",
+            persona_count=1,
+            question_count=1,
+        )
+        result = await mcp.call_tool("list_panel_results", {})
+        data = json.loads(result[0][0].text)
+        assert len(data) == 1
+        assert "variant_count" not in data[0]
+
+
+# ---------------------------------------------------------------------------
+# _compute_variant_data
+# ---------------------------------------------------------------------------
+
+
+class TestComputeVariantData:
+    """Test the robustness computation from variant results."""
+
+    def test_compute_variant_data_basic(self):
+        from synth_panel.mcp.server import _compute_variant_data
+
+        result_dicts = [
+            # Base persona
+            {
+                "persona": "Alice",
+                "responses": [{"question": "Q1", "response": "agree", "error": False}],
+                "usage": {},
+                "cost": "$0",
+                "error": None,
+            },
+            # Variant
+            {
+                "persona": "Alice (v0)",
+                "responses": [{"question": "Q1", "response": "agree", "error": False}],
+                "usage": {},
+                "cost": "$0",
+                "error": None,
+            },
+            {
+                "persona": "Alice (v1)",
+                "responses": [{"question": "Q1", "response": "disagree", "error": False}],
+                "usage": {},
+                "cost": "$0",
+                "error": None,
+            },
+        ]
+        variant_names = {"Alice (v0)", "Alice (v1)"}
+        variant_mapping = {"Alice (v0)": "Alice", "Alice (v1)": "Alice"}
+        questions = [{"text": "Do you agree?"}]
+
+        data = _compute_variant_data(result_dicts, variant_names, variant_mapping, 2, questions)
+
+        assert data["variant_count"] == 2
+        assert len(data["robustness_scores"]) == 1
+        assert len(data["per_persona_robustness"]) == 1
+        assert data["per_persona_robustness"][0]["persona"] == "Alice"
+        assert data["per_persona_robustness"][0]["k_variants"] == 2
+        # One variant agreed, one disagreed -> 0.5 robustness
+        assert data["per_persona_robustness"][0]["robustness"] == 0.5
+
+    def test_compute_variant_data_no_variants(self):
+        from synth_panel.mcp.server import _compute_variant_data
+
+        result_dicts = [
+            {
+                "persona": "Alice",
+                "responses": [{"question": "Q1", "response": "agree", "error": False}],
+                "usage": {},
+                "cost": "$0",
+                "error": None,
+            },
+        ]
+        data = _compute_variant_data(result_dicts, set(), {}, 0, [{"text": "Q1"}])
+
+        assert data["variant_count"] == 0
+        assert data["robustness_scores"] == []
+        assert data["per_persona_robustness"] == []

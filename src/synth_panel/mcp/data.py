@@ -430,15 +430,17 @@ def list_panel_results() -> list[dict[str, Any]]:
             continue
         try:
             data = json.loads(p.read_text(encoding="utf-8"))
-            results.append(
-                {
-                    "id": p.stem,
-                    "created_at": data.get("created_at", ""),
-                    "model": data.get("model", ""),
-                    "persona_count": data.get("persona_count", 0),
-                    "question_count": data.get("question_count", 0),
-                }
-            )
+            entry: dict[str, Any] = {
+                "id": p.stem,
+                "created_at": data.get("created_at", ""),
+                "model": data.get("model", ""),
+                "persona_count": data.get("persona_count", 0),
+                "question_count": data.get("question_count", 0),
+            }
+            vc = data.get("variant_count", 0)
+            if vc:
+                entry["variant_count"] = vc
+            results.append(entry)
         except Exception:
             continue
     return results
@@ -462,11 +464,12 @@ def save_panel_result(
     total_cost: str,
     persona_count: int,
     question_count: int,
+    variant_count: int = 0,
 ) -> str:
     """Save panel results and return the result ID."""
     rid = f"result-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
     p = _results_dir() / f"{rid}.json"
-    data = {
+    data: dict[str, Any] = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "model": model,
         "persona_count": persona_count,
@@ -475,5 +478,7 @@ def save_panel_result(
         "total_cost": total_cost,
         "results": results,
     }
+    if variant_count > 0:
+        data["variant_count"] = variant_count
     p.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     return rid

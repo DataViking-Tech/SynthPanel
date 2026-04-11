@@ -277,3 +277,166 @@ class TestPanelistResultModel:
     def test_model_field_set(self):
         pr = PanelistResult(persona_name="Test", responses=[], usage=ZERO_USAGE, model="haiku")
         assert pr.model == "haiku"
+
+
+# ---------------------------------------------------------------------------
+# Tests: ensemble_run (multi-model runner loop)
+# ---------------------------------------------------------------------------
+
+
+class TestEnsembleRun:
+    """Test ensemble_run: sequential N panel runs with per-model cost aggregation."""
+
+    def _mock_run_parallel(self, **kwargs):
+        """Side effect for mocked run_panel_parallel."""
+        from synth_panel.cost import TokenUsage as CostTokenUsage
+
+        model = kwargs["model"]
+        personas = kwargs["personas"]
+        results = [
+            PanelistResult(
+                persona_name=p["name"],
+                responses=[{"question": "Q1", "response": f"answer from {model}", "error": False}],
+                usage=CostTokenUsage(input_tokens=100, output_tokens=50),
+                model=model,
+            )
+            for p in personas
+        ]
+        sessions = {p["name"]: MagicMock() for p in personas}
+        return results, MagicMock(), sessions
+
+    def test_runs_once_per_model(self):
+        """ensemble_run should call run_panel_parallel once per model."""
+        from unittest.mock import patch as _patch
+
+        from synth_panel.ensemble import ensemble_run as _ensemble_run
+
+        personas = [{"name": "Alice"}, {"name": "Bob"}]
+        questions = [{"text": "Q1"}]
+        models = ["haiku", "sonnet"]
+        client = MagicMock()
+
+        with _patch("synth_panel.ensemble.run_panel_parallel") as mock_rpp:
+            mock_rpp.side_effect = lambda **kw: self._mock_run_parallel(**kw)
+            _ensemble_run(personas, questions, models, client)
+
+        assert mock_rpp.call_count == 2
+        assert mock_rpp.call_args_list[0][1]["model"] == "haiku"
+        assert mock_rpp.call_args_list[1][1]["model"] == "sonnet"
+
+    def test_per_model_results_stored_separately(self):
+        from unittest.mock import patch as _patch
+
+        from synth_panel.ensemble import EnsembleResult as _ER
+        from synth_panel.ensemble import ensemble_run as _ensemble_run
+
+        personas = [{"name": "Alice"}]
+        questions = [{"text": "Q1"}]
+        models = ["haiku", "sonnet"]
+        client = MagicMock()
+
+        with _patch("synth_panel.ensemble.run_panel_parallel") as mock_rpp:
+            mock_rpp.side_effect = lambda **kw: self._mock_run_parallel(**kw)
+            result = _ensemble_run(personas, questions, models, client)
+
+        assert isinstance(result, _ER)
+        assert len(result.model_results) == 2
+        assert result.model_results[0].model == "haiku"
+        assert result.model_results[1].model == "sonnet"
+
+    def test_per_model_cost_breakdown(self):
+        from unittest.mock import patch as _patch
+
+        from synth_panel.ensemble import ensemble_run as _ensemble_run
+
+        personas = [{"name": "Alice"}, {"name": "Bob"}]
+        questions = [{"text": "Q1"}]
+        models = ["haiku", "sonnet"]
+        client = MagicMock()
+
+        with _patch("synth_panel.ensemble.run_panel_parallel") as mock_rpp:
+            mock_rpp.side_effect = lambda **kw: self._mock_run_parallel(**kw)
+            result = _ensemble_run(personas, questions, models, client)
+
+        assert "haiku" in result.per_model_cost
+        assert "sonnet" in result.per_model_cost
+        assert result.per_model_cost["haiku"].startswith("$")
+        assert result.per_model_cost["sonnet"].startswith("$")
+
+    def test_total_cost_aggregated(self):
+        from unittest.mock import patch as _patch
+
+        from synth_panel.ensemble import ensemble_run as _ensemble_run
+
+        personas = [{"name": "Alice"}]
+        questions = [{"text": "Q1"}]
+        models = ["haiku", "sonnet"]
+        client = MagicMock()
+
+        with _patch("synth_panel.ensemble.run_panel_parallel") as mock_rpp:
+            mock_rpp.side_effect = lambda **kw: self._mock_run_parallel(**kw)
+            result = _ensemble_run(personas, questions, models, client)
+
+        assert result.total_cost.total_cost > 0
+        model_costs_sum = sum(mr.cost.total_cost for mr in result.model_results)
+        assert abs(result.total_cost.total_cost - model_costs_sum) < 1e-10
+
+    def test_total_usage_aggregated(self):
+        from unittest.mock import patch as _patch
+
+        from synth_panel.ensemble import ensemble_run as _ensemble_run
+
+        personas = [{"name": "Alice"}]
+        questions = [{"text": "Q1"}]
+        models = ["haiku", "sonnet"]
+        client = MagicMock()
+
+        with _patch("synth_panel.ensemble.run_panel_parallel") as mock_rpp:
+            mock_rpp.side_effect = lambda **kw: self._mock_run_parallel(**kw)
+            result = _ensemble_run(personas, questions, models, client)
+
+        # Each model: 100 input + 50 output per persona, 1 persona, 2 models
+        assert result.total_usage.input_tokens == 200
+        assert result.total_usage.output_tokens == 100
+
+    def test_empty_models_raises(self):
+        from synth_panel.ensemble import ensemble_run as _ensemble_run
+
+        with pytest.raises(ValueError, match="models list must not be empty"):
+            _ensemble_run([], [], [], MagicMock())
+
+    def test_panelist_results_tagged_with_model(self):
+        from unittest.mock import patch as _patch
+
+        from synth_panel.ensemble import ensemble_run as _ensemble_run
+
+        personas = [{"name": "Alice"}, {"name": "Bob"}]
+        questions = [{"text": "Q1"}]
+        models = ["haiku", "sonnet"]
+        client = MagicMock()
+
+        with _patch("synth_panel.ensemble.run_panel_parallel") as mock_rpp:
+            mock_rpp.side_effect = lambda **kw: self._mock_run_parallel(**kw)
+            result = _ensemble_run(personas, questions, models, client)
+
+        for mr in result.model_results:
+            for pr in mr.panelist_results:
+                assert pr.model == mr.model
+
+    def test_metadata_counts(self):
+        from unittest.mock import patch as _patch
+
+        from synth_panel.ensemble import ensemble_run as _ensemble_run
+
+        personas = [{"name": "Alice"}, {"name": "Bob"}, {"name": "Carol"}]
+        questions = [{"text": "Q1"}, {"text": "Q2"}]
+        models = ["haiku"]
+        client = MagicMock()
+
+        with _patch("synth_panel.ensemble.run_panel_parallel") as mock_rpp:
+            mock_rpp.side_effect = lambda **kw: self._mock_run_parallel(**kw)
+            result = _ensemble_run(personas, questions, models, client)
+
+        assert result.persona_count == 3
+        assert result.question_count == 2
+        assert result.models == ["haiku"]
