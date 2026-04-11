@@ -167,6 +167,10 @@ class AnthropicProvider(LLMProvider):
             body["tool_choice"] = tc
         if request.stream:
             body["stream"] = True
+        if request.temperature is not None:
+            body["temperature"] = request.temperature
+        if request.top_p is not None:
+            body["top_p"] = request.top_p
         return body
 
     def send(self, request: CompletionRequest) -> CompletionResponse:
@@ -221,6 +225,8 @@ class AnthropicProvider(LLMProvider):
             tools=request.tools,
             tool_choice=request.tool_choice,
             stream=True,
+            temperature=request.temperature,
+            top_p=request.top_p,
         )
         url = f"{self._base_url}/v1/messages"
         body = self._build_body(request_copy)

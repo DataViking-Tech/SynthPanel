@@ -101,6 +101,8 @@ class LLMClient:
                 tools=request.tools,
                 tool_choice=request.tool_choice,
                 stream=request.stream,
+                temperature=request.temperature,
+                top_p=request.top_p,
             )
         return request
 

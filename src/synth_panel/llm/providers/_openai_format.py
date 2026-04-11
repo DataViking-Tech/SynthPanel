@@ -131,6 +131,11 @@ def build_openai_body(
     if stream:
         body["stream"] = True
 
+    if request.temperature is not None:
+        body["temperature"] = request.temperature
+    if request.top_p is not None:
+        body["top_p"] = request.top_p
+
     return body
 
 

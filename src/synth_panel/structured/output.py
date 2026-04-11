@@ -83,6 +83,8 @@ class StructuredOutputEngine:
         messages: list[InputMessage],
         config: StructuredOutputConfig,
         system: str | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
     ) -> StructuredResult:
         """Run a completion with tool-use forcing and extract structured data."""
         if not config.enabled:
@@ -93,6 +95,8 @@ class StructuredOutputEngine:
                     max_tokens=max_tokens,
                     messages=messages,
                     system=system,
+                    temperature=temperature,
+                    top_p=top_p,
                 )
             )
             return StructuredResult(data={}, response=response)
@@ -112,6 +116,8 @@ class StructuredOutputEngine:
                 system=system,
                 tools=[tool_def],
                 tool_choice=ToolChoice.specific(config.tool_name),
+                temperature=temperature,
+                top_p=top_p,
             )
 
             try:

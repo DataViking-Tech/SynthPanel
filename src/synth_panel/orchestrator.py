@@ -302,6 +302,8 @@ def _run_panelist(
     session: Session | None = None,
     sentiment_cache: dict[str, str] | None = None,
     extract_schema: dict[str, Any] | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
 ) -> tuple[PanelistResult, Session]:
     """Execute a single panelist's full interview. Runs in a worker thread.
 
@@ -327,6 +329,8 @@ def _run_panelist(
             session=session,
             system_prompt=system_prompt,
             model=model,
+            temperature=temperature,
+            top_p=top_p,
         )
 
         # Set up structured output engine if schema provided
@@ -484,6 +488,8 @@ def run_panel_parallel(
     response_schema: dict[str, Any] | None = None,
     sessions: dict[str, Session] | None = None,
     extract_schema: dict[str, Any] | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
 ) -> tuple[list[PanelistResult], WorkerRegistry, dict[str, Session]]:
     """Run all panelists in parallel and return ordered results.
 
@@ -545,6 +551,8 @@ def run_panel_parallel(
                 existing_session,
                 sentiment_cache,
                 extract_schema,
+                temperature,
+                top_p,
             )
             future_to_index[future] = idx
 
@@ -602,6 +610,8 @@ def run_multi_round_panel(
     response_schema: dict[str, Any] | None = None,
     max_workers: int | None = None,
     extract_schema: dict[str, Any] | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
 ) -> MultiRoundResult:
     """Execute a (possibly branching) multi-round panel run.
 
@@ -658,6 +668,8 @@ def run_multi_round_panel(
             response_schema=response_schema,
             sessions=sessions,
             extract_schema=extract_schema,
+            temperature=temperature,
+            top_p=top_p,
         )
 
         synthesis = synthesize_round_fn(client, panelist_results, current.questions, model=model)

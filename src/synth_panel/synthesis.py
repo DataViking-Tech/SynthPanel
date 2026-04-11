@@ -168,6 +168,8 @@ def synthesize_panel(
     panelist_model: str | None = None,
     custom_prompt: str | None = None,
     panelist_cost: CostEstimate | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
 ) -> SynthesisResult:
     """Synthesize panelist responses into a structured research finding.
 
@@ -181,6 +183,8 @@ def synthesize_panel(
         custom_prompt: Override the default synthesis prompt.
         panelist_cost: Panelist cost estimate, shown in the pre-synthesis
             cost estimate printed to stderr.
+        temperature: Sampling temperature for the synthesis call.
+        top_p: Nucleus sampling cutoff for the synthesis call.
 
     Returns:
         SynthesisResult with structured findings and cost tracking.
@@ -211,6 +215,8 @@ def synthesize_panel(
         max_tokens=_MAX_TOKENS,
         messages=messages,
         config=config,
+        temperature=temperature,
+        top_p=top_p,
     )
 
     # Convert usage

@@ -295,6 +295,8 @@ class AgentRuntime:
         permission_policy: PermissionPolicy | None = None,
         hook_runner: HookRunner | None = None,
         usage_tracker: UsageTracker | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
     ) -> None:
         self._client = client
         self._session = session
@@ -309,6 +311,8 @@ class AgentRuntime:
         self._permission_policy = permission_policy or AllowAllPolicy()
         self._hook_runner = hook_runner or NoOpHookRunner()
         self._usage_tracker = usage_tracker or UsageTracker()
+        self._temperature = temperature
+        self._top_p = top_p
 
     @property
     def session(self) -> Session:
@@ -345,6 +349,8 @@ class AgentRuntime:
                 system=self._system_prompt,
                 tools=self._tools,
                 tool_choice=self._tool_choice,
+                temperature=self._temperature,
+                top_p=self._top_p,
             )
 
             # 3. Call LLM

@@ -147,6 +147,8 @@ class CompletionRequest:
     tools: list[ToolDefinition] | None = None
     tool_choice: ToolChoice | None = None
     stream: bool = False
+    temperature: float | None = None
+    top_p: float | None = None
 
 
 # ---------------------------------------------------------------------------

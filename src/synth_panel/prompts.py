@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
+from pathlib import Path
 from typing import Any
 
 # Synthesis prompt version — increment when the prompt changes materially.
@@ -42,6 +44,44 @@ def persona_system_prompt(persona: dict[str, Any]) -> str:
         "Give concise, direct answers."
     )
     return " ".join(parts)
+
+
+def load_prompt_template(path: str) -> str:
+    """Load a prompt template from a file path.
+
+    The template should contain Python format-string placeholders such as
+    ``{name}``, ``{age}``, ``{occupation}``, ``{background}``, and
+    ``{personality_traits}``.  Any key present in the persona dict can be
+    referenced.
+    """
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"Prompt template not found: {path}")
+    return p.read_text(encoding="utf-8")
+
+
+class _DefaultDict(defaultdict):
+    """A defaultdict that returns '{key}' for missing keys during format_map."""
+
+    def __missing__(self, key: str) -> str:
+        return "{" + key + "}"
+
+
+def persona_system_prompt_from_template(
+    persona: dict[str, Any],
+    template: str,
+) -> str:
+    """Build a system prompt by applying a template to the persona dict.
+
+    Uses Python ``str.format_map`` with a tolerant dict that leaves
+    unknown placeholders as literal ``{key}`` strings.  The
+    ``personality_traits`` field is pre-joined with ", " if it's a list.
+    """
+    ctx = dict(persona)
+    traits = ctx.get("personality_traits")
+    if isinstance(traits, list):
+        ctx["personality_traits"] = ", ".join(str(t) for t in traits)
+    return template.format_map(_DefaultDict(str, ctx))
 
 
 def build_question_prompt(question: dict[str, Any]) -> str:
