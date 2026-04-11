@@ -314,7 +314,7 @@ class TestSessionPersistence:
         assert list(path.glob("*.json")) == []
 
     def test_persona_name_with_slash_sanitised(self):
-        """Persona names with slashes are sanitised in filenames."""
+        """Persona names with slashes are URL-encoded in filenames."""
         sessions = {"Dr. A/B": self._make_session("Dr. A/B")}
         rid = save_panel_result(
             results=[],
@@ -325,7 +325,7 @@ class TestSessionPersistence:
             question_count=0,
         )
         path = save_panel_sessions(rid, sessions)
-        assert (path / "Dr. A_B.json").exists()
+        assert (path / "Dr.%20A%2FB.json").exists()
 
 
 # ---------------------------------------------------------------------------

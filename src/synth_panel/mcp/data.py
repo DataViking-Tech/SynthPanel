@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import urllib.parse
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -374,8 +375,8 @@ def save_panel_sessions(
     _validate_pack_id(result_id)
     sdir = _sessions_dir(result_id)
     for persona_name, session in sessions.items():
-        # Sanitise persona name for use as filename
-        safe_name = persona_name.replace("/", "_").replace("\\", "_")
+        # URL-encode persona name for a lossless, filesystem-safe filename
+        safe_name = urllib.parse.quote(persona_name, safe="")
         p = sdir / f"{safe_name}.json"
         p.write_text(json.dumps(session.to_dict(), indent=2) + "\n", encoding="utf-8")
     return sdir
@@ -397,8 +398,7 @@ def load_panel_sessions(result_id: str) -> dict[str, Session]:
     sessions: dict[str, Session] = {}
     for p in sorted(sdir.glob("*.json")):
         data = json.loads(p.read_text(encoding="utf-8"))
-        persona_name = p.stem.replace("_", " ")  # best-effort reverse of sanitisation
-        # Prefer the original persona name if we can recover it from session messages
+        persona_name = urllib.parse.unquote(p.stem)
         sessions[persona_name] = Session.from_dict(data)
     return sessions
 
