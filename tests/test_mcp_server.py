@@ -274,6 +274,84 @@ class TestRunPanelPackId:
 
 
 # ---------------------------------------------------------------------------
+# run_panel extract_schema parameter
+# ---------------------------------------------------------------------------
+
+
+class TestRunPanelExtractSchema:
+    """Test run_panel's extract_schema parameter (string name and inline dict)."""
+
+    @pytest.mark.asyncio
+    async def test_inline_dict_schema_passed_through(self):
+        """An inline dict extract_schema is forwarded to the async runner."""
+        schema = {
+            "type": "object",
+            "properties": {"mood": {"type": "string"}},
+            "required": ["mood"],
+        }
+        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = {"results": []}
+            await mcp.call_tool(
+                "run_panel",
+                {
+                    "personas": [{"name": "Alice"}],
+                    "questions": [{"text": "How do you feel?"}],
+                    "extract_schema": schema,
+                },
+            )
+            kwargs = mock_run.call_args[1]
+            assert kwargs["extract_schema"] == schema
+
+    @pytest.mark.asyncio
+    async def test_string_name_resolves_to_registry_schema(self):
+        """A string extract_schema resolves to the built-in registry entry."""
+        from synth_panel.mcp.server import EXTRACT_SCHEMA_REGISTRY
+
+        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = {"results": []}
+            await mcp.call_tool(
+                "run_panel",
+                {
+                    "personas": [{"name": "Alice"}],
+                    "questions": [{"text": "How do you feel?"}],
+                    "extract_schema": "sentiment",
+                },
+            )
+            kwargs = mock_run.call_args[1]
+            assert kwargs["extract_schema"] == EXTRACT_SCHEMA_REGISTRY["sentiment"]
+
+    @pytest.mark.asyncio
+    async def test_unknown_name_returns_error(self):
+        """An unrecognised schema name returns a JSON error (not an exception)."""
+        result = await mcp.call_tool(
+            "run_panel",
+            {
+                "personas": [{"name": "Alice"}],
+                "questions": [{"text": "Hello?"}],
+                "extract_schema": "nonexistent",
+            },
+        )
+        data = json.loads(result[0][0].text)
+        assert "error" in data
+        assert "nonexistent" in data["error"]
+
+    @pytest.mark.asyncio
+    async def test_none_schema_passes_none(self):
+        """Omitting extract_schema passes None to the async runner."""
+        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = {"results": []}
+            await mcp.call_tool(
+                "run_panel",
+                {
+                    "personas": [{"name": "Alice"}],
+                    "questions": [{"text": "Hello?"}],
+                },
+            )
+            kwargs = mock_run.call_args[1]
+            assert kwargs["extract_schema"] is None
+
+
+# ---------------------------------------------------------------------------
 # Prompt templates
 # ---------------------------------------------------------------------------
 
