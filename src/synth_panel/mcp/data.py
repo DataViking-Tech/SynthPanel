@@ -28,6 +28,21 @@ from importlib.resources import files as _resource_files
 import yaml
 
 
+def _sanitize_pack_id(pack_id: str) -> str:
+    """Validate and sanitize a pack ID to prevent path traversal.
+
+    Raises :class:`ValueError` if the ID contains directory separators or
+    parent-directory references.
+    """
+    if "/" in pack_id or ".." in pack_id:
+        raise ValueError(f"Invalid pack ID: {pack_id!r} (must not contain '/' or '..')")
+    # Extra safety: strip to filename component only
+    safe = Path(pack_id).name
+    if not safe or safe != pack_id:
+        raise ValueError(f"Invalid pack ID: {pack_id!r}")
+    return safe
+
+
 def _data_dir() -> Path:
     """Return the root data directory, creating it if needed."""
     d = Path(os.environ.get("SYNTH_PANEL_DATA_DIR", "~/.synthpanel")).expanduser()
@@ -170,6 +185,7 @@ def list_persona_packs() -> list[dict[str, Any]]:
 
 def get_persona_pack(pack_id: str) -> dict[str, Any]:
     """Load a persona pack by ID. User-saved packs override bundled ones."""
+    pack_id = _sanitize_pack_id(pack_id)
     # Check user-saved packs first
     p = _packs_dir() / f"{pack_id}.yaml"
     if p.exists():
@@ -245,6 +261,7 @@ def save_persona_pack(
     """
     personas = validate_persona_pack(personas)
     pid = pack_id or f"pack-{uuid.uuid4().hex[:8]}"
+    pid = _sanitize_pack_id(pid)
     p = _packs_dir() / f"{pid}.yaml"
     data = {"name": name, "personas": personas}
     p.write_text(yaml.dump(data, default_flow_style=False), encoding="utf-8")
@@ -299,6 +316,7 @@ def load_instrument_pack(name: str) -> dict[str, Any]:
 
     User-saved packs take precedence over bundled packs of the same id.
     """
+    name = _sanitize_pack_id(name)
     p = _instrument_packs_dir() / f"{name}.yaml"
     if p.exists():
         data = yaml.safe_load(p.read_text(encoding="utf-8"))
@@ -326,6 +344,7 @@ def save_instrument_pack(name: str, content: dict[str, Any]) -> dict[str, Any]:
     """
     if not isinstance(content, dict):
         raise ValueError("instrument pack content must be a mapping")
+    name = _sanitize_pack_id(name)
     body = dict(content)
     # Ensure the manifest 'name' matches the pack id on disk.
     body.setdefault("name", name)

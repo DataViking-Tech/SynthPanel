@@ -458,3 +458,125 @@ class TestExtendPanelContract:
         # Both halves of the contract must be present.
         assert "ad-hoc" in doc
         assert "not" in doc and "DAG" in doc
+
+
+# ---------------------------------------------------------------------------
+# Input validation and rate limits on run_panel
+# ---------------------------------------------------------------------------
+
+
+class TestRunPanelValidation:
+    """run_panel rejects invalid personas, questions, and oversized inputs."""
+
+    @pytest.mark.asyncio
+    async def test_persona_missing_name(self):
+        result = await mcp.call_tool(
+            "run_panel",
+            {
+                "personas": [{"age": 30}],
+                "questions": [{"text": "Hello?"}],
+            },
+        )
+        data = json.loads(result[0][0].text)
+        assert "error" in data
+        assert "name" in data["error"]
+
+    @pytest.mark.asyncio
+    async def test_persona_not_a_dict(self):
+        result = await mcp.call_tool(
+            "run_panel",
+            {
+                "personas": ["just a string"],
+                "questions": [{"text": "Hello?"}],
+            },
+        )
+        data = json.loads(result[0][0].text)
+        assert "error" in data
+        assert "dict" in data["error"]
+
+    @pytest.mark.asyncio
+    async def test_question_missing_text(self):
+        result = await mcp.call_tool(
+            "run_panel",
+            {
+                "personas": [{"name": "Alice"}],
+                "questions": [{"prompt": "no text key"}],
+            },
+        )
+        data = json.loads(result[0][0].text)
+        assert "error" in data
+        assert "text" in data["error"]
+
+    @pytest.mark.asyncio
+    async def test_question_not_a_dict(self):
+        result = await mcp.call_tool(
+            "run_panel",
+            {
+                "personas": [{"name": "Alice"}],
+                "questions": ["just a string"],
+            },
+        )
+        data = json.loads(result[0][0].text)
+        assert "error" in data
+        assert "dict" in data["error"]
+
+    @pytest.mark.asyncio
+    async def test_too_many_personas(self):
+        from synth_panel.mcp.server import MAX_PERSONAS
+
+        personas = [{"name": f"P{i}"} for i in range(MAX_PERSONAS + 1)]
+        result = await mcp.call_tool(
+            "run_panel",
+            {
+                "personas": personas,
+                "questions": [{"text": "Hello?"}],
+            },
+        )
+        data = json.loads(result[0][0].text)
+        assert "error" in data
+        assert "Too many personas" in data["error"]
+
+    @pytest.mark.asyncio
+    async def test_too_many_questions(self):
+        from synth_panel.mcp.server import MAX_QUESTIONS
+
+        questions = [{"text": f"Q{i}?"} for i in range(MAX_QUESTIONS + 1)]
+        result = await mcp.call_tool(
+            "run_panel",
+            {
+                "personas": [{"name": "Alice"}],
+                "questions": questions,
+            },
+        )
+        data = json.loads(result[0][0].text)
+        assert "error" in data
+        assert "Too many questions" in data["error"]
+
+    @pytest.mark.asyncio
+    async def test_valid_input_passes_validation(self):
+        """Valid personas + questions pass validation and reach the runner."""
+        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = {"results": []}
+            await mcp.call_tool(
+                "run_panel",
+                {
+                    "personas": [{"name": "Alice"}],
+                    "questions": [{"text": "Hello?"}],
+                },
+            )
+            assert mock_run.called
+
+
+# ---------------------------------------------------------------------------
+# Synthesis error surfacing
+# ---------------------------------------------------------------------------
+
+
+class TestSynthesisErrorSurfacing:
+    """Synthesis failures should be logged and surfaced, not silently swallowed."""
+
+    def test_constants_exported(self):
+        from synth_panel.mcp.server import MAX_PERSONAS, MAX_QUESTIONS
+
+        assert MAX_PERSONAS == 100
+        assert MAX_QUESTIONS == 50

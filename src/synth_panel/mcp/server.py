@@ -90,6 +90,10 @@ MCP_DEFAULT_MODEL = "haiku"
 # Per-panelist timeout (seconds)
 PANELIST_TIMEOUT = 30
 
+# Rate limits for run_panel inputs
+MAX_PERSONAS = 100
+MAX_QUESTIONS = 50
+
 mcp = FastMCP(
     "synthpanel",
     instructions=(
@@ -162,7 +166,8 @@ def _run_panel_sync(
             )
             synthesis_dict = synthesis_result.to_dict()
         except Exception:
-            pass  # Synthesis failure is non-fatal for MCP
+            logger.error("Synthesis failed", exc_info=True)
+            synthesis_dict = {"synthesis_error": "Synthesis failed — see server logs for details."}
 
     return panelist_results, result_dicts, panelist_usage, panelist_cost, synthesis_dict
 
@@ -556,6 +561,27 @@ async def run_panel(
     if not merged:
         return json.dumps({"error": "No personas provided. Supply personas and/or pack_id."})
 
+    # Validate persona structure
+    for i, p in enumerate(merged):
+        if not isinstance(p, dict):
+            return json.dumps({"error": f"Persona at index {i} must be a dict, got {type(p).__name__}."})
+        if "name" not in p or not str(p["name"]).strip():
+            return json.dumps({"error": f"Persona at index {i} is missing required field 'name'."})
+
+    # Validate question structure (when using inline questions)
+    if questions is not None:
+        for i, q in enumerate(questions):
+            if not isinstance(q, dict):
+                return json.dumps({"error": f"Question at index {i} must be a dict, got {type(q).__name__}."})
+            if "text" not in q or not str(q["text"]).strip():
+                return json.dumps({"error": f"Question at index {i} is missing required field 'text'."})
+
+    # Rate limits
+    if len(merged) > MAX_PERSONAS:
+        return json.dumps({"error": f"Too many personas ({len(merged)}). Maximum is {MAX_PERSONAS}."})
+    if questions is not None and len(questions) > MAX_QUESTIONS:
+        return json.dumps({"error": f"Too many questions ({len(questions)}). Maximum is {MAX_QUESTIONS}."})
+
     # Resolve instrument source (pack > inline instrument > questions).
     instrument_obj: Instrument | None = None
     if instrument_pack is not None:
@@ -792,6 +818,7 @@ async def extend_panel(
                     custom_prompt=synthesis_prompt,
                 )
             except Exception:
+                logger.error("Synthesis failed during extend_panel", exc_info=True)
                 synth = None
         return results, synth
 

@@ -440,3 +440,38 @@ class TestInstrumentPacks:
     def test_save_rejects_non_mapping(self):
         with pytest.raises(ValueError):
             save_instrument_pack("bad", ["not", "a", "dict"])  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
+# Pack ID sanitization (path traversal prevention)
+# ---------------------------------------------------------------------------
+
+
+class TestPackIdSanitization:
+    """Reject pack IDs that could escape the data directory."""
+
+    def test_slash_in_persona_pack_id_save(self):
+        with pytest.raises(ValueError, match="Invalid pack ID"):
+            save_persona_pack("Bad", [{"name": "A"}], pack_id="../../etc/passwd")
+
+    def test_dotdot_in_persona_pack_id_save(self):
+        with pytest.raises(ValueError, match="Invalid pack ID"):
+            save_persona_pack("Bad", [{"name": "A"}], pack_id="..secret")
+
+    def test_slash_in_persona_pack_id_get(self):
+        with pytest.raises(ValueError, match="Invalid pack ID"):
+            get_persona_pack("../../../etc/passwd")
+
+    def test_slash_in_instrument_pack_save(self):
+        with pytest.raises(ValueError, match="Invalid pack ID"):
+            save_instrument_pack("../../escape", {"instrument": {"version": 1, "questions": [{"text": "Q"}]}})
+
+    def test_dotdot_in_instrument_pack_load(self):
+        with pytest.raises(ValueError, match="Invalid pack ID"):
+            load_instrument_pack("../secret")
+
+    def test_clean_ids_still_work(self):
+        result = save_persona_pack("OK", [{"name": "A"}], pack_id="my-clean-pack")
+        assert result["id"] == "my-clean-pack"
+        pack = get_persona_pack("my-clean-pack")
+        assert pack["name"] == "OK"
