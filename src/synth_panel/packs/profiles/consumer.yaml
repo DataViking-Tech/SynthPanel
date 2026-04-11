@@ -1,0 +1,9 @@
+# Consumer research profile — fast, cost-effective runs with moderate diversity.
+name: consumer
+model: haiku
+temperature: 0.7
+top_p: null
+synthesis_model: null
+synthesis_temperature: null
+prompt_template: null
+models: null

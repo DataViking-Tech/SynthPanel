@@ -149,6 +149,47 @@ def assign_models_to_personas(
     return result
 
 
+def _load_profile(args: argparse.Namespace) -> tuple[Any, int | None]:
+    """Load and apply a profile from --profile or --config.
+
+    Returns ``(profile_or_None, error_exit_code_or_None)``. On error,
+    the message is already printed to stderr and the caller should return
+    the exit code.
+    """
+    from synth_panel.profiles import (
+        Profile,
+        apply_profile_to_args,
+        load_profile_by_name,
+        load_profile_from_path,
+    )
+
+    profile_name = getattr(args, "profile", None)
+    config_path = getattr(args, "config", None)
+
+    if profile_name and config_path:
+        print("Error: --profile and --config are mutually exclusive.", file=sys.stderr)
+        return None, 1
+
+    profile: Profile | None = None
+    if profile_name:
+        try:
+            profile = load_profile_by_name(profile_name)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Error loading profile: {exc}", file=sys.stderr)
+            return None, 1
+    elif config_path:
+        try:
+            profile = load_profile_from_path(config_path)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Error loading config: {exc}", file=sys.stderr)
+            return None, 1
+
+    if profile is not None:
+        apply_profile_to_args(profile, args)
+
+    return profile, None
+
+
 def _announce_default_model(args: argparse.Namespace) -> None:
     """Print the auto-selected default model to stderr.
 
@@ -366,6 +407,12 @@ def _load_schema(value: str) -> dict[str, Any]:
 
 def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """Run a panel: load personas + instrument, run panelists in parallel."""
+    # ── sp-prof: profile loading ──────────────────────────────────────
+    # Load profile defaults before anything else so CLI flags can override.
+    profile, profile_err = _load_profile(args)
+    if profile_err is not None:
+        return profile_err
+
     # Validate mutual exclusivity of --model and --models
     has_model = getattr(args, "model", None)
     has_models = getattr(args, "models", None)
@@ -579,6 +626,11 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         question_count=len(questions),
         timer=timer,
     )
+
+    # sp-prof: inject profile info into metadata for synthbench
+    if profile is not None:
+        metadata["profile"] = profile.name
+        metadata["profile_hash"] = profile.config_hash()
 
     # Output results
     banner = _build_invalid_banner(failure_stats, threshold, strict=strict, strict_violation=strict_violation)

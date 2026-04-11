@@ -37,7 +37,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--config",
         default=None,
         metavar="PATH",
-        help="Path to a configuration file.",
+        help="Path to a YAML profile/configuration file.",
+    )
+    parser.add_argument(
+        "--profile",
+        default=None,
+        metavar="NAME",
+        help=(
+            "Named profile to load defaults from. Searches bundled profiles, "
+            "./profiles/, and ~/.synthpanel/profiles/. CLI flags override "
+            "profile values."
+        ),
     )
     parser.add_argument(
         "--output-format",

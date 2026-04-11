@@ -1,0 +1,9 @@
+# Default profile — matches synthpanel's built-in behavior.
+name: default
+model: null
+temperature: null
+top_p: null
+synthesis_model: null
+synthesis_temperature: null
+prompt_template: null
+models: null

@@ -85,10 +85,41 @@ def _cmd_permissions(state: SessionState, argv: list[str], fmt: OutputFormat) ->
 
 
 def _cmd_config(state: SessionState, argv: list[str], fmt: OutputFormat) -> None:
-    """Inspect configuration."""
-    # TODO: wire to config system
-    section = argv[0] if argv else "all"
-    emit(fmt, message=f"[stub] Config inspection ({section}) not yet implemented.")
+    """Display active profile and available profiles."""
+    from synth_panel.profiles import list_available_profiles
+
+    lines: list[str] = []
+
+    # Show active profile if set
+    active_profile = getattr(state, "profile", None)
+    if active_profile is not None:
+        lines.append(f"Active profile: {active_profile.name}")
+        lines.append(f"  Source: {active_profile.source_path or 'unknown'}")
+        lines.append(f"  Hash:   {active_profile.config_hash()}")
+        profile_dict = active_profile.to_dict()
+        for key, val in profile_dict.items():
+            if key == "name":
+                continue
+            lines.append(f"  {key}: {val}")
+    else:
+        lines.append("No active profile (using CLI defaults)")
+
+    # Show overrides
+    overrides = getattr(state, "profile_overrides", None)
+    if overrides:
+        lines.append("\nCLI overrides applied on top of profile:")
+        for key, val in overrides.items():
+            lines.append(f"  {key}: {val}")
+
+    # List available profiles
+    available = list_available_profiles()
+    if available:
+        lines.append("\nAvailable profiles:")
+        for p in available:
+            marker = " *" if active_profile and p["name"] == active_profile.name else ""
+            lines.append(f"  {p['name']:<16s} ({p['source']}){marker}")
+
+    emit(fmt, message="\n".join(lines))
 
 
 def _cmd_memory(state: SessionState, argv: list[str], fmt: OutputFormat) -> None:

@@ -1,0 +1,9 @@
+# Research profile — high-diversity multi-model ensemble for thorough analysis.
+name: research
+model: null
+temperature: 1.0
+top_p: null
+synthesis_model: null
+synthesis_temperature: null
+prompt_template: null
+models: "haiku:0.5,gemini:0.5"
