@@ -6,25 +6,6 @@ name: Publish to PyPI
 # try to republish the same pyproject.toml version on every merge and
 # always fail, hiding the real problem that nothing was ever making it
 # to PyPI.
-#
-# ONE-TIME MANUAL SETUP (required before the first successful publish):
-#
-#   1. On https://pypi.org/manage/account/publishing/ add a trusted
-#      publisher with:
-#        project name = synthpanel
-#        owner        = DataViking-Tech
-#        repo         = synthpanel
-#        workflow     = publish.yml
-#        environment  = pypi   (must match the `environment:` key below)
-#   2. In GitHub repo Settings → Environments, create an environment
-#      named `pypi`. Optionally require a reviewer.
-#   3. Use `workflow_dispatch` with tag=v0.4.0 to backfill the first
-#      release from the existing tag, or land a PR with a `semver:`
-#      label to auto-cut a new one via auto-tag.yml.
-#
-# Without the trusted publisher configured, the "Publish to PyPI" step
-# fails with `invalid-publisher: valid token, but no corresponding
-# publisher` — that is the signal the manual step above is missing.
 on:
   workflow_call:
     inputs:
