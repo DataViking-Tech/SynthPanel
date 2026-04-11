@@ -1,0 +1,5 @@
+# Default owners for everything in the repo
+* @DataViking-Tech/synthpanel
+
+# Renovate config — auto-assign dependency PRs
+renovate.json @DataViking-Tech/synthpanel
