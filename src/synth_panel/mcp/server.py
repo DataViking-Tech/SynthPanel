@@ -102,6 +102,10 @@ mcp = FastMCP(
     ),
 )
 
+# Shared LLM client — reused across tool calls to avoid rebuilding the
+# provider cache on every invocation.  Thread-safe by design (see LLMClient).
+_shared_client = LLMClient()
+
 
 # ---------------------------------------------------------------------------
 # Internal panel runner (bridges threads to async)
@@ -124,7 +128,7 @@ def _run_panel_sync(
     synthesis_temperature: float | None = None,
 ) -> tuple[list[PanelistResult], list[dict[str, Any]], CostTokenUsage, Any, dict[str, Any] | None]:
     """Run panel synchronously. Returns (results, result_dicts, panelist_usage, panelist_cost, synthesis_dict)."""
-    client = LLMClient()
+    client = _shared_client
     panelist_results, _registry, _sessions = run_panel_parallel(
         client=client,
         personas=personas,
@@ -198,7 +202,7 @@ def _run_multi_round_sync(
     synthesis_temperature: float | None = None,
 ) -> MultiRoundResult:
     """Drive run_multi_round_panel for v1/v2/v3 instruments."""
-    client = LLMClient()
+    client = _shared_client
 
     def _round_synth(
         c: LLMClient,
@@ -508,7 +512,7 @@ async def run_prompt(
     """
     model = model or MCP_DEFAULT_MODEL
     logger.info("run_prompt: model=%s prompt_len=%d", model, len(prompt))
-    client = LLMClient()
+    client = _shared_client
     request = CompletionRequest(
         model=model,
         max_tokens=4096,
@@ -883,7 +887,7 @@ async def extend_panel(
         await ctx.report_progress(0, len(personas))
 
     def _go() -> tuple[list[PanelistResult], Any]:
-        client = LLMClient()
+        client = _shared_client
         results, _registry, _sessions = run_panel_parallel(
             client=client,
             personas=personas,
