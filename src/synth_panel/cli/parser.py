@@ -255,6 +255,19 @@ def build_parser() -> argparse.ArgumentParser:
             "conflicts)."
         ),
     )
+    panel_run_parser.add_argument(
+        "--variants",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Generate N LLM-perturbed variants per persona before running "
+            "the panel. The original personas are replaced by N*M variants "
+            "(M = number of personas). Each variant perturbs one axis "
+            "(trait swap, mood context, demographic shift, background "
+            "rephrase). Requires an LLM call per variant."
+        ),
+    )
 
     # pack
     pack_parser = subparsers.add_parser(

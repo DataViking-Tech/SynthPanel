@@ -1469,3 +1469,130 @@ instrument:
         err = capsys.readouterr().err
         assert rc == 1
         assert "Error" in err
+
+
+# --- Variants flag tests (sp-5on.15) -----------------------------------------
+
+
+class TestVariantsFlag:
+    def test_parser_accepts_variants(self):
+        parser = build_parser()
+        args = parser.parse_args(
+            [
+                "panel",
+                "run",
+                "--personas",
+                "p.yaml",
+                "--instrument",
+                "i.yaml",
+                "--variants",
+                "3",
+            ]
+        )
+        assert args.variants == 3
+
+    def test_parser_variants_default_is_none(self):
+        parser = build_parser()
+        args = parser.parse_args(
+            [
+                "panel",
+                "run",
+                "--personas",
+                "p.yaml",
+                "--instrument",
+                "i.yaml",
+            ]
+        )
+        assert args.variants is None
+
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("synth_panel.cli.commands.generate_panel_variants")
+    def test_variants_expands_personas(
+        self,
+        mock_gen_variants,
+        mock_client_cls,
+        mock_runtime_cls,
+        mock_synth,
+        capsys,
+        tmp_path,
+    ):
+        from synth_panel.perturbation import PersonaVariant, PerturbationAxis, PerturbationRecord, VariantSet
+
+        mock_runtime = MagicMock()
+        mock_runtime.run_turn.return_value = _mock_turn_summary("variant answer")
+        mock_runtime_cls.return_value = mock_runtime
+        mock_synth.return_value = _mock_synthesis_result()
+
+        # Build 2 variants for 1 persona
+        base = {"name": "Alice", "age": 30}
+        record = PerturbationRecord(
+            axis=PerturbationAxis.TRAIT_SWAP,
+            original_field="personality_traits",
+            original_value="analytical",
+            perturbed_value="intuitive",
+            change_description="swapped trait",
+        )
+        v0 = PersonaVariant(
+            persona=dict(base, name="Alice (v0)"),
+            source_persona_name="Alice",
+            variant_index=0,
+            perturbation=record,
+        )
+        v1 = PersonaVariant(
+            persona=dict(base, name="Alice (v1)"),
+            source_persona_name="Alice",
+            variant_index=1,
+            perturbation=record,
+        )
+        mock_gen_variants.return_value = [VariantSet(source_persona=base, variants=[v0, v1])]
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n    age: 30\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: What?\n")
+
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--variants",
+                "2",
+            ]
+        )
+        assert code == 0
+        mock_gen_variants.assert_called_once()
+        call_args = mock_gen_variants.call_args
+        assert call_args.kwargs["k"] == 2
+
+        err = capsys.readouterr().err
+        assert "Generating 2 variants for 1 personas" in err
+        assert "Variant expansion complete" in err
+
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_variants_out_of_range_returns_error(self, mock_client_cls, capsys, tmp_path):
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: What?\n")
+
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--variants",
+                "25",
+            ]
+        )
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "--variants must be between 1 and 20" in err

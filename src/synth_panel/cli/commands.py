@@ -21,6 +21,7 @@ from synth_panel.llm.client import LLMClient
 from synth_panel.metadata import PanelTimer, build_metadata
 from synth_panel.orchestrator import run_panel_parallel
 from synth_panel.persistence import Session
+from synth_panel.perturbation import generate_panel_variants
 from synth_panel.prompts import (
     build_question_prompt,
     load_prompt_template,
@@ -529,6 +530,30 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
 
     client = LLMClient()
     timer = PanelTimer()
+
+    # ── sp-5on.15: variant expansion ─────────────────────────────────
+    variants_k = getattr(args, "variants", None)
+    if variants_k is not None:
+        if variants_k < 1 or variants_k > 20:
+            print("Error: --variants must be between 1 and 20.", file=sys.stderr)
+            return 1
+        orig_count = len(personas)
+        total = variants_k * orig_count
+        print(
+            f"Generating {variants_k} variants for {orig_count} personas ({total} total sessions)...",
+            file=sys.stderr,
+        )
+        variant_sets = generate_panel_variants(
+            personas,
+            client,
+            k=variants_k,
+            model=model,
+        )
+        personas = [v.persona for vs in variant_sets for v in vs.variants]
+        print(
+            f"Variant expansion complete: {len(personas)} variant personas ready.",
+            file=sys.stderr,
+        )
 
     # Run all panelists in parallel via the orchestrator
     panelist_results, _registry, _sessions = run_panel_parallel(
