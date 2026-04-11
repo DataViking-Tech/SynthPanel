@@ -161,8 +161,7 @@ def _resolve_extract_schema(
         if value not in EXTRACT_SCHEMA_REGISTRY:
             names = ", ".join(sorted(EXTRACT_SCHEMA_REGISTRY))
             raise ValueError(
-                f"Unknown extract_schema name {value!r}. "
-                f"Available: {names}. Or pass an inline JSON Schema dict."
+                f"Unknown extract_schema name {value!r}. Available: {names}. Or pass an inline JSON Schema dict."
             )
         return EXTRACT_SCHEMA_REGISTRY[value]
     raise TypeError(f"extract_schema must be a string or dict, got {type(value).__name__}")
