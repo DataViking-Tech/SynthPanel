@@ -79,7 +79,9 @@ from synth_panel.orchestrator import (
     run_multi_round_panel,
     run_panel_parallel,
 )
+from synth_panel.perturbation import generate_panel_variants
 from synth_panel.prompts import build_question_prompt, persona_system_prompt
+from synth_panel.stats import robustness_score
 from synth_panel.synthesis import synthesize_panel
 
 logger = logging.getLogger(__name__)
@@ -122,12 +124,37 @@ def _run_panel_sync(
     persona_models: dict[str, str] | None = None,
     extract_schema: dict[str, Any] | None = None,
     synthesis_temperature: float | None = None,
-) -> tuple[list[PanelistResult], list[dict[str, Any]], CostTokenUsage, Any, dict[str, Any] | None]:
-    """Run panel synchronously. Returns (results, result_dicts, panelist_usage, panelist_cost, synthesis_dict)."""
+    variants: int = 0,
+) -> tuple[
+    list[PanelistResult], list[dict[str, Any]], CostTokenUsage, Any, dict[str, Any] | None, dict[str, Any] | None
+]:
+    """Run panel synchronously.
+
+    Returns (results, result_dicts, panelist_usage, panelist_cost, synthesis_dict, variant_data).
+    variant_data is None when variants == 0.
+    """
     client = LLMClient()
+
+    # Generate persona variants if requested
+    all_personas = list(personas)
+    variant_names: set[str] = set()
+    variant_mapping: dict[str, str] = {}  # variant_name -> source_name
+    variant_count = 0
+
+    if variants > 0:
+        logger.info("Generating %d variants per persona", variants)
+        variant_sets = generate_panel_variants(personas, client, k=variants, model=model)
+        for vs in variant_sets:
+            for v in vs.variants:
+                all_personas.append(v.persona)
+                variant_names.add(v.variant_name)
+                variant_mapping[v.variant_name] = v.source_persona_name
+                variant_count += 1
+        logger.info("Running panel with %d base + %d variant personas", len(personas), variant_count)
+
     panelist_results, _registry, _sessions = run_panel_parallel(
         client=client,
-        personas=personas,
+        personas=all_personas,
         questions=questions,
         model=model,
         system_prompt_fn=persona_system_prompt,
@@ -160,13 +187,14 @@ def _run_panel_sync(
     pricing, _ = lookup_pricing(model)
     panelist_cost = estimate_cost(panelist_usage, pricing)
 
-    # Synthesis
+    # Synthesis (base personas only)
+    base_results = [pr for pr in panelist_results if pr.persona_name not in variant_names]
     synthesis_dict: dict[str, Any] | None = None
     if synthesis:
         try:
             synthesis_result = synthesize_panel(
                 client,
-                panelist_results,
+                base_results,
                 questions,
                 model=synthesis_model,
                 panelist_model=model,
@@ -179,7 +207,109 @@ def _run_panel_sync(
             logger.error("Synthesis failed (non-fatal)", exc_info=True)
             synthesis_dict = {"synthesis_error": "Synthesis failed — see server logs for details."}
 
-    return panelist_results, result_dicts, panelist_usage, panelist_cost, synthesis_dict
+    # Compute robustness scores when variants were used
+    variant_data: dict[str, Any] | None = None
+    if variants > 0 and variant_mapping:
+        variant_data = _compute_variant_data(
+            result_dicts,
+            variant_names,
+            variant_mapping,
+            variant_count,
+            questions,
+        )
+
+    return panelist_results, result_dicts, panelist_usage, panelist_cost, synthesis_dict, variant_data
+
+
+def _compute_variant_data(
+    result_dicts: list[dict[str, Any]],
+    variant_names: set[str],
+    variant_mapping: dict[str, str],
+    variant_count: int,
+    questions: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Compute robustness scores from base + variant panel results."""
+    # Separate base and variant results
+    base_results = [r for r in result_dicts if r["persona"] not in variant_names]
+    variant_results = [r for r in result_dicts if r["persona"] in variant_names]
+
+    # Build per-question robustness scores
+    robustness_scores: list[dict[str, Any]] = []
+    per_persona_robustness: list[dict[str, Any]] = []
+    n_questions = len(questions)
+
+    for qi in range(n_questions):
+        # Group variant responses by source persona
+        variant_resps: dict[str, list[str]] = {}
+        for vr in variant_results:
+            source = variant_mapping.get(vr["persona"], "")
+            if not source:
+                continue
+            resps = vr.get("responses", [])
+            if qi < len(resps) and not resps[qi].get("error"):
+                variant_resps.setdefault(source, []).append(resps[qi].get("response", ""))
+
+        # Get base persona responses for this question
+        for br in base_results:
+            resps = br.get("responses", [])
+            if qi >= len(resps) or resps[qi].get("error"):
+                continue
+
+            base_response = resps[qi].get("response", "")
+            persona_name = br["persona"]
+            v_resps = variant_resps.get(persona_name, [])
+
+            if v_resps:
+                try:
+                    rs = robustness_score({persona_name: v_resps}, base_response)
+                    per_persona_robustness.append(
+                        {
+                            "persona": persona_name,
+                            "question_index": qi,
+                            "robustness": round(rs.per_persona.get(persona_name, 0.0), 4),
+                            "k_variants": len(v_resps),
+                            "finding_value": base_response,
+                            "interpretation": rs.interpretation,
+                        }
+                    )
+                except (ValueError, ZeroDivisionError):
+                    pass
+
+        # Overall robustness for this question across all base personas
+        if variant_resps:
+            # Find most common base response as the "finding"
+            base_responses_q = [
+                br["responses"][qi].get("response", "")
+                for br in base_results
+                if qi < len(br.get("responses", [])) and not br["responses"][qi].get("error")
+            ]
+            if base_responses_q:
+                from collections import Counter
+
+                most_common = Counter(base_responses_q).most_common(1)[0][0]
+                # Merge all variant responses for aggregate score
+                all_v = {}
+                for name, resps_list in variant_resps.items():
+                    all_v[name] = resps_list
+                try:
+                    agg = robustness_score(all_v, most_common)
+                    robustness_scores.append(
+                        {
+                            "question_index": qi,
+                            "question_text": questions[qi].get("text", ""),
+                            "finding_value": most_common,
+                            "overall_robustness": round(agg.overall_robustness, 4),
+                            "interpretation": agg.interpretation,
+                        }
+                    )
+                except (ValueError, ZeroDivisionError):
+                    pass
+
+    return {
+        "variant_count": variant_count,
+        "robustness_scores": robustness_scores,
+        "per_persona_robustness": per_persona_robustness,
+    }
 
 
 def _run_multi_round_sync(
@@ -395,6 +525,7 @@ async def _run_panel_async(
     persona_models: dict[str, str] | None = None,
     extract_schema: dict[str, Any] | None = None,
     synthesis_temperature: float | None = None,
+    variants: int = 0,
 ) -> dict[str, Any]:
     """Run panel via asyncio.to_thread with progress notifications."""
     total = len(personas)
@@ -402,7 +533,14 @@ async def _run_panel_async(
     await ctx.report_progress(0, total)
 
     # Run the blocking panel execution in a thread
-    _panelist_results, result_dicts, panelist_usage, panelist_cost, synthesis_dict = await asyncio.wait_for(
+    (
+        _panelist_results,
+        result_dicts,
+        panelist_usage,
+        panelist_cost,
+        synthesis_dict,
+        variant_data,
+    ) = await asyncio.wait_for(
         asyncio.to_thread(
             _run_panel_sync,
             personas,
@@ -417,8 +555,9 @@ async def _run_panel_async(
             persona_models=persona_models,
             extract_schema=extract_schema,
             synthesis_temperature=synthesis_temperature,
+            variants=variants,
         ),
-        timeout=PANELIST_TIMEOUT * total,
+        timeout=PANELIST_TIMEOUT * total * (1 + variants),
     )
 
     await ctx.report_progress(total, total)
@@ -452,6 +591,7 @@ async def _run_panel_async(
     )
 
     # Save result
+    variant_count = variant_data["variant_count"] if variant_data else 0
     result_id = save_panel_result(
         results=result_dicts,
         model=model,
@@ -459,9 +599,10 @@ async def _run_panel_async(
         total_cost=total_cost.format_usd(),
         persona_count=len(personas),
         question_count=len(questions),
+        variant_count=variant_count,
     )
 
-    return {
+    result: dict[str, Any] = {
         "result_id": result_id,
         "model": model,
         "persona_count": len(personas),
@@ -481,6 +622,13 @@ async def _run_panel_async(
         "warnings": [],
         "metadata": metadata,
     }
+
+    if variant_data:
+        result["robustness_scores"] = variant_data["robustness_scores"]
+        result["per_persona_robustness"] = variant_data["per_persona_robustness"]
+        result["variant_count"] = variant_data["variant_count"]
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -553,6 +701,7 @@ async def run_panel(
     persona_models: dict[str, str] | None = None,
     extract_schema: dict[str, Any] | None = None,
     synthesis_temperature: float | None = None,
+    variants: int | None = None,
     ctx: Context = None,
 ) -> str:
     """Run a full synthetic focus group panel.
@@ -609,9 +758,16 @@ async def run_panel(
         extract_schema: JSON Schema for structured extraction from responses.
         synthesis_temperature: Sampling temperature for the synthesis step.
             Independent of the panelist temperature.
+        variants: Number of persona variants to generate per persona for
+            robustness analysis. When > 0, each persona is perturbed K times
+            and all variants run through the same questions. Results include
+            robustness_scores and per_persona_robustness. Default: no variants.
     """
     model = model or MCP_DEFAULT_MODEL
-    logger.info("run_panel: model=%s synthesis=%s", model, synthesis)
+    variants_k = variants or 0
+    if variants_k < 0 or variants_k > 20:
+        return json.dumps({"error": "variants must be between 0 and 20."})
+    logger.info("run_panel: model=%s synthesis=%s variants=%d", model, synthesis, variants_k)
     merged = list(personas) if personas else []
     if pack_id is not None:
         pack = _data_get_persona_pack(pack_id)
@@ -684,6 +840,7 @@ async def run_panel(
         persona_models=persona_models,
         extract_schema=extract_schema,
         synthesis_temperature=synthesis_temperature,
+        variants=variants_k,
     )
     return json.dumps(result, indent=2)
 
