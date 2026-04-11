@@ -1,0 +1,13 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "packageRules": [
+    { "matchUpdateTypes": ["patch"], "automerge": true },
+    {
+      "matchUpdateTypes": ["minor"],
+      "groupName": "minor deps",
+      "schedule": ["before 9am on monday"]
+    }
+  ],
+  "prConcurrentLimit": 5
+}
