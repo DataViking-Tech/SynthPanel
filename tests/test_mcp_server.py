@@ -82,7 +82,7 @@ class TestRunPrompt:
             content=[TextBlock(text="Hello back!")],
             usage=TokenUsage(input_tokens=10, output_tokens=5),
         )
-        with patch("synth_panel.mcp.server.LLMClient") as MockClient:
+        with patch("synth_panel.mcp.server._shared_client", None), patch("synth_panel.mcp.server.LLMClient") as MockClient:
             MockClient.return_value.send.return_value = mock_response
             result = await mcp.call_tool("run_prompt", {"prompt": "Say hello"})
 
@@ -103,7 +103,7 @@ class TestRunPrompt:
             content=[TextBlock(text="Hi")],
             usage=TokenUsage(input_tokens=5, output_tokens=2),
         )
-        with patch("synth_panel.mcp.server.LLMClient") as MockClient:
+        with patch("synth_panel.mcp.server._shared_client", None), patch("synth_panel.mcp.server.LLMClient") as MockClient:
             MockClient.return_value.send.return_value = mock_response
             await mcp.call_tool("run_prompt", {"prompt": "Hi"})
             # Verify the request used 'haiku' model (MCP default)
@@ -120,7 +120,7 @@ class TestRunPrompt:
             content=[TextBlock(text="Hi")],
             usage=TokenUsage(input_tokens=5, output_tokens=2),
         )
-        with patch("synth_panel.mcp.server.LLMClient") as MockClient:
+        with patch("synth_panel.mcp.server._shared_client", None), patch("synth_panel.mcp.server.LLMClient") as MockClient:
             MockClient.return_value.send.return_value = mock_response
             await mcp.call_tool(
                 "run_prompt",
