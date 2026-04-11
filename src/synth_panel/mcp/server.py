@@ -96,6 +96,77 @@ PANELIST_TIMEOUT = 30
 MAX_PERSONAS = 100
 MAX_QUESTIONS = 50
 
+# Built-in extraction schema registry — keyed by short name.
+EXTRACT_SCHEMA_REGISTRY: dict[str, dict[str, Any]] = {
+    "sentiment": {
+        "type": "object",
+        "properties": {
+            "sentiment": {
+                "type": "string",
+                "enum": ["positive", "negative", "neutral", "mixed"],
+                "description": "Overall sentiment of the response.",
+            },
+            "confidence": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 1.0,
+                "description": "Confidence score (0-1) for the sentiment classification.",
+            },
+        },
+        "required": ["sentiment", "confidence"],
+    },
+    "themes": {
+        "type": "object",
+        "properties": {
+            "themes": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Key themes or topics mentioned in the response.",
+            },
+            "primary_theme": {
+                "type": "string",
+                "description": "The single most dominant theme.",
+            },
+        },
+        "required": ["themes", "primary_theme"],
+    },
+    "rating": {
+        "type": "object",
+        "properties": {
+            "rating": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10,
+                "description": "Numeric rating (1-10) implied by the response.",
+            },
+            "explanation": {
+                "type": "string",
+                "description": "Brief rationale for the assigned rating.",
+            },
+        },
+        "required": ["rating", "explanation"],
+    },
+}
+
+
+def _resolve_extract_schema(
+    value: str | dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Resolve extract_schema: pass dicts through, look up strings in the registry."""
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        if value not in EXTRACT_SCHEMA_REGISTRY:
+            names = ", ".join(sorted(EXTRACT_SCHEMA_REGISTRY))
+            raise ValueError(
+                f"Unknown extract_schema name {value!r}. Available: {names}. Or pass an inline JSON Schema dict."
+            )
+        return EXTRACT_SCHEMA_REGISTRY[value]
+    raise TypeError(f"extract_schema must be a string or dict, got {type(value).__name__}")
+
+
 mcp = FastMCP(
     "synthpanel",
     instructions=(
@@ -699,7 +770,7 @@ async def run_panel(
     temperature: float | None = None,
     top_p: float | None = None,
     persona_models: dict[str, str] | None = None,
-    extract_schema: dict[str, Any] | None = None,
+    extract_schema: str | dict[str, Any] | None = None,
     synthesis_temperature: float | None = None,
     variants: int | None = None,
     ctx: Context = None,
@@ -755,7 +826,9 @@ async def run_panel(
         top_p: Nucleus sampling threshold (0.0-1.0) for panelist responses.
         persona_models: Per-persona model overrides. Maps persona name to
             model alias (e.g. {"Sarah Chen": "sonnet", "Mike": "haiku"}).
-        extract_schema: JSON Schema for structured extraction from responses.
+        extract_schema: Schema for post-hoc structured extraction from
+            free-text responses. Pass a built-in name ("sentiment",
+            "themes", "rating") or an inline JSON Schema dict.
         synthesis_temperature: Sampling temperature for the synthesis step.
             Independent of the panelist temperature.
         variants: Number of persona variants to generate per persona for
@@ -768,6 +841,12 @@ async def run_panel(
     if variants_k < 0 or variants_k > 20:
         return json.dumps({"error": "variants must be between 0 and 20."})
     logger.info("run_panel: model=%s synthesis=%s variants=%d", model, synthesis, variants_k)
+
+    # Resolve extract_schema name → dict before threading to orchestrator.
+    try:
+        resolved_extract_schema = _resolve_extract_schema(extract_schema)
+    except (ValueError, TypeError) as exc:
+        return json.dumps({"error": str(exc)})
     merged = list(personas) if personas else []
     if pack_id is not None:
         pack = _data_get_persona_pack(pack_id)
@@ -818,7 +897,7 @@ async def run_panel(
             temperature=temperature,
             top_p=top_p,
             persona_models=persona_models,
-            extract_schema=extract_schema,
+            extract_schema=resolved_extract_schema,
             synthesis_temperature=synthesis_temperature,
         )
         return json.dumps(result, indent=2)
@@ -838,7 +917,7 @@ async def run_panel(
         temperature=temperature,
         top_p=top_p,
         persona_models=persona_models,
-        extract_schema=extract_schema,
+        extract_schema=resolved_extract_schema,
         synthesis_temperature=synthesis_temperature,
         variants=variants_k,
     )
