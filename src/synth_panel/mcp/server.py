@@ -452,6 +452,42 @@ def _format_panelist_result(pr: PanelistResult, model: str) -> dict[str, Any]:
     return rd
 
 
+def _run_ensemble_sync(
+    personas: list[dict[str, Any]],
+    questions: list[dict[str, Any]],
+    models: list[str],
+    response_schema: dict[str, Any] | None = None,
+    extract_schema: dict[str, Any] | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
+) -> dict[str, Any]:
+    """Run the same panel with each model and return comparative results."""
+    from synth_panel.ensemble import ensemble_run
+
+    client = LLMClient()
+    ens = ensemble_run(
+        personas,
+        questions,
+        models,
+        client,
+        system_prompt_fn=persona_system_prompt,
+        question_prompt_fn=build_question_prompt,
+        response_schema=response_schema,
+        extract_schema=extract_schema,
+        temperature=temperature,
+        top_p=top_p,
+    )
+    return {
+        "per_model_results": {
+            mr.model: [_format_panelist_result(pr, mr.model) for pr in mr.panelist_results]
+            for mr in ens.model_results
+        },
+        "cost_breakdown": ens.per_model_cost,
+        "models": ens.models,
+        "total_usage": ens.total_usage.to_dict(),
+    }
+
+
 async def _run_panel_async_instrument(
     personas: list[dict[str, Any]],
     instrument: Instrument,
@@ -771,6 +807,7 @@ async def run_panel(
     top_p: float | None = None,
     persona_models: dict[str, str] | None = None,
     extract_schema: str | dict[str, Any] | None = None,
+    models: list[str] | None = None,
     synthesis_temperature: float | None = None,
     variants: int | None = None,
     ctx: Context = None,
@@ -829,6 +866,10 @@ async def run_panel(
         extract_schema: Schema for post-hoc structured extraction from
             free-text responses. Pass a built-in name ("sentiment",
             "themes", "rating") or an inline JSON Schema dict.
+        models: List of model names for multi-model ensemble. When
+            provided, the panel is run once per model and results are
+            compared. Returns per_model_results and cost_breakdown.
+            Mutually exclusive with ``model``.
         synthesis_temperature: Sampling temperature for the synthesis step.
             Independent of the panelist temperature.
         variants: Number of persona variants to generate per persona for
@@ -873,6 +914,34 @@ async def run_panel(
                 return json.dumps({"error": f"Question at index {i} is missing required field 'text'."})
         if len(questions) > MAX_QUESTIONS:
             return json.dumps({"error": f"Too many questions ({len(questions)}). Maximum is {MAX_QUESTIONS}."})
+
+    # ── Ensemble mode: run with each model, compare across models ────────
+    if models and len(models) >= 2:
+        if not questions and instrument is None and instrument_pack is None:
+            return json.dumps({"error": "Ensemble mode requires questions or instrument."})
+        ens_questions = questions or []
+        if not ens_questions:
+            # Instruments: extract flat questions for ensemble (v1/v2 only)
+            if instrument is not None:
+                raw = instrument.get("instrument", instrument)
+                inst = parse_instrument(raw)
+                ens_questions = [{"text": q.text} for q in inst.questions]
+            elif instrument_pack is not None:
+                pack_body = _data_load_instrument_pack(instrument_pack)
+                raw = pack_body.get("instrument", pack_body)
+                inst = parse_instrument(raw)
+                ens_questions = [{"text": q.text} for q in inst.questions]
+        ens_result = await asyncio.to_thread(
+            _run_ensemble_sync,
+            merged,
+            ens_questions,
+            models,
+            response_schema,
+            extract_schema,
+            temperature,
+            top_p,
+        )
+        return json.dumps(ens_result, indent=2)
 
     # Resolve instrument source (pack > inline instrument > questions).
     instrument_obj: Instrument | None = None

@@ -825,3 +825,132 @@ def _merge_panelist_results(
                 if pr.error and not merged.error:
                     merged.error = pr.error
     return [by_name[n] for n in order]
+
+
+# ---------------------------------------------------------------------------
+# Multi-model ensemble
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class EnsembleResult:
+    """Result of running the same panel across multiple models."""
+
+    per_model_results: dict[str, list[PanelistResult]]
+    convergent_findings: list[dict[str, Any]]
+    divergent_findings: list[dict[str, Any]]
+    cost_breakdown: dict[str, dict[str, Any]]
+    models: list[str]
+    usage: TokenUsage = field(default_factory=lambda: ZERO_USAGE)
+
+
+def ensemble_run(
+    *,
+    client: LLMClient,
+    personas: list[dict[str, Any]],
+    questions: list[dict[str, Any]],
+    models: list[str],
+    system_prompt_fn: Callable[[dict[str, Any]], str],
+    question_prompt_fn: Callable[[dict[str, Any]], str],
+    response_schema: dict[str, Any] | None = None,
+    extract_schema: dict[str, Any] | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
+) -> EnsembleResult:
+    """Run the same panel with each model and compare results.
+
+    Runs ``run_panel_parallel`` once per model, then computes cross-model
+    convergence for questions that produced categorical responses.
+
+    Returns an :class:`EnsembleResult` with per-model results and
+    convergent/divergent findings.
+    """
+    per_model: dict[str, list[PanelistResult]] = {}
+    cost_breakdown: dict[str, dict[str, Any]] = {}
+    total_usage = ZERO_USAGE
+
+    for model_name in models:
+        results, _reg, _sessions = run_panel_parallel(
+            client=client,
+            personas=personas,
+            questions=questions,
+            model=model_name,
+            system_prompt_fn=system_prompt_fn,
+            question_prompt_fn=question_prompt_fn,
+            response_schema=response_schema,
+            extract_schema=extract_schema,
+            temperature=temperature,
+            top_p=top_p,
+        )
+        per_model[model_name] = results
+        model_usage = ZERO_USAGE
+        for pr in results:
+            model_usage = model_usage + pr.usage
+        total_usage = total_usage + model_usage
+        cost_breakdown[model_name] = {"usage": model_usage.to_dict()}
+
+    # Attempt convergence analysis when there are ≥2 models and structured responses
+    convergent: list[dict[str, Any]] = []
+    divergent: list[dict[str, Any]] = []
+
+    if len(models) >= 2 and questions:
+        question_texts = [q.get("text", str(q)) for q in questions]
+        try:
+            multi_model_responses = _extract_categorical_responses(per_model, len(questions))
+            if multi_model_responses:
+                from synth_panel.stats import convergence_report
+
+                report = convergence_report(multi_model_responses, question_texts)
+                for f in report.findings:
+                    entry = {
+                        "question_index": f.question_index,
+                        "question": f.question_text,
+                        "alpha": round(f.alpha, 3),
+                        "level": f.level.value,
+                        "interpretation": f.interpretation,
+                    }
+                    if f.alpha >= 0.60:
+                        convergent.append(entry)
+                    elif f.alpha < 0.40:
+                        divergent.append(entry)
+        except (ValueError, KeyError):
+            pass  # Convergence analysis not applicable (e.g. free-text responses)
+
+    return EnsembleResult(
+        per_model_results=per_model,
+        convergent_findings=convergent,
+        divergent_findings=divergent,
+        cost_breakdown=cost_breakdown,
+        models=models,
+        usage=total_usage,
+    )
+
+
+def _extract_categorical_responses(
+    per_model: dict[str, list[PanelistResult]],
+    n_questions: int,
+) -> dict[str, list[list[str]]] | None:
+    """Extract categorical response strings for convergence analysis.
+
+    Returns model_name -> [[response_per_question] per persona], or None
+    if responses aren't categorical (e.g. free-text with no structured data).
+    """
+    result: dict[str, list[list[str]]] = {}
+    for model_name, panelist_results in per_model.items():
+        personas_data: list[list[str]] = []
+        for pr in panelist_results:
+            q_responses: list[str] = []
+            for resp in pr.responses[:n_questions]:
+                # Prefer structured data for categorical comparison
+                if isinstance(resp.get("response"), dict):
+                    q_responses.append(str(sorted(resp["response"].items())))
+                elif isinstance(resp.get("response"), str):
+                    # Free-text: truncate to first 200 chars for rough comparison
+                    q_responses.append(resp["response"][:200])
+                else:
+                    return None
+            if len(q_responses) != n_questions:
+                return None
+            personas_data.append(q_responses)
+        result[model_name] = personas_data
+    return result

@@ -352,6 +352,53 @@ class TestRunPanelExtractSchema:
 
 
 # ---------------------------------------------------------------------------
+# run_panel models (ensemble) parameter
+# ---------------------------------------------------------------------------
+
+
+class TestRunPanelModels:
+    """Test run_panel's models parameter for multi-model ensemble."""
+
+    @pytest.mark.asyncio
+    async def test_models_triggers_ensemble(self):
+        """Providing models list triggers ensemble path via _run_ensemble_sync."""
+        with patch("synth_panel.mcp.server._run_ensemble_sync") as mock_ens:
+            mock_ens.return_value = {
+                "per_model_results": {},
+                "cost_breakdown": {},
+                "models": ["haiku", "sonnet"],
+                "total_usage": {},
+            }
+            result = await mcp.call_tool(
+                "run_panel",
+                {
+                    "personas": [{"name": "Alice"}],
+                    "questions": [{"text": "Hello?"}],
+                    "models": ["haiku", "sonnet"],
+                },
+            )
+            mock_ens.assert_called_once()
+            data = json.loads(result[0][0].text)
+            assert "per_model_results" in data
+            assert data["models"] == ["haiku", "sonnet"]
+
+    @pytest.mark.asyncio
+    async def test_single_model_list_uses_normal_path(self):
+        """A models list with <2 entries falls through to the normal path."""
+        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = {"results": []}
+            await mcp.call_tool(
+                "run_panel",
+                {
+                    "personas": [{"name": "Alice"}],
+                    "questions": [{"text": "Hello?"}],
+                    "models": ["haiku"],
+                },
+            )
+            mock_run.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
 # Prompt templates
 # ---------------------------------------------------------------------------
 
