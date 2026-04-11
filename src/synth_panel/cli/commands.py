@@ -1041,23 +1041,33 @@ def handle_instruments_list(args: argparse.Namespace, fmt: OutputFormat) -> int:
 
 def handle_instruments_install(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """Install an instrument pack from a YAML file (or bundled name)."""
-    from synth_panel.mcp.data import save_instrument_pack
+    from synth_panel.mcp.data import load_instrument_pack, save_instrument_pack
 
     source = args.source
-    if not Path(source).exists():
-        print(
-            f"Error: source file not found: {source}\n"
-            f"(bundled instrument packs are not yet shipped — pass a "
-            f"YAML file path)",
-            file=sys.stderr,
-        )
-        return 1
+    data: dict | None = None
 
-    try:
-        data = _load_yaml(source)
-    except (FileNotFoundError, ValueError) as exc:
-        print(f"Error loading file: {exc}", file=sys.stderr)
-        return 1
+    if Path(source).exists():
+        try:
+            data = _load_yaml(source)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Error loading file: {exc}", file=sys.stderr)
+            return 1
+    else:
+        # Try loading as a bundled pack name.
+        try:
+            data = load_instrument_pack(source)
+        except FileNotFoundError:
+            from synth_panel.mcp.data import list_instrument_packs
+
+            bundled = [p["id"] for p in list_instrument_packs() if p.get("source") == "bundled"]
+            hint = ", ".join(bundled) if bundled else "(none)"
+            print(
+                f"Error: '{source}' is not a file path or known bundled pack.\n"
+                f"Available bundled packs: {hint}\n"
+                f"Or pass a YAML file path.",
+                file=sys.stderr,
+            )
+            return 1
 
     if not isinstance(data, dict):
         print("Error: instrument pack file must be a YAML mapping", file=sys.stderr)

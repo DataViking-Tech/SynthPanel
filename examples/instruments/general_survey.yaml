@@ -1,0 +1,40 @@
+# general_survey: broad opinion survey for smoke-testing panel setups.
+#
+# Usage:
+#   synthpanel panel run --personas examples/personas.yaml --instrument examples/instruments/general_survey.yaml
+#
+# This is also available as a bundled pack (no file path needed):
+#   synthpanel panel run --personas examples/personas.yaml --instrument general-survey
+instrument:
+  version: 3
+  rounds:
+    - name: survey
+      questions:
+        - text: >
+            How do you feel about the pace of technology change in your
+            industry?  Is it exciting, overwhelming, or somewhere in
+            between?
+          response_schema:
+            type: text
+        - text: >
+            Describe your ideal work environment.  Remote, in-office,
+            hybrid — and why?
+          response_schema:
+            type: text
+        - text: >
+            What single tool or app could you not live without in your
+            daily work?
+          response_schema:
+            type: text
+        - text: >
+            If you could change one thing about how your team
+            communicates, what would it be?
+          response_schema:
+            type: text
+        - text: >
+            What trend — in your field or in the broader world — are
+            you most optimistic about right now?
+          response_schema:
+            type: text
+      route_when:
+        - else: __end__

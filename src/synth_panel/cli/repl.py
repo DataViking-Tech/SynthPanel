@@ -18,9 +18,25 @@ from synth_panel.runtime import AgentRuntime
 class SessionState:
     """Mutable state maintained during an interactive session."""
 
-    __slots__ = ("compacted_count", "last_usage", "model", "profile", "profile_overrides", "runtime", "turn_count")
+    __slots__ = (
+        "compacted_count",
+        "config_path",
+        "last_usage",
+        "model",
+        "permission_mode",
+        "profile",
+        "profile_overrides",
+        "runtime",
+        "turn_count",
+    )
 
-    def __init__(self, model: str | None = None, runtime: AgentRuntime | None = None) -> None:
+    def __init__(
+        self,
+        model: str | None = None,
+        runtime: AgentRuntime | None = None,
+        permission_mode: str = "full-access",
+        config_path: str | None = None,
+    ) -> None:
         self.turn_count: int = 0
         self.compacted_count: int = 0
         self.model: str | None = model
@@ -28,6 +44,8 @@ class SessionState:
         self.runtime: AgentRuntime | None = runtime
         self.profile: Any = None
         self.profile_overrides: dict[str, Any] | None = None
+        self.permission_mode: str = permission_mode
+        self.config_path: str | None = config_path
 
 
 PROMPT_CHAR = "\u276f "  # ❯
@@ -51,7 +69,12 @@ def run_repl(args: argparse.Namespace, fmt: OutputFormat) -> int:
     client = LLMClient()
     session = Session()
     runtime = AgentRuntime(client=client, session=session, model=model)
-    state = SessionState(model=model, runtime=runtime)
+    state = SessionState(
+        model=model,
+        runtime=runtime,
+        permission_mode=getattr(args, "permission_mode", "full-access") or "full-access",
+        config_path=getattr(args, "config", None),
+    )
 
     print("synthpanel interactive mode. Type /help for commands, Ctrl-D to exit.")
 

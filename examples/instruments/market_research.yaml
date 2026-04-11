@@ -1,0 +1,43 @@
+# market_research: competitive preference, purchase intent, pricing sensitivity.
+#
+# Usage:
+#   synthpanel panel run --personas examples/personas.yaml --instrument examples/instruments/market_research.yaml --var problem="expense tracking"
+#
+# Also available as a bundled pack:
+#   synthpanel panel run --personas examples/personas.yaml --instrument market-research --var problem="expense tracking"
+instrument:
+  version: 3
+  rounds:
+    - name: research
+      questions:
+        - text: >
+            When you think about solving {problem}, what existing
+            products or services come to mind first?  What draws you
+            to each?
+          response_schema:
+            type: text
+        - text: >
+            How do you typically evaluate a new product in this space?
+            What factors matter most — price, features, brand trust,
+            peer recommendations?
+          response_schema:
+            type: text
+        - text: >
+            Imagine a new solution that addressed your top frustration
+            perfectly.  How much would you expect to pay per month for
+            it?  At what price point would you say "no way"?
+          response_schema:
+            type: text
+        - text: >
+            If you were choosing between two products that both solved
+            your problem, what would be the deciding factor for you?
+          response_schema:
+            type: text
+        - text: >
+            How likely are you to switch from your current solution to
+            a new one in the next six months?  What would need to be
+            true for you to make the switch?
+          response_schema:
+            type: text
+      route_when:
+        - else: __end__

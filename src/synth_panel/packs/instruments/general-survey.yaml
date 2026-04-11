@@ -1,0 +1,46 @@
+# general-survey: broad opinion survey covering technology attitudes,
+# work preferences, and daily habits.  Good for testing panel setups.
+#
+# Single-round v3 instrument (no branching).  Themes emitted by the
+# synthesizer are not routed — all five questions run for every panelist.
+name: general-survey
+version: 1
+description: >
+  Five general opinion questions covering technology attitudes,
+  work preferences, and daily habits.  Useful as a smoke-test for
+  new persona packs or model configurations.
+author: synthpanel
+
+instrument:
+  version: 3
+  rounds:
+    - name: survey
+      questions:
+        - text: >
+            How do you feel about the pace of technology change in your
+            industry?  Is it exciting, overwhelming, or somewhere in
+            between?
+          response_schema:
+            type: text
+        - text: >
+            Describe your ideal work environment.  Remote, in-office,
+            hybrid — and why?
+          response_schema:
+            type: text
+        - text: >
+            What single tool or app could you not live without in your
+            daily work?
+          response_schema:
+            type: text
+        - text: >
+            If you could change one thing about how your team
+            communicates, what would it be?
+          response_schema:
+            type: text
+        - text: >
+            What trend — in your field or in the broader world — are
+            you most optimistic about right now?
+          response_schema:
+            type: text
+      route_when:
+        - else: __end__
