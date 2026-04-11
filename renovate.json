@@ -7,6 +7,11 @@
       "matchUpdateTypes": ["minor"],
       "groupName": "minor deps",
       "schedule": ["before 9am on monday"]
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "groupName": "github-actions",
+      "schedule": ["before 9am on monday"]
     }
   ],
   "prConcurrentLimit": 5
