@@ -1181,6 +1181,166 @@ class TestPackCommands:
         out = capsys.readouterr().out
         assert "my-team" in out
 
+    def test_pack_generate_success(self, capsys, monkeypatch):
+        """pack generate calls LLM and saves a valid persona pack."""
+        from unittest.mock import MagicMock
+
+        from synth_panel.llm.models import CompletionResponse, TokenUsage, ToolInvocationBlock
+
+        mock_personas = [
+            {
+                "name": "Alice Chen",
+                "age": 34,
+                "occupation": "Product Manager",
+                "background": "Ten years in SaaS product management.",
+                "personality_traits": ["analytical", "pragmatic"],
+            },
+            {
+                "name": "Bob Rivera",
+                "age": 28,
+                "occupation": "Software Engineer",
+                "background": "Full-stack developer at a startup.",
+                "personality_traits": ["curious", "detail-oriented"],
+            },
+        ]
+
+        mock_response = CompletionResponse(
+            id="r1",
+            model="test",
+            content=[
+                ToolInvocationBlock(
+                    id="tc1",
+                    name="generate_personas",
+                    input={"personas": mock_personas},
+                ),
+            ],
+            usage=TokenUsage(input_tokens=100, output_tokens=200),
+        )
+
+        mock_client = MagicMock()
+        mock_client.send.return_value = mock_response
+        monkeypatch.setattr("synth_panel.cli.commands.LLMClient", lambda: mock_client)
+
+        code = main([
+            "pack", "generate",
+            "--product", "project management tool",
+            "--audience", "engineering teams",
+            "--count", "2",
+        ])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "2 personas" in out
+        assert "project management tool personas" in out
+
+    def test_pack_generate_custom_name_and_id(self, capsys, monkeypatch):
+        """pack generate respects --name and --id flags."""
+        from unittest.mock import MagicMock
+
+        from synth_panel.llm.models import CompletionResponse, TokenUsage, ToolInvocationBlock
+
+        mock_response = CompletionResponse(
+            id="r1",
+            model="test",
+            content=[
+                ToolInvocationBlock(
+                    id="tc1",
+                    name="generate_personas",
+                    input={"personas": [{"name": "Eve", "age": 40, "occupation": "CTO",
+                                         "background": "Led teams.", "personality_traits": ["bold"]}]},
+                ),
+            ],
+            usage=TokenUsage(input_tokens=10, output_tokens=20),
+        )
+
+        mock_client = MagicMock()
+        mock_client.send.return_value = mock_response
+        monkeypatch.setattr("synth_panel.cli.commands.LLMClient", lambda: mock_client)
+
+        code = main([
+            "pack", "generate",
+            "--product", "CRM",
+            "--audience", "sales teams",
+            "--count", "1",
+            "--name", "Sales Personas",
+            "--id", "sales-gen",
+        ])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "Sales Personas" in out
+        assert "sales-gen" in out
+
+    def test_pack_generate_llm_fallback_error(self, capsys, monkeypatch):
+        """pack generate returns 1 when LLM fails to produce structured output."""
+        from unittest.mock import MagicMock
+
+        from synth_panel.llm.models import CompletionResponse, TextBlock, TokenUsage
+
+        mock_response = CompletionResponse(
+            id="r1",
+            model="test",
+            content=[TextBlock(text="Sorry, I cannot do that.")],
+            usage=TokenUsage(input_tokens=10, output_tokens=5),
+        )
+
+        mock_client = MagicMock()
+        mock_client.send.return_value = mock_response
+        monkeypatch.setattr("synth_panel.cli.commands.LLMClient", lambda: mock_client)
+
+        code = main([
+            "pack", "generate",
+            "--product", "widget",
+            "--audience", "everyone",
+        ])
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "structured output" in err.lower() or "tool call" in err.lower()
+
+    def test_pack_generate_invalid_count(self, capsys):
+        """pack generate rejects count outside 1-50."""
+        code = main([
+            "pack", "generate",
+            "--product", "x",
+            "--audience", "y",
+            "--count", "0",
+        ])
+        assert code == 1
+        assert "count" in capsys.readouterr().err.lower()
+
+    def test_pack_generate_json_output(self, capsys, monkeypatch):
+        """pack generate emits JSON when --output-format json is used."""
+        from unittest.mock import MagicMock
+
+        from synth_panel.llm.models import CompletionResponse, TokenUsage, ToolInvocationBlock
+
+        mock_response = CompletionResponse(
+            id="r1",
+            model="test",
+            content=[
+                ToolInvocationBlock(
+                    id="tc1",
+                    name="generate_personas",
+                    input={"personas": [{"name": "Zara", "age": 25, "occupation": "Designer",
+                                         "background": "UX designer.", "personality_traits": ["creative"]}]},
+                ),
+            ],
+            usage=TokenUsage(input_tokens=10, output_tokens=20),
+        )
+
+        mock_client = MagicMock()
+        mock_client.send.return_value = mock_response
+        monkeypatch.setattr("synth_panel.cli.commands.LLMClient", lambda: mock_client)
+
+        code = main([
+            "--output-format", "json",
+            "pack", "generate",
+            "--product", "design tool",
+            "--audience", "designers",
+            "--count", "1",
+        ])
+        assert code == 0
+        data = json.loads(capsys.readouterr().out)
+        assert data["persona_count"] == 1
+
     def test_parser_pack_subcommands(self):
         parser = build_parser()
         args = parser.parse_args(["pack", "list"])
@@ -1194,6 +1354,17 @@ class TestPackCommands:
         args = parser.parse_args(["pack", "export", "my-pack"])
         assert args.pack_command == "export"
         assert args.pack_id == "my-pack"
+
+        args = parser.parse_args([
+            "pack", "generate",
+            "--product", "test product",
+            "--audience", "test audience",
+            "--count", "3",
+        ])
+        assert args.pack_command == "generate"
+        assert args.product == "test product"
+        assert args.audience == "test audience"
+        assert args.count == 3
 
 
 # --- Schema loading tests ---
