@@ -440,6 +440,10 @@ def list_panel_results() -> list[dict[str, Any]]:
             vc = data.get("variant_count", 0)
             if vc:
                 entry["variant_count"] = vc
+            if "instrument_name" in data:
+                entry["instrument_name"] = data["instrument_name"]
+            if "models" in data:
+                entry["models"] = data["models"]
             results.append(entry)
         except Exception:
             continue
@@ -465,8 +469,26 @@ def save_panel_result(
     persona_count: int,
     question_count: int,
     variant_count: int = 0,
+    *,
+    instrument_name: str | None = None,
+    questions: list[dict[str, Any]] | None = None,
+    variants_config: dict[str, Any] | None = None,
+    models: list[str] | None = None,
 ) -> str:
-    """Save panel results and return the result ID."""
+    """Save panel results and return the result ID.
+
+    New optional fields (backward-compatible — omitted when *None*):
+
+    * ``instrument_name``: name/id of the instrument pack used.
+    * ``questions``: question defs with ``text`` and optional
+      ``extraction_schema``.
+    * ``variants_config``: variant generation config (``n``, ``seed``).
+    * ``models``: list of all model identifiers used in the run.
+
+    Per-result entries in *results* may contain ``_variant_of`` and
+    ``_model`` fields; per-response dicts may contain an ``extraction``
+    dict. These are passed through as-is.
+    """
     rid = f"result-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
     p = _results_dir() / f"{rid}.json"
     data: dict[str, Any] = {
@@ -480,5 +502,13 @@ def save_panel_result(
     }
     if variant_count > 0:
         data["variant_count"] = variant_count
+    if instrument_name is not None:
+        data["instrument_name"] = instrument_name
+    if questions is not None:
+        data["questions"] = questions
+    if variants_config is not None:
+        data["variants_config"] = variants_config
+    if models is not None:
+        data["models"] = models
     p.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     return rid
