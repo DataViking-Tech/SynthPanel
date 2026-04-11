@@ -113,6 +113,11 @@ def _run_panel_sync(
     synthesis: bool = True,
     synthesis_model: str | None = None,
     synthesis_prompt: str | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
+    persona_models: dict[str, str] | None = None,
+    extract_schema: dict[str, Any] | None = None,
+    synthesis_temperature: float | None = None,
 ) -> tuple[list[PanelistResult], list[dict[str, Any]], CostTokenUsage, Any, dict[str, Any] | None]:
     """Run panel synchronously. Returns (results, result_dicts, panelist_usage, panelist_cost, synthesis_dict)."""
     client = LLMClient()
@@ -124,6 +129,10 @@ def _run_panel_sync(
         system_prompt_fn=persona_system_prompt,
         question_prompt_fn=build_question_prompt,
         response_schema=response_schema,
+        temperature=temperature,
+        top_p=top_p,
+        persona_models=persona_models,
+        extract_schema=extract_schema,
     )
 
     panelist_usage = ZERO_USAGE
@@ -159,6 +168,7 @@ def _run_panel_sync(
                 panelist_model=model,
                 custom_prompt=synthesis_prompt,
                 panelist_cost=panelist_cost,
+                temperature=synthesis_temperature,
             )
             synthesis_dict = synthesis_result.to_dict()
         except Exception:
@@ -176,6 +186,11 @@ def _run_multi_round_sync(
     synthesis: bool,
     synthesis_model: str | None,
     synthesis_prompt: str | None,
+    temperature: float | None = None,
+    top_p: float | None = None,
+    persona_models: dict[str, str] | None = None,
+    extract_schema: dict[str, Any] | None = None,
+    synthesis_temperature: float | None = None,
 ) -> MultiRoundResult:
     """Drive run_multi_round_panel for v1/v2/v3 instruments."""
     client = LLMClient()
@@ -194,6 +209,7 @@ def _run_multi_round_sync(
             model=synthesis_model,
             panelist_model=model,
             custom_prompt=synthesis_prompt,
+            temperature=synthesis_temperature,
         )
 
     final_fn = _round_synth if synthesis else None
@@ -207,6 +223,10 @@ def _run_multi_round_sync(
         synthesize_round_fn=_round_synth if synthesis else (lambda *a, **kw: None),
         synthesize_final_fn=final_fn,
         response_schema=response_schema,
+        temperature=temperature,
+        top_p=top_p,
+        persona_models=persona_models,
+        extract_schema=extract_schema,
     )
 
 
@@ -236,6 +256,11 @@ async def _run_panel_async_instrument(
     synthesis: bool = True,
     synthesis_model: str | None = None,
     synthesis_prompt: str | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
+    persona_models: dict[str, str] | None = None,
+    extract_schema: dict[str, Any] | None = None,
+    synthesis_temperature: float | None = None,
 ) -> dict[str, Any]:
     """Run a (possibly branching) instrument and return v3-shaped response."""
     total = len(personas)
@@ -252,6 +277,11 @@ async def _run_panel_async_instrument(
             synthesis=synthesis,
             synthesis_model=synthesis_model,
             synthesis_prompt=synthesis_prompt,
+            temperature=temperature,
+            top_p=top_p,
+            persona_models=persona_models,
+            extract_schema=extract_schema,
+            synthesis_temperature=synthesis_temperature,
         ),
         # Multi-round can chain N rounds; budget per panelist scales with rounds.
         timeout=PANELIST_TIMEOUT * max(total, 1) * max(len(instrument.rounds), 1),
@@ -355,6 +385,11 @@ async def _run_panel_async(
     synthesis: bool = True,
     synthesis_model: str | None = None,
     synthesis_prompt: str | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
+    persona_models: dict[str, str] | None = None,
+    extract_schema: dict[str, Any] | None = None,
+    synthesis_temperature: float | None = None,
 ) -> dict[str, Any]:
     """Run panel via asyncio.to_thread with progress notifications."""
     total = len(personas)
@@ -372,6 +407,11 @@ async def _run_panel_async(
             synthesis=synthesis,
             synthesis_model=synthesis_model,
             synthesis_prompt=synthesis_prompt,
+            temperature=temperature,
+            top_p=top_p,
+            persona_models=persona_models,
+            extract_schema=extract_schema,
+            synthesis_temperature=synthesis_temperature,
         ),
         timeout=PANELIST_TIMEOUT * total,
     )
@@ -447,6 +487,8 @@ async def _run_panel_async(
 async def run_prompt(
     prompt: str,
     model: str | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
 ) -> str:
     """Send a single prompt to an LLM and get a response. No personas required.
 
@@ -456,6 +498,8 @@ async def run_prompt(
     Args:
         prompt: The question or prompt to send.
         model: LLM model to use. Defaults to haiku.
+        temperature: Sampling temperature (0.0-1.0). Controls randomness.
+        top_p: Nucleus sampling threshold (0.0-1.0). Alternative to temperature.
     """
     model = model or MCP_DEFAULT_MODEL
     logger.info("run_prompt: model=%s prompt_len=%d", model, len(prompt))
@@ -464,6 +508,8 @@ async def run_prompt(
         model=model,
         max_tokens=4096,
         messages=[InputMessage(role="user", content=[TextBlock(text=prompt)])],
+        temperature=temperature,
+        top_p=top_p,
     )
     response = await asyncio.to_thread(client.send, request)
     usage = CostTokenUsage(
@@ -497,6 +543,11 @@ async def run_panel(
     synthesis: bool = True,
     synthesis_model: str | None = None,
     synthesis_prompt: str | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
+    persona_models: dict[str, str] | None = None,
+    extract_schema: dict[str, Any] | None = None,
+    synthesis_temperature: float | None = None,
     ctx: Context = None,
 ) -> str:
     """Run a full synthetic focus group panel.
@@ -546,6 +597,13 @@ async def run_panel(
             Defaults to true.
         synthesis_model: Model to use for synthesis. Defaults to panelist model.
         synthesis_prompt: Custom synthesis prompt. Replaces the default.
+        temperature: Sampling temperature (0.0-1.0) for panelist responses.
+        top_p: Nucleus sampling threshold (0.0-1.0) for panelist responses.
+        persona_models: Per-persona model overrides. Maps persona name to
+            model alias (e.g. {"Sarah Chen": "sonnet", "Mike": "haiku"}).
+        extract_schema: JSON Schema for structured extraction from responses.
+        synthesis_temperature: Sampling temperature for the synthesis step.
+            Independent of the panelist temperature.
     """
     model = model or MCP_DEFAULT_MODEL
     logger.info("run_panel: model=%s synthesis=%s", model, synthesis)
@@ -576,6 +634,11 @@ async def run_panel(
             synthesis=synthesis,
             synthesis_model=synthesis_model,
             synthesis_prompt=synthesis_prompt,
+            temperature=temperature,
+            top_p=top_p,
+            persona_models=persona_models,
+            extract_schema=extract_schema,
+            synthesis_temperature=synthesis_temperature,
         )
         return json.dumps(result, indent=2)
 
@@ -591,6 +654,11 @@ async def run_panel(
         synthesis=synthesis,
         synthesis_model=synthesis_model,
         synthesis_prompt=synthesis_prompt,
+        temperature=temperature,
+        top_p=top_p,
+        persona_models=persona_models,
+        extract_schema=extract_schema,
+        synthesis_temperature=synthesis_temperature,
     )
     return json.dumps(result, indent=2)
 
@@ -604,6 +672,8 @@ async def run_quick_poll(
     synthesis: bool = True,
     synthesis_model: str | None = None,
     synthesis_prompt: str | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
     ctx: Context = None,
 ) -> str:
     """Quick single-question poll across personas.
@@ -622,6 +692,8 @@ async def run_quick_poll(
             Defaults to true.
         synthesis_model: Model to use for synthesis. Defaults to panelist model.
         synthesis_prompt: Custom synthesis prompt. Replaces the default.
+        temperature: Sampling temperature (0.0-1.0). Controls randomness.
+        top_p: Nucleus sampling threshold (0.0-1.0). Alternative to temperature.
     """
     model = model or MCP_DEFAULT_MODEL
     logger.info("run_quick_poll: model=%s personas=%d", model, len(personas))
@@ -635,6 +707,8 @@ async def run_quick_poll(
         synthesis=synthesis,
         synthesis_model=synthesis_model,
         synthesis_prompt=synthesis_prompt,
+        temperature=temperature,
+        top_p=top_p,
     )
     return json.dumps(result, indent=2)
 
