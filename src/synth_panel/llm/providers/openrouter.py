@@ -47,8 +47,32 @@ class OpenRouterProvider(LLMProvider):
             "Content-Type": "application/json",
         }
 
+    @staticmethod
+    def _strip_prefix(model: str) -> str:
+        """Strip the ``openrouter/`` routing prefix so the API sees the
+        upstream model ID (e.g. ``anthropic/claude-3.5-haiku-20241022``)."""
+        for prefix in OPENROUTER_CONFIG.model_prefixes:
+            if model.startswith(prefix):
+                return model[len(prefix) :]
+        return model
+
     def send(self, request: CompletionRequest) -> CompletionResponse:
         url = f"{self._base_url}/v1/chat/completions"
+        # Strip routing prefix before building the request body
+        if request.model != self._strip_prefix(request.model):
+            from synth_panel.llm.models import CompletionRequest as CR
+
+            request = CR(
+                model=self._strip_prefix(request.model),
+                max_tokens=request.max_tokens,
+                messages=request.messages,
+                system=request.system,
+                tools=request.tools,
+                tool_choice=request.tool_choice,
+                stream=request.stream,
+                temperature=request.temperature,
+                top_p=request.top_p,
+            )
         body = build_openai_body(request)
         try:
             resp = httpx.post(url, headers=self._headers(), json=body, timeout=120.0)
@@ -80,6 +104,21 @@ class OpenRouterProvider(LLMProvider):
 
     def stream(self, request: CompletionRequest) -> Iterator[StreamEvent]:
         url = f"{self._base_url}/v1/chat/completions"
+        # Strip routing prefix before building the request body
+        if request.model != self._strip_prefix(request.model):
+            from synth_panel.llm.models import CompletionRequest as CR
+
+            request = CR(
+                model=self._strip_prefix(request.model),
+                max_tokens=request.max_tokens,
+                messages=request.messages,
+                system=request.system,
+                tools=request.tools,
+                tool_choice=request.tool_choice,
+                stream=True,
+                temperature=request.temperature,
+                top_p=request.top_p,
+            )
         body = build_openai_body(request, stream=True)
         try:
             with httpx.stream(
