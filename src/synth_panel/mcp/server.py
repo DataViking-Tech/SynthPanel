@@ -924,12 +924,12 @@ async def run_panel(
             if instrument is not None:
                 raw = instrument.get("instrument", instrument)
                 inst = parse_instrument(raw)
-                ens_questions = [{"text": q.text} for q in inst.questions]
+                ens_questions = [{"text": q["text"]} for q in inst.questions]
             elif instrument_pack is not None:
                 pack_body = _data_load_instrument_pack(instrument_pack)
                 raw = pack_body.get("instrument", pack_body)
                 inst = parse_instrument(raw)
-                ens_questions = [{"text": q.text} for q in inst.questions]
+                ens_questions = [{"text": q["text"]} for q in inst.questions]
         ens_result = await asyncio.to_thread(
             _run_ensemble_sync,
             merged,
