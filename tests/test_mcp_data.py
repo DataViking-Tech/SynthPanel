@@ -370,7 +370,10 @@ class TestPanelResultSchemaExpansion:
     def test_full_schema_save_load(self):
         """End-to-end round-trip with all new fields populated."""
         questions = [
-            {"text": "What frustrates you?", "extraction_schema": {"type": "object", "properties": {"themes": {"type": "array"}}}},
+            {
+                "text": "What frustrates you?",
+                "extraction_schema": {"type": "object", "properties": {"themes": {"type": "array"}}},
+            },
         ]
         results = [
             {
