@@ -8,7 +8,7 @@ into a structured SynthesisResult via an LLM call using tool-use forcing
 from __future__ import annotations
 
 import json
-import sys
+import logging
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -24,6 +24,8 @@ from synth_panel.llm.models import InputMessage, TextBlock
 from synth_panel.llm.models import TokenUsage as LLMTokenUsage
 from synth_panel.prompts import SYNTHESIS_PROMPT, SYNTHESIS_PROMPT_VERSION
 from synth_panel.structured import StructuredOutputConfig, StructuredOutputEngine
+
+logger = logging.getLogger(__name__)
 
 
 def _convert_llm_usage(llm_usage: LLMTokenUsage) -> TokenUsage:
@@ -156,7 +158,7 @@ def _print_cost_estimate(
     parts = [f"Synthesis will cost ~{est.format_usd()}"]
     if panelist_cost is not None:
         parts.append(f"(panelist cost was {panelist_cost.format_usd()})")
-    print(" ".join(parts), file=sys.stderr)
+    logger.info(" ".join(parts))
 
 
 def synthesize_panel(

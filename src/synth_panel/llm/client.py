@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import random
 import time
 from collections.abc import Callable, Iterator
@@ -15,6 +16,8 @@ from synth_panel.llm.providers.gemini import GEMINI_CONFIG, GeminiProvider
 from synth_panel.llm.providers.openai_compat import OPENAI_COMPAT_CONFIG, OpenAICompatibleProvider
 from synth_panel.llm.providers.openrouter import OPENROUTER_CONFIG, OpenRouterProvider
 from synth_panel.llm.providers.xai import XAI_CONFIG, XAIProvider
+
+logger = logging.getLogger(__name__)
 
 # Provider detection order (SPEC.md §2 — Provider Resolution).
 _PROVIDER_REGISTRY: list[tuple[ProviderConfig, type[LLMProvider]]] = [
@@ -110,7 +113,18 @@ class LLMClient:
         """Send a blocking completion request with automatic retry."""
         request = self._prepare(request)
         provider = self._resolve_provider(request.model)
-        return self._with_retry(provider.send, request)
+        logger.debug("send model=%s max_tokens=%d", request.model, request.max_tokens)
+        t0 = time.monotonic()
+        response = self._with_retry(provider.send, request)
+        elapsed = time.monotonic() - t0
+        logger.debug(
+            "response model=%s latency=%.2fs tokens_in=%d tokens_out=%d",
+            response.model,
+            elapsed,
+            response.usage.input_tokens,
+            response.usage.output_tokens,
+        )
+        return response
 
     def stream(self, request: CompletionRequest) -> Iterator[StreamEvent]:
         """Send a streaming request. Retry is NOT applied to streams."""
@@ -136,6 +150,13 @@ class LLMClient:
                     break
                 # Exponential backoff with full jitter
                 jitter = random.uniform(0, backoff)
+                logger.warning(
+                    "retryable error (attempt %d/%d, backoff=%.2fs): %s",
+                    attempt + 1,
+                    self._max_retries + 1,
+                    jitter,
+                    exc,
+                )
                 time.sleep(jitter)
                 backoff = min(backoff * 2, self._max_backoff)
 

@@ -55,6 +55,20 @@ def build_parser() -> argparse.ArgumentParser:
         default="text",
         help="Output format (default: text).",
     )
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        default=False,
+        help="Enable verbose (DEBUG) logging.",
+    )
+    parser.add_argument(
+        "--quiet",
+        "-q",
+        action="store_true",
+        default=False,
+        help="Suppress most output; only show warnings and errors.",
+    )
 
     # Subcommands
     subparsers = parser.add_subparsers(dest="command")

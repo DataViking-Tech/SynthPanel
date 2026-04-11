@@ -6,7 +6,9 @@ Manages lifecycle of independent agent sessions running concurrently.
 
 from __future__ import annotations
 
+import logging
 import threading
+import time as _time
 import uuid
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -25,6 +27,8 @@ from synth_panel.persistence import Session
 from synth_panel.routing import route_round
 from synth_panel.runtime import AgentRuntime, TurnSummary
 from synth_panel.structured.output import StructuredOutputConfig, StructuredOutputEngine
+
+logger = logging.getLogger(__name__)
 
 
 def _convert_llm_usage(llm_usage: LLMTokenUsage) -> TokenUsage:
@@ -313,6 +317,8 @@ def _run_panelist(
     name = persona.get("name", "Anonymous")
     tracker = UsageTracker()
     responses: list[dict[str, Any]] = []
+    t0 = _time.monotonic()
+    logger.info("panelist %s starting (model=%s, questions=%d)", name, model, len(questions))
 
     try:
         # Transition: spawning → ready_for_prompt
@@ -455,6 +461,14 @@ def _run_panelist(
         registry.set_result(worker_id, {"responses": responses}, tracker.cumulative_usage)
         registry.transition(worker_id, WorkerStatus.FINISHED, "all questions complete")
 
+        elapsed = _time.monotonic() - t0
+        logger.info(
+            "panelist %s completed in %.2fs (tokens=%d)",
+            name,
+            elapsed,
+            tracker.cumulative_usage.total_tokens,
+        )
+
         result = PanelistResult(
             persona_name=name,
             responses=responses,
@@ -464,6 +478,8 @@ def _run_panelist(
         return result, session
 
     except Exception as exc:
+        elapsed = _time.monotonic() - t0
+        logger.error("panelist %s failed after %.2fs: %s", name, elapsed, exc)
         # Transition to failed
         try:
             registry.set_error(worker_id, FailureKind.PROTOCOL, str(exc))
@@ -526,6 +542,15 @@ def run_panel_parallel(
     registry = WorkerRegistry()
     effective_workers = max_workers or len(personas)
     sentiment_cache: dict[str, str] = {}
+    request_id = uuid.uuid4().hex[:12]
+    logger.info(
+        "[%s] panel starting: %d personas, %d questions, model=%s, workers=%d",
+        request_id,
+        len(personas),
+        len(questions),
+        model,
+        effective_workers,
+    )
 
     # Create workers and map to personas (preserves order)
     worker_ids: list[str] = []
@@ -644,6 +669,11 @@ def run_multi_round_panel(
     if not instrument.rounds:
         return MultiRoundResult(rounds=[], warnings=list(instrument.warnings))
 
+    request_id = uuid.uuid4().hex[:12]
+    logger.info(
+        "[%s] multi-round panel starting: %d personas, %d rounds", request_id, len(personas), len(instrument.rounds)
+    )
+
     by_name = _round_lookup(instrument)
     sessions: dict[str, Session] = {}
     executed: list[RoundResult] = []
@@ -666,6 +696,7 @@ def run_multi_round_panel(
 
         current = by_name[next_round]
         visited.add(current.name)
+        logger.info("executing round '%s' (%d/%d visited)", current.name, len(visited), len(by_name))
 
         panelist_results, _registry, sessions = run_panel_parallel(
             client=client,
@@ -716,6 +747,7 @@ def run_multi_round_panel(
             branch_desc = "linear"
 
         path.append({"round": current.name, "branch": branch_desc, "next": target})
+        logger.debug("route decision: round=%s branch=%s next=%s", current.name, branch_desc, target)
         next_round = target
 
     terminal = executed[-1].name if executed else None

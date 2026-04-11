@@ -6,7 +6,10 @@ cost estimation, budget enforcement, and human-readable summaries.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -213,6 +216,13 @@ class UsageTracker:
         """Append a single turn's usage and update the running total."""
         self._turns.append(usage)
         self._cumulative = self._cumulative + usage
+        logger.debug(
+            "usage turn %d: in=%d out=%d cumulative=%d",
+            len(self._turns),
+            usage.input_tokens,
+            usage.output_tokens,
+            self._cumulative.total_tokens,
+        )
 
     # --- Queries ---------------------------------------------------------
 
