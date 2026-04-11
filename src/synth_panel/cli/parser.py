@@ -373,6 +373,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="DAG output format (default: text).",
     )
 
+    # analyze
+    analyze_parser = subparsers.add_parser(
+        "analyze",
+        help="Analyze a saved panel result (descriptive, inferential, cross-model, clusters).",
+    )
+    analyze_parser.add_argument(
+        "result",
+        metavar="RESULT_ID",
+        help="Panel result ID (from 'synthpanel panel run') or path to a result JSON file.",
+    )
+    analyze_parser.add_argument(
+        "--output",
+        choices=["text", "json", "csv"],
+        default="text",
+        help="Output format (default: text).",
+    )
+
     # mcp-serve
     subparsers.add_parser(
         "mcp-serve",
