@@ -170,7 +170,7 @@ class BootstrapResult:
     method: str = "BCa"
 
 
-def proportion_stat(value) -> Callable:
+def proportion_stat(value: object) -> Callable[[list[object]], float]:
     """Return a stat function that computes the proportion of *value* in data."""
 
     def _fn(data: list) -> float:
@@ -313,9 +313,9 @@ def chi_squared_test(
     if not observed:
         raise ValueError("observed must not be empty")
 
-    for k, v in observed.items():
-        if v < 0:
-            raise ValueError(f"observed count for {k!r} is negative: {v}")
+    for k, count in observed.items():
+        if count < 0:
+            raise ValueError(f"observed count for {k!r} is negative: {count}")
 
     k_cats = len(observed)
     total = sum(observed.values())

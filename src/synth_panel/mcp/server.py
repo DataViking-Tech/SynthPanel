@@ -80,7 +80,7 @@ from synth_panel.orchestrator import (
     run_panel_parallel,
 )
 from synth_panel.prompts import build_question_prompt, persona_system_prompt
-from synth_panel.synthesis import synthesize_panel
+from synth_panel.synthesis import SynthesisResult, synthesize_panel
 
 logger = logging.getLogger(__name__)
 
@@ -201,7 +201,7 @@ def _run_multi_round_sync(
         questions: list[dict[str, Any]],
         *,
         model: str,
-    ):
+    ) -> SynthesisResult:
         return synthesize_panel(
             c,
             panelist_results,

@@ -45,6 +45,8 @@ class _SafeFormatter(string.Formatter):
     def get_field(self, field_name: str, args: tuple, kwargs: dict) -> tuple[Any, str]:  # type: ignore[override]
         # Block dotted/bracket attribute access to prevent injection
         # Only allow simple key lookups
+        first: Any
+        rest: Any
         first, rest = field_name, iter([])
         try:
             import _string

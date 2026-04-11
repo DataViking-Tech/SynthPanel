@@ -309,7 +309,7 @@ def _run_panelist(
     extract_schema: dict[str, Any] | None = None,
     temperature: float | None = None,
     top_p: float | None = None,
-) -> tuple[PanelistResult, Session]:
+) -> tuple[PanelistResult, Session | None]:
     """Execute a single panelist's full interview. Runs in a worker thread.
 
     Manages the worker lifecycle: spawning → ready → running → finished/failed.
@@ -469,13 +469,13 @@ def _run_panelist(
             tracker.cumulative_usage.total_tokens,
         )
 
-        result = PanelistResult(
+        panelist_result = PanelistResult(
             persona_name=name,
             responses=responses,
             usage=tracker.cumulative_usage,
             model=model,
         )
-        return result, session
+        return panelist_result, session
 
     except Exception as exc:
         elapsed = _time.monotonic() - t0
@@ -594,8 +594,9 @@ def run_panel_parallel(
             try:
                 result, sess = future.result()
                 results[idx] = result
-                with session_lock:
-                    out_sessions[result.persona_name] = sess
+                if sess is not None:
+                    with session_lock:
+                        out_sessions[result.persona_name] = sess
             except Exception as exc:
                 name = personas[idx].get("name", "Anonymous")
                 results[idx] = PanelistResult(

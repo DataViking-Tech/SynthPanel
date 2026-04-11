@@ -51,7 +51,7 @@ class SessionState:
 PROMPT_CHAR = "\u276f "  # ❯
 
 
-def _extract_response_text(summary) -> str:
+def _extract_response_text(summary: Any) -> str:
     """Extract plain text from a TurnSummary's assistant messages."""
     parts: list[str] = []
     for msg in summary.assistant_messages:
