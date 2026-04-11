@@ -109,10 +109,7 @@ def get_domain_template(name: str) -> dict[str, str]:
 
 def list_domain_templates() -> list[dict[str, str]]:
     """Return metadata for all registered domain templates."""
-    return [
-        {"name": name, "description": t["description"]}
-        for name, t in sorted(_TEMPLATES.items())
-    ]
+    return [{"name": name, "description": t["description"]} for name, t in sorted(_TEMPLATES.items())]
 
 
 # ---------------------------------------------------------------------------
