@@ -9,8 +9,10 @@ via json.dumps before condition evaluation.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
+import threading
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
@@ -18,6 +20,9 @@ if TYPE_CHECKING:
     from synth_panel.llm.client import LLMClient
 
 log = logging.getLogger(__name__)
+
+# A no-op context manager used when no lock is supplied.
+_noop_lock = contextlib.nullcontext()
 
 # ---------------------------------------------------------------------------
 # Evaluator registry
@@ -55,6 +60,7 @@ def _eval_sentiment(
     response_text: str,
     client: LLMClient,
     sentiment_cache: dict[str, str] | None = None,
+    sentiment_cache_lock: threading.Lock | None = None,
 ) -> bool:
     """Classify response sentiment via a haiku LLM call.
 
@@ -64,6 +70,8 @@ def _eval_sentiment(
         client: LLM client for making the classification call.
         sentiment_cache: Optional cache mapping response_text -> sentiment.
             Avoids duplicate LLM calls for the same response.
+        sentiment_cache_lock: Optional lock protecting sentiment_cache
+            mutations across ThreadPoolExecutor workers.
 
     Returns:
         True if the classified sentiment matches *target*.
@@ -72,11 +80,13 @@ def _eval_sentiment(
 
     target = target.lower().strip()
 
-    # Check cache first
-    if sentiment_cache is not None and response_text in sentiment_cache:
-        cached = sentiment_cache[response_text]
-        log.debug("sentiment cache hit: %r -> %s", response_text[:40], cached)
-        return cached == target
+    # Check cache first (under lock when shared across threads)
+    if sentiment_cache is not None:
+        with sentiment_cache_lock or _noop_lock:
+            if response_text in sentiment_cache:
+                cached = sentiment_cache[response_text]
+                log.debug("sentiment cache hit: %r -> %s", response_text[:40], cached)
+                return cached == target
 
     prompt = _SENTIMENT_PROMPT.format(text=response_text)
     request = CompletionRequest(
@@ -96,9 +106,10 @@ def _eval_sentiment(
         )
         classification = "neutral"
 
-    # Populate cache
+    # Populate cache (under lock when shared across threads)
     if sentiment_cache is not None:
-        sentiment_cache[response_text] = classification
+        with sentiment_cache_lock or _noop_lock:
+            sentiment_cache[response_text] = classification
 
     return classification == target
 
@@ -114,6 +125,7 @@ def evaluate_condition(
     *,
     client: LLMClient | None = None,
     sentiment_cache: dict[str, str] | None = None,
+    sentiment_cache_lock: threading.Lock | None = None,
 ) -> bool:
     """Evaluate whether a follow-up should fire.
 
@@ -129,6 +141,8 @@ def evaluate_condition(
         client: Optional LLM client, required for ``response_sentiment``.
         sentiment_cache: Optional cache to avoid duplicate LLM calls for
             the same response text.
+        sentiment_cache_lock: Optional lock protecting sentiment_cache
+            mutations across ThreadPoolExecutor workers.
 
     Returns:
         True if the follow-up should be asked.
@@ -153,7 +167,7 @@ def evaluate_condition(
             # Graceful degradation: no client → default to True
             log.debug("response_sentiment: no client, defaulting to True")
             return True
-        return _eval_sentiment(arg, response_text, client, sentiment_cache)
+        return _eval_sentiment(arg, response_text, client, sentiment_cache, sentiment_cache_lock)
 
     evaluator = EVALUATORS.get(ctype)
     if evaluator is None:
