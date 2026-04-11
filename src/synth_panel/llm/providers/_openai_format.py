@@ -20,6 +20,7 @@ from synth_panel.llm.models import (
     TokenUsage,
     ToolChoiceKind,
     ToolInvocationBlock,
+    ToolResultBlock,
 )
 
 # ---------------------------------------------------------------------------
@@ -79,7 +80,7 @@ def build_openai_body(
             ]
         else:
             # Check for tool result blocks
-            tool_results = [b for b in msg.content if hasattr(b, "tool_use_id")]
+            tool_results = [b for b in msg.content if isinstance(b, ToolResultBlock)]
             if tool_results:
                 # OpenAI uses role=tool for tool results
                 for tr in tool_results:

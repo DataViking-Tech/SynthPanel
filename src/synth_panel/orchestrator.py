@@ -319,6 +319,8 @@ def _run_panelist(
     responses: list[dict[str, Any]] = []
     t0 = _time.monotonic()
     logger.info("panelist %s starting (model=%s, questions=%d)", name, model, len(questions))
+    if session is None:
+        session = Session()
 
     try:
         # Transition: spawning → ready_for_prompt
@@ -329,8 +331,6 @@ def _run_panelist(
         registry.transition(worker_id, WorkerStatus.PROMPT_ACCEPTED, "prompt received")
         registry.transition(worker_id, WorkerStatus.RUNNING, "executing questions")
 
-        if session is None:
-            session = Session()
         runtime = AgentRuntime(
             client=client,
             session=session,
@@ -366,20 +366,20 @@ def _run_panelist(
 
                     # Build messages from session history for structured extraction
                     messages = [InputMessage(role="user", content=[TextBlock(text=question_text)])]
-                    result = structured_engine.extract(
+                    struct_result = structured_engine.extract(
                         model=model,
                         max_tokens=4096,
                         messages=messages,
                         config=structured_config,
                         system=system_prompt,
                     )
-                    tracker.record_turn(_convert_llm_usage(result.response.usage))
+                    tracker.record_turn(_convert_llm_usage(struct_result.response.usage))
                     responses.append(
                         {
                             "question": question_text,
-                            "response": result.data,
+                            "response": struct_result.data,
                             "structured": True,
-                            "is_fallback": result.is_fallback,
+                            "is_fallback": struct_result.is_fallback,
                         }
                     )
                 else:

@@ -12,7 +12,7 @@ from synth_panel.cli.output import OutputFormat, emit
 from synth_panel.cli.slash import dispatch_slash
 from synth_panel.llm.client import LLMClient
 from synth_panel.persistence import Session
-from synth_panel.runtime import AgentRuntime
+from synth_panel.runtime import AgentRuntime, TurnSummary
 
 
 class SessionState:
@@ -51,7 +51,7 @@ class SessionState:
 PROMPT_CHAR = "\u276f "  # ❯
 
 
-def _extract_response_text(summary) -> str:
+def _extract_response_text(summary: TurnSummary) -> str:
     """Extract plain text from a TurnSummary's assistant messages."""
     parts: list[str] = []
     for msg in summary.assistant_messages:

@@ -9,13 +9,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, cast, runtime_checkable
 
 from synth_panel.cost import ZERO_USAGE, TokenUsage, UsageTracker
 from synth_panel.llm.client import LLMClient
 from synth_panel.llm.models import (
     CompletionRequest,
     CompletionResponse,
+    ContentBlock,
     InputMessage,
     TextBlock,
     ToolChoice,
@@ -191,7 +192,7 @@ def _session_messages_to_input(messages: list[ConversationMessage]) -> list[Inpu
                 )
             )
         elif msg.role in ("user", "assistant"):
-            content_blocks = []
+            content_blocks: list[ContentBlock] = []
             for block in msg.content:
                 btype = block.get("type", "text")
                 if btype == "text":
@@ -212,7 +213,7 @@ def _session_messages_to_input(messages: list[ConversationMessage]) -> list[Inpu
                             is_error=block.get("is_error", False),
                         )
                     )
-            result.append(InputMessage(role=msg.role, content=content_blocks))
+            result.append(InputMessage(role=cast(Literal["user", "assistant"], msg.role), content=content_blocks))
     return result
 
 

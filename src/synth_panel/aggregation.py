@@ -178,7 +178,7 @@ def robustness_report(
     if not scorable:
         raise ValueError("no groups with both an original and variants")
 
-    n_questions = max(len(g.original.responses) for g in scorable)
+    n_questions = max(len(g.original.responses) for g in scorable if g.original is not None)
 
     findings: list[FindingRobustness] = []
     per_persona_all: dict[str, list[float]] = {}
@@ -187,10 +187,11 @@ def robustness_report(
         per_persona: dict[str, float] = {}
 
         for group in scorable:
-            if qi >= len(group.original.responses):
+            original = group.original
+            if original is None or qi >= len(original.responses):
                 continue
 
-            ref = extract(group.original.responses[qi])
+            ref = extract(original.responses[qi])
 
             k = 0
             agreements = 0

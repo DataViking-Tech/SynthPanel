@@ -21,6 +21,7 @@ from synth_panel.llm.models import (
     TokenUsage,
     ToolChoiceKind,
     ToolInvocationBlock,
+    ToolResultBlock,
 )
 from synth_panel.llm.providers.base import LLMProvider, ProviderConfig
 
@@ -60,7 +61,7 @@ def _build_content_blocks(blocks: list[ContentBlock]) -> list[dict[str, Any]]:
                     "input": b.input,
                 }
             )
-        elif hasattr(b, "tool_use_id"):  # ToolResultBlock
+        elif isinstance(b, ToolResultBlock):
             content = [{"type": "text", "text": c.text} for c in b.content]
             out.append(
                 {
