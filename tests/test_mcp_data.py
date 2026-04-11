@@ -234,6 +234,180 @@ class TestPanelResults:
         assert f"{rid}.pre-extend" not in ids
 
 
+class TestPanelResultSchemaExpansion:
+    """Tests for expanded save_panel_result schema (sp-5on.6)."""
+
+    def test_instrument_metadata_round_trip(self):
+        """instrument_name, questions, variants_config, models round-trip."""
+        questions = [
+            {"text": "How do you feel?", "extraction_schema": {"type": "object"}},
+            {"text": "Rate 1-10"},
+        ]
+        rid = save_panel_result(
+            results=[{"persona": "Alice", "responses": []}],
+            model="sonnet",
+            total_usage={"input_tokens": 100, "output_tokens": 50},
+            total_cost="$0.01",
+            persona_count=1,
+            question_count=2,
+            instrument_name="pricing-discovery",
+            questions=questions,
+            variants_config={"n": 3, "seed": 42},
+            models=["sonnet", "haiku"],
+        )
+        result = get_panel_result(rid)
+        assert result["instrument_name"] == "pricing-discovery"
+        assert result["questions"] == questions
+        assert result["variants_config"] == {"n": 3, "seed": 42}
+        assert result["models"] == ["sonnet", "haiku"]
+
+    def test_new_fields_optional_backward_compat(self):
+        """Existing results without new fields still load fine."""
+        rid = save_panel_result(
+            results=[{"persona": "Bob", "responses": []}],
+            model="haiku",
+            total_usage={"input_tokens": 10, "output_tokens": 5},
+            total_cost="$0.001",
+            persona_count=1,
+            question_count=1,
+        )
+        result = get_panel_result(rid)
+        assert "instrument_name" not in result
+        assert "questions" not in result
+        assert "variants_config" not in result
+        assert "models" not in result
+
+    def test_per_result_variant_and_model_fields(self):
+        """Per-result _variant_of and _model pass through."""
+        results = [
+            {
+                "persona": "Alice",
+                "_variant_of": "Alice",
+                "_model": "sonnet",
+                "responses": [{"question": "Q1", "response": "A1"}],
+            },
+            {
+                "persona": "Alice (v2)",
+                "_variant_of": "Alice",
+                "_model": "haiku",
+                "responses": [{"question": "Q1", "response": "A1b"}],
+            },
+        ]
+        rid = save_panel_result(
+            results=results,
+            model="sonnet",
+            total_usage={"input_tokens": 200, "output_tokens": 100},
+            total_cost="$0.02",
+            persona_count=2,
+            question_count=1,
+        )
+        loaded = get_panel_result(rid)
+        assert loaded["results"][0]["_variant_of"] == "Alice"
+        assert loaded["results"][0]["_model"] == "sonnet"
+        assert loaded["results"][1]["_variant_of"] == "Alice"
+        assert loaded["results"][1]["_model"] == "haiku"
+
+    def test_per_response_extraction_data(self):
+        """Per-response extraction dicts pass through."""
+        results = [
+            {
+                "persona": "Alice",
+                "responses": [
+                    {
+                        "question": "Rate this product",
+                        "response": "I'd give it an 8 out of 10",
+                        "extraction": {"rating": 8, "sentiment": "positive"},
+                        "extraction_is_fallback": False,
+                    },
+                ],
+            },
+        ]
+        rid = save_panel_result(
+            results=results,
+            model="sonnet",
+            total_usage={"input_tokens": 150, "output_tokens": 75},
+            total_cost="$0.015",
+            persona_count=1,
+            question_count=1,
+        )
+        loaded = get_panel_result(rid)
+        resp = loaded["results"][0]["responses"][0]
+        assert resp["extraction"] == {"rating": 8, "sentiment": "positive"}
+        assert resp["extraction_is_fallback"] is False
+
+    def test_list_surfaces_instrument_name_and_models(self):
+        """list_panel_results includes instrument_name and models when present."""
+        save_panel_result(
+            results=[],
+            model="sonnet",
+            total_usage={},
+            total_cost="$0.00",
+            persona_count=0,
+            question_count=0,
+            instrument_name="ux-friction",
+            models=["sonnet", "haiku"],
+        )
+        listing = list_panel_results()
+        assert len(listing) == 1
+        assert listing[0]["instrument_name"] == "ux-friction"
+        assert listing[0]["models"] == ["sonnet", "haiku"]
+
+    def test_list_omits_new_fields_when_absent(self):
+        """list_panel_results omits instrument_name/models for old results."""
+        save_panel_result(
+            results=[],
+            model="haiku",
+            total_usage={},
+            total_cost="$0.00",
+            persona_count=0,
+            question_count=0,
+        )
+        listing = list_panel_results()
+        assert len(listing) == 1
+        assert "instrument_name" not in listing[0]
+        assert "models" not in listing[0]
+
+    def test_full_schema_save_load(self):
+        """End-to-end round-trip with all new fields populated."""
+        questions = [
+            {"text": "What frustrates you?", "extraction_schema": {"type": "object", "properties": {"themes": {"type": "array"}}}},
+        ]
+        results = [
+            {
+                "persona": "Sarah",
+                "_variant_of": "Sarah",
+                "_model": "sonnet",
+                "responses": [
+                    {
+                        "question": "What frustrates you?",
+                        "response": "Slow load times",
+                        "extraction": {"themes": ["performance"]},
+                    },
+                ],
+            },
+        ]
+        rid = save_panel_result(
+            results=results,
+            model="sonnet",
+            total_usage={"input_tokens": 500, "output_tokens": 200},
+            total_cost="$0.05",
+            persona_count=1,
+            question_count=1,
+            instrument_name="ux-friction",
+            questions=questions,
+            variants_config={"n": 2, "seed": 123},
+            models=["sonnet"],
+        )
+        loaded = get_panel_result(rid)
+        assert loaded["instrument_name"] == "ux-friction"
+        assert loaded["questions"] == questions
+        assert loaded["variants_config"] == {"n": 2, "seed": 123}
+        assert loaded["models"] == ["sonnet"]
+        assert loaded["results"][0]["_variant_of"] == "Sarah"
+        assert loaded["results"][0]["_model"] == "sonnet"
+        assert loaded["results"][0]["responses"][0]["extraction"] == {"themes": ["performance"]}
+
+
 # ---------------------------------------------------------------------------
 # Session persistence
 # ---------------------------------------------------------------------------
