@@ -243,6 +243,7 @@ class PanelistResult:
     responses: list[dict[str, Any]]
     usage: TokenUsage
     error: str | None = None
+    model: str | None = None
 
 
 @dataclass
@@ -458,6 +459,7 @@ def _run_panelist(
             persona_name=name,
             responses=responses,
             usage=tracker.cumulative_usage,
+            model=model,
         )
         return result, session
 
@@ -474,6 +476,7 @@ def _run_panelist(
             responses=responses,
             usage=tracker.cumulative_usage,
             error=str(exc),
+            model=model,
         ), session
 
 
@@ -490,6 +493,7 @@ def run_panel_parallel(
     extract_schema: dict[str, Any] | None = None,
     temperature: float | None = None,
     top_p: float | None = None,
+    persona_models: dict[str, str] | None = None,
 ) -> tuple[list[PanelistResult], WorkerRegistry, dict[str, Session]]:
     """Run all panelists in parallel and return ordered results.
 
@@ -497,7 +501,7 @@ def run_panel_parallel(
         client: Shared LLM client (must be thread-safe for concurrent sends).
         personas: List of persona definitions.
         questions: List of question definitions from the instrument.
-        model: Model alias to use for all panelists.
+        model: Default model alias (used when no per-persona override exists).
         system_prompt_fn: Builds system prompt from a persona dict.
         question_prompt_fn: Builds question text from a question dict.
         max_workers: Max concurrent threads. Defaults to number of personas.
@@ -512,6 +516,8 @@ def run_panel_parallel(
             each text response is followed by a second LLM call that extracts
             structured data matching this schema. The result is stored under
             an ``extraction`` key alongside the raw ``response``.
+        persona_models: Optional mapping of persona name → model override.
+            Resolution order: persona_models[name] > model (global default).
 
     Returns:
         Tuple of (ordered results matching persona order, registry,
@@ -537,6 +543,8 @@ def run_panel_parallel(
         for idx, (persona, worker_id) in enumerate(zip(personas, worker_ids)):
             name = persona.get("name", "Anonymous")
             existing_session = (sessions or {}).get(name)
+            # Resolve per-persona model: persona_models mapping > global default
+            effective_model = (persona_models or {}).get(name, model)
             future = executor.submit(
                 _run_panelist,
                 registry,
@@ -544,7 +552,7 @@ def run_panel_parallel(
                 client,
                 persona,
                 questions,
-                model,
+                effective_model,
                 system_prompt_fn,
                 question_prompt_fn,
                 response_schema,
@@ -570,6 +578,7 @@ def run_panel_parallel(
                     responses=[],
                     usage=ZERO_USAGE,
                     error=str(exc),
+                    model=model,
                 )
 
     # All slots should be filled; cast away None
@@ -612,6 +621,7 @@ def run_multi_round_panel(
     extract_schema: dict[str, Any] | None = None,
     temperature: float | None = None,
     top_p: float | None = None,
+    persona_models: dict[str, str] | None = None,
 ) -> MultiRoundResult:
     """Execute a (possibly branching) multi-round panel run.
 
@@ -670,6 +680,7 @@ def run_multi_round_panel(
             extract_schema=extract_schema,
             temperature=temperature,
             top_p=top_p,
+            persona_models=persona_models,
         )
 
         synthesis = synthesize_round_fn(client, panelist_results, current.questions, model=model)

@@ -85,6 +85,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to a YAML file defining the survey/instrument.",
     )
     panel_run_parser.add_argument(
+        "--models",
+        default=None,
+        metavar="SPEC",
+        help=(
+            "Multi-model ensemble spec: comma-separated model:weight pairs. "
+            "E.g. 'haiku:0.5,gemini-2.5-flash:0.5'. Personas are assigned "
+            "models proportionally by weight. Mutually exclusive with --model."
+        ),
+    )
+    panel_run_parser.add_argument(
         "--schema",
         default=None,
         metavar="SCHEMA",
