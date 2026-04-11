@@ -16,6 +16,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: read
+      checks: read
     outputs:
       tag: ${{ steps.bump.outputs.tag }}
       skipped: ${{ steps.check.outputs.skipped }}
@@ -56,6 +57,41 @@ jobs:
           echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
           echo "skipped=false" >> "$GITHUB_OUTPUT"
           echo "Bump type: $BUMP"
+
+      - name: Verify CI checks passed
+        if: steps.check.outputs.skipped != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          echo "Verifying CI status for PR head commit: $HEAD_SHA"
+
+          RUNS=$(gh api "repos/${{ github.repository }}/commits/${HEAD_SHA}/check-runs" \
+            --paginate --jq '.check_runs[] | select(.name != "auto-tag") | {name: .name, status: .status, conclusion: .conclusion}')
+
+          if [ -z "$RUNS" ]; then
+            echo "::error::No CI check runs found for commit $HEAD_SHA — refusing to tag"
+            exit 1
+          fi
+
+          echo "Check runs:"
+          echo "$RUNS" | jq -s '.'
+
+          INCOMPLETE=$(echo "$RUNS" | jq -s '[.[] | select(.status != "completed")] | length')
+          if [ "$INCOMPLETE" -gt 0 ]; then
+            echo "::error::${INCOMPLETE} check(s) still running — refusing to tag"
+            echo "$RUNS" | jq -s '[.[] | select(.status != "completed")]'
+            exit 1
+          fi
+
+          FAILED=$(echo "$RUNS" | jq -s '[.[] | select(.conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral")] | length')
+          if [ "$FAILED" -gt 0 ]; then
+            echo "::error::${FAILED} check(s) did not pass — refusing to tag"
+            echo "$RUNS" | jq -s '[.[] | select(.conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral")]'
+            exit 1
+          fi
+
+          echo "All CI checks passed ✓"
 
       - name: Compute next version
         if: steps.check.outputs.skipped != 'true'
