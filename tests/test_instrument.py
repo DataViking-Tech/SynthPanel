@@ -423,3 +423,120 @@ class TestV3Branching:
                     ],
                 }
             )
+
+
+# ---------------------------------------------------------------------------
+# extraction_schema per question
+# ---------------------------------------------------------------------------
+
+
+class TestExtractionSchema:
+    def test_v1_string_schema_name_accepted(self):
+        """Known schema names pass validation."""
+        data = {
+            "version": 1,
+            "questions": [
+                {"text": "Rate this", "extraction_schema": "likert"},
+            ],
+        }
+        inst = parse_instrument(data)
+        assert inst.questions[0]["extraction_schema"] == "likert"
+
+    def test_v1_inline_dict_schema_accepted(self):
+        """Inline dict schemas pass validation without registry lookup."""
+        schema = {"type": "object", "properties": {"score": {"type": "integer"}}}
+        data = {
+            "version": 1,
+            "questions": [
+                {"text": "Score it", "extraction_schema": schema},
+            ],
+        }
+        inst = parse_instrument(data)
+        assert inst.questions[0]["extraction_schema"] == schema
+
+    def test_v1_unknown_schema_name_rejected(self):
+        """Unknown schema names raise InstrumentError at parse time."""
+        data = {
+            "version": 1,
+            "questions": [
+                {"text": "Q?", "extraction_schema": "nonexistent"},
+            ],
+        }
+        with pytest.raises(InstrumentError, match="Unknown extraction schema.*nonexistent"):
+            parse_instrument(data)
+
+    def test_v1_invalid_type_rejected(self):
+        """Non-string, non-dict extraction_schema raises InstrumentError."""
+        data = {
+            "version": 1,
+            "questions": [
+                {"text": "Q?", "extraction_schema": 42},
+            ],
+        }
+        with pytest.raises(InstrumentError, match="extraction_schema must be a string"):
+            parse_instrument(data)
+
+    def test_v1_no_extraction_schema_ok(self):
+        """Questions without extraction_schema parse fine."""
+        data = {"version": 1, "questions": [{"text": "Hello?"}]}
+        inst = parse_instrument(data)
+        assert "extraction_schema" not in inst.questions[0]
+
+    def test_rounds_schema_name_validated(self):
+        """extraction_schema in round questions is validated."""
+        data = {
+            "version": 3,
+            "rounds": [
+                {
+                    "name": "intro",
+                    "questions": [
+                        {"text": "Yes or no?", "extraction_schema": "yes_no"},
+                    ],
+                    "route_when": [{"else": "__end__"}],
+                },
+            ],
+        }
+        inst = parse_instrument(data)
+        assert inst.rounds[0].questions[0]["extraction_schema"] == "yes_no"
+
+    def test_rounds_unknown_schema_rejected(self):
+        """Unknown schema names in round questions raise InstrumentError."""
+        data = {
+            "version": 3,
+            "rounds": [
+                {
+                    "name": "intro",
+                    "questions": [
+                        {"text": "Q?", "extraction_schema": "bogus"},
+                    ],
+                    "route_when": [{"else": "__end__"}],
+                },
+            ],
+        }
+        with pytest.raises(InstrumentError, match="Unknown extraction schema.*bogus"):
+            parse_instrument(data)
+
+    def test_mixed_questions_some_with_schema(self):
+        """Only questions with extraction_schema are validated."""
+        data = {
+            "version": 1,
+            "questions": [
+                {"text": "Open ended"},
+                {"text": "Pick one", "extraction_schema": "pick_one"},
+                {"text": "Rank them", "extraction_schema": "ranking"},
+            ],
+        }
+        inst = parse_instrument(data)
+        assert len(inst.questions) == 3
+        assert inst.questions[1]["extraction_schema"] == "pick_one"
+        assert inst.questions[2]["extraction_schema"] == "ranking"
+
+    def test_all_bundled_schema_names_accepted(self):
+        """All four bundled schema names pass validation."""
+        for name in ("ranking", "likert", "yes_no", "pick_one"):
+            data = {
+                "version": 1,
+                "questions": [{"text": "Q?", "extraction_schema": name}],
+            }
+            inst = parse_instrument(data)
+            assert inst.questions[0]["extraction_schema"] == name

@@ -41,6 +41,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from synth_panel.structured.schemas import is_known_schema
+
 END_SENTINEL = "__end__"
 
 
@@ -85,6 +87,36 @@ class InstrumentError(ValueError):
     """Raised when an instrument definition is invalid."""
 
 
+def _validate_questions(questions: list[dict[str, Any]], context: str) -> None:
+    """Validate extraction_schema on questions.
+
+    String values are checked against the bundled schema registry.
+    Dict values are accepted as inline JSON Schemas without further
+    validation. Other types raise :class:`InstrumentError`.
+
+    Args:
+        questions: List of question dicts to validate.
+        context: Human-readable location for error messages
+            (e.g. ``"v1 instrument"`` or ``"round 'discovery'"``).
+    """
+    for i, q in enumerate(questions):
+        if not isinstance(q, dict):
+            continue
+        es = q.get("extraction_schema")
+        if es is None:
+            continue
+        if isinstance(es, str):
+            if not is_known_schema(es):
+                from synth_panel.structured.schemas import SchemaNotFoundError
+
+                raise InstrumentError(str(SchemaNotFoundError(es)))
+        elif not isinstance(es, dict):
+            raise InstrumentError(
+                f"{context} question[{i}]: extraction_schema must be a string (schema name) or mapping, "
+                f"got {type(es).__name__}"
+            )
+
+
 def parse_instrument(data: dict[str, Any]) -> Instrument:
     """Parse a raw instrument dict into a validated Instrument.
 
@@ -108,6 +140,7 @@ def _parse_v1(data: dict[str, Any], version: int) -> Instrument:
     questions = data["questions"]
     if not isinstance(questions, list) or not questions:
         raise InstrumentError("'questions' must be a non-empty list")
+    _validate_questions(questions, "v1 instrument")
     return Instrument(
         version=version,
         rounds=[Round(name="default", questions=questions)],
@@ -138,6 +171,7 @@ def _parse_rounds(data: dict[str, Any], version: int) -> Instrument:
         questions = raw.get("questions")
         if not isinstance(questions, list) or not questions:
             raise InstrumentError(f"Round '{name}' must have a non-empty 'questions' list")
+        _validate_questions(questions, f"round '{name}'")
 
         depends_on = raw.get("depends_on")
         if depends_on is not None and not isinstance(depends_on, str):
