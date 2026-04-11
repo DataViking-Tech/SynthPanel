@@ -722,6 +722,20 @@ async def run_quick_poll(
     """
     model = model or MCP_DEFAULT_MODEL
     logger.info("run_quick_poll: model=%s personas=%d", model, len(personas))
+
+    if not question or not question.strip():
+        return json.dumps({"error": "Question text must be a non-empty string."})
+
+    # Validate personas: must be dicts with "name"
+    for i, p in enumerate(personas):
+        if not isinstance(p, dict):
+            return json.dumps({"error": f"Persona at index {i} must be a dict, got {type(p).__name__}."})
+        if "name" not in p or not str(p["name"]).strip():
+            return json.dumps({"error": f"Persona at index {i} is missing required field 'name'."})
+
+    if len(personas) > MAX_PERSONAS:
+        return json.dumps({"error": f"Too many personas ({len(personas)}). Maximum is {MAX_PERSONAS}."})
+
     questions = [{"text": question}]
     result = await _run_panel_async(
         personas,
