@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
@@ -80,6 +81,8 @@ from synth_panel.orchestrator import (
 )
 from synth_panel.prompts import build_question_prompt, persona_system_prompt
 from synth_panel.synthesis import synthesize_panel
+
+logger = logging.getLogger(__name__)
 
 # Default model for MCP mode
 MCP_DEFAULT_MODEL = "haiku"
@@ -455,6 +458,7 @@ async def run_prompt(
         model: LLM model to use. Defaults to haiku.
     """
     model = model or MCP_DEFAULT_MODEL
+    logger.info("run_prompt: model=%s prompt_len=%d", model, len(prompt))
     client = LLMClient()
     request = CompletionRequest(
         model=model,
@@ -544,6 +548,7 @@ async def run_panel(
         synthesis_prompt: Custom synthesis prompt. Replaces the default.
     """
     model = model or MCP_DEFAULT_MODEL
+    logger.info("run_panel: model=%s synthesis=%s", model, synthesis)
     merged = list(personas) if personas else []
     if pack_id is not None:
         pack = _data_get_persona_pack(pack_id)
@@ -619,6 +624,7 @@ async def run_quick_poll(
         synthesis_prompt: Custom synthesis prompt. Replaces the default.
     """
     model = model or MCP_DEFAULT_MODEL
+    logger.info("run_quick_poll: model=%s personas=%d", model, len(personas))
     questions = [{"text": question}]
     result = await _run_panel_async(
         personas,
@@ -751,6 +757,7 @@ async def extend_panel(
         synthesis_prompt: Custom synthesis prompt for the new round.
     """
     model = model or MCP_DEFAULT_MODEL
+    logger.info("extend_panel: result_id=%s questions=%d model=%s", result_id, len(questions), model)
     existing = _data_get_panel_result(result_id)
 
     # Reuse the original personas (recovered from saved sessions if possible).
@@ -985,4 +992,5 @@ def concept_test(
 
 def serve() -> None:
     """Run the MCP server on stdio transport."""
+    logger.info("MCP server starting (stdio transport)")
     mcp.run(transport="stdio")

@@ -24,12 +24,21 @@ from synth_panel.cli.commands import (
 from synth_panel.cli.output import OutputFormat
 from synth_panel.cli.parser import build_parser
 from synth_panel.cli.repl import run_repl
+from synth_panel.logging_config import setup_logging
 
 
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point. Returns exit code."""
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    # Configure logging from --verbose / --quiet / env var.
+    if args.verbose:
+        setup_logging("debug")
+    elif args.quiet:
+        setup_logging("warning")
+    else:
+        setup_logging()
 
     output_format = OutputFormat(args.output_format)
 

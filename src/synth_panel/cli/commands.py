@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,8 @@ from synth_panel.prompts import (
 )
 from synth_panel.runtime import AgentRuntime
 from synth_panel.synthesis import synthesize_panel
+
+logger = logging.getLogger(__name__)
 
 # Preference chain for --model default (sp-f4t). Each entry is
 # (env var that signals provider availability, model alias or name).
@@ -203,16 +206,16 @@ def _announce_default_model(args: argparse.Namespace) -> None:
         return
     alias, source = _resolve_default_model()
     if source:
-        print(
-            f"[synthpanel] --model not specified; using '{alias}' (detected {source}). Override with --model <name>.",
-            file=sys.stderr,
+        logger.info(
+            "--model not specified; using '%s' (detected %s). Override with --model <name>.",
+            alias,
+            source,
         )
     else:
-        print(
-            f"[synthpanel] --model not specified and no provider API "
-            f"keys detected; falling back to '{alias}'. Set one of: "
-            f"{', '.join(env for env, _ in _DEFAULT_MODEL_PREFERENCE)}.",
-            file=sys.stderr,
+        logger.warning(
+            "--model not specified and no provider API keys detected; falling back to '%s'. Set one of: %s.",
+            alias,
+            ", ".join(env for env, _ in _DEFAULT_MODEL_PREFERENCE),
         )
 
 
@@ -439,7 +442,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     # Surface parser warnings (e.g. unreachable rounds) to stderr — these
     # are non-fatal but the user should see them before any LLM call fires.
     for w in instrument.warnings:
-        print(f"warning: {w}", file=sys.stderr)
+        logger.warning("instrument: %s", w)
 
     # ── sp-1hb: variable substitution ──────────────────────────────────
     # Bundled instrument packs ship with {candidates}, {theme_0}, and
@@ -518,6 +521,11 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         yaml_overrides = {p.get("name", "Anonymous"): p["model"] for p in personas if p.get("model")}
         if yaml_overrides:
             persona_models = yaml_overrides
+
+    import uuid as _uuid
+
+    request_id = _uuid.uuid4().hex[:12]
+    logger.info("[%s] panel run: model=%s personas=%d questions=%d", request_id, model, len(personas), len(questions))
 
     client = LLMClient()
     timer = PanelTimer()
@@ -601,7 +609,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 top_p=top_p,
             )
         except Exception as exc:
-            print(f"Warning: synthesis failed: {exc}", file=sys.stderr)
+            logger.warning("synthesis failed: %s", exc)
 
     if synthesis_result:
         total_usage = panelist_usage + synthesis_result.usage
@@ -1118,7 +1126,7 @@ def handle_instruments_graph(args: argparse.Namespace, fmt: OutputFormat) -> int
         return 1
 
     for w in instrument.warnings:
-        print(f"warning: {w}", file=sys.stderr)
+        logger.warning("instrument: %s", w)
 
     rendered = (
         _render_mermaid(instrument) if getattr(args, "format", "text") == "mermaid" else _render_text_dag(instrument)
