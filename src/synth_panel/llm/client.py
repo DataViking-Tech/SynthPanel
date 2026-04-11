@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import random
+import threading
 import time
 from collections.abc import Callable, Iterator
 
@@ -58,26 +59,28 @@ class LLMClient:
         self._initial_backoff = initial_backoff
         self._max_backoff = max_backoff
         self._provider_cache: dict[str, LLMProvider] = {}
+        self._cache_lock = threading.Lock()
 
     def _resolve_provider(self, model: str) -> LLMProvider:
         """Resolve a provider for the given canonical model name."""
-        if model in self._provider_cache:
-            return self._provider_cache[model]
+        with self._cache_lock:
+            if model in self._provider_cache:
+                return self._provider_cache[model]
 
-        # 1. Match by prefix
-        for config, cls in _PROVIDER_REGISTRY:
-            for prefix in config.model_prefixes:
-                if model.startswith(prefix):
+            # 1. Match by prefix
+            for config, cls in _PROVIDER_REGISTRY:
+                for prefix in config.model_prefixes:
+                    if model.startswith(prefix):
+                        provider = cls()
+                        self._provider_cache[model] = provider
+                        return provider
+
+            # 2. Fallback: first provider with credentials available
+            for config, cls in _PROVIDER_REGISTRY:
+                if config.has_credentials():
                     provider = cls()
                     self._provider_cache[model] = provider
                     return provider
-
-        # 2. Fallback: first provider with credentials available
-        for config, cls in _PROVIDER_REGISTRY:
-            if config.has_credentials():
-                provider = cls()
-                self._provider_cache[model] = provider
-                return provider
 
         raise LLMError(
             "No LLM provider credentials found. Set ANTHROPIC_API_KEY, GEMINI_API_KEY, XAI_API_KEY, OPENROUTER_API_KEY, or OPENAI_API_KEY.",
@@ -92,8 +95,12 @@ class LLMClient:
 
         # For local models (ollama:*, local:*), cache a provider with the
         # correct base URL so _resolve_provider finds it.
-        if base_url is not None and canonical not in self._provider_cache:
-            self._provider_cache[canonical] = OpenAICompatibleProvider(base_url=base_url, api_key="no-key-required")
+        if base_url is not None:
+            with self._cache_lock:
+                if canonical not in self._provider_cache:
+                    self._provider_cache[canonical] = OpenAICompatibleProvider(
+                        base_url=base_url, api_key="no-key-required"
+                    )
 
         if canonical != original:
             return CompletionRequest(
