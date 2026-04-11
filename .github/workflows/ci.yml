@@ -80,7 +80,7 @@ jobs:
         run: pip install -e ".[dev,mcp]"
 
       - name: Run tests with coverage
-        run: pytest tests/ -x --ignore=tests/test_acceptance.py
+        run: pytest tests/ -x --ignore=tests/test_acceptance.py --cov=synth_panel --cov-report=term --cov-fail-under=80
 
   coverage:
     runs-on: ubuntu-latest
