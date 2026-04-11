@@ -479,8 +479,7 @@ def _run_ensemble_sync(
     )
     return {
         "per_model_results": {
-            mr.model: [_format_panelist_result(pr, mr.model) for pr in mr.panelist_results]
-            for mr in ens.model_results
+            mr.model: [_format_panelist_result(pr, mr.model) for pr in mr.panelist_results] for mr in ens.model_results
         },
         "cost_breakdown": ens.per_model_cost,
         "models": ens.models,
