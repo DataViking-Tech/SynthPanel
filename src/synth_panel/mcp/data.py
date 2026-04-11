@@ -407,6 +407,7 @@ def update_panel_result(result_id: str, updated_data: dict[str, Any]) -> None:
     Creates ``<result_id>.pre-extend.json`` as a backup before overwriting
     the main result file.
     """
+    _validate_pack_id(result_id)
     result_path = _results_dir() / f"{result_id}.json"
     if not result_path.exists():
         raise FileNotFoundError(f"Panel result not found: {result_id}")
@@ -443,6 +444,7 @@ def list_panel_results() -> list[dict[str, Any]]:
 
 def get_panel_result(result_id: str) -> dict[str, Any]:
     """Load a panel result by ID."""
+    _validate_pack_id(result_id)
     p = _results_dir() / f"{result_id}.json"
     if not p.exists():
         raise FileNotFoundError(f"Panel result not found: {result_id}")
