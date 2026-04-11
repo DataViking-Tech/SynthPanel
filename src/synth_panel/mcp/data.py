@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -30,8 +31,8 @@ import yaml
 
 def _validate_pack_id(pack_id: str) -> None:
     """Reject pack IDs that could escape the data directory."""
-    if "/" in pack_id or ".." in pack_id:
-        raise ValueError(f"Invalid pack ID (path traversal characters not allowed): {pack_id!r}")
+    if not re.fullmatch(r"[a-zA-Z0-9_-]+", pack_id):
+        raise ValueError(f"Invalid pack ID: {pack_id!r}")
 
 
 def _data_dir() -> Path:
