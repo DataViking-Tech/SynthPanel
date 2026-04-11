@@ -1247,6 +1247,46 @@ def _build_params_metadata(
     return params
 
 
+def handle_analyze(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Run statistical analysis on a saved panel result."""
+    import json as _json
+
+    from synth_panel.analyze import (
+        analysis_to_dict,
+        analyze_panel_result,
+        format_csv,
+        format_text,
+    )
+
+    result_ref = args.result
+    output_mode = getattr(args, "output", "text")
+
+    # Load the panel result — either by ID or file path
+    path = Path(result_ref)
+    if path.exists() and path.suffix == ".json":
+        data = _json.loads(path.read_text(encoding="utf-8"))
+        data.setdefault("id", path.stem)
+    else:
+        from synth_panel.mcp.data import get_panel_result
+
+        try:
+            data = get_panel_result(result_ref)
+        except FileNotFoundError:
+            print(f"Error: panel result not found: {result_ref}", file=sys.stderr)
+            return 1
+
+    analysis = analyze_panel_result(data)
+
+    if output_mode == "json":
+        print(_json.dumps(analysis_to_dict(analysis), indent=2))
+    elif output_mode == "csv":
+        print(format_csv(analysis))
+    else:
+        print(format_text(analysis))
+
+    return 0
+
+
 def _format_path(path: list[dict[str, Any]]) -> str:
     """Render an executed branching path as a single human line.
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 import sys
 
 from synth_panel.cli.commands import (
+    handle_analyze,
     handle_instruments_graph,
     handle_instruments_install,
     handle_instruments_list,
@@ -76,6 +77,8 @@ def main(argv: list[str] | None = None) -> int:
         else:
             parser.parse_args(["instruments", "--help"])
             return 1
+    elif args.command == "analyze":
+        return handle_analyze(args, output_format)
     elif args.command == "mcp-serve":
         return handle_mcp_serve(args, output_format)
     else:
