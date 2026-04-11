@@ -128,6 +128,46 @@ def build_parser() -> argparse.ArgumentParser:
         help="Custom synthesis prompt. Replaces the default synthesis prompt entirely.",
     )
     panel_run_parser.add_argument(
+        "--temperature",
+        type=float,
+        default=None,
+        metavar="FLOAT",
+        help=(
+            "Sampling temperature for panelist LLM calls (0.0-2.0). "
+            "Higher values produce more diverse responses. "
+            "Default: provider default (typically 1.0)."
+        ),
+    )
+    panel_run_parser.add_argument(
+        "--top-p",
+        type=float,
+        default=None,
+        metavar="FLOAT",
+        help=("Nucleus sampling cutoff for panelist LLM calls (0.0-1.0). Default: provider default."),
+    )
+    panel_run_parser.add_argument(
+        "--synthesis-temperature",
+        type=float,
+        default=None,
+        metavar="FLOAT",
+        help=(
+            "Sampling temperature for the synthesis LLM call only. "
+            "Overrides --temperature for the synthesis step. "
+            "Default: same as --temperature (or provider default)."
+        ),
+    )
+    panel_run_parser.add_argument(
+        "--prompt-template",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Path to a custom persona system prompt template file. "
+            "Uses Python format-string syntax with placeholders like "
+            "{name}, {age}, {occupation}, {background}, {personality_traits}. "
+            "Default: built-in persona prompt."
+        ),
+    )
+    panel_run_parser.add_argument(
         "--legacy-output",
         action="store_true",
         default=False,

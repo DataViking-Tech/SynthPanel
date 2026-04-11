@@ -20,7 +20,12 @@ from synth_panel.llm.client import LLMClient
 from synth_panel.metadata import PanelTimer, build_metadata
 from synth_panel.orchestrator import run_panel_parallel
 from synth_panel.persistence import Session
-from synth_panel.prompts import build_question_prompt, persona_system_prompt
+from synth_panel.prompts import (
+    build_question_prompt,
+    load_prompt_template,
+    persona_system_prompt,
+    persona_system_prompt_from_template,
+)
 from synth_panel.runtime import AgentRuntime
 from synth_panel.synthesis import synthesize_panel
 
@@ -342,6 +347,28 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             print(f"Error loading extract-schema: {exc}", file=sys.stderr)
             return 1
 
+    # Load optional prompt template (--prompt-template)
+    prompt_template_path = getattr(args, "prompt_template", None)
+    prompt_template: str | None = None
+    if prompt_template_path:
+        try:
+            prompt_template = load_prompt_template(prompt_template_path)
+        except FileNotFoundError as exc:
+            print(f"Error loading prompt template: {exc}", file=sys.stderr)
+            return 1
+
+    # Build the system prompt function
+    if prompt_template is not None:
+
+        def system_prompt_fn(persona: dict) -> str:
+            return persona_system_prompt_from_template(persona, prompt_template)  # type: ignore[arg-type]
+    else:
+        system_prompt_fn = persona_system_prompt
+
+    # Generation parameters
+    temperature: float | None = getattr(args, "temperature", None)
+    top_p: float | None = getattr(args, "top_p", None)
+
     client = LLMClient()
     timer = PanelTimer()
 
@@ -351,10 +378,12 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         personas=personas,
         questions=questions,
         model=model,
-        system_prompt_fn=persona_system_prompt,
+        system_prompt_fn=system_prompt_fn,
         question_prompt_fn=build_question_prompt,
         response_schema=response_schema,
         extract_schema=extract_schema,
+        temperature=temperature,
+        top_p=top_p,
     )
 
     # Build output results and aggregate panelist usage
@@ -402,6 +431,9 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     if not skip_synthesis:
         synthesis_model = getattr(args, "synthesis_model", None)
         custom_prompt = getattr(args, "synthesis_prompt", None)
+        synthesis_temperature = getattr(args, "synthesis_temperature", None)
+        # synthesis_temperature overrides panelist temperature for synthesis
+        effective_synth_temp = synthesis_temperature if synthesis_temperature is not None else temperature
         try:
             synthesis_result = synthesize_panel(
                 client,
@@ -411,6 +443,8 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 panelist_model=model,
                 custom_prompt=custom_prompt,
                 panelist_cost=panelist_cost_est,
+                temperature=effective_synth_temp,
+                top_p=top_p,
             )
         except Exception as exc:
             print(f"Warning: synthesis failed: {exc}", file=sys.stderr)
@@ -531,6 +565,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 "persona_count": len(personas),
                 "question_count": len(questions),
                 "metadata": metadata,
+                "parameters": _build_params_metadata(args, temperature, top_p),
             }
         else:
             extra = _build_rounds_shape(
@@ -545,6 +580,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 question_count=len(questions),
                 metadata=metadata,
             )
+            extra["parameters"] = _build_params_metadata(args, temperature, top_p)
         # Surface failure stats + run validity in structured output so
         # downstream consumers (MCP, CI) can gate on it without parsing text.
         extra["failure_stats"] = failure_stats
@@ -1012,6 +1048,26 @@ def _degenerate_path(instrument: Instrument) -> list[dict[str, Any]]:
         nxt = rounds[i + 1].name if i + 1 < len(rounds) else END_SENTINEL
         path.append({"round": r.name, "branch": "linear", "next": nxt})
     return path
+
+
+def _build_params_metadata(
+    args: argparse.Namespace,
+    temperature: float | None,
+    top_p: float | None,
+) -> dict[str, Any]:
+    """Build a metadata dict of generation parameters for output."""
+    params: dict[str, Any] = {}
+    if temperature is not None:
+        params["temperature"] = temperature
+    if top_p is not None:
+        params["top_p"] = top_p
+    synthesis_temperature = getattr(args, "synthesis_temperature", None)
+    if synthesis_temperature is not None:
+        params["synthesis_temperature"] = synthesis_temperature
+    prompt_template = getattr(args, "prompt_template", None)
+    if prompt_template is not None:
+        params["prompt_template"] = prompt_template
+    return params
 
 
 def _format_path(path: list[dict[str, Any]]) -> str:

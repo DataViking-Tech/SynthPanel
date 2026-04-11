@@ -76,6 +76,8 @@ def patched_panel(monkeypatch):
         response_schema=None,
         sessions=None,
         extract_schema=None,
+        temperature=None,
+        top_p=None,
     ):
         results = [
             PanelistResult(
