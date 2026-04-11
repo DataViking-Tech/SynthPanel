@@ -17,6 +17,7 @@ from synth_panel.cli.output import OutputFormat, emit
 from synth_panel.cost import ZERO_USAGE, TokenUsage, estimate_cost, format_summary, lookup_pricing
 from synth_panel.instrument import Instrument, InstrumentError, parse_instrument
 from synth_panel.llm.client import LLMClient
+from synth_panel.metadata import PanelTimer, build_metadata
 from synth_panel.orchestrator import run_panel_parallel
 from synth_panel.persistence import Session
 from synth_panel.prompts import build_question_prompt, persona_system_prompt
@@ -342,6 +343,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             return 1
 
     client = LLMClient()
+    timer = PanelTimer()
 
     # Run all panelists in parallel via the orchestrator
     panelist_results, _registry, _sessions = run_panel_parallel(
@@ -420,7 +422,22 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         total_usage = panelist_usage
         total_cost_est = panelist_cost_est
 
+    timer.stop()
     synthesis_dict = synthesis_result.to_dict() if synthesis_result else None
+
+    metadata = build_metadata(
+        panelist_model=model,
+        synthesis_model=getattr(args, "synthesis_model", None),
+        panelist_usage=panelist_usage,
+        panelist_cost=panelist_cost_est,
+        synthesis_usage=synthesis_result.usage if synthesis_result else None,
+        synthesis_cost=synthesis_result.cost if synthesis_result else None,
+        total_usage=total_usage,
+        total_cost=total_cost_est,
+        persona_count=len(personas),
+        question_count=len(questions),
+        timer=timer,
+    )
 
     # Output results
     banner = _build_invalid_banner(failure_stats, threshold, strict=strict, strict_violation=strict_violation)
@@ -513,6 +530,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 "model": model,
                 "persona_count": len(personas),
                 "question_count": len(questions),
+                "metadata": metadata,
             }
         else:
             extra = _build_rounds_shape(
@@ -525,6 +543,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 model=model,
                 persona_count=len(personas),
                 question_count=len(questions),
+                metadata=metadata,
             )
         # Surface failure stats + run validity in structured output so
         # downstream consumers (MCP, CI) can gate on it without parsing text.
@@ -666,6 +685,7 @@ def _build_rounds_shape(
     model: str,
     persona_count: int,
     question_count: int,
+    metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the rounds-shaped panel output payload.
 
@@ -676,7 +696,7 @@ def _build_rounds_shape(
     single-round case — the final synthesis goes at the top level.
     """
     round_name = instrument.rounds[0].name if instrument.rounds else "default"
-    return {
+    result: dict[str, Any] = {
         "rounds": [
             {
                 "name": round_name,
@@ -694,6 +714,9 @@ def _build_rounds_shape(
         "persona_count": persona_count,
         "question_count": question_count,
     }
+    if metadata is not None:
+        result["metadata"] = metadata
+    return result
 
 
 def handle_pack_list(args: argparse.Namespace, fmt: OutputFormat) -> int:

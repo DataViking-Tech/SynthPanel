@@ -71,6 +71,7 @@ from synth_panel.mcp.data import (
 from synth_panel.mcp.data import (
     save_persona_pack as _data_save_persona_pack,
 )
+from synth_panel.metadata import PanelTimer, build_metadata
 from synth_panel.orchestrator import (
     MultiRoundResult,
     PanelistResult,
@@ -229,6 +230,7 @@ async def _run_panel_async_instrument(
 ) -> dict[str, Any]:
     """Run a (possibly branching) instrument and return v3-shaped response."""
     total = len(personas)
+    timer = PanelTimer()
     await ctx.report_progress(0, total)
 
     mr: MultiRoundResult = await asyncio.wait_for(
@@ -269,10 +271,41 @@ async def _run_panel_async_instrument(
     pricing, _ = lookup_pricing(model)
     total_cost = estimate_cost(mr.usage, pricing)
 
+    timer.stop()
+
     final_synth_dict = (
         mr.final_synthesis.to_dict()
         if mr.final_synthesis is not None and hasattr(mr.final_synthesis, "to_dict")
         else None
+    )
+
+    # Compute per-model cost breakdown for metadata
+    panelist_usage = ZERO_USAGE
+    for rr in mr.rounds:
+        for pr in rr.panelist_results:
+            panelist_usage = panelist_usage + pr.usage
+    panelist_cost_est = estimate_cost(panelist_usage, pricing)
+
+    synthesis_usage_for_meta: CostTokenUsage | None = None
+    synthesis_cost_for_meta = None
+    if mr.final_synthesis is not None and hasattr(mr.final_synthesis, "usage"):
+        synthesis_usage_for_meta = mr.final_synthesis.usage
+        synth_model = getattr(mr.final_synthesis, "model", model)
+        synth_pricing, _ = lookup_pricing(synth_model)
+        synthesis_cost_for_meta = estimate_cost(synthesis_usage_for_meta, synth_pricing)
+
+    inst_metadata = build_metadata(
+        panelist_model=model,
+        synthesis_model=getattr(mr.final_synthesis, "model", None) if mr.final_synthesis else None,
+        panelist_usage=panelist_usage,
+        panelist_cost=panelist_cost_est,
+        synthesis_usage=synthesis_usage_for_meta,
+        synthesis_cost=synthesis_cost_for_meta,
+        total_usage=mr.usage,
+        total_cost=total_cost,
+        persona_count=len(personas),
+        question_count=total_question_count,
+        timer=timer,
     )
 
     result_id = save_panel_result(
@@ -299,6 +332,7 @@ async def _run_panel_async_instrument(
         # Back-compat: ``results`` mirrors the terminal round's flat panelist
         # list so v1/v2 callers see the same shape they did pre-0.5.0.
         "results": flat_results,
+        "metadata": inst_metadata,
     }
 
 
@@ -315,6 +349,7 @@ async def _run_panel_async(
 ) -> dict[str, Any]:
     """Run panel via asyncio.to_thread with progress notifications."""
     total = len(personas)
+    timer = PanelTimer()
     await ctx.report_progress(0, total)
 
     # Run the blocking panel execution in a thread
@@ -335,15 +370,32 @@ async def _run_panel_async(
     await ctx.report_progress(total, total)
 
     # Compute total cost (panelist + synthesis)
+    synthesis_usage_obj: CostTokenUsage | None = None
+    synthesis_cost_obj = None
     if synthesis_dict:
-        synthesis_usage = CostTokenUsage.from_dict(synthesis_dict["usage"])
+        synthesis_usage_obj = CostTokenUsage.from_dict(synthesis_dict["usage"])
         synthesis_pricing, _ = lookup_pricing(synthesis_dict.get("model"))
-        synthesis_cost_est = estimate_cost(synthesis_usage, synthesis_pricing)
-        total_usage = panelist_usage + synthesis_usage
-        total_cost = panelist_cost + synthesis_cost_est
+        synthesis_cost_obj = estimate_cost(synthesis_usage_obj, synthesis_pricing)
+        total_usage = panelist_usage + synthesis_usage_obj
+        total_cost = panelist_cost + synthesis_cost_obj
     else:
         total_usage = panelist_usage
         total_cost = panelist_cost
+
+    timer.stop()
+    metadata = build_metadata(
+        panelist_model=model,
+        synthesis_model=synthesis_dict.get("model") if synthesis_dict else None,
+        panelist_usage=panelist_usage,
+        panelist_cost=panelist_cost,
+        synthesis_usage=synthesis_usage_obj,
+        synthesis_cost=synthesis_cost_obj,
+        total_usage=total_usage,
+        total_cost=total_cost,
+        persona_count=len(personas),
+        question_count=len(questions),
+        timer=timer,
+    )
 
     # Save result
     result_id = save_panel_result(
@@ -373,6 +425,7 @@ async def _run_panel_async(
         ],
         "path": [],
         "warnings": [],
+        "metadata": metadata,
     }
 
 
