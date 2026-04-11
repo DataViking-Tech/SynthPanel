@@ -371,6 +371,7 @@ def save_panel_sessions(
     Returns the sessions directory path.
     """
 
+    _validate_pack_id(result_id)
     sdir = _sessions_dir(result_id)
     for persona_name, session in sessions.items():
         # Sanitise persona name for use as filename
@@ -388,6 +389,7 @@ def load_panel_sessions(result_id: str) -> dict[str, Session]:
     """
     from synth_panel.persistence import Session
 
+    _validate_pack_id(result_id)
     sdir = _results_dir() / f"{result_id}.sessions"
     if not sdir.exists():
         raise FileNotFoundError(f"No sessions found for result: {result_id}")
