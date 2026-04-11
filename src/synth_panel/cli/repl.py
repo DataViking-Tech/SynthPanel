@@ -6,6 +6,7 @@ Entered when no subcommand is given. Supports slash commands per SPEC.md §8.
 from __future__ import annotations
 
 import argparse
+from typing import Any
 
 from synth_panel.cli.output import OutputFormat, emit
 from synth_panel.cli.slash import dispatch_slash
@@ -17,7 +18,7 @@ from synth_panel.runtime import AgentRuntime
 class SessionState:
     """Mutable state maintained during an interactive session."""
 
-    __slots__ = ("compacted_count", "last_usage", "model", "runtime", "turn_count")
+    __slots__ = ("compacted_count", "last_usage", "model", "profile", "profile_overrides", "runtime", "turn_count")
 
     def __init__(self, model: str | None = None, runtime: AgentRuntime | None = None) -> None:
         self.turn_count: int = 0
@@ -25,6 +26,8 @@ class SessionState:
         self.model: str | None = model
         self.last_usage: dict[str, int] | None = None
         self.runtime: AgentRuntime | None = runtime
+        self.profile: Any = None
+        self.profile_overrides: dict[str, Any] | None = None
 
 
 PROMPT_CHAR = "\u276f "  # ❯
