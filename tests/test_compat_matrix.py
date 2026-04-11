@@ -78,12 +78,14 @@ def patched_panel(monkeypatch):
         extract_schema=None,
         temperature=None,
         top_p=None,
+        persona_models=None,
     ):
         results = [
             PanelistResult(
                 persona_name=p.get("name", "anon"),
                 responses=[{"q": q.get("text", ""), "a": "ok"} for q in questions],
                 usage=ZERO_USAGE,
+                model=(persona_models or {}).get(p.get("name", "anon"), model),
             )
             for p in personas
         ]

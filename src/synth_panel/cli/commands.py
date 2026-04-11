@@ -74,6 +74,81 @@ def _resolve_model(args: argparse.Namespace) -> str:
     return alias
 
 
+def parse_models_spec(spec: str) -> list[tuple[str, float]]:
+    """Parse a --models spec string into [(model, weight)] pairs.
+
+    Format: "haiku:0.5,gemini-2.5-flash:0.5"
+    Weights must be positive and are normalized to sum to 1.0.
+    """
+    pairs: list[tuple[str, float]] = []
+    for entry in spec.split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        if ":" not in entry:
+            raise ValueError(f"Invalid model spec entry '{entry}': expected 'model:weight' (e.g. 'haiku:0.5')")
+        model_part, weight_str = entry.rsplit(":", 1)
+        model_part = model_part.strip()
+        weight_str = weight_str.strip()
+        if not model_part:
+            raise ValueError(f"Empty model name in spec entry '{entry}'")
+        try:
+            weight = float(weight_str)
+        except ValueError as exc:
+            raise ValueError(f"Invalid weight '{weight_str}' in spec entry '{entry}': must be a number") from exc
+        if weight <= 0:
+            raise ValueError(f"Weight must be positive, got {weight} for model '{model_part}'")
+        pairs.append((model_part, weight))
+    if not pairs:
+        raise ValueError("Empty --models spec")
+    return pairs
+
+
+def assign_models_to_personas(
+    personas: list[dict[str, Any]],
+    model_spec: list[tuple[str, float]],
+    default_model: str,
+) -> dict[str, str]:
+    """Assign models to personas based on weighted spec and YAML overrides.
+
+    Resolution order: persona YAML 'model' field > weighted assignment > default.
+    Returns a dict mapping persona name → resolved model.
+    """
+    # Personas with YAML model overrides are pre-assigned
+    needs_assignment: list[str] = []
+    result: dict[str, str] = {}
+    for p in personas:
+        name = p.get("name", "Anonymous")
+        if p.get("model"):
+            result[name] = p["model"]
+        else:
+            needs_assignment.append(name)
+
+    if not needs_assignment:
+        return result
+
+    # Normalize weights
+    total_weight = sum(w for _, w in model_spec)
+    normalized = [(m, w / total_weight) for m, w in model_spec]
+
+    # Assign proportionally: distribute personas across models by weight
+    remaining = len(needs_assignment)
+    assigned_idx = 0
+    for i, (model, weight) in enumerate(normalized):
+        if i == len(normalized) - 1:
+            # Last model gets all remaining to avoid rounding gaps
+            count = remaining
+        else:
+            count = max(0, round(weight * len(needs_assignment)))
+            remaining -= count
+        for _ in range(count):
+            if assigned_idx < len(needs_assignment):
+                result[needs_assignment[assigned_idx]] = model
+                assigned_idx += 1
+
+    return result
+
+
 def _announce_default_model(args: argparse.Namespace) -> None:
     """Print the auto-selected default model to stderr.
 
@@ -291,7 +366,15 @@ def _load_schema(value: str) -> dict[str, Any]:
 
 def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """Run a panel: load personas + instrument, run panelists in parallel."""
-    _announce_default_model(args)
+    # Validate mutual exclusivity of --model and --models
+    has_model = getattr(args, "model", None)
+    has_models = getattr(args, "models", None)
+    if has_model and has_models:
+        print("Error: --model and --models are mutually exclusive.", file=sys.stderr)
+        return 1
+
+    if not has_models:
+        _announce_default_model(args)
     model = _resolve_model(args)
 
     try:
@@ -369,6 +452,26 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     temperature: float | None = getattr(args, "temperature", None)
     top_p: float | None = getattr(args, "top_p", None)
 
+    # ── sp-blend: multi-model ensemble ───────────────────────────────────
+    # Parse --models spec and build per-persona model assignments.
+    # Resolution order: persona YAML 'model' > --models weighted > --model.
+    persona_models: dict[str, str] | None = None
+    if has_models:
+        try:
+            model_spec = parse_models_spec(has_models)
+        except ValueError as exc:
+            print(f"Error parsing --models: {exc}", file=sys.stderr)
+            return 1
+        persona_models = assign_models_to_personas(personas, model_spec, model)
+        # Use the first model in the spec as the "primary" for cost fallback
+        if not has_model:
+            model = model_spec[0][0]
+    elif not has_models:
+        # Even without --models, respect per-persona YAML model overrides
+        yaml_overrides = {p.get("name", "Anonymous"): p["model"] for p in personas if p.get("model")}
+        if yaml_overrides:
+            persona_models = yaml_overrides
+
     client = LLMClient()
     timer = PanelTimer()
 
@@ -384,6 +487,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         extract_schema=extract_schema,
         temperature=temperature,
         top_p=top_p,
+        persona_models=persona_models,
     )
 
     # Build output results and aggregate panelist usage
@@ -391,17 +495,20 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     panelist_usage = ZERO_USAGE
 
     for pr in panelist_results:
-        pricing, is_estimated = lookup_pricing(model)
+        # Use per-panelist model for accurate cost tracking
+        pr_model = pr.model or model
+        pricing, is_estimated = lookup_pricing(pr_model)
         persona_cost = estimate_cost(pr.usage, pricing)
-        results.append(
-            {
-                "persona": pr.persona_name,
-                "responses": pr.responses,
-                "usage": pr.usage.to_dict(),
-                "cost": persona_cost.format_usd(),
-                "error": pr.error,
-            }
-        )
+        result_dict: dict[str, Any] = {
+            "persona": pr.persona_name,
+            "responses": pr.responses,
+            "usage": pr.usage.to_dict(),
+            "cost": persona_cost.format_usd(),
+            "error": pr.error,
+        }
+        if pr.model:
+            result_dict["model"] = pr.model
+        results.append(result_dict)
         panelist_usage = panelist_usage + pr.usage
 
     # ── Failure analysis (sp-2hg) ──────────────────────────────────────

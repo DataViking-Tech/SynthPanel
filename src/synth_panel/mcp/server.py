@@ -126,17 +126,19 @@ def _run_panel_sync(
     panelist_usage = ZERO_USAGE
     result_dicts: list[dict[str, Any]] = []
     for pr in panelist_results:
-        pricing, _ = lookup_pricing(model)
+        pr_model = pr.model or model
+        pricing, _ = lookup_pricing(pr_model)
         persona_cost = estimate_cost(pr.usage, pricing)
-        result_dicts.append(
-            {
-                "persona": pr.persona_name,
-                "responses": pr.responses,
-                "usage": pr.usage.to_dict(),
-                "cost": persona_cost.format_usd(),
-                "error": pr.error,
-            }
-        )
+        rd: dict[str, Any] = {
+            "persona": pr.persona_name,
+            "responses": pr.responses,
+            "usage": pr.usage.to_dict(),
+            "cost": persona_cost.format_usd(),
+            "error": pr.error,
+        }
+        if pr.model:
+            rd["model"] = pr.model
+        result_dicts.append(rd)
         panelist_usage = panelist_usage + pr.usage
 
     pricing, _ = lookup_pricing(model)
@@ -206,15 +208,19 @@ def _run_multi_round_sync(
 
 
 def _format_panelist_result(pr: PanelistResult, model: str) -> dict[str, Any]:
-    pricing, _ = lookup_pricing(model)
+    pr_model = pr.model or model
+    pricing, _ = lookup_pricing(pr_model)
     persona_cost = estimate_cost(pr.usage, pricing)
-    return {
+    rd: dict[str, Any] = {
         "persona": pr.persona_name,
         "responses": pr.responses,
         "usage": pr.usage.to_dict(),
         "cost": persona_cost.format_usd(),
         "error": pr.error,
     }
+    if pr.model:
+        rd["model"] = pr.model
+    return rd
 
 
 async def _run_panel_async_instrument(
