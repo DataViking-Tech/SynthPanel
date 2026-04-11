@@ -430,15 +430,18 @@ def list_panel_results() -> list[dict[str, Any]]:
             continue
         try:
             data = json.loads(p.read_text(encoding="utf-8"))
-            results.append(
-                {
-                    "id": p.stem,
-                    "created_at": data.get("created_at", ""),
-                    "model": data.get("model", ""),
-                    "persona_count": data.get("persona_count", 0),
-                    "question_count": data.get("question_count", 0),
-                }
-            )
+            entry: dict[str, Any] = {
+                "id": p.stem,
+                "created_at": data.get("created_at", ""),
+                "model": data.get("model", ""),
+                "persona_count": data.get("persona_count", 0),
+                "question_count": data.get("question_count", 0),
+            }
+            if "instrument_name" in data:
+                entry["instrument_name"] = data["instrument_name"]
+            if "models" in data:
+                entry["models"] = data["models"]
+            results.append(entry)
         except Exception:
             continue
     return results
@@ -462,11 +465,29 @@ def save_panel_result(
     total_cost: str,
     persona_count: int,
     question_count: int,
+    *,
+    instrument_name: str | None = None,
+    questions: list[dict[str, Any]] | None = None,
+    variants_config: dict[str, Any] | None = None,
+    models: list[str] | None = None,
 ) -> str:
-    """Save panel results and return the result ID."""
+    """Save panel results and return the result ID.
+
+    New optional fields (backward-compatible — omitted when *None*):
+
+    * ``instrument_name``: name/id of the instrument pack used.
+    * ``questions``: question defs with ``text`` and optional
+      ``extraction_schema``.
+    * ``variants_config``: variant generation config (``n``, ``seed``).
+    * ``models``: list of all model identifiers used in the run.
+
+    Per-result entries in *results* may contain ``_variant_of`` and
+    ``_model`` fields; per-response dicts may contain an ``extraction``
+    dict. These are passed through as-is.
+    """
     rid = f"result-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
     p = _results_dir() / f"{rid}.json"
-    data = {
+    data: dict[str, Any] = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "model": model,
         "persona_count": persona_count,
@@ -475,5 +496,13 @@ def save_panel_result(
         "total_cost": total_cost,
         "results": results,
     }
+    if instrument_name is not None:
+        data["instrument_name"] = instrument_name
+    if questions is not None:
+        data["questions"] = questions
+    if variants_config is not None:
+        data["variants_config"] = variants_config
+    if models is not None:
+        data["models"] = models
     p.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     return rid
