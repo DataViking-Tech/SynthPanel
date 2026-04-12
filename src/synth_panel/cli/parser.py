@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import argparse
 
+from synth_panel import __version__
+
 
 def build_parser() -> argparse.ArgumentParser:
     """Build the top-level argument parser with global args and subcommands."""
@@ -14,6 +16,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="synthpanel",
         description="Synthetic focus group CLI — orchestrate LLM-powered personas for structured qualitative feedback.",
     )
+    parser.add_argument("--version", action="version", version=f"synthpanel {__version__}")
 
     # Global arguments (apply to all commands)
     parser.add_argument(
