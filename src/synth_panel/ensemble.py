@@ -293,10 +293,7 @@ def blend_distributions(
 
         blended: dict[str, float] = {}
         for option in all_options:
-            blended[option] = sum(
-                norm_weights.get(m, 0.0) * per_model_dist.get(m, {}).get(option, 0.0)
-                for m in models
-            )
+            blended[option] = sum(norm_weights.get(m, 0.0) * per_model_dist.get(m, {}).get(option, 0.0) for m in models)
 
         blended_questions.append(
             BlendedQuestion(

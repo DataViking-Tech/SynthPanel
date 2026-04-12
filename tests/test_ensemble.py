@@ -785,10 +785,14 @@ class TestParserBlendFlag:
         parser = build_parser()
         args = parser.parse_args(
             [
-                "panel", "run",
-                "--personas", "p.yaml",
-                "--instrument", "i.yaml",
-                "--models", "haiku:0.5,gemini:0.5",
+                "panel",
+                "run",
+                "--personas",
+                "p.yaml",
+                "--instrument",
+                "i.yaml",
+                "--models",
+                "haiku:0.5,gemini:0.5",
                 "--blend",
             ]
         )
@@ -796,7 +800,5 @@ class TestParserBlendFlag:
 
     def test_blend_default_false(self):
         parser = build_parser()
-        args = parser.parse_args(
-            ["panel", "run", "--personas", "p.yaml", "--instrument", "i.yaml"]
-        )
+        args = parser.parse_args(["panel", "run", "--personas", "p.yaml", "--instrument", "i.yaml"])
         assert args.blend is False

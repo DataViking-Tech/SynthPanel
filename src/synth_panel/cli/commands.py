@@ -636,9 +636,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         blend_result = blend_distributions(ensemble, weights=blend_weights)
 
         # Flatten all panelist results across models for output + synthesis
-        panelist_results = [
-            pr for mr in ensemble.model_results for pr in mr.panelist_results
-        ]
+        panelist_results = [pr for mr in ensemble.model_results for pr in mr.panelist_results]
     else:
         panelist_results, _registry, _sessions = run_panel_parallel(
             client=client,
