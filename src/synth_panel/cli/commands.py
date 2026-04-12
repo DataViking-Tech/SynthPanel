@@ -522,8 +522,10 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
 
     # ── sp-blend: multi-model ensemble ───────────────────────────────────
     # Parse --models spec and build per-persona model assignments.
-    # Two modes: ensemble (no weights) vs weighted (per-persona assignment).
+    # Resolution order: persona YAML 'model' > --models weighted > --model.
+    blend_mode = getattr(args, "blend", False)
     persona_models: dict[str, str] | None = None
+    model_spec: list[tuple[str, float]] | None = None
     ensemble_mode = has_models and is_ensemble_spec(has_models)
 
     if has_models:
@@ -532,16 +534,21 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         except ValueError as exc:
             print(f"Error parsing --models: {exc}", file=sys.stderr)
             return 1
-        if not ensemble_mode:
+        if not ensemble_mode and not blend_mode:
             persona_models = assign_models_to_personas(personas, model_spec, model)
-            # Use the first model in the spec as the "primary" for cost fallback
-            if not has_model:
-                model = model_spec[0][0]
+        # Use the first model in the spec as the "primary" for cost fallback
+        if not has_model:
+            model = model_spec[0][0]
     elif not has_models:
         # Even without --models, respect per-persona YAML model overrides
         yaml_overrides = {p.get("name", "Anonymous"): p["model"] for p in personas if p.get("model")}
         if yaml_overrides:
             persona_models = yaml_overrides
+
+    # Validate --blend requires --models
+    if blend_mode and not has_models:
+        print("Error: --blend requires --models.", file=sys.stderr)
+        return 1
 
     import uuid as _uuid
 
@@ -606,19 +613,44 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         return 0
 
     # Run all panelists in parallel via the orchestrator
-    panelist_results, _registry, _sessions = run_panel_parallel(
-        client=client,
-        personas=personas,
-        questions=questions,
-        model=model,
-        system_prompt_fn=system_prompt_fn,
-        question_prompt_fn=build_question_prompt,
-        response_schema=response_schema,
-        extract_schema=extract_schema,
-        temperature=temperature,
-        top_p=top_p,
-        persona_models=persona_models,
-    )
+    blend_result = None  # populated only when --blend is active
+    if blend_mode and model_spec:
+        # ── Blend mode: run full panel once per model, then blend ────
+        from synth_panel.ensemble import blend_distributions, ensemble_run
+
+        ensemble_models = [m for m, _w in model_spec]
+        ensemble = ensemble_run(
+            personas,
+            questions,
+            ensemble_models,
+            client,
+            system_prompt_fn=system_prompt_fn,
+            question_prompt_fn=build_question_prompt,
+            response_schema=response_schema,
+            extract_schema=extract_schema,
+            temperature=temperature,
+            top_p=top_p,
+        )
+        # Build weights dict from the model spec
+        blend_weights = {m: w for m, w in model_spec}
+        blend_result = blend_distributions(ensemble, weights=blend_weights)
+
+        # Flatten all panelist results across models for output + synthesis
+        panelist_results = [pr for mr in ensemble.model_results for pr in mr.panelist_results]
+    else:
+        panelist_results, _registry, _sessions = run_panel_parallel(
+            client=client,
+            personas=personas,
+            questions=questions,
+            model=model,
+            system_prompt_fn=system_prompt_fn,
+            question_prompt_fn=build_question_prompt,
+            response_schema=response_schema,
+            extract_schema=extract_schema,
+            temperature=temperature,
+            top_p=top_p,
+            persona_models=persona_models,
+        )
 
     # Build output results and aggregate panelist usage
     results: list[dict[str, Any]] = []
@@ -762,6 +794,21 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             print(f"\n  Recommendation: {synthesis_dict['recommendation']}")
             print(f"  Synthesis cost: {synthesis_dict['cost']}")
 
+        # Blend output
+        if blend_result:
+            print(f"\n{'=' * 60}")
+            print("BLENDED DISTRIBUTIONS")
+            print(f"{'=' * 60}")
+            print(f"  Models: {', '.join(blend_result.models)}")
+            print(f"  Weights: {', '.join(f'{m}={w:.2f}' for m, w in blend_result.weights.items())}")
+            for bq in blend_result.questions:
+                print(f"\n  Q{bq.question_index + 1}: {bq.question_text}")
+                print(f"  Responses: {bq.response_count}")
+                if bq.distribution:
+                    sorted_dist = sorted(bq.distribution.items(), key=lambda x: x[1], reverse=True)
+                    for option, prob in sorted_dist:
+                        print(f"    {option}: {prob:.1%}")
+
         # Cost summaries
         print(f"\n{'=' * 60}")
         print(
@@ -827,6 +874,22 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         # downstream consumers (MCP, CI) can gate on it without parsing text.
         extra["failure_stats"] = failure_stats
         extra["run_invalid"] = bool(run_invalid or strict_violation)
+        # Include blend distributions when --blend is active
+        if blend_result:
+            extra["blend"] = {
+                "models": blend_result.models,
+                "weights": blend_result.weights,
+                "questions": [
+                    {
+                        "index": bq.question_index,
+                        "question": bq.question_text,
+                        "distribution": bq.distribution,
+                        "per_model": bq.per_model,
+                        "response_count": bq.response_count,
+                    }
+                    for bq in blend_result.questions
+                ],
+            }
         if run_invalid or strict_violation:
             extra["message"] = banner.replace("\n", " ").strip() if banner else "PANEL RUN INVALID"
         emit(fmt, message=extra.get("message", "Panel complete"), extra=extra)

@@ -491,3 +491,314 @@ class TestParserEnsembleModels:
             ["panel", "run", "--personas", "p.yaml", "--instrument", "i.yaml", "--models", "haiku,sonnet"]
         )
         assert args.models == "haiku,sonnet"
+
+
+# ---------------------------------------------------------------------------
+# Tests: blend_distributions
+# ---------------------------------------------------------------------------
+
+
+class TestBlendDistributions:
+    """Tests for the blend_distributions function."""
+
+    def _make_ensemble_result(
+        self,
+        models: list[str],
+        model_responses: dict[str, list[list[dict]]],
+    ):
+        """Build an EnsembleResult from per-model response dicts.
+
+        model_responses maps model -> list of panelist response lists.
+        Each panelist response list is a list of response dicts.
+        """
+        from synth_panel.cost import CostEstimate, TokenUsage
+        from synth_panel.ensemble import EnsembleResult, ModelRunResult
+
+        model_results = []
+        total_usage = ZERO_USAGE
+        for m in models:
+            panelist_results = []
+            for i, responses in enumerate(model_responses[m]):
+                pr = PanelistResult(
+                    persona_name=f"P{i}",
+                    responses=responses,
+                    usage=TokenUsage(input_tokens=10, output_tokens=5),
+                    model=m,
+                )
+                panelist_results.append(pr)
+
+            mr = ModelRunResult(
+                model=m,
+                panelist_results=panelist_results,
+                usage=TokenUsage(input_tokens=20, output_tokens=10),
+                cost=CostEstimate(input_cost=0.001, output_cost=0.001),
+                sessions={},
+            )
+            model_results.append(mr)
+            total_usage = total_usage + mr.usage
+
+        return EnsembleResult(
+            model_results=model_results,
+            models=models,
+            total_usage=total_usage,
+            total_cost=CostEstimate(input_cost=0.002, output_cost=0.002),
+            per_model_cost={m: "$0.00" for m in models},
+            per_model_usage={m: {"input_tokens": 20, "output_tokens": 10} for m in models},
+            persona_count=len(model_responses[models[0]]),
+            question_count=len(model_responses[models[0]][0]) if model_responses[models[0]] else 0,
+        )
+
+    def test_equal_weights_two_models_unanimous(self):
+        """When both models agree, blended distribution has 100% for one option."""
+        from synth_panel.ensemble import blend_distributions
+
+        # Both models, both panelists say "A"
+        ensemble = self._make_ensemble_result(
+            models=["haiku", "gemini"],
+            model_responses={
+                "haiku": [
+                    [{"question": "Pick one", "response": "A"}],
+                    [{"question": "Pick one", "response": "A"}],
+                ],
+                "gemini": [
+                    [{"question": "Pick one", "response": "A"}],
+                    [{"question": "Pick one", "response": "A"}],
+                ],
+            },
+        )
+
+        result = blend_distributions(ensemble)
+        assert len(result.questions) == 1
+        assert result.questions[0].distribution["A"] == pytest.approx(1.0)
+        assert result.weights["haiku"] == pytest.approx(0.5)
+        assert result.weights["gemini"] == pytest.approx(0.5)
+
+    def test_equal_weights_models_disagree(self):
+        """When models fully disagree, each option gets 50%."""
+        from synth_panel.ensemble import blend_distributions
+
+        ensemble = self._make_ensemble_result(
+            models=["haiku", "gemini"],
+            model_responses={
+                "haiku": [
+                    [{"question": "Pick one", "response": "A"}],
+                ],
+                "gemini": [
+                    [{"question": "Pick one", "response": "B"}],
+                ],
+            },
+        )
+
+        result = blend_distributions(ensemble)
+        dist = result.questions[0].distribution
+        assert dist["A"] == pytest.approx(0.5)
+        assert dist["B"] == pytest.approx(0.5)
+
+    def test_custom_weights(self):
+        """Custom weights bias toward the heavier model."""
+        from synth_panel.ensemble import blend_distributions
+
+        ensemble = self._make_ensemble_result(
+            models=["haiku", "gemini"],
+            model_responses={
+                "haiku": [
+                    [{"question": "Pick one", "response": "A"}],
+                ],
+                "gemini": [
+                    [{"question": "Pick one", "response": "B"}],
+                ],
+            },
+        )
+
+        result = blend_distributions(ensemble, weights={"haiku": 0.8, "gemini": 0.2})
+        dist = result.questions[0].distribution
+        assert dist["A"] == pytest.approx(0.8)
+        assert dist["B"] == pytest.approx(0.2)
+        assert result.weights["haiku"] == pytest.approx(0.8)
+        assert result.weights["gemini"] == pytest.approx(0.2)
+
+    def test_multiple_questions(self):
+        """Blending works across multiple questions."""
+        from synth_panel.ensemble import blend_distributions
+
+        ensemble = self._make_ensemble_result(
+            models=["haiku", "gemini"],
+            model_responses={
+                "haiku": [
+                    [
+                        {"question": "Q1", "response": "A"},
+                        {"question": "Q2", "response": "X"},
+                    ],
+                ],
+                "gemini": [
+                    [
+                        {"question": "Q1", "response": "B"},
+                        {"question": "Q2", "response": "X"},
+                    ],
+                ],
+            },
+        )
+
+        result = blend_distributions(ensemble)
+        assert len(result.questions) == 2
+        # Q1: split between A and B
+        assert result.questions[0].distribution["A"] == pytest.approx(0.5)
+        assert result.questions[0].distribution["B"] == pytest.approx(0.5)
+        # Q2: unanimous X
+        assert result.questions[1].distribution["X"] == pytest.approx(1.0)
+
+    def test_intra_model_distribution(self):
+        """Multiple panelists within a model create a proper distribution."""
+        from synth_panel.ensemble import blend_distributions
+
+        # haiku: 2 say A, 1 says B -> haiku dist: A=2/3, B=1/3
+        # gemini: all say B -> gemini dist: B=1.0
+        # equal weights: A = 0.5*2/3 + 0.5*0 = 1/3, B = 0.5*1/3 + 0.5*1 = 2/3
+        ensemble = self._make_ensemble_result(
+            models=["haiku", "gemini"],
+            model_responses={
+                "haiku": [
+                    [{"question": "Q1", "response": "A"}],
+                    [{"question": "Q1", "response": "A"}],
+                    [{"question": "Q1", "response": "B"}],
+                ],
+                "gemini": [
+                    [{"question": "Q1", "response": "B"}],
+                    [{"question": "Q1", "response": "B"}],
+                    [{"question": "Q1", "response": "B"}],
+                ],
+            },
+        )
+
+        result = blend_distributions(ensemble)
+        dist = result.questions[0].distribution
+        assert dist["A"] == pytest.approx(1 / 3, abs=1e-9)
+        assert dist["B"] == pytest.approx(2 / 3, abs=1e-9)
+
+    def test_three_models(self):
+        """Blending works with three models."""
+        from synth_panel.ensemble import blend_distributions
+
+        ensemble = self._make_ensemble_result(
+            models=["haiku", "gemini", "gpt"],
+            model_responses={
+                "haiku": [[{"question": "Q1", "response": "A"}]],
+                "gemini": [[{"question": "Q1", "response": "B"}]],
+                "gpt": [[{"question": "Q1", "response": "C"}]],
+            },
+        )
+
+        result = blend_distributions(ensemble)
+        dist = result.questions[0].distribution
+        assert dist["A"] == pytest.approx(1 / 3, abs=1e-9)
+        assert dist["B"] == pytest.approx(1 / 3, abs=1e-9)
+        assert dist["C"] == pytest.approx(1 / 3, abs=1e-9)
+
+    def test_per_model_distributions_preserved(self):
+        """per_model field on BlendedQuestion shows each model's raw distribution."""
+        from synth_panel.ensemble import blend_distributions
+
+        ensemble = self._make_ensemble_result(
+            models=["haiku", "gemini"],
+            model_responses={
+                "haiku": [[{"question": "Q1", "response": "A"}]],
+                "gemini": [[{"question": "Q1", "response": "B"}]],
+            },
+        )
+
+        result = blend_distributions(ensemble)
+        bq = result.questions[0]
+        assert bq.per_model["haiku"] == {"A": 1.0}
+        assert bq.per_model["gemini"] == {"B": 1.0}
+
+    def test_error_responses_excluded(self):
+        """Responses flagged as errors are excluded from distributions."""
+        from synth_panel.ensemble import blend_distributions
+
+        ensemble = self._make_ensemble_result(
+            models=["haiku", "gemini"],
+            model_responses={
+                "haiku": [
+                    [{"question": "Q1", "response": "A"}],
+                    [{"question": "Q1", "response": "[error: timeout]", "error": True}],
+                ],
+                "gemini": [
+                    [{"question": "Q1", "response": "B"}],
+                ],
+            },
+        )
+
+        result = blend_distributions(ensemble)
+        dist = result.questions[0].distribution
+        # haiku: only 1 valid response (A=1.0), gemini: B=1.0
+        assert dist["A"] == pytest.approx(0.5)
+        assert dist["B"] == pytest.approx(0.5)
+
+    def test_empty_ensemble_raises(self):
+        """Empty model_results raises ValueError."""
+        from synth_panel.ensemble import EnsembleResult, blend_distributions
+
+        empty = EnsembleResult(
+            model_results=[],
+            models=[],
+            total_usage=ZERO_USAGE,
+            total_cost=__import__("synth_panel.cost", fromlist=["CostEstimate"]).CostEstimate(),
+            per_model_cost={},
+            per_model_usage={},
+            persona_count=0,
+            question_count=0,
+        )
+        with pytest.raises(ValueError, match="no model results"):
+            blend_distributions(empty)
+
+    def test_structured_response_extraction(self):
+        """Structured (dict) responses are handled correctly."""
+        from synth_panel.ensemble import blend_distributions
+
+        ensemble = self._make_ensemble_result(
+            models=["haiku", "gemini"],
+            model_responses={
+                "haiku": [
+                    [{"question": "Q1", "response": {"answer": "Strongly Agree"}}],
+                ],
+                "gemini": [
+                    [{"question": "Q1", "response": {"answer": "Disagree"}}],
+                ],
+            },
+        )
+
+        result = blend_distributions(ensemble)
+        dist = result.questions[0].distribution
+        assert "Strongly Agree" in dist
+        assert "Disagree" in dist
+        assert dist["Strongly Agree"] == pytest.approx(0.5)
+        assert dist["Disagree"] == pytest.approx(0.5)
+
+
+# ---------------------------------------------------------------------------
+# Tests: CLI parser --blend flag
+# ---------------------------------------------------------------------------
+
+
+class TestParserBlendFlag:
+    def test_blend_flag_parsed(self):
+        parser = build_parser()
+        args = parser.parse_args(
+            [
+                "panel",
+                "run",
+                "--personas",
+                "p.yaml",
+                "--instrument",
+                "i.yaml",
+                "--models",
+                "haiku:0.5,gemini:0.5",
+                "--blend",
+            ]
+        )
+        assert args.blend is True
+
+    def test_blend_default_false(self):
+        parser = build_parser()
+        args = parser.parse_args(["panel", "run", "--personas", "p.yaml", "--instrument", "i.yaml"])
+        assert args.blend is False

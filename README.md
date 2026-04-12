@@ -24,7 +24,7 @@ Traditional focus groups cost $5,000-$15,000 and take weeks. Synthetic panels co
 ## Quick Start
 
 ```bash
-# Install from PyPI (v0.4.0+)
+# Install from PyPI
 pip install synthpanel
 
 # For MCP server support (agent integration)
@@ -234,6 +234,7 @@ synthpanel works with any LLM provider. Set the appropriate environment variable
 | Anthropic (Claude) | `ANTHROPIC_API_KEY` | `--model sonnet` |
 | Google (Gemini) | `GOOGLE_API_KEY` or `GEMINI_API_KEY` | `--model gemini` |
 | OpenAI | `OPENAI_API_KEY` | `--model gpt-4o` |
+| OpenRouter | `OPENROUTER_API_KEY` | `--model openrouter/anthropic/claude-haiku-4-5` |
 | xAI (Grok) | `XAI_API_KEY` | `--model grok` |
 | Any OpenAI-compatible | `OPENAI_API_KEY` + `OPENAI_BASE_URL` | `--model <model-id>` |
 
@@ -401,10 +402,31 @@ Known limitations:
 
 Use synthpanel to pre-screen and iterate, then validate with real participants.
 
+## Multi-Model Ensemble (0.7.0)
+
+Run the same panel through multiple models and blend their response distributions for higher-fidelity results. [SynthBench experiments](https://github.com/DataViking-Tech/synthbench/blob/main/FINDINGS.md) show 3-model ensembles improve human-parity scores by +5-7 points over any single model.
+
+```bash
+# Run 3 models with equal weights and blend distributions
+synthpanel panel run \
+  --models haiku:0.33,gemini:0.33,gpt-4o-mini:0.34 \
+  --blend \
+  --personas personas.yaml \
+  --instrument survey.yaml
+
+# Each persona is interviewed by all 3 models independently.
+# The --blend flag averages response distributions across models,
+# producing more representative synthetic survey data.
+```
+
+The blended output includes per-model distributions and the weighted ensemble distribution, letting you inspect both individual model perspectives and the consensus view.
+
 ## Versions
 
 | Version | Highlights |
 |---------|-----------|
+| 0.7.0 | Multi-model ensemble blending (`--blend`), OpenRouter provider support, temperature/top_p controls, prompt template customization |
+| 0.6.0 | `--models` weighted model spec, `--temperature`/`--top_p` flags, persona prompt templates, pack generation, domain templates, MCP improvements |
 | 0.5.0 | v3 branching instruments, router predicates, 5 bundled instrument packs, `instruments` subcommand (list/show/install/graph), MCP `*_instrument_pack` tools, rounds-shaped panel output, `extend_panel` ad-hoc round tool |
 | 0.4.0 | `--var KEY=VALUE` and `--vars-file` for instrument templates, fail-loud on all-provider errors, default `--model` respects available credentials, `pack show <id>` alias, publish workflow fix |
 | 0.3.0 | Structured output via tool-use forcing, cost tracking, MCP server (stdio), persona-pack persistence |
