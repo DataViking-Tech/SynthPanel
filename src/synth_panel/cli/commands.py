@@ -898,6 +898,38 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             extra["message"] = banner.replace("\n", " ").strip() if banner else "PANEL RUN INVALID"
         emit(fmt, message=extra.get("message", "Panel complete"), extra=extra)
 
+    # ── sp-7vp: auto-save results with --save ─────────────────────────
+    if getattr(args, "save", False):
+        from synth_panel.mcp.data import save_panel_result
+
+        # Determine instrument name (pack name or filename stem)
+        inst_name: str | None = None
+        inst_arg = getattr(args, "instrument", None)
+        if inst_arg:
+            inst_path = Path(inst_arg)
+            if inst_path.exists():
+                inst_name = inst_path.stem
+            else:
+                inst_name = inst_arg  # pack name
+
+        all_models: list[str] | None = None
+        if persona_models:
+            all_models = sorted(set(persona_models.values()))
+        elif model_spec:
+            all_models = [m for m, _w in model_spec]
+
+        result_id = save_panel_result(
+            results=results,
+            model=model,
+            total_usage=total_usage.to_dict(),
+            total_cost=total_cost_est.format_usd(),
+            persona_count=len(personas),
+            question_count=len(questions),
+            instrument_name=inst_name,
+            models=all_models,
+        )
+        print(f"Result saved: {result_id}", file=sys.stderr)
+
     # sp-2hg: exit non-zero when the run is invalid so automation (CI,
     # refinery, wrapper scripts) can detect silent-failure scenarios.
     if strict_violation:

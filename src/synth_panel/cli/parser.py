@@ -283,6 +283,16 @@ def build_parser() -> argparse.ArgumentParser:
             "'haiku:0.5,gemini:0.5'). Requires --models."
         ),
     )
+    panel_run_parser.add_argument(
+        "--save",
+        action="store_true",
+        default=False,
+        help=(
+            "Save panel results to ~/.synthpanel/results/ with a generated "
+            "result ID. The result ID is printed to stderr on completion and "
+            "can be passed to 'synthpanel analyze <RESULT_ID>'."
+        ),
+    )
 
     # pack
     pack_parser = subparsers.add_parser(
