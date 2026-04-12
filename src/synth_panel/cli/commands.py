@@ -44,6 +44,7 @@ _DEFAULT_MODEL_PREFERENCE: list[tuple[str, str]] = [
     ("GEMINI_API_KEY", "gemini-2.5-flash"),
     ("GOOGLE_API_KEY", "gemini-2.5-flash"),
     ("XAI_API_KEY", "grok-3"),
+    ("OPENROUTER_API_KEY", "openrouter/auto"),
 ]
 
 
@@ -294,7 +295,10 @@ def _load_yaml(path: str) -> Any:
     if not p.exists():
         raise FileNotFoundError(f"File not found: {path}")
     with open(p, encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        try:
+            return yaml.safe_load(f)
+        except yaml.YAMLError as exc:
+            raise ValueError(f"Invalid YAML in {path}: {exc}") from exc
 
 
 def _load_personas(path: str) -> list[dict[str, Any]]:
