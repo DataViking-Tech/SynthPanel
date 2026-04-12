@@ -841,39 +841,19 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             # surfaces it — this is the critical fix for sp-2hg.
             print(banner, file=sys.stderr)
     else:
-        legacy = getattr(args, "legacy_output", False)
-        if legacy:
-            sys.stderr.write(
-                "DeprecationWarning: --legacy-output emits the flat "
-                "single-round shape and will be removed in 0.6.0. Migrate "
-                "consumers to the rounds-shaped output.\n"
-            )
-            extra: dict[str, Any] = {
-                "results": results,
-                "panelist_cost": panelist_cost_est.format_usd(),
-                "synthesis": synthesis_dict,
-                "total_usage": total_usage.to_dict(),
-                "total_cost": total_cost_est.format_usd(),
-                "model": model,
-                "persona_count": len(personas),
-                "question_count": len(questions),
-                "metadata": metadata,
-                "parameters": _build_params_metadata(args, temperature, top_p),
-            }
-        else:
-            extra = _build_rounds_shape(
-                instrument=instrument,
-                results=results,
-                synthesis_dict=synthesis_dict,
-                panelist_cost=panelist_cost_est,
-                total_usage=total_usage,
-                total_cost=total_cost_est,
-                model=model,
-                persona_count=len(personas),
-                question_count=len(questions),
-                metadata=metadata,
-            )
-            extra["parameters"] = _build_params_metadata(args, temperature, top_p)
+        extra: dict[str, Any] = _build_rounds_shape(
+            instrument=instrument,
+            results=results,
+            synthesis_dict=synthesis_dict,
+            panelist_cost=panelist_cost_est,
+            total_usage=total_usage,
+            total_cost=total_cost_est,
+            model=model,
+            persona_count=len(personas),
+            question_count=len(questions),
+            metadata=metadata,
+        )
+        extra["parameters"] = _build_params_metadata(args, temperature, top_p)
         # Surface failure stats + run validity in structured output so
         # downstream consumers (MCP, CI) can gate on it without parsing text.
         extra["failure_stats"] = failure_stats
