@@ -766,6 +766,129 @@ class TestPanelRun:
         mock_synth.assert_not_called()
 
 
+# --- sp-7vp: --save flag --------------------------------------------------
+
+
+class TestPanelRunSave:
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_save_flag_writes_result_and_prints_id(
+        self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path, monkeypatch
+    ):
+        """--save stores results to disk and prints the result ID to stderr."""
+        mock_runtime = MagicMock()
+        mock_runtime.run_turn.return_value = _mock_turn_summary("answer")
+        mock_runtime_cls.return_value = mock_runtime
+        mock_synth.return_value = _mock_synthesis_result()
+
+        # Redirect results to tmp_path so we don't pollute ~/.synthpanel
+        monkeypatch.setenv("SYNTH_PANEL_DATA_DIR", str(tmp_path / "data"))
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n    age: 30\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: What do you think?\n")
+
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--save",
+            ]
+        )
+        assert code == 0
+        captured = capsys.readouterr()
+        assert "Result saved: result-" in captured.err
+
+        # Extract the result ID from stderr
+        for line in captured.err.splitlines():
+            if line.startswith("Result saved: "):
+                result_id = line.split("Result saved: ")[1].strip()
+                break
+        else:
+            pytest.fail("Result ID not found in stderr")
+
+        # Verify the file was created
+        result_file = tmp_path / "data" / "results" / f"{result_id}.json"
+        assert result_file.exists()
+
+        # Verify the file content is valid JSON with expected fields
+        data = json.loads(result_file.read_text())
+        assert data["persona_count"] == 1
+        assert data["question_count"] == 1
+        assert "results" in data
+        assert "total_usage" in data
+        assert "total_cost" in data
+
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_save_result_works_with_analyze(
+        self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path, monkeypatch
+    ):
+        """Saved result can be loaded by 'synthpanel analyze'."""
+        mock_runtime = MagicMock()
+        mock_runtime.run_turn.return_value = _mock_turn_summary("Strongly agree")
+        mock_runtime_cls.return_value = mock_runtime
+        mock_synth.return_value = _mock_synthesis_result()
+
+        monkeypatch.setenv("SYNTH_PANEL_DATA_DIR", str(tmp_path / "data"))
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text(
+            "personas:\n  - name: Alice\n    age: 30\n  - name: Bob\n    age: 25\n"
+        )
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: Do you agree?\n")
+
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--save",
+            ]
+        )
+        assert code == 0
+
+        # Extract result ID
+        captured = capsys.readouterr()
+        result_id = None
+        for line in captured.err.splitlines():
+            if line.startswith("Result saved: "):
+                result_id = line.split("Result saved: ")[1].strip()
+                break
+        assert result_id is not None
+
+        # Now run analyze on the saved result
+        code = main(["analyze", result_id])
+        assert code == 0
+
+    def test_save_flag_parser(self):
+        """--save flag is accepted by the parser."""
+        parser = build_parser()
+        args = parser.parse_args(
+            ["panel", "run", "--personas", "p.yaml", "--instrument", "i.yaml", "--save"]
+        )
+        assert args.save is True
+
+    def test_save_flag_default_false(self):
+        """--save defaults to False."""
+        parser = build_parser()
+        args = parser.parse_args(
+            ["panel", "run", "--personas", "p.yaml", "--instrument", "i.yaml"]
+        )
+        assert args.save is False
+
+
 # --- sp-f4t: default model resolution -----------------------------------
 
 
