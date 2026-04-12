@@ -823,20 +823,14 @@ class TestMatchToOption:
         from synth_panel.ensemble import _match_to_option
 
         options = ["Fully remote", "Hybrid 3 days", "In office"]
-        assert _match_to_option(
-            "I'd definitely prefer fully remote work", options
-        ) == "Fully remote"
-        assert _match_to_option(
-            "I think hybrid 3 days is best for me", options
-        ) == "Hybrid 3 days"
+        assert _match_to_option("I'd definitely prefer fully remote work", options) == "Fully remote"
+        assert _match_to_option("I think hybrid 3 days is best for me", options) == "Hybrid 3 days"
 
     def test_longest_match_wins(self):
         from synth_panel.ensemble import _match_to_option
 
         options = ["remote", "Fully remote"]
-        assert _match_to_option(
-            "I want fully remote work", options
-        ) == "Fully remote"
+        assert _match_to_option("I want fully remote work", options) == "Fully remote"
 
     def test_response_contained_in_option(self):
         from synth_panel.ensemble import _match_to_option
