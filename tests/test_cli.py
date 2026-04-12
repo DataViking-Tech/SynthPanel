@@ -840,9 +840,7 @@ class TestPanelRunSave:
         monkeypatch.setenv("SYNTH_PANEL_DATA_DIR", str(tmp_path / "data"))
 
         personas_file = tmp_path / "personas.yaml"
-        personas_file.write_text(
-            "personas:\n  - name: Alice\n    age: 30\n  - name: Bob\n    age: 25\n"
-        )
+        personas_file.write_text("personas:\n  - name: Alice\n    age: 30\n  - name: Bob\n    age: 25\n")
         survey_file = tmp_path / "survey.yaml"
         survey_file.write_text("instrument:\n  questions:\n    - text: Do you agree?\n")
 
@@ -875,17 +873,13 @@ class TestPanelRunSave:
     def test_save_flag_parser(self):
         """--save flag is accepted by the parser."""
         parser = build_parser()
-        args = parser.parse_args(
-            ["panel", "run", "--personas", "p.yaml", "--instrument", "i.yaml", "--save"]
-        )
+        args = parser.parse_args(["panel", "run", "--personas", "p.yaml", "--instrument", "i.yaml", "--save"])
         assert args.save is True
 
     def test_save_flag_default_false(self):
         """--save defaults to False."""
         parser = build_parser()
-        args = parser.parse_args(
-            ["panel", "run", "--personas", "p.yaml", "--instrument", "i.yaml"]
-        )
+        args = parser.parse_args(["panel", "run", "--personas", "p.yaml", "--instrument", "i.yaml"])
         assert args.save is False
 
 
