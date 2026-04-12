@@ -736,7 +736,7 @@ class TestBlendDistributions:
 
     def test_empty_ensemble_raises(self):
         """Empty model_results raises ValueError."""
-        from synth_panel.ensemble import BlendedResult, EnsembleResult, blend_distributions
+        from synth_panel.ensemble import EnsembleResult, blend_distributions
 
         empty = EnsembleResult(
             model_results=[],
