@@ -2,14 +2,16 @@
 
 Runs the same panel N times (once per model) using existing
 run_panel_parallel(), then aggregates per-model costs via
-CostEstimate/TokenUsage.
+CostEstimate/TokenUsage.  Optionally blends response distributions
+across models for multiple-choice / structured-option questions.
 """
 
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from synth_panel.cost import (
@@ -153,4 +155,161 @@ def ensemble_run(
         per_model_usage=per_model_usage,
         persona_count=len(personas),
         question_count=len(questions),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Distribution blending
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class BlendedQuestion:
+    """Blended distribution for a single question across models."""
+
+    question_index: int
+    question_text: str
+    distribution: dict[str, float]  # option -> blended probability
+    per_model: dict[str, dict[str, float]]  # model -> {option -> probability}
+    response_count: int  # total panelist responses that contributed
+
+
+@dataclass
+class BlendedResult:
+    """Complete blended distribution set from an ensemble run."""
+
+    questions: list[BlendedQuestion]
+    models: list[str]
+    weights: dict[str, float]  # model -> normalized weight
+
+
+def _extract_response_value(response: dict[str, Any]) -> str:
+    """Extract a comparable response value from a panelist response dict.
+
+    Handles both free-text and structured responses. For structured
+    responses, extracts the primary value (first string field or the
+    ``response`` key). For free-text, returns the raw response string.
+    """
+    val = response.get("response", "")
+    if isinstance(val, dict):
+        # Structured response — try common keys, then first string value
+        for key in ("answer", "choice", "selection", "value", "response"):
+            if key in val and isinstance(val[key], str):
+                return val[key].strip()
+        # Fallback: first string value in the dict
+        for v in val.values():
+            if isinstance(v, str):
+                return v.strip()
+        return str(val)
+    return str(val).strip()
+
+
+def _build_distribution(responses: list[str]) -> dict[str, float]:
+    """Build a probability distribution from a list of response strings.
+
+    Each unique response gets a probability equal to its frequency.
+    Returns a dict mapping response -> probability (sums to 1.0).
+    """
+    if not responses:
+        return {}
+    counts = Counter(responses)
+    total = len(responses)
+    return {option: count / total for option, count in counts.items()}
+
+
+def blend_distributions(
+    ensemble_result: EnsembleResult,
+    *,
+    weights: dict[str, float] | None = None,
+) -> BlendedResult:
+    """Blend response distributions across models in an ensemble result.
+
+    For each question, collects all panelist responses from each model,
+    computes per-model response distributions (option frequencies), and
+    produces a weighted average across models.
+
+    Args:
+        ensemble_result: Result from :func:`ensemble_run` containing
+            per-model panelist results.
+        weights: Optional model -> weight mapping. When provided, weights
+            are normalized to sum to 1.0. When ``None``, all models get
+            equal weight.
+
+    Returns:
+        :class:`BlendedResult` with per-question blended distributions.
+
+    Raises:
+        ValueError: If ensemble_result has no model results.
+    """
+    if not ensemble_result.model_results:
+        raise ValueError("ensemble_result has no model results")
+
+    models = ensemble_result.models
+
+    # Resolve and normalize weights
+    if weights:
+        raw_weights = {m: weights.get(m, 0.0) for m in models}
+    else:
+        raw_weights = {m: 1.0 for m in models}
+
+    weight_sum = sum(raw_weights.values())
+    if weight_sum <= 0:
+        raise ValueError("model weights must sum to a positive value")
+    norm_weights = {m: w / weight_sum for m, w in raw_weights.items()}
+
+    # Determine the number of questions from the first model's results.
+    # All models ran the same questions, so we use the max response count
+    # across panelists as the question count.
+    n_questions = 0
+    for mr in ensemble_result.model_results:
+        for pr in mr.panelist_results:
+            n_questions = max(n_questions, len(pr.responses))
+
+    blended_questions: list[BlendedQuestion] = []
+
+    for qi in range(n_questions):
+        per_model_dist: dict[str, dict[str, float]] = {}
+        question_text = ""
+        total_responses = 0
+
+        for mr in ensemble_result.model_results:
+            model_responses: list[str] = []
+            for pr in mr.panelist_results:
+                if qi < len(pr.responses):
+                    resp = pr.responses[qi]
+                    if not question_text:
+                        question_text = resp.get("question", f"Q{qi + 1}")
+                    if not resp.get("error"):
+                        model_responses.append(_extract_response_value(resp))
+
+            total_responses += len(model_responses)
+            per_model_dist[mr.model] = _build_distribution(model_responses)
+
+        # Weighted average across models: collect all options, then for
+        # each option compute sum(weight_m * prob_m(option)).
+        all_options: set[str] = set()
+        for dist in per_model_dist.values():
+            all_options.update(dist.keys())
+
+        blended: dict[str, float] = {}
+        for option in all_options:
+            blended[option] = sum(
+                norm_weights.get(m, 0.0) * per_model_dist.get(m, {}).get(option, 0.0)
+                for m in models
+            )
+
+        blended_questions.append(
+            BlendedQuestion(
+                question_index=qi,
+                question_text=question_text,
+                distribution=blended,
+                per_model=per_model_dist,
+                response_count=total_responses,
+            )
+        )
+
+    return BlendedResult(
+        questions=blended_questions,
+        models=models,
+        weights=norm_weights,
     )

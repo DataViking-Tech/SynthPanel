@@ -268,6 +268,18 @@ def build_parser() -> argparse.ArgumentParser:
             "rephrase). Requires an LLM call per variant."
         ),
     )
+    panel_run_parser.add_argument(
+        "--blend",
+        action="store_true",
+        default=False,
+        help=(
+            "Enable distribution blending when running with multiple models "
+            "via --models. Runs each model on the full panel, then computes "
+            "weighted-average response distributions across models for each "
+            "question. Weights are taken from the --models spec (e.g. "
+            "'haiku:0.5,gemini:0.5'). Requires --models."
+        ),
+    )
 
     # pack
     pack_parser = subparsers.add_parser(
