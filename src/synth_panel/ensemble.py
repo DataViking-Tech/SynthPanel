@@ -204,6 +204,45 @@ def _extract_response_value(response: dict[str, Any]) -> str:
     return str(val).strip()
 
 
+def _match_to_option(value: str, options: list[str]) -> str:
+    """Match a response value to the closest option from a defined list.
+
+    Matching strategy (first match wins):
+    1. Exact match (case-insensitive)
+    2. Option is a substring of the response (case-insensitive),
+       preferring the longest matching option
+    3. Response is a substring of an option (case-insensitive),
+       preferring the longest matching option
+
+    Returns the original option string (preserving case) on match,
+    or the original value if no match is found.
+    """
+    val_lower = value.lower()
+
+    # 1. Exact match
+    for opt in options:
+        if val_lower == opt.lower():
+            return opt
+
+    # 2. Option contained in response (longest wins)
+    contained: list[str] = []
+    for opt in options:
+        if opt.lower() in val_lower:
+            contained.append(opt)
+    if contained:
+        return max(contained, key=len)
+
+    # 3. Response contained in option (longest matching option wins)
+    reverse_contained: list[str] = []
+    for opt in options:
+        if val_lower in opt.lower():
+            reverse_contained.append(opt)
+    if reverse_contained:
+        return max(reverse_contained, key=len)
+
+    return value
+
+
 def _build_distribution(responses: list[str]) -> dict[str, float]:
     """Build a probability distribution from a list of response strings.
 
@@ -221,6 +260,7 @@ def blend_distributions(
     ensemble_result: EnsembleResult,
     *,
     weights: dict[str, float] | None = None,
+    questions: list[dict[str, Any]] | None = None,
 ) -> BlendedResult:
     """Blend response distributions across models in an ensemble result.
 
@@ -228,12 +268,21 @@ def blend_distributions(
     computes per-model response distributions (option frequencies), and
     produces a weighted average across models.
 
+    When *questions* is provided and a question defines an ``options``
+    list, each response value is matched to the closest option before
+    aggregation.  This collapses free-text variations into canonical
+    option names (e.g. "I'd go with hybrid" → "Hybrid 3 days").
+
     Args:
         ensemble_result: Result from :func:`ensemble_run` containing
             per-model panelist results.
         weights: Optional model -> weight mapping. When provided, weights
             are normalized to sum to 1.0. When ``None``, all models get
             equal weight.
+        questions: Optional list of question dicts from the instrument.
+            When a question dict contains an ``options`` key (a list of
+            strings), responses are matched to those options before
+            distribution calculation.
 
     Returns:
         :class:`BlendedResult` with per-question blended distributions.
@@ -272,6 +321,13 @@ def blend_distributions(
         question_text = ""
         total_responses = 0
 
+        # Resolve options list for this question index (if provided)
+        q_options: list[str] | None = None
+        if questions and qi < len(questions):
+            opts = questions[qi].get("options")
+            if isinstance(opts, list) and opts:
+                q_options = [str(o) for o in opts]
+
         for mr in ensemble_result.model_results:
             model_responses: list[str] = []
             for pr in mr.panelist_results:
@@ -280,7 +336,10 @@ def blend_distributions(
                     if not question_text:
                         question_text = resp.get("question", f"Q{qi + 1}")
                     if not resp.get("error"):
-                        model_responses.append(_extract_response_value(resp))
+                        val = _extract_response_value(resp)
+                        if q_options:
+                            val = _match_to_option(val, q_options)
+                        model_responses.append(val)
 
             total_responses += len(model_responses)
             per_model_dist[mr.model] = _build_distribution(model_responses)

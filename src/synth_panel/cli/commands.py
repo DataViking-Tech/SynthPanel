@@ -637,7 +637,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         )
         # Build weights dict from the model spec
         blend_weights = {m: w for m, w in model_spec}
-        blend_result = blend_distributions(ensemble, weights=blend_weights)
+        blend_result = blend_distributions(ensemble, weights=blend_weights, questions=questions)
 
         # Flatten all panelist results across models for output + synthesis
         panelist_results = [pr for mr in ensemble.model_results for pr in mr.panelist_results]

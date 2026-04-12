@@ -802,3 +802,198 @@ class TestParserBlendFlag:
         parser = build_parser()
         args = parser.parse_args(["panel", "run", "--personas", "p.yaml", "--instrument", "i.yaml"])
         assert args.blend is False
+
+
+# ---------------------------------------------------------------------------
+# Tests: _match_to_option
+# ---------------------------------------------------------------------------
+
+
+class TestMatchToOption:
+    """Tests for the _match_to_option helper."""
+
+    def test_exact_match_case_insensitive(self):
+        from synth_panel.ensemble import _match_to_option
+
+        assert _match_to_option("Fully remote", ["Fully remote", "Hybrid 3 days"]) == "Fully remote"
+        assert _match_to_option("fully remote", ["Fully remote", "Hybrid 3 days"]) == "Fully remote"
+        assert _match_to_option("FULLY REMOTE", ["Fully remote", "Hybrid 3 days"]) == "Fully remote"
+
+    def test_option_contained_in_response(self):
+        from synth_panel.ensemble import _match_to_option
+
+        options = ["Fully remote", "Hybrid 3 days", "In office"]
+        assert _match_to_option("I'd definitely prefer fully remote work", options) == "Fully remote"
+        assert _match_to_option("I think hybrid 3 days is best for me", options) == "Hybrid 3 days"
+
+    def test_longest_match_wins(self):
+        from synth_panel.ensemble import _match_to_option
+
+        options = ["remote", "Fully remote"]
+        assert _match_to_option("I want fully remote work", options) == "Fully remote"
+
+    def test_response_contained_in_option(self):
+        from synth_panel.ensemble import _match_to_option
+
+        options = ["Fully remote work schedule", "Hybrid 3 days per week"]
+        assert _match_to_option("hybrid 3 days", options) == "Hybrid 3 days per week"
+
+    def test_no_match_returns_original(self):
+        from synth_panel.ensemble import _match_to_option
+
+        options = ["Fully remote", "Hybrid 3 days"]
+        assert _match_to_option("Something else entirely", options) == "Something else entirely"
+
+    def test_empty_options_returns_original(self):
+        from synth_panel.ensemble import _match_to_option
+
+        assert _match_to_option("anything", []) == "anything"
+
+
+# ---------------------------------------------------------------------------
+# Tests: blend_distributions with options
+# ---------------------------------------------------------------------------
+
+
+class TestBlendDistributionsWithOptions(TestBlendDistributions):
+    """Tests for blend_distributions when questions define options."""
+
+    def test_options_normalize_responses(self):
+        """Responses are matched to defined options before aggregation."""
+        from synth_panel.ensemble import blend_distributions
+
+        ensemble = self._make_ensemble_result(
+            models=["haiku", "gemini"],
+            model_responses={
+                "haiku": [
+                    [{"question": "Work preference?", "response": "I prefer fully remote work"}],
+                    [{"question": "Work preference?", "response": "Hybrid 3 days sounds good"}],
+                ],
+                "gemini": [
+                    [{"question": "Work preference?", "response": "fully remote for me"}],
+                    [{"question": "Work preference?", "response": "I'd choose in office"}],
+                ],
+            },
+        )
+        questions = [
+            {"text": "Work preference?", "options": ["Fully remote", "Hybrid 3 days", "In office"]},
+        ]
+
+        result = blend_distributions(ensemble, questions=questions)
+        dist = result.questions[0].distribution
+        # haiku: Fully remote=0.5, Hybrid 3 days=0.5
+        # gemini: Fully remote=0.5, In office=0.5
+        # blended (equal weight): Fully remote=0.5, Hybrid 3 days=0.25, In office=0.25
+        assert "Fully remote" in dist
+        assert "Hybrid 3 days" in dist
+        assert "In office" in dist
+        assert dist["Fully remote"] == pytest.approx(0.5)
+        assert dist["Hybrid 3 days"] == pytest.approx(0.25)
+        assert dist["In office"] == pytest.approx(0.25)
+
+    def test_structured_response_with_options(self):
+        """Structured responses (pick_one) are matched to defined options."""
+        from synth_panel.ensemble import blend_distributions
+
+        ensemble = self._make_ensemble_result(
+            models=["haiku", "gemini"],
+            model_responses={
+                "haiku": [
+                    [{"question": "Q1", "response": {"choice": "fully remote", "reasoning": "I like it"}}],
+                ],
+                "gemini": [
+                    [{"question": "Q1", "response": {"choice": "Hybrid 3 days", "reasoning": "balance"}}],
+                ],
+            },
+        )
+        questions = [
+            {"text": "Q1", "options": ["Fully remote", "Hybrid 3 days", "In office"]},
+        ]
+
+        result = blend_distributions(ensemble, questions=questions)
+        dist = result.questions[0].distribution
+        assert "Fully remote" in dist
+        assert "Hybrid 3 days" in dist
+        assert dist["Fully remote"] == pytest.approx(0.5)
+        assert dist["Hybrid 3 days"] == pytest.approx(0.5)
+
+    def test_no_options_preserves_behavior(self):
+        """Questions without options keep raw response values."""
+        from synth_panel.ensemble import blend_distributions
+
+        ensemble = self._make_ensemble_result(
+            models=["haiku", "gemini"],
+            model_responses={
+                "haiku": [[{"question": "Q1", "response": "A long answer"}]],
+                "gemini": [[{"question": "Q1", "response": "B long answer"}]],
+            },
+        )
+        questions = [{"text": "Q1"}]  # no options
+
+        result = blend_distributions(ensemble, questions=questions)
+        dist = result.questions[0].distribution
+        assert "A long answer" in dist
+        assert "B long answer" in dist
+
+    def test_questions_none_preserves_behavior(self):
+        """When questions is None, behavior is unchanged."""
+        from synth_panel.ensemble import blend_distributions
+
+        ensemble = self._make_ensemble_result(
+            models=["haiku", "gemini"],
+            model_responses={
+                "haiku": [[{"question": "Q1", "response": "A"}]],
+                "gemini": [[{"question": "Q1", "response": "B"}]],
+            },
+        )
+
+        result = blend_distributions(ensemble, questions=None)
+        dist = result.questions[0].distribution
+        assert dist["A"] == pytest.approx(0.5)
+        assert dist["B"] == pytest.approx(0.5)
+
+    def test_mixed_questions_some_with_options(self):
+        """Only questions with options get matching; others pass through."""
+        from synth_panel.ensemble import blend_distributions
+
+        ensemble = self._make_ensemble_result(
+            models=["haiku"],
+            model_responses={
+                "haiku": [
+                    [
+                        {"question": "Q1", "response": "I like fully remote"},
+                        {"question": "Q2", "response": "Free-form answer here"},
+                    ],
+                ],
+            },
+        )
+        questions = [
+            {"text": "Q1", "options": ["Fully remote", "Hybrid", "In office"]},
+            {"text": "Q2"},  # no options
+        ]
+
+        result = blend_distributions(ensemble, questions=questions)
+        assert result.questions[0].distribution == {"Fully remote": pytest.approx(1.0)}
+        assert result.questions[1].distribution == {"Free-form answer here": pytest.approx(1.0)}
+
+    def test_unmatched_response_passes_through(self):
+        """Responses that don't match any option are kept as-is."""
+        from synth_panel.ensemble import blend_distributions
+
+        ensemble = self._make_ensemble_result(
+            models=["haiku"],
+            model_responses={
+                "haiku": [
+                    [{"question": "Q1", "response": "Something completely different"}],
+                    [{"question": "Q1", "response": "Fully remote"}],
+                ],
+            },
+        )
+        questions = [
+            {"text": "Q1", "options": ["Fully remote", "Hybrid"]},
+        ]
+
+        result = blend_distributions(ensemble, questions=questions)
+        dist = result.questions[0].distribution
+        assert "Fully remote" in dist
+        assert "Something completely different" in dist
