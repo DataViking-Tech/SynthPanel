@@ -205,16 +205,6 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     panel_run_parser.add_argument(
-        "--legacy-output",
-        action="store_true",
-        default=False,
-        help=(
-            "Emit the deprecated flat single-round output shape instead "
-            "of the rounds-shaped payload. Prints a DeprecationWarning to "
-            "stderr; will be removed in 0.6.0."
-        ),
-    )
-    panel_run_parser.add_argument(
         "--strict",
         action="store_true",
         default=False,
