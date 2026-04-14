@@ -91,6 +91,10 @@ src/synth_panel/
 └── main.py           # Entry point
 ```
 
+## Adding a New LLM Provider
+
+Adapters are the highest-leverage contribution — one adapter brings every synthpanel feature to a new backend. See [docs/adapter-guide.md](docs/adapter-guide.md) for a step-by-step walkthrough, including a worked Mistral example, required tests, and PR checklist.
+
 ## Submitting Changes
 
 1. Fork the repository and create a feature branch from `main`.

@@ -450,6 +450,14 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, and how t
 
 For detailed MCP server documentation (all 12 tools, 4 resources, 3 prompt templates), see [docs/mcp.md](docs/mcp.md).
 
+## Benchmarked on SynthBench
+
+synth-panel's ability to produce representative synthetic respondents is independently measured by [SynthBench](https://dataviking-tech.github.io/synthbench/), an open benchmark for synthetic survey quality.
+
+- **Want proof it works?** Browse the [leaderboard](https://dataviking-tech.github.io/synthbench/leaderboard/) — ensemble blending of 3 models hits SPS 0.90 (90% human parity).
+- **Got a great configuration?** [Submit your scores](https://dataviking-tech.github.io/synthbench/submit/) and compare against baselines.
+- **Contributing an adapter?** Heavy PRs with substantial behavior changes benefit from SynthBench results — reviewers can evaluate empirical quality, not just code. See [docs/adapter-guide.md](docs/adapter-guide.md) for the full adapter workflow.
+
 ## License
 
 MIT
