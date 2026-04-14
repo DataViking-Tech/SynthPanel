@@ -284,6 +284,29 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    # panel synthesize (sp-5on.5: post-hoc re-synthesis of a saved result)
+    panel_synth_parser = panel_subparsers.add_parser(
+        "synthesize",
+        help="Re-synthesize a saved panel result with a different model or prompt.",
+    )
+    panel_synth_parser.add_argument(
+        "result",
+        metavar="RESULT_ID",
+        help="Panel result ID (from 'panel run --save') or path to a result JSON file.",
+    )
+    panel_synth_parser.add_argument(
+        "--synthesis-model",
+        default=None,
+        metavar="MODEL",
+        help="Model for re-synthesis (default: original panelist model).",
+    )
+    panel_synth_parser.add_argument(
+        "--synthesis-prompt",
+        default=None,
+        metavar="PROMPT",
+        help="Custom synthesis prompt (replaces the default entirely).",
+    )
+
     # pack
     pack_parser = subparsers.add_parser(
         "pack",

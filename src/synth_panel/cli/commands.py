@@ -1502,6 +1502,138 @@ def _build_params_metadata(
     return params
 
 
+def handle_panel_synthesize(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Re-synthesize a saved panel result (sp-5on.5).
+
+    Loads a saved panel result, reconstructs the panelist results and
+    question list, invokes :func:`synthesize_panel` with the requested
+    model/prompt, and writes a sidecar file
+    ``<result_id>.synthesis-<ts>.json`` next to the original result.
+    """
+    from datetime import datetime, timezone
+
+    from synth_panel.orchestrator import PanelistResult
+
+    result_ref = args.result
+    path = Path(result_ref)
+    if path.exists() and path.suffix == ".json":
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data.setdefault("id", path.stem)
+    else:
+        from synth_panel.mcp.data import get_panel_result
+
+        try:
+            data = get_panel_result(result_ref)
+        except FileNotFoundError:
+            print(f"Error: panel result not found: {result_ref}", file=sys.stderr)
+            return 1
+
+    saved_results = data.get("results") or []
+    if not saved_results:
+        print(f"Error: no panelist results found in {result_ref}", file=sys.stderr)
+        return 1
+
+    panelist_results: list[PanelistResult] = []
+    for r in saved_results:
+        usage_dict = r.get("usage") or {}
+        usage = TokenUsage.from_dict(usage_dict) if usage_dict else ZERO_USAGE
+        panelist_results.append(
+            PanelistResult(
+                persona_name=r.get("persona", "Anonymous"),
+                responses=r.get("responses") or [],
+                usage=usage,
+                error=r.get("error"),
+                model=r.get("model"),
+            )
+        )
+
+    saved_questions = data.get("questions")
+    if saved_questions:
+        questions = saved_questions
+    else:
+        seen: list[dict[str, Any]] = []
+        seen_texts: set[str] = set()
+        for pr in panelist_results:
+            for resp in pr.responses:
+                if resp.get("follow_up"):
+                    continue
+                q_text = resp.get("question", "")
+                if q_text and q_text not in seen_texts:
+                    seen.append({"text": q_text})
+                    seen_texts.add(q_text)
+        questions = seen
+
+    panelist_model = data.get("model")
+    client = LLMClient()
+    try:
+        synth = synthesize_panel(
+            client,
+            panelist_results,
+            questions,
+            model=getattr(args, "synthesis_model", None),
+            panelist_model=panelist_model,
+            custom_prompt=getattr(args, "synthesis_prompt", None),
+        )
+    except Exception as exc:
+        print(f"Error: synthesis failed: {exc}", file=sys.stderr)
+        return 1
+
+    synthesis_dict = synth.to_dict()
+
+    from synth_panel.mcp.data import save_panel_synthesis
+
+    source_id = data.get("id") or path.stem
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    sidecar_name = save_panel_synthesis(
+        source_id,
+        ts,
+        {
+            "source_result_id": source_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "synthesis_model": synth.model,
+            "synthesis_prompt_override": getattr(args, "synthesis_prompt", None) is not None,
+            "synthesis": synthesis_dict,
+        },
+    )
+
+    if fmt is OutputFormat.TEXT:
+        print(f"{'=' * 60}")
+        print("SYNTHESIS")
+        print(f"{'=' * 60}")
+        print(f"\n  Summary: {synthesis_dict['summary']}")
+        if synthesis_dict.get("themes"):
+            print("\n  Themes:")
+            for t in synthesis_dict["themes"]:
+                print(f"    - {t}")
+        if synthesis_dict.get("agreements"):
+            print("\n  Agreements:")
+            for a in synthesis_dict["agreements"]:
+                print(f"    - {a}")
+        if synthesis_dict.get("disagreements"):
+            print("\n  Disagreements:")
+            for d in synthesis_dict["disagreements"]:
+                print(f"    - {d}")
+        if synthesis_dict.get("surprises"):
+            print("\n  Surprises:")
+            for s in synthesis_dict["surprises"]:
+                print(f"    - {s}")
+        print(f"\n  Recommendation: {synthesis_dict['recommendation']}")
+        print(f"  Synthesis cost: {synthesis_dict['cost']}")
+        print(f"\nSaved synthesis: {sidecar_name}", file=sys.stderr)
+    else:
+        emit(
+            fmt,
+            message="Panel synthesis complete",
+            extra={
+                "source_result_id": source_id,
+                "synthesis": synthesis_dict,
+                "saved_as": sidecar_name,
+            },
+        )
+
+    return 0
+
+
 def handle_analyze(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """Run statistical analysis on a saved panel result."""
     import json as _json
