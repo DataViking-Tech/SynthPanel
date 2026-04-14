@@ -1,0 +1,78 @@
+# pricing-segmentation-study: v3 branching instrument that splits the
+# panel into a premium-tier probe or value-tier probe based on the
+# income bracket that surfaces in the discovery round.
+#
+# Routing note: v3 predicates match exact substrings against themes
+# emitted by the synthesizer, not numeric response values. There is no
+# `greater_than` operator — instead, we prompt the synthesizer to emit
+# canonical income-bracket tags and branch on `contains`. See the
+# README "Theme Matching" section for the full R3 caveat.
+#
+# Canonical theme tags used below:
+#   - "income_high"  (respondents anchor on >$75K household income
+#                     or premium-tier willingness to pay)
+#   - "income_low"   (respondents anchor on <=$75K or value-tier
+#                     willingness to pay)
+#   - "price_sensitive" (any strong price-anchored resistance)
+
+instrument:
+  version: 3
+  rounds:
+    - name: discovery
+      questions:
+        - text: >
+            Walk me through the last time you paid for a {category}
+            product. What did you pay, and did it feel fair?
+        - text: >
+            When you think about your household budget, where does a
+            product like this sit — comfortable purchase, stretch, or
+            splurge? A rough income bracket is fine if you're willing.
+      route_when:
+        - if:
+            field: themes
+            op: contains
+            value: income_high
+          goto: premium_tier
+        - if:
+            field: themes
+            op: contains
+            value: income_low
+          goto: value_tier
+        - if:
+            field: themes
+            op: contains
+            value: price_sensitive
+          goto: value_tier
+        - else: value_tier
+
+    - name: premium_tier
+      questions:
+        - text: >
+            For a premium version of {category} — best-in-class
+            materials, white-glove support, early access to new
+            features — what would you expect to pay per year?
+        - text: >
+            What would make the premium price feel *earned* versus
+            feel like a tax on people who can afford it?
+      route_when:
+        - else: wrap_up
+
+    - name: value_tier
+      questions:
+        - text: >
+            For a no-frills version of {category} that covers the
+            essentials reliably, what monthly price would feel fair —
+            and what price would feel like a bargain?
+        - text: >
+            What's the one feature you'd refuse to give up even in a
+            value-tier product? What would you trade away without
+            blinking?
+      route_when:
+        - else: wrap_up
+
+    - name: wrap_up
+      questions:
+        - text: >
+            Last question for everyone — if {category} raised its
+            price 20% tomorrow, what would you do? Pay it, switch,
+            cancel, or something else?
