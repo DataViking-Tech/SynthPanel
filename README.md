@@ -225,6 +225,15 @@ The unified instrument resolver (used by `panel run --instrument`) accepts
 either a YAML path *or* an installed pack name, so you can iterate on a
 local file and then `install` it once it's stable.
 
+## Examples
+
+The [`examples/`](examples/) directory ships a persona pack plus one
+instrument per format (v1 flat, v2 linear, v3 branching). Start from
+[`examples/README.md`](examples/README.md) for the full index and
+annotated walkthroughs — including two v3 branching patterns
+(demographic segmentation and A/B concept testing) you can adapt to
+your own studies.
+
 ## LLM Provider Support
 
 synthpanel works with any LLM provider. Set the appropriate environment variable:

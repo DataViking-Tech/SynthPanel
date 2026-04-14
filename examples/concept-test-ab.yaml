@@ -1,0 +1,79 @@
+# concept-test-ab: v3 branching instrument for classic A/B concept
+# testing. Panelists react to concept A, then concept B, and a
+# conditional third round probes the underlying reasoning *only* when
+# their reactions diverge significantly across the two concepts.
+#
+# This example demonstrates the `matches` predicate (Python regex).
+# `matches` is the right tool when you want to detect a family of
+# related phrasings — here, any synthesizer theme tag that signals
+# divergence, split reactions, or preference flipping.
+#
+# Canonical theme tags the synthesizer is encouraged to emit:
+#   - "divergent"       (panelists split sharply between A and B)
+#   - "diverge_strong"  (near-opposite reactions across the panel)
+#   - "prefer_a"        (clear group lean toward concept A)
+#   - "prefer_b"        (clear group lean toward concept B)
+#   - "tie"             (no meaningful difference between A and B)
+
+instrument:
+  version: 3
+  rounds:
+    - name: concept_a_reaction
+      questions:
+        - text: >
+            Here's concept A: {concept_a}. What's your immediate,
+            unfiltered reaction? Don't think too hard.
+        - text: >
+            Who do you think this is for? Would you use it yourself?
+
+    - name: concept_b_reaction
+      depends_on: concept_a_reaction
+      questions:
+        - text: >
+            Now here's concept B: {concept_b}. Same drill — gut
+            reaction first, then tell me who it's for.
+        - text: >
+            If you had to pick one of the two to actually use
+            tomorrow, which would it be, and by how wide a margin?
+      route_when:
+        - if:
+            field: themes
+            op: matches
+            value: "diverge|split|flip|opposite"
+          goto: probe_divergence
+        - if:
+            field: themes
+            op: matches
+            value: "(?i)prefer_[ab]|strong_(?:a|b)"
+          goto: probe_preference
+        - else: wrap_up
+
+    - name: probe_divergence
+      questions:
+        - text: >
+            The group split hard on these two. Walk me through what
+            concept A promises that concept B doesn't, and vice
+            versa — in your own words.
+        - text: >
+            What would concept A need to borrow from concept B (or
+            the other way around) to become the clear winner for you?
+      route_when:
+        - else: wrap_up
+
+    - name: probe_preference
+      questions:
+        - text: >
+            You leaned toward one concept pretty clearly. What tipped
+            it — the idea itself, the way it was framed, or something
+            about the alternative that turned you off?
+        - text: >
+            If we reframed the weaker concept so that its strongest
+            idea led, would your preference shift? Be honest.
+      route_when:
+        - else: wrap_up
+
+    - name: wrap_up
+      questions:
+        - text: >
+            Final word — if you had to explain to a friend in one
+            sentence which concept wins and why, what would you say?
