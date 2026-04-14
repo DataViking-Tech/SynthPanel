@@ -118,3 +118,7 @@ Releases are published to PyPI via GitHub Actions:
 3. The `publish.yml` workflow builds and publishes to PyPI using trusted publishing.
 
 See the [Versions table in README.md](README.md#versions) for release history.
+
+## Sign-off
+
+All contributions require a DCO sign-off. Use `git commit -s` to add a `Signed-off-by:` trailer. This certifies you have the right to submit the contribution under the project's MIT license. See https://developercertificate.org/.

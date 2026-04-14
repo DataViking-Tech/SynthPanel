@@ -1,0 +1,73 @@
+name: Bug report
+description: Report a bug in synth-panel
+labels: ["bug"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: synth-panel version
+      description: Output of `synthpanel --version` or the installed package version.
+      placeholder: e.g. 0.7.4
+    validations:
+      required: true
+
+  - type: dropdown
+    id: provider
+    attributes:
+      label: LLM provider
+      description: Which provider were you using when the bug occurred?
+      options:
+        - Anthropic
+        - OpenAI
+        - xAI
+        - Gemini
+        - OpenRouter
+        - Other (please describe in reproduction steps)
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Model name
+      description: Exact model name or alias (e.g. `claude-sonnet-4-6`, `sonnet`, `gpt-4o`).
+      placeholder: e.g. claude-sonnet-4-6
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Minimal steps to reproduce. Include command, YAML input, or code snippet.
+      placeholder: |
+        1. Create `personas.yaml` with ...
+        2. Run `synthpanel panel run --personas personas.yaml --instrument ...`
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened? Include exit codes, error messages, or unexpected output.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / traceback
+      description: Paste relevant logs, stack traces, or NDJSON output. Redact API keys.
+      render: shell
+    validations:
+      required: false
