@@ -846,6 +846,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             results=results,
             synthesis_dict=synthesis_dict,
             panelist_cost=panelist_cost_est,
+            panelist_usage=panelist_usage,
             total_usage=total_usage,
             total_cost=total_cost_est,
             model=model,
@@ -1042,6 +1043,7 @@ def _build_rounds_shape(
     model: str,
     persona_count: int,
     question_count: int,
+    panelist_usage: TokenUsage | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the rounds-shaped panel output payload.
@@ -1065,6 +1067,7 @@ def _build_rounds_shape(
         "warnings": list(getattr(instrument, "warnings", []) or []),
         "synthesis": synthesis_dict,
         "panelist_cost": panelist_cost.format_usd(),
+        "panelist_usage": (panelist_usage.to_dict() if panelist_usage is not None else None),
         "total_usage": total_usage.to_dict(),
         "total_cost": total_cost.format_usd(),
         "model": model,

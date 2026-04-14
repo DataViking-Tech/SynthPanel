@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 
 from synth_panel.cost import (
+    GEMINI_FLASH_PRICING,
+    GEMINI_PRO_PRICING,
     HAIKU_PRICING,
     OPUS_PRICING,
     SONNET_PRICING,
@@ -17,6 +19,7 @@ from synth_panel.cost import (
     estimate_cost,
     format_summary,
     lookup_pricing,
+    lookup_pricing_by_provider,
 )
 
 # --- TokenUsage -----------------------------------------------------------
@@ -81,6 +84,57 @@ class TestPricingLookup:
     def test_none_model_defaults(self):
         _p, est = lookup_pricing(None)
         assert est is True
+
+
+# --- Provider-string pricing lookup --------------------------------------
+
+
+class TestProviderLookup:
+    """Cover the 7 R-observed `config.provider` formats plus negatives.
+
+    The provider string is the synthbench-side identifier that pairs a
+    bucket prefix (delivery channel) with an inner model string. The
+    helper must (a) parse the bucket + inner correctly, (b) refuse to
+    fall back to SONNET pricing for unrecognised inner strings, and
+    (c) treat baselines / ensembles / self-hosted as unpriced.
+    """
+
+    @pytest.mark.parametrize(
+        "provider, expected",
+        [
+            # 7 positive cases — valid bucket + recognised inner.
+            ("synthpanel/claude-sonnet-4", SONNET_PRICING),
+            ("synthpanel/claude-sonnet-4 t=0.85 tpl=current", SONNET_PRICING),
+            ("synthpanel/claude-haiku-4-5 t=0.85 profile=foo tpl=minimal", HAIKU_PRICING),
+            ("openrouter/anthropic/claude-haiku-4-5", HAIKU_PRICING),
+            ("openrouter/google/gemini-2.5-flash", GEMINI_FLASH_PRICING),
+            ("raw-anthropic/claude-opus-4-6", OPUS_PRICING),
+            ("raw-gemini/gemini-2.5-pro", GEMINI_PRO_PRICING),
+        ],
+    )
+    def test_positive_lookup(self, provider: str, expected: object) -> None:
+        pricing, is_estimated = lookup_pricing_by_provider(provider)
+        assert pricing is expected
+        assert is_estimated is False
+
+    @pytest.mark.parametrize(
+        "provider",
+        [
+            # 5 negative cases — unpriced by design.
+            "ollama/llama3",
+            "random-baseline",
+            "majority-baseline",
+            "population-average-baseline",
+            "ensemble/3-model-blend",
+            # 1 edge case — valid bucket but inner has no priced match.
+            # Refuses to silently fall back to SONNET.
+            "raw-openai/gpt-5-unreleased",
+        ],
+    )
+    def test_negative_lookup(self, provider: str) -> None:
+        pricing, is_estimated = lookup_pricing_by_provider(provider)
+        assert pricing is None
+        assert is_estimated is False
 
 
 # --- CostEstimate ---------------------------------------------------------
