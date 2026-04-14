@@ -16,6 +16,9 @@ pip install -e ".[dev]"
 
 # For MCP server development, also install MCP deps
 pip install -e ".[dev,mcp]"
+
+# Install pre-commit hooks (runs ruff auto-fixes on commit)
+pip install pre-commit && pre-commit install
 ```
 
 ## Running Tests
