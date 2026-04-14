@@ -461,6 +461,24 @@ def get_panel_result(result_id: str) -> dict[str, Any]:
     return data
 
 
+def save_panel_synthesis(
+    source_result_id: str,
+    timestamp: str,
+    payload: dict[str, Any],
+) -> str:
+    """Write a sidecar synthesis file next to a saved panel result.
+
+    Used by ``synthpanel panel synthesize`` (sp-5on.5) to persist a
+    re-synthesis without mutating the original result. Returns the
+    sidecar filename (not the full path).
+    """
+    _validate_pack_id(source_result_id)
+    name = f"{source_result_id}.synthesis-{timestamp}.json"
+    p = _results_dir() / name
+    p.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return name
+
+
 def save_panel_result(
     results: list[dict[str, Any]],
     model: str,

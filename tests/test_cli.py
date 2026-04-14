@@ -882,6 +882,151 @@ class TestPanelRunSave:
         assert args.save is False
 
 
+# --- sp-5on.5: panel synthesize re-synthesis subcommand -----------------
+
+
+class TestPanelSynthesize:
+    """sp-5on.5: ``panel synthesize`` replays synthesis against a saved result."""
+
+    def test_panel_synthesize_parser(self):
+        parser = build_parser()
+        args = parser.parse_args(
+            ["panel", "synthesize", "result-abc", "--synthesis-model", "opus", "--synthesis-prompt", "Be brief."]
+        )
+        assert args.command == "panel"
+        assert args.panel_command == "synthesize"
+        assert args.result == "result-abc"
+        assert args.synthesis_model == "opus"
+        assert args.synthesis_prompt == "Be brief."
+
+    def test_panel_synthesize_parser_defaults(self):
+        parser = build_parser()
+        args = parser.parse_args(["panel", "synthesize", "result-xyz"])
+        assert args.synthesis_model is None
+        assert args.synthesis_prompt is None
+
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_panel_synthesize_reloads_result_and_saves_sidecar(
+        self, mock_client_cls, mock_synth, capsys, tmp_path, monkeypatch
+    ):
+        """Loads saved result by ID, invokes synthesize_panel, writes sidecar."""
+        mock_synth.return_value = _mock_synthesis_result()
+        monkeypatch.setenv("SYNTH_PANEL_DATA_DIR", str(tmp_path / "data"))
+
+        # Seed a saved panel result on disk
+        results_dir = tmp_path / "data" / "results"
+        results_dir.mkdir(parents=True)
+        result_id = "result-20260101-120000-abcdef"
+        (results_dir / f"{result_id}.json").write_text(
+            json.dumps(
+                {
+                    "created_at": "2026-01-01T12:00:00+00:00",
+                    "model": "haiku",
+                    "persona_count": 1,
+                    "question_count": 1,
+                    "total_usage": {"input_tokens": 5, "output_tokens": 10},
+                    "total_cost": "$0.0001",
+                    "results": [
+                        {
+                            "persona": "Alice",
+                            "responses": [
+                                {"question": "What do you think?", "response": "I like it."},
+                            ],
+                            "usage": {"input_tokens": 5, "output_tokens": 10},
+                            "cost": "$0.0001",
+                            "error": None,
+                        }
+                    ],
+                }
+            )
+        )
+
+        code = main(["panel", "synthesize", result_id, "--synthesis-model", "opus"])
+        assert code == 0
+
+        # synthesize_panel should have been called with the rebuilt panelist_results
+        mock_synth.assert_called_once()
+        _, kwargs = mock_synth.call_args
+        assert kwargs["model"] == "opus"
+        assert kwargs["panelist_model"] == "haiku"
+        panelist_results_arg = mock_synth.call_args.args[1]
+        assert len(panelist_results_arg) == 1
+        assert panelist_results_arg[0].persona_name == "Alice"
+        # Questions reconstructed from response dicts when not saved explicitly
+        questions_arg = mock_synth.call_args.args[2]
+        assert questions_arg == [{"text": "What do you think?"}]
+
+        # Sidecar was written alongside the original result
+        sidecars = list(results_dir.glob(f"{result_id}.synthesis-*.json"))
+        assert len(sidecars) == 1
+        sidecar_data = json.loads(sidecars[0].read_text())
+        assert sidecar_data["source_result_id"] == result_id
+        assert sidecar_data["synthesis"]["summary"] == "Test synthesis summary"
+        assert sidecar_data["synthesis_prompt_override"] is False
+
+        # Original result file must remain untouched
+        original = json.loads((results_dir / f"{result_id}.json").read_text())
+        assert "synthesis" not in original
+
+        # Text output surfaces the synthesis
+        out = capsys.readouterr()
+        assert "SYNTHESIS" in out.out
+        assert "Test synthesis summary" in out.out
+        assert "Saved synthesis:" in out.err
+
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_panel_synthesize_passes_custom_prompt(self, mock_client_cls, mock_synth, capsys, tmp_path, monkeypatch):
+        """``--synthesis-prompt`` flows through as custom_prompt."""
+        mock_synth.return_value = _mock_synthesis_result()
+        monkeypatch.setenv("SYNTH_PANEL_DATA_DIR", str(tmp_path / "data"))
+
+        result_file = tmp_path / "inline-result.json"
+        result_file.write_text(
+            json.dumps(
+                {
+                    "model": "sonnet",
+                    "persona_count": 1,
+                    "question_count": 1,
+                    "results": [
+                        {
+                            "persona": "Bob",
+                            "responses": [{"question": "Q?", "response": "A."}],
+                            "usage": {"input_tokens": 1, "output_tokens": 2},
+                        }
+                    ],
+                }
+            )
+        )
+
+        code = main(
+            [
+                "--output-format",
+                "json",
+                "panel",
+                "synthesize",
+                str(result_file),
+                "--synthesis-prompt",
+                "Summarize tersely.",
+            ]
+        )
+        assert code == 0
+        _, kwargs = mock_synth.call_args
+        assert kwargs["custom_prompt"] == "Summarize tersely."
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["source_result_id"] == result_file.stem
+        assert payload["synthesis"]["summary"] == "Test synthesis summary"
+        assert payload["saved_as"].startswith(f"{result_file.stem}.synthesis-")
+
+    def test_panel_synthesize_missing_result_returns_error(self, capsys, tmp_path, monkeypatch):
+        monkeypatch.setenv("SYNTH_PANEL_DATA_DIR", str(tmp_path / "data"))
+        code = main(["panel", "synthesize", "result-does-not-exist"])
+        assert code == 1
+        assert "not found" in capsys.readouterr().err
+
+
 # --- sp-f4t: default model resolution -----------------------------------
 
 
