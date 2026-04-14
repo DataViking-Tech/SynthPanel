@@ -1,0 +1,53 @@
+name: Adapter proposal
+description: Propose a new LLM provider adapter for synth-panel
+labels: ["adapter", "enhancement"]
+body:
+  - type: input
+    id: provider
+    attributes:
+      label: Provider name
+      description: The LLM provider you'd like to add support for.
+      placeholder: e.g. Cohere, Mistral, Together
+    validations:
+      required: true
+
+  - type: input
+    id: api_docs
+    attributes:
+      label: API documentation URL
+      description: Link to the provider's public API documentation.
+      placeholder: https://...
+    validations:
+      required: true
+
+  - type: textarea
+    id: models
+    attributes:
+      label: Model list
+      description: Which models should the adapter expose? Include model IDs and any aliases.
+    validations:
+      required: true
+
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Why this adapter?
+      description: What's the use case? Why is this provider valuable for synth-panel users?
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: maintain
+    attributes:
+      label: Willingness to author and maintain
+      options:
+        - label: I'd be willing to author this adapter and help maintain it going forward.
+          required: false
+
+  - type: checkboxes
+    id: synthbench
+    attributes:
+      label: SynthBench results (recommended for adapter PRs)
+      options:
+        - label: I plan to include SynthBench results with the adapter PR.
+          required: false
