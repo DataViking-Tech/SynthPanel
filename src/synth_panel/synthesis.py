@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -158,7 +159,7 @@ def _print_cost_estimate(
     parts = [f"Synthesis will cost ~{est.format_usd()}"]
     if panelist_cost is not None:
         parts.append(f"(panelist cost was {panelist_cost.format_usd()})")
-    logger.info(" ".join(parts))
+    print(" ".join(parts), file=sys.stderr)
 
 
 def synthesize_panel(
