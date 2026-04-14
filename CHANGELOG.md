@@ -6,7 +6,12 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-04-14
+
 ### Added
+- `lookup_pricing_by_provider(provider_string)` helper in `synth_panel.cost`: parses synthbench `config.provider` strings (`synthpanel/`, `openrouter/`, `raw-anthropic/`, `raw-openai/`, `raw-gemini/`, `ollama/` plus `t=`/`profile=`/`tpl=` decorators) and resolves to `(ModelPricing, is_estimated)`. Refuses substring fallback to SONNET so callers (notably synthbench publish) decide whether to emit null. Returns `(None, False)` for `ollama/*`, the named baselines, `ensemble/*`, and unknown inner models. (sp-027)
+- `pricing snapshot_date: 2026-04-14` comment above the pricing table to anchor downstream snapshot generation. (sp-027)
+- `panelist_usage` field on the rounds-shaped CLI JSON output, restoring symmetry with `panelist_cost`/`total_cost`/`total_usage` so multi-question runs no longer drop a usage bucket downstream consumers rely on. (sp-027)
 - v3 branching instruments with `route_when` predicates and DAG validation
 - Router predicate engine: `contains`, `equals`, `matches` operators
 - Multi-round branching orchestrator loop
@@ -23,6 +28,7 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 - GitHub Release notes + changelog config in auto-tag workflow
 
 ### Fixed
+- Multi-question CLI runs now emit the full cost shape (`total_cost`, `total_usage`, `panelist_cost`, `panelist_usage`) on the rounds-shaped output. Previously `panelist_usage` was absent, which silently zeroed the synthbench leaderboard's `$/100Q` column for new rows. (sp-027)
 - Fail loud when all provider requests error (#37)
 - Default `--model` now respects available credentials and announces pick (#38)
 - Publish workflow trigger corrected + manual PyPI setup documented (#40)
@@ -57,6 +63,7 @@ First published release on [PyPI](https://pypi.org/project/synthpanel/).
 - Persona-pack persistence (`save_persona_pack`, `get_persona_pack`, `list_persona_packs`)
 - Panel result persistence and retrieval
 
-[Unreleased]: https://github.com/DataViking-Tech/synthpanel/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/DataViking-Tech/synthpanel/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/DataViking-Tech/synthpanel/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/DataViking-Tech/synthpanel/releases/tag/v0.4.0
 [0.3.0]: https://github.com/DataViking-Tech/synthpanel/releases/tag/v0.3.0

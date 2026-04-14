@@ -489,6 +489,72 @@ class TestPanelRun:
     @patch("synth_panel.cli.commands.synthesize_panel")
     @patch("synth_panel.orchestrator.AgentRuntime")
     @patch("synth_panel.cli.commands.LLMClient")
+    def test_panel_run_multi_question_emits_full_cost_shape(
+        self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path
+    ):
+        """Multi-question CLI runs must surface the full cost shape (sp-027).
+
+        The synthbench publish pipeline reads ``total_cost``, ``total_usage``,
+        ``panelist_cost`` and ``panelist_usage`` off the rounds-shaped JSON
+        output. A regression in any one of them silently zeroes a
+        leaderboard row's $/100Q column, so this test pins the contract.
+        """
+        mock_runtime = MagicMock()
+        mock_runtime.run_turn.return_value = _mock_turn_summary("answer")
+        mock_runtime_cls.return_value = mock_runtime
+        mock_synth.return_value = _mock_synthesis_result()
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n  - name: Bob\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: Q1?\n    - text: Q2?\n    - text: Q3?\n")
+
+        code = main(
+            [
+                "--output-format",
+                "json",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+            ]
+        )
+        assert code == 0
+        data = json.loads(capsys.readouterr().out)
+
+        # All four cost fields must be present at the top level of the
+        # rounds-shaped output — no silent drops, no Nones.
+        for key in ("total_cost", "total_usage", "panelist_cost", "panelist_usage"):
+            assert key in data, f"missing {key} in multi-question output"
+            assert data[key] is not None, f"{key} unexpectedly None"
+
+        # panelist_usage is the dict shape produced by TokenUsage.to_dict()
+        # — it must include the four token buckets even when zero.
+        for bucket in (
+            "input_tokens",
+            "output_tokens",
+            "cache_creation_input_tokens",
+            "cache_read_input_tokens",
+        ):
+            assert bucket in data["panelist_usage"]
+            assert bucket in data["total_usage"]
+
+        # Cost strings are formatted USD (e.g. "$0.0001"). Reject the
+        # accidental empty / placeholder shapes that would mask a regression.
+        assert data["total_cost"].startswith("$")
+        assert data["panelist_cost"].startswith("$")
+
+        # The metadata block surfaces the same data for downstream consumers
+        # (synthbench publish reads either path); both must agree.
+        assert "metadata" in data
+        assert "cost" in data["metadata"]
+        assert "total_cost_usd" in data["metadata"]["cost"]
+
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
     def test_panel_run_synthesis_model(self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path):
         """--synthesis-model is passed through to synthesize_panel."""
         mock_runtime = MagicMock()

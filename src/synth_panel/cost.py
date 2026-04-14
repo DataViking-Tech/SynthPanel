@@ -7,6 +7,7 @@ cost estimation, budget enforcement, and human-readable summaries.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -65,6 +66,7 @@ class ModelPricing:
 
 
 # Known pricing tiers from SPEC.md §7.
+# pricing snapshot_date: 2026-04-14
 HAIKU_PRICING = ModelPricing(
     input_cost_per_million=1.00,
     output_cost_per_million=5.00,
@@ -124,6 +126,70 @@ def lookup_pricing(model: str | None = None) -> tuple[ModelPricing, bool]:
             if key in lower:
                 return pricing, False
     return DEFAULT_PRICING, True
+
+
+# Bucket prefixes observed in synthbench `config.provider` strings
+# (see synthbench specs/cost-metrics/research/synthbench-runner.md Q5).
+_PROVIDER_BUCKETS = ("synthpanel", "openrouter", "raw-anthropic", "raw-openai", "raw-gemini", "ollama")
+
+# Strip a leading bucket prefix and any trailing " t=...", " profile=...", " tpl=..."
+# decorators so the remainder is a plain canonical model string suitable for
+# ``lookup_pricing``.
+_PROVIDER_SPLIT_RE = re.compile(
+    r"^(?P<bucket>" + "|".join(re.escape(b) for b in _PROVIDER_BUCKETS) + r")/(?P<inner>.+?)"
+    r"(?:\s+(?:t|profile|tpl)=\S+)*\s*$"
+)
+
+# Provider strings that intentionally have no priced equivalent: synthetic
+# baselines (zero-cost references) and ensemble blends (cost is the sum of
+# constituents, computed elsewhere). Callers decide whether to emit null or 0.
+_UNPRICED_PROVIDERS = frozenset(
+    {
+        "random-baseline",
+        "majority-baseline",
+        "population-average-baseline",
+    }
+)
+
+
+def lookup_pricing_by_provider(provider_string: str) -> tuple[ModelPricing | None, bool]:
+    """Resolve a synthbench ``config.provider`` string to pricing.
+
+    Parses the bucket prefix (``synthpanel/``, ``openrouter/``,
+    ``raw-(anthropic|openai|gemini)/``, ``ollama/``) and trailing
+    ``" t=..."``, ``" profile=..."``, ``" tpl=..."`` decorators, then
+    delegates to ``lookup_pricing`` on the inner model string.
+
+    Returns ``(pricing, is_estimated)`` matching ``lookup_pricing``'s
+    return shape, except: returns ``(None, False)`` for unresolved
+    providers — ``ollama/*`` (self-hosted), the named baselines, any
+    ``ensemble/*`` provider, and any inner string that ``lookup_pricing``
+    can only price via the substring-fallback. Refusing the fallback is
+    intentional: callers (e.g. synthbench publish) decide whether to emit
+    null or a default rather than silently billing at Sonnet rates.
+    """
+    if not provider_string:
+        return None, False
+
+    stripped = provider_string.strip()
+
+    if stripped in _UNPRICED_PROVIDERS or stripped.startswith("ensemble/"):
+        return None, False
+
+    match = _PROVIDER_SPLIT_RE.match(stripped)
+    if not match:
+        return None, False
+
+    bucket = match.group("bucket")
+    inner = match.group("inner").strip()
+
+    if bucket == "ollama":
+        return None, False
+
+    pricing, is_estimated = lookup_pricing(inner)
+    if is_estimated:
+        return None, False
+    return pricing, False
 
 
 @dataclass(frozen=True)
