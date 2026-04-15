@@ -4,8 +4,8 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/DataViking-Tech/synthpanel.git
-cd synthpanel
+git clone https://github.com/DataViking-Tech/synth-panel.git
+cd synth-panel
 
 # Create a virtual environment (using uv or standard venv)
 uv venv .venv && source .venv/bin/activate

@@ -31,7 +31,7 @@ pip install synthpanel
 pip install synthpanel[mcp]
 
 # Or install from source for the latest unreleased changes
-pip install git+https://github.com/DataViking-Tech/synthpanel.git@main
+pip install git+https://github.com/DataViking-Tech/synth-panel.git@main
 
 # Set your API key (Claude, OpenAI, Gemini, xAI, or any OpenAI-compatible provider)
 export ANTHROPIC_API_KEY="sk-..."

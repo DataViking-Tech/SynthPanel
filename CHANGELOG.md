@@ -2,7 +2,7 @@
 
 All notable changes to synthpanel are documented here.
 
-For auto-generated release notes, see [GitHub Releases](https://github.com/DataViking-Tech/synthpanel/releases).
+For auto-generated release notes, see [GitHub Releases](https://github.com/DataViking-Tech/synth-panel/releases).
 
 ## [Unreleased]
 
@@ -75,7 +75,47 @@ First published release on [PyPI](https://pypi.org/project/synthpanel/).
 - Persona-pack persistence (`save_persona_pack`, `get_persona_pack`, `list_persona_packs`)
 - Panel result persistence and retrieval
 
-[Unreleased]: https://github.com/DataViking-Tech/synthpanel/compare/v0.4.1...HEAD
-[0.4.1]: https://github.com/DataViking-Tech/synthpanel/compare/v0.4.0...v0.4.1
-[0.4.0]: https://github.com/DataViking-Tech/synthpanel/releases/tag/v0.4.0
-[0.3.0]: https://github.com/DataViking-Tech/synthpanel/releases/tag/v0.3.0
+## [0.7.4] - 2026-04-14
+
+Patch release in the 0.7.x series. See the [README Versions table](README.md#versions) for the headline 0.7.x features and the GitHub Release notes for per-tag detail.
+
+## [0.7.0] - 2026-04-14
+
+### Added
+- Multi-model ensemble blending (`--blend`)
+- OpenRouter provider support
+- Temperature / top_p controls
+- Persona prompt template customization (see `templates/`)
+
+## [0.6.0] - 2026-04-13
+
+### Added
+- `--models` weighted model spec (e.g., `haiku:0.33,gemini:0.33,gpt-4o-mini:0.34`)
+- `--temperature` / `--top_p` flags
+- Persona prompt templates
+- Pack generation helpers
+- Domain templates
+- MCP server improvements
+
+## [0.5.0] - 2026-04-12
+
+### Added
+- v3 branching instruments with `route_when` predicates and DAG validation
+- Router predicate engine: `contains`, `equals`, `matches` operators
+- Multi-round branching orchestrator loop
+- 5 bundled v3 instrument packs: `pricing-discovery`, `name-test`, `feature-prioritization`, `landing-page-comprehension`, `churn-diagnosis`
+- `instruments` CLI subcommand: `list`, `show`, `install`, `graph`
+- Instrument pack loader (single-file YAML with manifest fields)
+- MCP `list_instrument_packs`, `get_instrument_pack`, `save_instrument_pack` tools
+- Rounds-shaped panel output with `path`, `terminal_round`, and `warnings` fields
+- `extend_panel` MCP tool for ad-hoc follow-up rounds
+
+[Unreleased]: https://github.com/DataViking-Tech/synth-panel/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/DataViking-Tech/synth-panel/compare/v0.7.4...v0.8.0
+[0.7.4]: https://github.com/DataViking-Tech/synth-panel/compare/v0.7.0...v0.7.4
+[0.7.0]: https://github.com/DataViking-Tech/synth-panel/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/DataViking-Tech/synth-panel/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/DataViking-Tech/synth-panel/compare/v0.4.0...v0.5.0
+[0.4.1]: https://github.com/DataViking-Tech/synth-panel/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/DataViking-Tech/synth-panel/releases/tag/v0.4.0
+[0.3.0]: https://github.com/DataViking-Tech/synth-panel/releases/tag/v0.3.0
