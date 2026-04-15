@@ -6,6 +6,23 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-04-15
+
+### Public Launch
+- First release post-public-flip. Repo renamed from `synth-panel` to
+  `SynthPanel` (PyPI distribution name `synthpanel` unchanged).
+- Pre-launch audit verdict: READY-TO-FLIP (see `docs/release-audit-2026-04-15.md`).
+
+### Documentation
+- README badges: PyPI version, CI status, MIT license, Python versions.
+- README links updated to canonical Pascal-case repo name.
+- CHANGELOG backfilled with 0.5/0.6/0.7 entries.
+- `docs/stability.md` documents `lookup_pricing_by_provider` as part of public surface.
+
+### Internal
+- Removed Gas Town agent-internal config from public repo.
+- Reconciled conflicting CODEOWNERS file.
+
 ## [0.8.0] - 2026-04-14
 
 ### Added
