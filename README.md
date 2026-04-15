@@ -1,5 +1,10 @@
 # synthpanel
 
+[![PyPI](https://img.shields.io/pypi/v/synthpanel.svg)](https://pypi.org/project/synthpanel/)
+[![CI](https://github.com/DataViking-Tech/SynthPanel/actions/workflows/ci.yml/badge.svg)](https://github.com/DataViking-Tech/SynthPanel/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python versions](https://img.shields.io/pypi/pyversions/synthpanel.svg)](https://pypi.org/project/synthpanel/)
+
 Open-source synthetic focus groups. Any LLM. Your terminal or your agent's tool call.
 
 Define personas in YAML. Define your research instrument in YAML. Run against any LLM — from your terminal, from a pipeline, or from an AI agent's MCP tool call. Get structured, reproducible output with full cost transparency.
@@ -31,7 +36,7 @@ pip install synthpanel
 pip install synthpanel[mcp]
 
 # Or install from source for the latest unreleased changes
-pip install git+https://github.com/DataViking-Tech/synth-panel.git@main
+pip install git+https://github.com/DataViking-Tech/SynthPanel.git@main
 
 # Set your API key (Claude, OpenAI, Gemini, xAI, or any OpenAI-compatible provider)
 export ANTHROPIC_API_KEY="sk-..."
@@ -452,7 +457,7 @@ For detailed MCP server documentation (all 12 tools, 4 resources, 3 prompt templ
 
 ## Benchmarked on SynthBench
 
-synth-panel's ability to produce representative synthetic respondents is independently measured by [SynthBench](https://dataviking-tech.github.io/synthbench/), an open benchmark for synthetic survey quality.
+synthpanel's ability to produce representative synthetic respondents is independently measured by [SynthBench](https://dataviking-tech.github.io/synthbench/), an open benchmark for synthetic survey quality.
 
 - **Want proof it works?** Browse the [leaderboard](https://dataviking-tech.github.io/synthbench/leaderboard/) — ensemble blending of 3 models hits SPS 0.90 (90% human parity).
 - **Got a great configuration?** [Submit your scores](https://dataviking-tech.github.io/synthbench/submit/) and compare against baselines.
