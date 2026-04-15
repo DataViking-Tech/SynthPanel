@@ -1,6 +1,6 @@
 [project]
 name = "synthpanel"
-version = "0.8.0"
+version = "0.9.0"
 description = "Run synthetic focus groups and user research panels using AI personas. CLI tool, Python library, any LLM."
 requires-python = ">=3.10"
 license = {text = "MIT"}
