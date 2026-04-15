@@ -6,6 +6,18 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-04-14
+
+### Added
+- (sp-027) `lookup_pricing_by_provider(provider_string)` — parses synthbench-format provider strings (synthpanel/*, openrouter/*, raw-anthropic/*, etc.) into pricing tuples; returns `(None, False)` for ollama, baselines, ensembles, and unresolved providers.
+
+### Fixed
+- (sp-027) Multi-question CLI cost-drop: `_run_multi_cli` and `_run_multi_batch` now propagate `total_cost` / `panelist_cost` / `total_usage` / `panelist_usage` to per-response metadata, matching `_run_single`.
+
+### Notes
+- Version bumped from 0.4.1 → 0.8.0 to reconcile pyproject.toml with PyPI release line (last published was 0.7.4); minor bump reflects new public API.
+
+
 ## [0.4.1] - 2026-04-14
 
 ### Added
