@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>synthpanel — Run synthetic focus groups with any LLM</title>
+    <meta
+      name="description"
+      content="Open-source synthetic focus groups. Define personas in YAML, run them against any LLM (Claude, GPT, Gemini, Grok, local), and get structured, reproducible output with full cost transparency."
+    />
+    <link rel="canonical" href="https://synthpanel.dev/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="synthpanel" />
+    <meta
+      property="og:description"
+      content="Run synthetic focus groups with any LLM. Pip-install, define personas in YAML, get structured output."
+    />
+    <meta property="og:url" content="https://synthpanel.dev/" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="synthpanel" />
+    <meta
+      name="twitter:description"
+      content="Run synthetic focus groups with any LLM."
+    />
+
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230f172a'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' font-family='ui-monospace,monospace' font-size='34' font-weight='700' fill='%2334d399'%3Esp%3C/text%3E%3C/svg%3E"
+    />
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              mono: [
+                "ui-monospace",
+                "SFMono-Regular",
+                "Menlo",
+                "Monaco",
+                "Consolas",
+                "monospace",
+              ],
+            },
+          },
+        },
+      };
+    </script>
+
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        background:
+          radial-gradient(
+            ellipse at top,
+            rgba(52, 211, 153, 0.08),
+            transparent 60%
+          ),
+          #0f172a;
+      }
+      .copy-btn:active {
+        transform: translateY(1px);
+      }
+    </style>
+  </head>
+
+  <body class="text-slate-200 antialiased">
+    <main class="mx-auto max-w-4xl px-6 pb-24 pt-16 sm:pt-24">
+      <!-- Hero -->
+      <section class="text-center">
+        <p
+          class="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/5 px-3 py-1 text-xs font-medium text-emerald-300"
+        >
+          <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+          v0.9.0 — public beta
+        </p>
+        <h1
+          class="bg-gradient-to-br from-white to-slate-400 bg-clip-text font-mono text-5xl font-bold tracking-tight text-transparent sm:text-6xl"
+        >
+          synthpanel
+        </h1>
+        <p class="mx-auto mt-5 max-w-2xl text-lg text-slate-300 sm:text-xl">
+          Run synthetic focus groups with any LLM.
+        </p>
+        <p class="mx-auto mt-3 max-w-2xl text-base text-slate-400">
+          Define personas in YAML. Define your research instrument in YAML. Run
+          against Claude, GPT, Gemini, Grok, or any OpenAI-compatible model —
+          from your terminal, a pipeline, or an AI agent's MCP tool call.
+        </p>
+
+        <!-- Install command -->
+        <div class="mx-auto mt-8 max-w-xl">
+          <div
+            class="group relative flex items-center justify-between rounded-lg border border-slate-700 bg-slate-900/80 px-4 py-3 text-left font-mono text-sm shadow-lg shadow-emerald-500/5"
+          >
+            <span class="select-all">
+              <span class="text-slate-500">$</span>
+              <span class="text-emerald-400">pip install</span>
+              <span class="text-slate-200">synthpanel</span>
+            </span>
+            <button
+              type="button"
+              class="copy-btn ml-3 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-emerald-400/50 hover:text-emerald-300"
+              data-copy="pip install synthpanel"
+              aria-label="Copy install command"
+            >
+              Copy
+            </button>
+          </div>
+          <p class="mt-2 text-xs text-slate-500">
+            Add <code class="text-slate-400">[mcp]</code> for
+            Claude&nbsp;Code&nbsp;/&nbsp;Cursor&nbsp;/&nbsp;Windsurf agent
+            integration.
+          </p>
+        </div>
+
+        <!-- Primary CTAs -->
+        <div
+          class="mt-8 flex flex-wrap items-center justify-center gap-3 text-sm"
+        >
+          <a
+            href="https://github.com/DataViking-Tech/SynthPanel"
+            class="inline-flex items-center gap-2 rounded-md bg-emerald-500 px-4 py-2 font-medium text-slate-950 transition hover:bg-emerald-400"
+            >GitHub repo →</a
+          >
+          <a
+            href="https://pypi.org/project/synthpanel/"
+            class="inline-flex items-center gap-2 rounded-md border border-slate-700 px-4 py-2 font-medium text-slate-200 transition hover:border-slate-500 hover:text-white"
+            >PyPI package</a
+          >
+        </div>
+      </section>
+
+      <!-- Quick-start snippet -->
+      <section class="mt-20">
+        <h2 class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400">
+          Quick start
+        </h2>
+        <div
+          class="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/70 p-5 font-mono text-sm leading-relaxed shadow-xl"
+        >
+<pre class="text-slate-300"><span class="text-slate-500"># 1. install</span>
+<span class="text-emerald-400">pip install</span> synthpanel
+
+<span class="text-slate-500"># 2. set a key for any provider you have</span>
+<span class="text-emerald-400">export</span> ANTHROPIC_API_KEY=<span class="text-amber-300">"sk-..."</span>
+
+<span class="text-slate-500"># 3. one-shot prompt against the default model</span>
+synthpanel prompt <span class="text-amber-300">"What do you think of the name Traitprint?"</span>
+
+<span class="text-slate-500"># 4. run a full panel</span>
+synthpanel panel run \
+  --personas examples/personas.yaml \
+  --instrument examples/survey.yaml</pre>
+        </div>
+      </section>
+
+      <!-- Cards -->
+      <section class="mt-20 grid gap-4 sm:grid-cols-3">
+        <a
+          href="https://pypi.org/project/synthpanel/"
+          class="group rounded-lg border border-slate-800 bg-slate-900/40 p-5 transition hover:border-emerald-400/40 hover:bg-slate-900/70"
+        >
+          <div class="flex items-center justify-between">
+            <h3 class="font-semibold text-white">PyPI</h3>
+            <span class="text-slate-500 transition group-hover:text-emerald-300">→</span>
+          </div>
+          <p class="mt-2 text-sm text-slate-400">
+            Pip-installable package. <code class="text-slate-300">pip install synthpanel</code>.
+          </p>
+        </a>
+
+        <a
+          href="https://github.com/DataViking-Tech/SynthPanel"
+          class="group rounded-lg border border-slate-800 bg-slate-900/40 p-5 transition hover:border-emerald-400/40 hover:bg-slate-900/70"
+        >
+          <div class="flex items-center justify-between">
+            <h3 class="font-semibold text-white">GitHub</h3>
+            <span class="text-slate-500 transition group-hover:text-emerald-300">→</span>
+          </div>
+          <p class="mt-2 text-sm text-slate-400">
+            Source, issues, and roadmap. MIT-licensed.
+          </p>
+        </a>
+
+        <a
+          href="https://synthbench.org"
+          class="group rounded-lg border border-slate-800 bg-slate-900/40 p-5 transition hover:border-emerald-400/40 hover:bg-slate-900/70"
+        >
+          <div class="flex items-center justify-between">
+            <h3 class="font-semibold text-white">SynthBench</h3>
+            <span class="text-slate-500 transition group-hover:text-emerald-300">→</span>
+          </div>
+          <p class="mt-2 text-sm text-slate-400">
+            Open benchmark for synthetic survey quality. See the leaderboard at
+            <span class="text-emerald-300">synthbench.org</span>.
+          </p>
+        </a>
+      </section>
+
+      <!-- SynthBench callout -->
+      <section
+        class="mt-12 rounded-lg border border-emerald-400/20 bg-emerald-400/5 p-5 text-sm text-slate-300"
+      >
+        <p>
+          <span class="font-semibold text-emerald-300">Powered the
+            <a
+              class="underline decoration-emerald-400/60 underline-offset-2 hover:text-emerald-200"
+              href="https://synthbench.org"
+              >SynthBench</a
+            >
+            public benchmark</span
+          >
+          — independent, open evaluation of synthetic-respondent quality.
+          Ensemble blending of 3 models hits SPS 0.90 (90% human parity) on the
+          current
+          <a
+            href="https://synthbench.org"
+            class="underline decoration-emerald-400/60 underline-offset-2 hover:text-emerald-200"
+            >leaderboard</a
+          >.
+        </p>
+      </section>
+
+      <!-- Footer -->
+      <footer
+        class="mt-20 border-t border-slate-800 pt-6 text-xs text-slate-500"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <span>
+            MIT-licensed · v0.9.0 ·
+            <a
+              href="https://github.com/DataViking-Tech/SynthPanel"
+              class="hover:text-slate-300"
+              >DataViking-Tech/SynthPanel</a
+            >
+          </span>
+          <span>
+            Built by
+            <a href="https://dataviking.tech" class="hover:text-slate-300"
+              >DataViking</a
+            >
+          </span>
+        </div>
+      </footer>
+    </main>
+
+    <script>
+      document.querySelectorAll(".copy-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const text = btn.getAttribute("data-copy") || "";
+          try {
+            await navigator.clipboard.writeText(text);
+            const original = btn.textContent;
+            btn.textContent = "Copied";
+            btn.classList.add("text-emerald-300", "border-emerald-400/50");
+            setTimeout(() => {
+              btn.textContent = original;
+              btn.classList.remove("text-emerald-300", "border-emerald-400/50");
+            }, 1500);
+          } catch (err) {
+            // Clipboard API unavailable — leave as no-op; users can still select-all.
+          }
+        });
+      });
+    </script>
+  </body>
+</html>
