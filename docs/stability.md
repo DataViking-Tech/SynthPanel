@@ -1,6 +1,6 @@
 # API Stability Policy
 
-synth-panel is currently **pre-1.0** (0.x.y). This document describes what contributors and users can expect about breaking changes.
+synthpanel is currently **pre-1.0** (0.x.y). This document describes what contributors and users can expect about breaking changes.
 
 ## Pre-1.0 stance
 
@@ -19,7 +19,8 @@ The following are considered **public** and we try hard not to break them:
 
 - `synth_panel.llm.providers.base.LLMProvider` — the adapter base class
 - `ProviderConfig`, `CompletionRequest`, `CompletionResponse`, `StreamEvent` — adapter contract types
-- `synth-panel` CLI commands (`prompt`, `panel run`, `pack list`, `instruments list|show`, etc.)
+- `synth_panel.cost.lookup_pricing_by_provider(provider_string)` — returns `(ModelPricing | None, is_estimated: bool)` for synthbench-format provider strings; used by downstream cost integrations
+- `synthpanel` CLI commands (`prompt`, `panel run`, `pack list`, `instruments list|show`, etc.)
 - MCP tool signatures (12 tools — see [MCP docs](./mcp.md))
 - Instrument YAML formats (v1 flat, v2 linear, v3 branching)
 - Persona pack YAML format

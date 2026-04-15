@@ -29,6 +29,8 @@ uv.lock
 .logs/
 state.json
 .beads/
+gastown-*.json
+CLAUDE.local.md
 
 # DevContainer temp files
 .devcontainer/.env
