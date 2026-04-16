@@ -135,6 +135,53 @@
         </div>
       </section>
 
+      <!-- MCP Server -->
+      <section class="mt-16">
+        <h2 class="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400">
+          MCP Server
+        </h2>
+        <p class="mb-4 text-base text-slate-300">
+          Give your AI coding assistant access to synthetic focus groups.
+          Drop this config into your editor and start running panels from chat.
+        </p>
+        <div
+          class="group relative rounded-lg border border-slate-800 bg-slate-950/70 p-5 font-mono text-sm leading-relaxed shadow-xl"
+        >
+<pre class="text-slate-300"><span class="text-slate-500">// Claude Code · Cursor · Windsurf · Zed</span>
+{
+  <span class="text-emerald-400">"mcpServers"</span>: {
+    <span class="text-emerald-400">"synth_panel"</span>: {
+      <span class="text-emerald-400">"command"</span>: <span class="text-amber-300">"synthpanel"</span>,
+      <span class="text-emerald-400">"args"</span>: [<span class="text-amber-300">"mcp-serve"</span>],
+      <span class="text-emerald-400">"env"</span>: { <span class="text-emerald-400">"ANTHROPIC_API_KEY"</span>: <span class="text-amber-300">"sk-..."</span> }
+    }
+  }
+}</pre>
+          <button
+            type="button"
+            class="copy-btn absolute right-3 top-3 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-emerald-400/50 hover:text-emerald-300"
+            data-copy='{ "mcpServers": { "synth_panel": { "command": "synthpanel", "args": ["mcp-serve"], "env": { "ANTHROPIC_API_KEY": "sk-..." } } } }'
+            aria-label="Copy MCP config"
+          >
+            Copy
+          </button>
+        </div>
+        <div class="mt-4 flex flex-wrap items-center gap-3 text-xs">
+          <span class="rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-slate-300">Claude Code</span>
+          <span class="rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-slate-300">Cursor</span>
+          <span class="rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-slate-300">Windsurf</span>
+          <span class="rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-slate-300">Zed</span>
+          <a
+            href="https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/mcp.md"
+            class="text-emerald-400 underline decoration-emerald-400/40 underline-offset-2 hover:text-emerald-300"
+          >Full MCP docs →</a>
+        </div>
+        <p class="mt-2 text-xs text-slate-500">
+          Requires <code class="text-slate-400">pip install synthpanel[mcp]</code>.
+          12 tools: run prompts, run panels, manage persona &amp; instrument packs, and more.
+        </p>
+      </section>
+
       <!-- Quick-start snippet -->
       <section class="mt-20">
         <h2 class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400">
