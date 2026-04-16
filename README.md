@@ -216,6 +216,27 @@ Restart Claude Desktop after editing.
 > into a virtualenv, point `command` at its absolute path
 > (e.g. `/path/to/.venv/bin/synthpanel`).
 
+## Works with
+
+Every major agent framework now supports MCP as a first-class tool source,
+which means SynthPanel's MCP server plugs into all of them with zero
+additional library code. Runnable examples for each framework live in
+[`examples/integrations/`](examples/integrations/README.md):
+
+| Framework | Example | Bridge |
+|-----------|---------|--------|
+| [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/mcp/) | [openai_agents.py](examples/integrations/openai_agents.py) | Built-in `MCPServerStdio` |
+| [LlamaIndex](https://docs.llamaindex.ai/) | [llamaindex_tool.py](examples/integrations/llamaindex_tool.py) | `llama-index-tools-mcp` |
+| [CrewAI](https://docs.crewai.com/) | [crewai_tool.py](examples/integrations/crewai_tool.py) | `crewai-tools[mcp]` |
+| [LangChain / LangGraph](https://python.langchain.com/) | [langchain_tool.py](examples/integrations/langchain_tool.py) | `langchain-mcp-adapters` |
+| [Microsoft Agent Framework 1.0](https://learn.microsoft.com/en-us/agent-framework/) | [microsoft_agent.py](examples/integrations/microsoft_agent.py) | Built-in `MCPStdioTool` |
+| [n8n](https://n8n.io/) | [n8n_workflow.json](examples/integrations/n8n_workflow.json) | Built-in MCP Client tool |
+
+Also reaches [Zapier MCP](https://zapier.com/mcp) (30K+ actions), the
+[VS Code AI Toolkit](https://code.visualstudio.com/api/extension-guides/ai/mcp),
+Windsurf, Cursor, Zed, and Claude Desktop via the same MCP server. If your
+framework speaks MCP, it works with SynthPanel today.
+
 ## What You Get
 
 ```
