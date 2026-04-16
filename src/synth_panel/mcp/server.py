@@ -93,6 +93,16 @@ from synth_panel.mcp.data import (
 from synth_panel.mcp.data import (
     save_persona_pack as _data_save_persona_pack,
 )
+from synth_panel.mcp.sampling import (
+    SAMPLING_MAX_PERSONAS,
+    SAMPLING_MAX_QUESTIONS,
+)
+from synth_panel.mcp.sampling import (
+    decide_mode as _decide_sampling_mode,
+)
+from synth_panel.mcp.sampling import (
+    sample_text as _sample_text,
+)
 from synth_panel.metadata import PanelTimer, build_metadata
 from synth_panel.orchestrator import (
     MultiRoundResult,
@@ -114,6 +124,8 @@ __all__ = [
     "MAX_QUESTIONS",
     "MCP_DEFAULT_MODEL",
     "PANELIST_TIMEOUT",
+    "SAMPLING_MAX_PERSONAS",
+    "SAMPLING_MAX_QUESTIONS",
     "_compute_variant_data",
     "mcp",
     "serve",
@@ -513,20 +525,63 @@ async def run_prompt(
     model: str | None = None,
     temperature: float | None = None,
     top_p: float | None = None,
+    use_sampling: bool | None = None,
+    ctx: Context = None,
 ) -> str:
     """Send a single prompt to an LLM and get a response. No personas required.
 
     The simplest tool — ask a quick research question without constructing
     personas or running a full panel.
 
+    Two execution modes:
+
+    * **BYOK** (bring-your-own-key): calls a provider directly using env
+      credentials (``ANTHROPIC_API_KEY``, etc.). Supports the full model
+      list and per-call cost accounting.
+    * **Sampling**: when no creds are set and the invoking MCP client
+      (Claude Desktop, Claude Code, Cursor, Windsurf) advertises the
+      ``sampling`` capability, synthpanel asks the client to run the
+      completion itself. Model is whatever the host agent is using, and
+      token cost is charged to the host agent's subscription rather
+      than reported here.
+
     Args:
         prompt: The question or prompt to send.
-        model: LLM model to use. Defaults to haiku.
+        model: LLM model to use. Defaults to haiku. Ignored in sampling
+            mode (the host agent picks its own model).
         temperature: Sampling temperature (0.0-1.0). Controls randomness.
-        top_p: Nucleus sampling threshold (0.0-1.0). Alternative to temperature.
+        top_p: Nucleus sampling threshold (0.0-1.0). Alternative to
+            temperature. Ignored in sampling mode.
+        use_sampling: Explicit mode override. ``True`` forces sampling
+            (error if unsupported), ``False`` forces BYOK. ``None``
+            auto-picks based on creds + client capability.
     """
     model = model or MCP_DEFAULT_MODEL
-    logger.info("run_prompt: model=%s prompt_len=%d", model, len(prompt))
+    decision = _decide_sampling_mode(ctx, use_sampling=use_sampling)
+    logger.info("run_prompt: mode=%s model=%s prompt_len=%d", decision.mode, model, len(prompt))
+
+    if decision.mode == "error":
+        return json.dumps({"error": decision.error})
+
+    if decision.mode == "sampling":
+        sample = await _sample_text(
+            ctx,
+            prompt=prompt,
+            max_tokens=4096,
+            temperature=temperature,
+        )
+        return json.dumps(
+            {
+                "response": sample["text"],
+                "model": sample["model"],
+                "mode": "sampling",
+                "usage": None,
+                "cost": None,
+                "hint": decision.hint,
+            },
+            indent=2,
+        )
+
     client = _get_shared_client()
     request = CompletionRequest(
         model=model,
@@ -548,6 +603,7 @@ async def run_prompt(
         {
             "response": response.text,
             "model": response.model,
+            "mode": "byok",
             "usage": usage.to_dict(),
             "cost": cost.format_usd(),
         },
@@ -768,6 +824,7 @@ async def run_quick_poll(
     synthesis_prompt: str | None = None,
     temperature: float | None = None,
     top_p: float | None = None,
+    use_sampling: bool | None = None,
     ctx: Context = None,
 ) -> str:
     """Quick single-question poll across personas.
@@ -775,22 +832,35 @@ async def run_quick_poll(
     A simplified version of run_panel for quick feedback on one question.
     Includes synthesis by default.
 
+    When no provider credentials are set and the invoking MCP client
+    advertises the ``sampling`` capability, the poll runs in
+    **sampling mode**: synthpanel asks the host agent to run each
+    persona's completion using its own LLM access, so the user can run
+    their first poll with zero configuration. Sampling mode is capped
+    at :data:`SAMPLING_MAX_PERSONAS` personas to keep the host agent's
+    context footprint small — larger panels require BYOK credentials.
+
     Args:
         question: The question to ask all personas.
         personas: List of persona definitions.
-        model: LLM model to use. Defaults to haiku.
+        model: LLM model to use. Defaults to haiku. Ignored in sampling
+            mode (the host agent picks its own model).
         response_schema: Optional JSON Schema for structured output. When
             provided, responses are extracted as structured JSON matching
-            this schema instead of free text.
+            this schema instead of free text. Not supported in sampling
+            mode — raw text is returned instead.
         synthesis: Whether to run synthesis after collecting responses.
-            Defaults to true.
+            Defaults to true. In sampling mode synthesis is also
+            performed via the host agent.
         synthesis_model: Model to use for synthesis. Defaults to panelist model.
         synthesis_prompt: Custom synthesis prompt. Replaces the default.
         temperature: Sampling temperature (0.0-1.0). Controls randomness.
         top_p: Nucleus sampling threshold (0.0-1.0). Alternative to temperature.
+        use_sampling: Explicit mode override. ``True`` forces sampling
+            (error if unsupported), ``False`` forces BYOK. ``None``
+            auto-picks based on creds + client capability.
     """
     model = model or MCP_DEFAULT_MODEL
-    logger.info("run_quick_poll: model=%s personas=%d", model, len(personas))
 
     if not question or not question.strip():
         return json.dumps({"error": "Question text must be a non-empty string."})
@@ -805,6 +875,36 @@ async def run_quick_poll(
     if len(personas) > MAX_PERSONAS:
         return json.dumps({"error": f"Too many personas ({len(personas)}). Maximum is {MAX_PERSONAS}."})
 
+    decision = _decide_sampling_mode(ctx, use_sampling=use_sampling)
+    logger.info("run_quick_poll: mode=%s model=%s personas=%d", decision.mode, model, len(personas))
+
+    if decision.mode == "error":
+        return json.dumps({"error": decision.error})
+
+    if decision.mode == "sampling":
+        if len(personas) > SAMPLING_MAX_PERSONAS:
+            return json.dumps(
+                {
+                    "error": (
+                        f"Sampling mode is capped at {SAMPLING_MAX_PERSONAS} personas "
+                        f"to protect the host agent's context window (got "
+                        f"{len(personas)}). Set ANTHROPIC_API_KEY (or another "
+                        f"provider key) in your environment to run larger panels "
+                        f"via BYOK."
+                    )
+                }
+            )
+        result = await _run_quick_poll_sampling(
+            ctx,
+            question=question,
+            personas=personas,
+            synthesis=synthesis,
+            synthesis_prompt=synthesis_prompt,
+            temperature=temperature,
+            hint=decision.hint,
+        )
+        return json.dumps(result, indent=2)
+
     questions = [{"text": question}]
     result = await _run_panel_async(
         personas,
@@ -818,7 +918,103 @@ async def run_quick_poll(
         temperature=temperature,
         top_p=top_p,
     )
+    result["mode"] = "byok"
     return json.dumps(result, indent=2)
+
+
+async def _run_quick_poll_sampling(
+    ctx: Context,
+    *,
+    question: str,
+    personas: list[dict[str, Any]],
+    synthesis: bool,
+    synthesis_prompt: str | None,
+    temperature: float | None,
+    hint: str | None,
+) -> dict[str, Any]:
+    """Run a quick poll via MCP sampling.
+
+    One ``create_message`` call per persona (serial — host agents
+    generally rate-limit sampling), plus one synthesis call when
+    enabled. The result shape deliberately mirrors the BYOK
+    :func:`_run_panel_async` output for the fields callers care about
+    (``results``, ``synthesis``, ``rounds``, ``persona_count``,
+    ``question_count``) so downstream tooling works uniformly across
+    modes. Fields that only make sense in BYOK (``usage``, ``cost``,
+    ``metadata``) are ``None``.
+    """
+    from synth_panel.prompts import SYNTHESIS_PROMPT
+
+    await ctx.report_progress(0, len(personas))
+    panelist_entries: list[dict[str, Any]] = []
+    host_model: str | None = None
+    for i, persona in enumerate(personas):
+        system_prompt = persona_system_prompt(persona)
+        user_prompt = build_question_prompt({"text": question})
+        sample = await _sample_text(
+            ctx,
+            prompt=user_prompt,
+            system_prompt=system_prompt,
+            max_tokens=2048,
+            temperature=temperature,
+        )
+        host_model = sample["model"]
+        panelist_entries.append(
+            {
+                "persona": persona,
+                "responses": [
+                    {
+                        "question": question,
+                        "answer": sample["text"],
+                    }
+                ],
+                "model": sample["model"],
+                "usage": None,
+            }
+        )
+        await ctx.report_progress(i + 1, len(personas))
+
+    synthesis_block: dict[str, Any] | None = None
+    if synthesis and panelist_entries:
+        synth_prompt = synthesis_prompt or SYNTHESIS_PROMPT
+        rendered_panel = "\n\n".join(
+            f"Panelist: {entry['persona'].get('name', 'anon')}\nQ: {question}\nA: {entry['responses'][0]['answer']}"
+            for entry in panelist_entries
+        )
+        synth = await _sample_text(
+            ctx,
+            prompt=rendered_panel,
+            system_prompt=synth_prompt,
+            max_tokens=2048,
+            temperature=temperature,
+        )
+        synthesis_block = {
+            "summary": synth["text"],
+            "model": synth["model"],
+            "usage": None,
+        }
+
+    return {
+        "mode": "sampling",
+        "hint": hint,
+        "model": host_model,
+        "persona_count": len(personas),
+        "question_count": 1,
+        "results": panelist_entries,
+        "rounds": [
+            {
+                "name": "default",
+                "results": panelist_entries,
+                "synthesis": synthesis_block,
+            }
+        ],
+        "synthesis": synthesis_block,
+        "path": [],
+        "warnings": [],
+        "usage": None,
+        "cost": None,
+        "metadata": None,
+    }
 
 
 @mcp.tool()
