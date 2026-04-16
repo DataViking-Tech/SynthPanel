@@ -1,21 +1,26 @@
 [project]
 name = "synthpanel"
-version = "0.9.0"
-description = "Run synthetic focus groups and user research panels using AI personas. CLI tool, Python library, any LLM."
+version = "0.9.1"
+description = "Run synthetic focus groups using AI personas, with an MCP server for Claude Code / Cursor / Windsurf. CLI tool, Python library, any LLM."
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [{name = "DataViking", email = "openclaw@dataviking.tech"}]
 readme = "README.md"
-keywords = ["llm", "research", "focus-group", "synthetic", "personas", "user-research", "ai"]
+keywords = ["llm", "research", "focus-group", "synthetic", "personas", "user-research", "ai", "mcp", "model-context-protocol", "agent", "claude", "claude-code", "cursor", "windsurf", "survey-research", "synthetic-respondents", "market-research"]
 classifiers = [
     "Development Status :: 4 - Beta",
+    "Environment :: Console",
     "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
     "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
     "httpx>=0.27",
@@ -23,10 +28,12 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/DataViking-Tech/SynthPanel"
+Homepage = "https://synthpanel.dev"
+Documentation = "https://synthpanel.dev"
 Repository = "https://github.com/DataViking-Tech/SynthPanel"
 Issues = "https://github.com/DataViking-Tech/SynthPanel/issues"
 Changelog = "https://github.com/DataViking-Tech/SynthPanel/releases"
+"MCP Reference" = "https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/mcp.md"
 
 [project.optional-dependencies]
 mcp = [
