@@ -1,0 +1,984 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>
+      MCP Server — synthpanel · Run synthetic focus groups from your AI editor
+    </title>
+    <meta
+      name="description"
+      content="synthpanel's MCP server exposes 12 tools for AI agents to run synthetic focus groups, manage persona packs, and query panel results. Drop-in config for Claude Code, Cursor, Windsurf, Zed, and Claude Desktop."
+    />
+    <link rel="canonical" href="https://synthpanel.dev/mcp" />
+
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="synthpanel MCP Server" />
+    <meta
+      property="og:description"
+      content="Drop-in MCP config for Claude Code, Cursor, Windsurf, Zed, and Claude Desktop. 12 tools to run synthetic focus groups from chat."
+    />
+    <meta property="og:url" content="https://synthpanel.dev/mcp" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="synthpanel MCP Server" />
+    <meta
+      name="twitter:description"
+      content="Drop-in MCP config for Claude Code, Cursor, Windsurf, Zed, and Claude Desktop."
+    />
+
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230f172a'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' font-family='ui-monospace,monospace' font-size='34' font-weight='700' fill='%2334d399'%3Esp%3C/text%3E%3C/svg%3E"
+    />
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              mono: [
+                "ui-monospace",
+                "SFMono-Regular",
+                "Menlo",
+                "Monaco",
+                "Consolas",
+                "monospace",
+              ],
+            },
+          },
+        },
+      };
+    </script>
+
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        background:
+          radial-gradient(
+            ellipse at top,
+            rgba(52, 211, 153, 0.08),
+            transparent 60%
+          ),
+          #0f172a;
+      }
+      .copy-btn:active {
+        transform: translateY(1px);
+      }
+      /* Tight anchor offset for hash-linked section headers */
+      :target {
+        scroll-margin-top: 1rem;
+      }
+      details > summary {
+        list-style: none;
+        cursor: pointer;
+      }
+      details > summary::-webkit-details-marker {
+        display: none;
+      }
+      details > summary::before {
+        content: "▸";
+        display: inline-block;
+        width: 1rem;
+        color: rgb(100, 116, 139);
+        transition: transform 0.15s ease;
+      }
+      details[open] > summary::before {
+        transform: rotate(90deg);
+      }
+      table {
+        border-collapse: collapse;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 0.5rem 0.75rem;
+        border-bottom: 1px solid rgb(30, 41, 59);
+        vertical-align: top;
+      }
+      th {
+        color: rgb(148, 163, 184);
+        font-weight: 600;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      td code {
+        color: rgb(110, 231, 183);
+        font-size: 0.85em;
+      }
+    </style>
+  </head>
+
+  <body class="text-slate-200 antialiased">
+    <main class="mx-auto max-w-4xl px-6 pb-24 pt-12 sm:pt-16">
+      <!-- Breadcrumb / back link -->
+      <nav class="mb-8 text-sm">
+        <a
+          href="/"
+          class="inline-flex items-center gap-1 text-slate-400 transition hover:text-emerald-300"
+        >
+          <span aria-hidden="true">←</span> synthpanel.dev
+        </a>
+      </nav>
+
+      <!-- Hero -->
+      <header>
+        <p
+          class="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/5 px-3 py-1 text-xs font-medium text-emerald-300"
+        >
+          <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+          MCP Server · stdio
+        </p>
+        <h1
+          class="bg-gradient-to-br from-white to-slate-400 bg-clip-text font-mono text-4xl font-bold tracking-tight text-transparent sm:text-5xl"
+        >
+          synthpanel MCP server
+        </h1>
+        <p class="mt-4 text-lg text-slate-300">
+          Give your AI coding assistant tool-call access to synthetic focus
+          groups. Run panels, manage persona packs, and query saved results —
+          straight from chat.
+        </p>
+        <p class="mt-3 text-sm text-slate-400">
+          Uses the
+          <a
+            class="text-emerald-400 underline decoration-emerald-400/40 underline-offset-2 hover:text-emerald-300"
+            href="https://modelcontextprotocol.io/"
+            >Model Context Protocol</a
+          >
+          over stdio transport. Defaults to the
+          <code class="text-slate-300">haiku</code> model for cheap, fast
+          iterative use.
+        </p>
+
+        <!-- Install command -->
+        <div class="mt-8 max-w-xl">
+          <div
+            class="group relative flex items-center justify-between rounded-lg border border-slate-700 bg-slate-900/80 px-4 py-3 text-left font-mono text-sm shadow-lg shadow-emerald-500/5"
+          >
+            <span class="select-all">
+              <span class="text-slate-500">$</span>
+              <span class="text-emerald-400">pip install</span>
+              <span class="text-slate-200">"synthpanel[mcp]"</span>
+            </span>
+            <button
+              type="button"
+              class="copy-btn ml-3 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-emerald-400/50 hover:text-emerald-300"
+              data-copy='pip install "synthpanel[mcp]"'
+              aria-label="Copy install command"
+            >
+              Copy
+            </button>
+          </div>
+          <p class="mt-2 text-xs text-slate-500">
+            The <code class="text-slate-400">[mcp]</code> extra pulls in the
+            MCP Python SDK required to launch the server.
+          </p>
+        </div>
+      </header>
+
+      <!-- Starting the server -->
+      <section class="mt-16" id="starting">
+        <h2
+          class="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Starting the server
+        </h2>
+        <p class="mb-4 text-base text-slate-300">
+          The server communicates over stdin/stdout using JSON-RPC. It is
+          launched by your editor, not by you — but you can sanity-check the
+          binary:
+        </p>
+        <div
+          class="group relative flex items-center justify-between rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-3 text-left font-mono text-sm shadow-xl"
+        >
+          <span class="select-all">
+            <span class="text-slate-500">$</span>
+            <span class="text-emerald-400">synthpanel</span>
+            <span class="text-slate-200">mcp-serve</span>
+          </span>
+          <button
+            type="button"
+            class="copy-btn ml-3 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-emerald-400/50 hover:text-emerald-300"
+            data-copy="synthpanel mcp-serve"
+            aria-label="Copy command"
+          >
+            Copy
+          </button>
+        </div>
+      </section>
+
+      <!-- Editor configuration -->
+      <section class="mt-16" id="editors">
+        <h2
+          class="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Editor configuration
+        </h2>
+        <p class="mb-6 text-base text-slate-300">
+          Every editor uses the same underlying config shape — command,
+          args, and environment. Pick yours:
+        </p>
+
+        <!-- Claude Code -->
+        <details
+          open
+          class="mb-3 rounded-lg border border-slate-800 bg-slate-900/40 p-4 transition hover:border-slate-700"
+        >
+          <summary class="flex items-center gap-2 text-base font-semibold text-white">
+            Claude Code
+            <span
+              class="ml-auto rounded-full border border-emerald-400/30 bg-emerald-400/5 px-2 py-0.5 text-[11px] font-normal text-emerald-300"
+              >recommended</span
+            >
+          </summary>
+          <div class="mt-4 space-y-4">
+            <p class="text-sm text-slate-400">
+              Easiest: add via the CLI. Works at user scope (all projects) or
+              project scope (this repo only).
+            </p>
+            <div
+              class="group relative rounded-lg border border-slate-700 bg-slate-950/70 p-4 font-mono text-sm leading-relaxed shadow"
+            >
+<pre class="whitespace-pre-wrap text-slate-300"><span class="text-slate-500"># user scope — available everywhere</span>
+<span class="text-emerald-400">claude mcp add</span> --scope user synth_panel -- synthpanel mcp-serve
+
+<span class="text-slate-500"># or project scope — checked-in .mcp.json for this repo</span>
+<span class="text-emerald-400">claude mcp add</span> --scope project synth_panel -- synthpanel mcp-serve</pre>
+              <button
+                type="button"
+                class="copy-btn absolute right-3 top-3 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-emerald-400/50 hover:text-emerald-300"
+                data-copy="claude mcp add --scope user synth_panel -- synthpanel mcp-serve"
+                aria-label="Copy CLI command"
+              >
+                Copy
+              </button>
+            </div>
+            <p class="text-sm text-slate-400">
+              Or edit
+              <code class="text-slate-300">.mcp.json</code> in your project
+              root directly:
+            </p>
+            <div
+              class="group relative rounded-lg border border-slate-700 bg-slate-950/70 p-4 font-mono text-sm leading-relaxed shadow"
+            >
+<pre class="whitespace-pre-wrap text-slate-300">{
+  <span class="text-emerald-400">"mcpServers"</span>: {
+    <span class="text-emerald-400">"synth_panel"</span>: {
+      <span class="text-emerald-400">"command"</span>: <span class="text-amber-300">"synthpanel"</span>,
+      <span class="text-emerald-400">"args"</span>: [<span class="text-amber-300">"mcp-serve"</span>],
+      <span class="text-emerald-400">"env"</span>: { <span class="text-emerald-400">"ANTHROPIC_API_KEY"</span>: <span class="text-amber-300">"sk-..."</span> }
+    }
+  }
+}</pre>
+              <button
+                type="button"
+                class="copy-btn absolute right-3 top-3 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-emerald-400/50 hover:text-emerald-300"
+                data-copy='{
+  "mcpServers": {
+    "synth_panel": {
+      "command": "synthpanel",
+      "args": ["mcp-serve"],
+      "env": { "ANTHROPIC_API_KEY": "sk-..." }
+    }
+  }
+}'
+                aria-label="Copy Claude Code MCP config"
+              >
+                Copy
+              </button>
+            </div>
+            <p class="text-xs text-slate-500">
+              Plugin alternative:
+              <code class="text-slate-300">/plugin install synthpanel</code>
+              adds the <code class="text-slate-300">/focus-group</code> skill
+              alongside the MCP server.
+            </p>
+          </div>
+        </details>
+
+        <!-- Cursor -->
+        <details
+          class="mb-3 rounded-lg border border-slate-800 bg-slate-900/40 p-4 transition hover:border-slate-700"
+        >
+          <summary class="flex items-center gap-2 text-base font-semibold text-white">
+            Cursor
+          </summary>
+          <div class="mt-4 space-y-4">
+            <p class="text-sm text-slate-400">
+              Project scope:
+              <code class="text-slate-300">.cursor/mcp.json</code>. User scope:
+              <code class="text-slate-300">~/.cursor/mcp.json</code>.
+            </p>
+            <div
+              class="group relative rounded-lg border border-slate-700 bg-slate-950/70 p-4 font-mono text-sm leading-relaxed shadow"
+            >
+<pre class="whitespace-pre-wrap text-slate-300">{
+  <span class="text-emerald-400">"mcpServers"</span>: {
+    <span class="text-emerald-400">"synth_panel"</span>: {
+      <span class="text-emerald-400">"command"</span>: <span class="text-amber-300">"synthpanel"</span>,
+      <span class="text-emerald-400">"args"</span>: [<span class="text-amber-300">"mcp-serve"</span>],
+      <span class="text-emerald-400">"env"</span>: { <span class="text-emerald-400">"ANTHROPIC_API_KEY"</span>: <span class="text-amber-300">"sk-..."</span> }
+    }
+  }
+}</pre>
+              <button
+                type="button"
+                class="copy-btn absolute right-3 top-3 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-emerald-400/50 hover:text-emerald-300"
+                data-copy='{
+  "mcpServers": {
+    "synth_panel": {
+      "command": "synthpanel",
+      "args": ["mcp-serve"],
+      "env": { "ANTHROPIC_API_KEY": "sk-..." }
+    }
+  }
+}'
+                aria-label="Copy Cursor MCP config"
+              >
+                Copy
+              </button>
+            </div>
+          </div>
+        </details>
+
+        <!-- Windsurf -->
+        <details
+          class="mb-3 rounded-lg border border-slate-800 bg-slate-900/40 p-4 transition hover:border-slate-700"
+        >
+          <summary class="flex items-center gap-2 text-base font-semibold text-white">
+            Windsurf
+          </summary>
+          <div class="mt-4 space-y-4">
+            <p class="text-sm text-slate-400">
+              Edit
+              <code class="text-slate-300"
+                >~/.codeium/windsurf/mcp_config.json</code
+              >
+              (or use the Cascade → MCP settings panel).
+            </p>
+            <div
+              class="group relative rounded-lg border border-slate-700 bg-slate-950/70 p-4 font-mono text-sm leading-relaxed shadow"
+            >
+<pre class="whitespace-pre-wrap text-slate-300">{
+  <span class="text-emerald-400">"mcpServers"</span>: {
+    <span class="text-emerald-400">"synth_panel"</span>: {
+      <span class="text-emerald-400">"command"</span>: <span class="text-amber-300">"synthpanel"</span>,
+      <span class="text-emerald-400">"args"</span>: [<span class="text-amber-300">"mcp-serve"</span>],
+      <span class="text-emerald-400">"env"</span>: { <span class="text-emerald-400">"ANTHROPIC_API_KEY"</span>: <span class="text-amber-300">"sk-..."</span> }
+    }
+  }
+}</pre>
+              <button
+                type="button"
+                class="copy-btn absolute right-3 top-3 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-emerald-400/50 hover:text-emerald-300"
+                data-copy='{
+  "mcpServers": {
+    "synth_panel": {
+      "command": "synthpanel",
+      "args": ["mcp-serve"],
+      "env": { "ANTHROPIC_API_KEY": "sk-..." }
+    }
+  }
+}'
+                aria-label="Copy Windsurf MCP config"
+              >
+                Copy
+              </button>
+            </div>
+          </div>
+        </details>
+
+        <!-- Zed -->
+        <details
+          class="mb-3 rounded-lg border border-slate-800 bg-slate-900/40 p-4 transition hover:border-slate-700"
+        >
+          <summary class="flex items-center gap-2 text-base font-semibold text-white">
+            Zed
+          </summary>
+          <div class="mt-4 space-y-4">
+            <p class="text-sm text-slate-400">
+              Zed calls them <em>context servers</em>. Open
+              <code class="text-slate-300">settings.json</code>
+              (cmd-,) and merge this block:
+            </p>
+            <div
+              class="group relative rounded-lg border border-slate-700 bg-slate-950/70 p-4 font-mono text-sm leading-relaxed shadow"
+            >
+<pre class="whitespace-pre-wrap text-slate-300">{
+  <span class="text-emerald-400">"context_servers"</span>: {
+    <span class="text-emerald-400">"synth_panel"</span>: {
+      <span class="text-emerald-400">"command"</span>: {
+        <span class="text-emerald-400">"path"</span>: <span class="text-amber-300">"synthpanel"</span>,
+        <span class="text-emerald-400">"args"</span>: [<span class="text-amber-300">"mcp-serve"</span>],
+        <span class="text-emerald-400">"env"</span>: { <span class="text-emerald-400">"ANTHROPIC_API_KEY"</span>: <span class="text-amber-300">"sk-..."</span> }
+      }
+    }
+  }
+}</pre>
+              <button
+                type="button"
+                class="copy-btn absolute right-3 top-3 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-emerald-400/50 hover:text-emerald-300"
+                data-copy='{
+  "context_servers": {
+    "synth_panel": {
+      "command": {
+        "path": "synthpanel",
+        "args": ["mcp-serve"],
+        "env": { "ANTHROPIC_API_KEY": "sk-..." }
+      }
+    }
+  }
+}'
+                aria-label="Copy Zed context-server config"
+              >
+                Copy
+              </button>
+            </div>
+          </div>
+        </details>
+
+        <!-- Claude Desktop -->
+        <details
+          class="mb-3 rounded-lg border border-slate-800 bg-slate-900/40 p-4 transition hover:border-slate-700"
+        >
+          <summary class="flex items-center gap-2 text-base font-semibold text-white">
+            Claude Desktop
+          </summary>
+          <div class="mt-4 space-y-4">
+            <p class="text-sm text-slate-400">
+              Edit
+              <code class="text-slate-300"
+                >~/Library/Application Support/Claude/claude_desktop_config.json</code
+              >
+              on macOS, or
+              <code class="text-slate-300"
+                >%APPDATA%\Claude\claude_desktop_config.json</code
+              >
+              on Windows, then restart the app.
+            </p>
+            <div
+              class="group relative rounded-lg border border-slate-700 bg-slate-950/70 p-4 font-mono text-sm leading-relaxed shadow"
+            >
+<pre class="whitespace-pre-wrap text-slate-300">{
+  <span class="text-emerald-400">"mcpServers"</span>: {
+    <span class="text-emerald-400">"synth_panel"</span>: {
+      <span class="text-emerald-400">"command"</span>: <span class="text-amber-300">"synthpanel"</span>,
+      <span class="text-emerald-400">"args"</span>: [<span class="text-amber-300">"mcp-serve"</span>],
+      <span class="text-emerald-400">"env"</span>: { <span class="text-emerald-400">"ANTHROPIC_API_KEY"</span>: <span class="text-amber-300">"sk-..."</span> }
+    }
+  }
+}</pre>
+              <button
+                type="button"
+                class="copy-btn absolute right-3 top-3 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-emerald-400/50 hover:text-emerald-300"
+                data-copy='{
+  "mcpServers": {
+    "synth_panel": {
+      "command": "synthpanel",
+      "args": ["mcp-serve"],
+      "env": { "ANTHROPIC_API_KEY": "sk-..." }
+    }
+  }
+}'
+                aria-label="Copy Claude Desktop MCP config"
+              >
+                Copy
+              </button>
+            </div>
+            <p class="text-xs text-slate-500">
+              If
+              <code class="text-slate-300">synthpanel</code> is not on the
+              desktop app's PATH, replace the
+              <code class="text-slate-300">command</code> value with an
+              absolute path (e.g.
+              <code class="text-slate-300">/Users/you/.venv/bin/synthpanel</code
+              >).
+            </p>
+          </div>
+        </details>
+
+        <p class="mt-6 text-xs text-slate-500">
+          Set whichever provider env var you want to use —
+          <code class="text-slate-400">ANTHROPIC_API_KEY</code>,
+          <code class="text-slate-400">OPENAI_API_KEY</code>,
+          <code class="text-slate-400">XAI_API_KEY</code>, or
+          <code class="text-slate-400">GOOGLE_API_KEY</code>. Multiple keys can
+          be set simultaneously; the model string picks the provider.
+        </p>
+      </section>
+
+      <!-- Tools -->
+      <section class="mt-16" id="tools">
+        <h2
+          class="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Tools (12)
+        </h2>
+
+        <h3 class="mt-6 mb-3 text-base font-semibold text-white">
+          Research tools
+        </h3>
+        <div class="overflow-x-auto rounded-lg border border-slate-800 bg-slate-900/40">
+          <table class="w-full text-sm">
+            <thead>
+              <tr>
+                <th class="w-1/4">Tool</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody class="text-slate-300">
+              <tr>
+                <td><code>run_prompt</code></td>
+                <td>
+                  Send a single prompt to an LLM. No personas required — the
+                  simplest tool for a quick research question.
+                </td>
+              </tr>
+              <tr>
+                <td><code>run_panel</code></td>
+                <td>
+                  Run a full synthetic focus group. Each persona answers all
+                  questions independently in parallel, followed by synthesis.
+                  Accepts inline <code>questions</code>, an inline
+                  <code>instrument</code> dict (v1/v2/v3), or an
+                  <code>instrument_pack</code> name.
+                </td>
+              </tr>
+              <tr>
+                <td><code>run_quick_poll</code></td>
+                <td>
+                  Single-question poll across personas. A simplified
+                  <code>run_panel</code> for one question with synthesis.
+                </td>
+              </tr>
+              <tr>
+                <td><code>extend_panel</code></td>
+                <td>
+                  Append a single ad-hoc round to a saved panel result.
+                  Reuses each panelist's saved session for conversational
+                  context. <em>Not</em> a re-entry into the v3 DAG — use for
+                  human-in-the-loop follow-ups.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 class="mt-8 mb-3 text-base font-semibold text-white">
+          Persona pack management
+        </h3>
+        <div class="overflow-x-auto rounded-lg border border-slate-800 bg-slate-900/40">
+          <table class="w-full text-sm">
+            <thead>
+              <tr>
+                <th class="w-1/4">Tool</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody class="text-slate-300">
+              <tr>
+                <td><code>list_persona_packs</code></td>
+                <td>
+                  List all saved persona packs (bundled + user-saved).
+                  Returns ID, name, and persona count.
+                </td>
+              </tr>
+              <tr>
+                <td><code>get_persona_pack</code></td>
+                <td>Get a specific persona pack by ID — full definitions.</td>
+              </tr>
+              <tr>
+                <td><code>save_persona_pack</code></td>
+                <td>
+                  Save a persona pack for reuse. Validates persona data
+                  before writing to disk.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 class="mt-8 mb-3 text-base font-semibold text-white">
+          Instrument pack management
+        </h3>
+        <div class="overflow-x-auto rounded-lg border border-slate-800 bg-slate-900/40">
+          <table class="w-full text-sm">
+            <thead>
+              <tr>
+                <th class="w-1/4">Tool</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody class="text-slate-300">
+              <tr>
+                <td><code>list_instrument_packs</code></td>
+                <td>
+                  List installed instrument packs (bundled + user-saved) with
+                  manifest metadata.
+                </td>
+              </tr>
+              <tr>
+                <td><code>get_instrument_pack</code></td>
+                <td>Load an installed instrument pack by name — full YAML body.</td>
+              </tr>
+              <tr>
+                <td><code>save_instrument_pack</code></td>
+                <td>
+                  Install an instrument pack. Validates via the parser before
+                  writing to disk.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 class="mt-8 mb-3 text-base font-semibold text-white">
+          Result management
+        </h3>
+        <div class="overflow-x-auto rounded-lg border border-slate-800 bg-slate-900/40">
+          <table class="w-full text-sm">
+            <thead>
+              <tr>
+                <th class="w-1/4">Tool</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody class="text-slate-300">
+              <tr>
+                <td><code>list_panel_results</code></td>
+                <td>List saved panel results — ID, date, model, counts.</td>
+              </tr>
+              <tr>
+                <td><code>get_panel_result</code></td>
+                <td>
+                  Get a specific panel result by ID — full result with all
+                  rounds and synthesis.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Resources -->
+      <section class="mt-16" id="resources">
+        <h2
+          class="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Resources (4 URI patterns)
+        </h2>
+        <p class="mb-4 text-base text-slate-300">
+          MCP resources let agents read data without invoking a tool.
+        </p>
+        <div class="overflow-x-auto rounded-lg border border-slate-800 bg-slate-900/40">
+          <table class="w-full text-sm">
+            <thead>
+              <tr>
+                <th class="w-1/3">URI pattern</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody class="text-slate-300">
+              <tr>
+                <td><code>persona-pack://{pack_id}</code></td>
+                <td>A specific persona pack.</td>
+              </tr>
+              <tr>
+                <td><code>persona-pack://</code></td>
+                <td>List all persona packs.</td>
+              </tr>
+              <tr>
+                <td><code>panel-result://{result_id}</code></td>
+                <td>A specific panel result.</td>
+              </tr>
+              <tr>
+                <td><code>panel-result://</code></td>
+                <td>List all panel results.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Prompts -->
+      <section class="mt-16" id="prompts">
+        <h2
+          class="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Prompt templates (3)
+        </h2>
+        <p class="mb-4 text-base text-slate-300">
+          Pre-built research workflows agents can use as starting points.
+        </p>
+        <div class="overflow-x-auto rounded-lg border border-slate-800 bg-slate-900/40">
+          <table class="w-full text-sm">
+            <thead>
+              <tr>
+                <th class="w-1/4">Prompt</th>
+                <th class="w-1/3">Parameters</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody class="text-slate-300">
+              <tr>
+                <td><code>focus_group</code></td>
+                <td>
+                  <code>topic</code> (required),
+                  <code>num_personas</code> (default 5),
+                  <code>follow_up</code> (default true)
+                </td>
+                <td>
+                  Structured focus group discussion prompt for a given topic.
+                </td>
+              </tr>
+              <tr>
+                <td><code>name_test</code></td>
+                <td>
+                  <code>names</code> (required, comma-separated),
+                  <code>context</code> (optional)
+                </td>
+                <td>
+                  Test product or feature name options with diverse
+                  perspectives.
+                </td>
+              </tr>
+              <tr>
+                <td><code>concept_test</code></td>
+                <td>
+                  <code>concept</code> (required),
+                  <code>target_audience</code> (optional)
+                </td>
+                <td>Test a concept or idea with targeted personas.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Response shape -->
+      <section class="mt-16" id="response-shape">
+        <h2
+          class="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Response shape
+        </h2>
+        <p class="mb-4 text-base text-slate-300">
+          All panel runs (<code>run_panel</code>,
+          <code>run_quick_poll</code>, <code>extend_panel</code>) return a
+          uniform response:
+        </p>
+        <div
+          class="group relative rounded-lg border border-slate-800 bg-slate-950/70 p-5 font-mono text-sm leading-relaxed shadow-xl"
+        >
+<pre class="whitespace-pre-wrap text-slate-300">{
+  <span class="text-emerald-400">"result_id"</span>: <span class="text-amber-300">"result-20260410-..."</span>,
+  <span class="text-emerald-400">"model"</span>: <span class="text-amber-300">"haiku"</span>,
+  <span class="text-emerald-400">"persona_count"</span>: 5,
+  <span class="text-emerald-400">"question_count"</span>: 3,
+  <span class="text-emerald-400">"rounds"</span>: [
+    {
+      <span class="text-emerald-400">"name"</span>: <span class="text-amber-300">"discovery"</span>,
+      <span class="text-emerald-400">"results"</span>: [
+        {
+          <span class="text-emerald-400">"persona"</span>: <span class="text-amber-300">"Sarah Chen"</span>,
+          <span class="text-emerald-400">"responses"</span>: [<span class="text-amber-300">"..."</span>],
+          <span class="text-emerald-400">"usage"</span>: { <span class="text-emerald-400">"input_tokens"</span>: 450, <span class="text-emerald-400">"output_tokens"</span>: 120 },
+          <span class="text-emerald-400">"cost"</span>: <span class="text-amber-300">"$0.0012"</span>,
+          <span class="text-emerald-400">"error"</span>: null
+        }
+      ],
+      <span class="text-emerald-400">"synthesis"</span>: { <span class="text-emerald-400">"themes"</span>: [...], <span class="text-emerald-400">"summary"</span>: <span class="text-amber-300">"..."</span> }
+    }
+  ],
+  <span class="text-emerald-400">"path"</span>: [
+    { <span class="text-emerald-400">"round"</span>: <span class="text-amber-300">"discovery"</span>, <span class="text-emerald-400">"branch"</span>: <span class="text-amber-300">"themes contains price"</span>, <span class="text-emerald-400">"next"</span>: <span class="text-amber-300">"probe_pricing"</span> }
+  ],
+  <span class="text-emerald-400">"terminal_round"</span>: <span class="text-amber-300">"probe_pricing"</span>,
+  <span class="text-emerald-400">"warnings"</span>: [],
+  <span class="text-emerald-400">"synthesis"</span>: { <span class="text-emerald-400">"themes"</span>: [...], <span class="text-emerald-400">"summary"</span>: <span class="text-amber-300">"..."</span>, <span class="text-emerald-400">"recommendation"</span>: <span class="text-amber-300">"..."</span> },
+  <span class="text-emerald-400">"total_cost"</span>: <span class="text-amber-300">"$0.0234"</span>,
+  <span class="text-emerald-400">"total_usage"</span>: { <span class="text-emerald-400">"input_tokens"</span>: 2250, <span class="text-emerald-400">"output_tokens"</span>: 600 },
+  <span class="text-emerald-400">"results"</span>: [...]
+}</pre>
+          <button
+            type="button"
+            class="copy-btn absolute right-3 top-3 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-emerald-400/50 hover:text-emerald-300"
+            data-copy='{
+  "result_id": "result-20260410-...",
+  "model": "haiku",
+  "persona_count": 5,
+  "question_count": 3,
+  "rounds": [
+    {
+      "name": "discovery",
+      "results": [
+        {
+          "persona": "Sarah Chen",
+          "responses": ["..."],
+          "usage": { "input_tokens": 450, "output_tokens": 120 },
+          "cost": "$0.0012",
+          "error": null
+        }
+      ],
+      "synthesis": { "themes": [...], "summary": "..." }
+    }
+  ],
+  "path": [
+    { "round": "discovery", "branch": "themes contains price", "next": "probe_pricing" }
+  ],
+  "terminal_round": "probe_pricing",
+  "warnings": [],
+  "synthesis": { "themes": [...], "summary": "...", "recommendation": "..." },
+  "total_cost": "$0.0234",
+  "total_usage": { "input_tokens": 2250, "output_tokens": 600 },
+  "results": [...]
+}'
+            aria-label="Copy example response"
+          >
+            Copy
+          </button>
+        </div>
+        <ul class="mt-5 space-y-2 text-sm text-slate-400">
+          <li>
+            <code class="text-slate-300">rounds</code> — per-round results with
+            panelist responses and per-round synthesis.
+          </li>
+          <li>
+            <code class="text-slate-300">path</code> — routing decisions that
+            fired (v3 branching instruments).
+          </li>
+          <li>
+            <code class="text-slate-300">terminal_round</code> — the round
+            whose synthesis fed final synthesis.
+          </li>
+          <li>
+            <code class="text-slate-300">warnings</code> — parser or runtime
+            warnings.
+          </li>
+          <li>
+            <code class="text-slate-300">results</code> — back-compat flat
+            array mirroring the terminal round's panelist results.
+          </li>
+        </ul>
+        <p class="mt-4 text-xs text-slate-500">
+          For v1/v2 instruments and raw <code>questions</code> input,
+          <code class="text-slate-400">path</code> is empty or linear and
+          <code class="text-slate-400">warnings</code> is typically empty —
+          the shape is uniform across versions.
+        </p>
+      </section>
+
+      <!-- Data storage -->
+      <section class="mt-16" id="storage">
+        <h2
+          class="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Data storage
+        </h2>
+        <p class="mb-4 text-base text-slate-300">
+          Panel results, persona packs, and instrument packs are stored under
+          <code class="text-slate-300">~/.synthpanel/</code> (configurable via
+          <code class="text-slate-300">SYNTH_PANEL_DATA_DIR</code>):
+        </p>
+        <div
+          class="rounded-lg border border-slate-800 bg-slate-950/70 p-5 font-mono text-sm leading-relaxed shadow-xl"
+        >
+<pre class="whitespace-pre-wrap text-slate-300">~/.synthpanel/
+├── persona_packs/          <span class="text-slate-500"># Saved persona packs (YAML)</span>
+├── packs/instruments/      <span class="text-slate-500"># Installed instrument packs (YAML)</span>
+└── results/                <span class="text-slate-500"># Panel results (JSON) + session data</span></pre>
+        </div>
+      </section>
+
+      <!-- Next steps -->
+      <section class="mt-16" id="next">
+        <h2
+          class="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Next steps
+        </h2>
+        <div class="mt-4 grid gap-4 sm:grid-cols-2">
+          <a
+            href="https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/mcp.md"
+            class="group rounded-lg border border-slate-800 bg-slate-900/40 p-5 transition hover:border-emerald-400/40 hover:bg-slate-900/70"
+          >
+            <div class="flex items-center justify-between">
+              <h3 class="font-semibold text-white">Source docs</h3>
+              <span
+                class="text-slate-500 transition group-hover:text-emerald-300"
+                >→</span
+              >
+            </div>
+            <p class="mt-2 text-sm text-slate-400">
+              The canonical
+              <code class="text-slate-300">docs/mcp.md</code> in the GitHub
+              repo.
+            </p>
+          </a>
+          <a
+            href="https://github.com/DataViking-Tech/SynthPanel"
+            class="group rounded-lg border border-slate-800 bg-slate-900/40 p-5 transition hover:border-emerald-400/40 hover:bg-slate-900/70"
+          >
+            <div class="flex items-center justify-between">
+              <h3 class="font-semibold text-white">Report an issue</h3>
+              <span
+                class="text-slate-500 transition group-hover:text-emerald-300"
+                >→</span
+              >
+            </div>
+            <p class="mt-2 text-sm text-slate-400">
+              Open an issue on GitHub if a tool misbehaves or an editor config
+              needs a tweak.
+            </p>
+          </a>
+        </div>
+      </section>
+
+      <!-- Footer -->
+      <footer
+        class="mt-20 border-t border-slate-800 pt-6 text-xs text-slate-500"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <span>
+            MIT-licensed ·
+            <a
+              href="https://github.com/DataViking-Tech/SynthPanel"
+              class="hover:text-slate-300"
+              >DataViking-Tech/SynthPanel</a
+            >
+          </span>
+          <span>
+            Built by
+            <a href="https://dataviking.tech" class="hover:text-slate-300"
+              >DataViking</a
+            >
+          </span>
+        </div>
+      </footer>
+    </main>
+
+    <script>
+      document.querySelectorAll(".copy-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const text = btn.getAttribute("data-copy") || "";
+          try {
+            await navigator.clipboard.writeText(text);
+            const original = btn.textContent;
+            btn.textContent = "Copied";
+            btn.classList.add("text-emerald-300", "border-emerald-400/50");
+            setTimeout(() => {
+              btn.textContent = original;
+              btn.classList.remove("text-emerald-300", "border-emerald-400/50");
+            }, 1500);
+          } catch (err) {
+            // Clipboard API unavailable — leave as no-op; users can still select-all.
+          }
+        });
+      });
+    </script>
+  </body>
+</html>
