@@ -4,6 +4,7 @@
 [![CI](https://github.com/DataViking-Tech/SynthPanel/actions/workflows/ci.yml/badge.svg)](https://github.com/DataViking-Tech/SynthPanel/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python versions](https://img.shields.io/pypi/pyversions/synthpanel.svg)](https://pypi.org/project/synthpanel/)
+[![MCP](https://img.shields.io/badge/MCP-enabled-brightgreen.svg)](https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/mcp.md)
 
 Site: <https://synthpanel.dev> · Benchmark: <https://synthbench.org>
 
