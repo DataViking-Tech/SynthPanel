@@ -23,10 +23,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/DataViking-Tech/synth-panel"
-Repository = "https://github.com/DataViking-Tech/synth-panel"
-Issues = "https://github.com/DataViking-Tech/synth-panel/issues"
-Changelog = "https://github.com/DataViking-Tech/synth-panel/releases"
+Homepage = "https://github.com/DataViking-Tech/SynthPanel"
+Repository = "https://github.com/DataViking-Tech/SynthPanel"
+Issues = "https://github.com/DataViking-Tech/SynthPanel/issues"
+Changelog = "https://github.com/DataViking-Tech/SynthPanel/releases"
 
 [project.optional-dependencies]
 mcp = [
