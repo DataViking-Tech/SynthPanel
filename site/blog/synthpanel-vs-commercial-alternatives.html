@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>
+      SynthPanel vs Synthetic Users vs FocusPanel.ai — When Open-Source MCP
+      Beats the SaaS
+    </title>
+    <meta
+      name="description"
+      content="SynthPanel is the open-source, LLM-agnostic alternative to commercial synthetic-respondent tools (Synthetic Users, FocusPanel.ai, Delve.ai, POPJAM). CLI + MCP server for Claude Code, Cursor, Windsurf, Zed. MIT-licensed. SPS 0.90 on SynthBench."
+    />
+    <meta
+      name="keywords"
+      content="open source synthetic focus group, open source AI persona survey, mcp server survey research, llm-agnostic focus group tool, synthpanel, synthetic users, focuspanel.ai, delve.ai, popjam, model context protocol, synthetic respondents, ai personas, market research"
+    />
+    <meta name="author" content="DataViking" />
+    <link
+      rel="canonical"
+      href="https://synthpanel.dev/blog/synthpanel-vs-commercial-alternatives.html"
+    />
+
+    <meta property="og:type" content="article" />
+    <meta
+      property="og:title"
+      content="SynthPanel vs Synthetic Users vs FocusPanel.ai — When Open-Source MCP Beats the SaaS"
+    />
+    <meta
+      property="og:description"
+      content="Open-source, LLM-agnostic synthetic focus group tool. CLI + MCP server. SPS 0.90 on SynthBench. pip install synthpanel[mcp]."
+    />
+    <meta
+      property="og:url"
+      content="https://synthpanel.dev/blog/synthpanel-vs-commercial-alternatives.html"
+    />
+    <meta property="og:site_name" content="synthpanel" />
+    <meta property="article:published_time" content="2026-04-15" />
+    <meta property="article:author" content="DataViking" />
+    <meta property="article:section" content="Positioning" />
+    <meta property="article:tag" content="synthetic research" />
+    <meta property="article:tag" content="MCP" />
+    <meta property="article:tag" content="open source" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="SynthPanel vs Synthetic Users vs FocusPanel.ai"
+    />
+    <meta
+      name="twitter:description"
+      content="When open-source MCP beats the SaaS: the LLM-agnostic synthetic focus group tool."
+    />
+
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230f172a'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' font-family='ui-monospace,monospace' font-size='34' font-weight='700' fill='%2334d399'%3Esp%3C/text%3E%3C/svg%3E"
+    />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "TechArticle",
+        "headline": "SynthPanel vs Synthetic Users vs FocusPanel.ai — When Open-Source MCP Beats the SaaS",
+        "description": "SynthPanel is the open-source, LLM-agnostic alternative to commercial synthetic-respondent tools. CLI + 12-tool MCP server, MIT-licensed, SPS 0.90 on SynthBench.",
+        "datePublished": "2026-04-15",
+        "author": { "@type": "Organization", "name": "DataViking", "url": "https://dataviking.tech" },
+        "publisher": { "@type": "Organization", "name": "synthpanel", "url": "https://synthpanel.dev" },
+        "about": [
+          { "@type": "SoftwareApplication", "name": "SynthPanel", "applicationCategory": "DeveloperApplication", "operatingSystem": "Cross-platform", "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" } }
+        ],
+        "keywords": "open source synthetic focus group, mcp server survey research, llm-agnostic focus group tool, open source AI persona survey"
+      }
+    </script>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              mono: [
+                "ui-monospace",
+                "SFMono-Regular",
+                "Menlo",
+                "Monaco",
+                "Consolas",
+                "monospace",
+              ],
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        background:
+          radial-gradient(
+            ellipse at top,
+            rgba(52, 211, 153, 0.08),
+            transparent 60%
+          ),
+          #0f172a;
+      }
+      article h2 {
+        scroll-margin-top: 2rem;
+      }
+      article p,
+      article li {
+        line-height: 1.75;
+      }
+      article code {
+        font-size: 0.92em;
+      }
+    </style>
+  </head>
+
+  <body class="text-slate-200 antialiased">
+    <main class="mx-auto max-w-3xl px-6 pb-24 pt-12 sm:pt-16">
+      <nav class="mb-10 text-sm text-slate-400">
+        <a href="/" class="hover:text-emerald-300">← synthpanel.dev</a>
+        <span class="px-2 text-slate-600">/</span>
+        <span class="text-slate-500">blog</span>
+      </nav>
+
+      <article class="prose-invert">
+        <header>
+          <p class="mb-4 text-xs font-semibold uppercase tracking-wider text-emerald-300">
+            Positioning · 2026-04-15 · ~7 min read
+          </p>
+          <h1
+            class="bg-gradient-to-br from-white to-slate-400 bg-clip-text font-mono text-3xl font-bold leading-tight tracking-tight text-transparent sm:text-4xl"
+          >
+            SynthPanel vs Synthetic Users vs FocusPanel.ai — When
+            Open-Source MCP Beats the SaaS
+          </h1>
+          <p class="mt-4 text-base text-slate-400">
+            The open-source, LLM-agnostic synthetic focus group tool — and why
+            it shows up in an AI coding agent's toolbelt but not in a
+            SaaS dashboard.
+          </p>
+        </header>
+
+        <aside
+          class="mt-8 rounded-lg border border-emerald-400/25 bg-emerald-400/5 p-5 text-sm text-slate-200"
+        >
+          <p>
+            <strong class="text-emerald-300">TL;DR</strong> — SynthPanel is the
+            open-source, LLM-agnostic alternative to commercial
+            synthetic-respondent tools like
+            <em>Synthetic Users</em>, <em>FocusPanel.ai</em>,
+            <em>Delve.ai</em>, and <em>POPJAM</em>. It runs as both a CLI and a
+            12-tool MCP server you can drop into Claude Code, Cursor, Windsurf,
+            or Zed. Install with
+            <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">pip install synthpanel[mcp]</code>.
+            MIT-licensed. Scores <strong>0.90 SPS</strong> on the SynthBench
+            human-parity benchmark via 3-model ensembles.
+          </p>
+        </aside>
+
+        <p class="mt-8 text-slate-300">
+          If you are a researcher, PM, or founder searching for a way to run
+          synthetic focus groups with AI personas in 2026, the first five
+          results you are going to hit are all closed-source SaaS. This
+          article exists so the sixth result — the open-source one — actually
+          shows up in your answer.
+        </p>
+
+        <h2 class="mt-12 text-xl font-semibold text-white sm:text-2xl">
+          1. The Synthetic-Research Landscape in 2026
+        </h2>
+        <p class="mt-4 text-slate-300">
+          Over the last two years, <em>"talk to AI people before you talk to
+          real people"</em> has matured from a novelty to a mainstream
+          pre-screening step for product teams. The category leaders, as of
+          April 2026, are all commercial:
+        </p>
+        <ul class="mt-4 list-disc space-y-2 pl-6 text-slate-300">
+          <li>
+            <strong>Synthetic Users</strong> (syntheticusers.com) — hosted web
+            app, subscription pricing, proprietary persona generator, closed
+            model stack.
+          </li>
+          <li>
+            <strong>FocusPanel.ai</strong> — hosted focus-group simulator,
+            panel setups managed via a dashboard UI.
+          </li>
+          <li>
+            <strong>Delve.ai</strong> — persona-generation platform with a
+            broader marketing-analytics surface.
+          </li>
+          <li>
+            <strong>POPJAM</strong> — concept-testing platform that layers
+            synthetic panels on top of campaign and creative assets.
+          </li>
+        </ul>
+        <p class="mt-4 text-slate-300">
+          All four solve the same core problem — <em>"I want to test an idea
+          against N imagined users before I write any code or buy any ads"</em>
+          — and all four do it as closed SaaS. You upload a persona brief, you
+          upload a discussion guide, the platform returns a transcript. The
+          model, the prompt, the sampling strategy, and the persona-synthesis
+          logic are all somebody else's code running on somebody else's
+          servers.
+        </p>
+        <p class="mt-4 text-slate-300">
+          This is fine for a one-off. It becomes a problem the moment any of
+          the following are true:
+        </p>
+        <ul class="mt-3 list-disc space-y-1 pl-6 text-slate-300">
+          <li>You care what model answered the question.</li>
+          <li>You need to diff a discussion guide in version control.</li>
+          <li>You want your research harness to survive a vendor pivot.</li>
+          <li>You want an AI coding agent to <em>invoke</em> the research panel, not you.</li>
+        </ul>
+        <p class="mt-4 text-slate-300">
+          That's where an open-source, LLM-agnostic synthetic focus group tool
+          starts to matter. Enter <strong>SynthPanel</strong>.
+        </p>
+
+        <h2 class="mt-12 text-xl font-semibold text-white sm:text-2xl">
+          2. Why LLM-Agnostic Matters
+        </h2>
+        <p class="mt-4 text-slate-300">
+          SynthPanel is a pure Python library with a provider-agnostic LLM
+          client. You set an environment variable, you pick a model alias
+          (<code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">sonnet</code>,
+          <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">haiku</code>,
+          <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">gemini</code>,
+          <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">grok-3</code>,
+          any OpenAI-compatible endpoint), and every panelist is interviewed
+          against that model. You can switch providers by flipping one flag.
+          You can run the same panel through three different model families
+          and blend the response distributions (the 0.7.0
+          <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">--models</code>
+          and
+          <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">--blend</code>
+          features).
+        </p>
+        <p class="mt-4 text-slate-300">
+          Three things fall out of LLM-agnosticism for free:
+        </p>
+        <p class="mt-4 text-slate-300">
+          <strong class="text-emerald-300">BYOK — bring your own key.</strong>
+          The cost of a 30-persona panel with a 12-question instrument is
+          whatever your provider charges, no markup, no seat license, no
+          per-panel metering. If you have a Claude enterprise deal, use it. If
+          you have Gemini free-tier credits, use those. Token accounting is
+          built in: SynthPanel tracks input, output, cache-read, and
+          cache-write tokens separately and emits a per-panel cost total.
+          What you see is what your provider actually charged.
+        </p>
+        <p class="mt-4 text-slate-300">
+          <strong class="text-emerald-300">No vendor lock-in.</strong> If
+          Anthropic's prices change, or OpenAI deprecates a model, or Google
+          introduces a smarter one, nothing in your research corpus breaks.
+          Your personas, instruments, and saved panel results are all plain
+          YAML and JSON. The client swaps underneath them. A SaaS competitor
+          cannot give you this — they <em>are</em> the vendor.
+        </p>
+        <p class="mt-4 text-slate-300">
+          <strong class="text-emerald-300">Honest model comparison.</strong>
+          Run the same instrument through Claude Sonnet 4.6, GPT-4o, and
+          Gemini 2.5 Flash, blend at
+          <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">--models sonnet:0.34,gpt-4o:0.33,gemini:0.33</code>,
+          and the framework emits per-model distributions <em>and</em> the
+          weighted ensemble. This is how SynthPanel earns its 0.90 SynthBench
+          score: you cannot get that number from any single model alone.
+        </p>
+
+        <h2 class="mt-12 text-xl font-semibold text-white sm:text-2xl">
+          3. Why YAML Instruments Matter
+        </h2>
+        <p class="mt-4 text-slate-300">Here is a SynthPanel instrument:</p>
+        <div
+          class="mt-4 overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/70 p-5 font-mono text-sm leading-relaxed"
+        >
+<pre class="text-slate-300"><span class="text-emerald-400">instrument:</span>
+  <span class="text-emerald-400">version:</span> 3
+  <span class="text-emerald-400">rounds:</span>
+    - <span class="text-emerald-400">name:</span> discovery
+      <span class="text-emerald-400">questions:</span>
+        - <span class="text-emerald-400">text:</span> <span class="text-amber-300">"What's the most frustrating part of your current workflow?"</span>
+      <span class="text-emerald-400">route_when:</span>
+        - <span class="text-emerald-400">if:</span> { field: themes, op: contains, value: price }
+          <span class="text-emerald-400">goto:</span> probe_pricing
+        - <span class="text-emerald-400">else:</span> __end__
+    - <span class="text-emerald-400">name:</span> probe_pricing
+      <span class="text-emerald-400">questions:</span>
+        - <span class="text-emerald-400">text:</span> <span class="text-amber-300">"What would feel fair to pay?"</span></pre>
+        </div>
+        <p class="mt-4 text-slate-300">Four facts fall out of that snippet:</p>
+        <ol class="mt-3 list-decimal space-y-2 pl-6 text-slate-300">
+          <li>
+            <strong>It is a text file.</strong>
+            <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">git diff</code>
+            tells you exactly what changed between research waves. Two
+            researchers can review an instrument the same way they review a
+            pull request.
+          </li>
+          <li>
+            <strong>It is reproducible.</strong> The same instrument + the same
+            personas + the same model + the same seed produce the same panel.
+            There is no <em>"the platform updated its prompt template last
+            Tuesday and now my trend line moved."</em>
+          </li>
+          <li>
+            <strong>It branches.</strong> The v3 schema supports
+            <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">route_when</code>
+            predicates (<code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">contains</code>,
+            <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">equals</code>,
+            <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">matches</code>)
+            against synthesizer-emitted fields like
+            <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">themes</code>
+            and
+            <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">sentiment</code>.
+            Follow-up rounds are authored once and routed automatically
+            per-panelist.
+          </li>
+          <li>
+            <strong>It is portable.</strong> Bundle an instrument as a "pack"
+            (SynthPanel ships five —
+            <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">pricing-discovery</code>,
+            <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">feature-evaluation</code>,
+            <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">churn-exit</code>,
+            <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">messaging-test</code>,
+            <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">onboarding-friction</code>),
+            install it like a library, and every consumer of that pack runs
+            the exact same discussion guide.
+          </li>
+        </ol>
+        <p class="mt-4 text-slate-300">
+          Closed SaaS competitors typically expose a form-based editor. That
+          editor is great for non-technical teams composing one-off studies.
+          It is terrible for research-ops teams who want a reproducible,
+          diffable, versionable artifact. That is the gap SynthPanel's
+          YAML-instrument format fills.
+        </p>
+
+        <h2 class="mt-12 text-xl font-semibold text-white sm:text-2xl">
+          4. Why MCP Matters — The Agent-Era Workflow
+        </h2>
+        <p class="mt-4 text-slate-300">
+          The <strong>Model Context Protocol (MCP)</strong> is Anthropic's
+          standard for giving AI coding assistants tool access. An MCP server
+          exposes tools over stdio; any MCP-compatible editor (Claude Code,
+          Cursor, Windsurf, Zed) can call them.
+        </p>
+        <p class="mt-4 text-slate-300">
+          SynthPanel ships an MCP server with twelve tools:
+        </p>
+        <ul class="mt-4 list-disc space-y-1 pl-6 text-sm text-slate-300">
+          <li><code class="text-emerald-300">run_prompt</code> — one-shot LLM call against any configured model.</li>
+          <li><code class="text-emerald-300">run_panel</code> — full synthetic focus group, including v3 branching.</li>
+          <li><code class="text-emerald-300">run_quick_poll</code> — rapid-turn poll, no follow-ups.</li>
+          <li><code class="text-emerald-300">extend_panel</code> — append one ad-hoc round to a saved panel result.</li>
+          <li><code class="text-emerald-300">list_persona_packs</code>, <code class="text-emerald-300">get_persona_pack</code>, <code class="text-emerald-300">save_persona_pack</code> — persona-pack CRUD.</li>
+          <li><code class="text-emerald-300">list_instrument_packs</code>, <code class="text-emerald-300">get_instrument_pack</code>, <code class="text-emerald-300">save_instrument_pack</code> — instrument-pack CRUD.</li>
+          <li><code class="text-emerald-300">list_panel_results</code>, <code class="text-emerald-300">get_panel_result</code> — panel-result lookup.</li>
+        </ul>
+        <p class="mt-4 text-slate-300">Drop this JSON into your editor config:</p>
+        <div
+          class="mt-4 overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/70 p-5 font-mono text-sm leading-relaxed"
+        >
+<pre class="text-slate-300">{
+  <span class="text-emerald-400">"mcpServers"</span>: {
+    <span class="text-emerald-400">"synth_panel"</span>: {
+      <span class="text-emerald-400">"command"</span>: <span class="text-amber-300">"synthpanel"</span>,
+      <span class="text-emerald-400">"args"</span>: [<span class="text-amber-300">"mcp-serve"</span>],
+      <span class="text-emerald-400">"env"</span>: { <span class="text-emerald-400">"ANTHROPIC_API_KEY"</span>: <span class="text-amber-300">"sk-..."</span> }
+    }
+  }
+}</pre>
+        </div>
+        <p class="mt-4 text-slate-300">
+          …and your coding agent can now run a 12-persona focus group on your
+          new pricing page while you are still in the IDE. No context-switch
+          to a SaaS dashboard, no copy-paste between tools, no <em>"please
+          export to CSV."</em> The agent asks the panel, reads the result
+          object, and drafts its next action off the synthesized themes. That
+          is the agent-era workflow, and closed synthetic-respondent SaaS
+          products cannot natively participate in it — they are not MCP
+          servers, they are dashboards.
+        </p>
+        <p class="mt-4 text-slate-300">
+          If you came here searching for <em>"MCP server survey research"</em>
+          or <em>"MCP server focus group,"</em> SynthPanel is the thing you
+          want to install.
+        </p>
+
+        <h2 class="mt-12 text-xl font-semibold text-white sm:text-2xl">
+          5. Honest Limits (Read This Before You Publish Findings)
+        </h2>
+        <p class="mt-4 text-slate-300">
+          Synthetic research is useful for exploration, hypothesis generation,
+          and rapid iteration. It is <strong>not</strong> a replacement for
+          talking to real humans. SynthPanel documents four known limits in
+          its README, and they apply to every tool in this category —
+          commercial or otherwise:
+        </p>
+        <ul class="mt-4 list-disc space-y-2 pl-6 text-slate-300">
+          <li>
+            <strong>Synthetic responses tend to cluster around means.</strong>
+            Tail behaviours (the outlier user who would pay 10× the median
+            price, the 5% who will churn the moment onboarding jitters) are
+            underrepresented.
+          </li>
+          <li>
+            <strong>LLMs exhibit sycophancy.</strong> Personas will soften
+            criticism of a proposed product. You can partially counter this
+            with adversarial persona templates, but the residual bias is
+            real.
+          </li>
+          <li>
+            <strong>Cultural and demographic representation has blind spots.</strong>
+            Base-model training data is skewed. A persona of "40-year-old
+            rural Indonesian merchant" will be less textured than
+            "35-year-old urban American PM."
+          </li>
+          <li>
+            <strong>Higher-order correlations are poorly replicated.</strong>
+            Synthetic panels are adequate for first-order "what do people
+            think of X" and weak for second-order "how does X interact with Y
+            when Z is true."
+          </li>
+        </ul>
+        <p class="mt-4 text-slate-300">
+          This list is in the README. Any research harness that does not
+          publish a list like this — commercial or open-source — is
+          over-claiming.
+        </p>
+        <p class="mt-4 text-slate-300">
+          Use synthetic panels to <em>pre-screen</em> and <em>iterate</em>.
+          Validate the interesting findings with real participants before you
+          publish, launch, or sell.
+        </p>
+
+        <h2 class="mt-12 text-xl font-semibold text-white sm:text-2xl">
+          6. Quantitative Proof: SynthBench SPS 0.90
+        </h2>
+        <p class="mt-4 text-slate-300">
+          Claims are cheap. SynthPanel was the first harness to publish
+          head-to-head results on
+          <a
+            href="https://synthbench.org"
+            class="text-emerald-400 underline decoration-emerald-400/40 underline-offset-2 hover:text-emerald-300"
+            >SynthBench</a
+          >, an independent open benchmark for synthetic-respondent quality.
+          SynthBench computes a <strong>Synthetic-Parity Score (SPS)</strong>
+          — the fraction of responses from a synthetic panel that match the
+          distribution of a real-human control group on the same instrument.
+        </p>
+        <p class="mt-4 text-slate-300">
+          A 3-model ensemble of SynthPanel personas — blended via
+          <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">synthpanel panel run --models haiku:0.33,gemini:0.33,gpt-4o-mini:0.34 --blend</code>
+          — scores <strong class="text-emerald-300">SPS 0.90</strong> on the
+          current SynthBench leaderboard. That is 90% human parity, measured
+          by an independent third party, on a benchmark whose data and
+          scoring code are both open.
+        </p>
+        <p class="mt-4 text-slate-300">
+          Commercial competitors have not, at time of writing, published SPS
+          scores on the same benchmark. If they do, the comparison will be
+          apples-to-apples — and whoever wins on the leaderboard wins on the
+          leaderboard.
+        </p>
+
+        <h2 class="mt-12 text-xl font-semibold text-white sm:text-2xl">
+          7. Call to Action
+        </h2>
+        <p class="mt-4 text-slate-300">
+          If you need an <strong>open-source synthetic focus group</strong>
+          tool, an <strong>LLM-agnostic focus group tool</strong>, an
+          <strong>open-source AI persona survey</strong> runner, or an
+          <strong>MCP server for survey research</strong> — SynthPanel is one
+          <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">pip</code>
+          away.
+        </p>
+        <div
+          class="mt-6 overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/70 p-5 font-mono text-sm leading-relaxed"
+        >
+<pre class="text-slate-300"><span class="text-slate-500"># Full install with MCP server support</span>
+<span class="text-emerald-400">pip install</span> synthpanel[mcp]
+
+<span class="text-slate-500"># Set a provider key (any of these works)</span>
+<span class="text-emerald-400">export</span> ANTHROPIC_API_KEY=<span class="text-amber-300">sk-...</span>
+
+<span class="text-slate-500"># Run a panel from a bundled instrument</span>
+synthpanel panel run --personas examples/personas.yaml --instrument pricing-discovery
+
+<span class="text-slate-500"># Or start the MCP server for your AI coding agent</span>
+synthpanel mcp-serve</pre>
+        </div>
+        <p class="mt-6 text-sm text-slate-400">
+          Homepage:
+          <a href="https://synthpanel.dev" class="text-emerald-400 hover:text-emerald-300">synthpanel.dev</a>
+          · Repo:
+          <a
+            href="https://github.com/DataViking-Tech/SynthPanel"
+            class="text-emerald-400 hover:text-emerald-300"
+            >github.com/DataViking-Tech/SynthPanel</a
+          >
+          · Benchmark:
+          <a href="https://synthbench.org" class="text-emerald-400 hover:text-emerald-300">synthbench.org</a>
+          · Full MCP docs:
+          <a
+            href="https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/mcp.md"
+            class="text-emerald-400 hover:text-emerald-300"
+            >docs/mcp.md</a
+          >.
+        </p>
+        <p class="mt-4 text-sm text-slate-400">
+          MIT-licensed. BYOK. No dashboard. No seat license. No platform
+          lock-in. Your research harness, in your editor, talking to any model
+          you want to pay for.
+        </p>
+      </article>
+
+      <footer
+        class="mt-20 border-t border-slate-800 pt-6 text-xs text-slate-500"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <span>
+            MIT-licensed ·
+            <a
+              href="https://github.com/DataViking-Tech/SynthPanel"
+              class="hover:text-slate-300"
+              >DataViking-Tech/SynthPanel</a
+            >
+          </span>
+          <span>
+            Built by
+            <a href="https://dataviking.tech" class="hover:text-slate-300"
+              >DataViking</a
+            >
+          </span>
+        </div>
+      </footer>
+    </main>
+  </body>
+</html>
