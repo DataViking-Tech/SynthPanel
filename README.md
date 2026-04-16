@@ -52,6 +52,48 @@ synthpanel panel run \
   --instrument examples/survey.yaml
 ```
 
+## MCP Server (Agent Integration)
+
+synthpanel ships an MCP server so AI agents can run synthetic focus groups as tool calls.
+
+```bash
+pip install synthpanel[mcp]
+synthpanel mcp-serve
+```
+
+Add to your editor's MCP config (Claude Code, Cursor, Windsurf):
+
+```json
+{
+  "mcpServers": {
+    "synth_panel": {
+      "command": "synthpanel",
+      "args": ["mcp-serve"],
+      "env": { "ANTHROPIC_API_KEY": "sk-..." }
+    }
+  }
+}
+```
+
+### Tools (12)
+
+| Tool | Description |
+|------|-------------|
+| `run_prompt` | Send a single prompt to an LLM — no personas required |
+| `run_panel` | Run a full synthetic focus group panel with parallel panelists and synthesis |
+| `run_quick_poll` | Quick single-question poll across personas with synthesis |
+| `extend_panel` | Append an ad-hoc follow-up round to a saved panel result |
+| `list_persona_packs` | List all saved persona packs (bundled + user-saved) |
+| `get_persona_pack` | Get a specific persona pack by ID |
+| `save_persona_pack` | Save a persona pack for reuse |
+| `list_instrument_packs` | List installed instrument packs (bundled + user-saved) |
+| `get_instrument_pack` | Load an installed instrument pack by name |
+| `save_instrument_pack` | Install an instrument pack with validation |
+| `list_panel_results` | List all saved panel results |
+| `get_panel_result` | Get a specific panel result with all rounds and synthesis |
+
+`run_panel` accepts an inline `instrument` dict or an `instrument_pack` name for v3 branching runs. `extend_panel` appends one ad-hoc round — it is **not** a re-entry into the v3 DAG. See [docs/mcp.md](docs/mcp.md) for full tool schemas, resources, and prompt templates.
+
 ## What You Get
 
 ```
@@ -332,39 +374,6 @@ instrument.yaml ─┘                 ├──> Panelist 2 ──> LLM ──>
 - **Reproducible** — same personas + same instrument = comparable output
 - **Structured by default** — responses conform to declared schemas
 
-## MCP Server (Agent Integration)
-
-synthpanel includes an MCP server so AI agents can run panels as tool calls:
-
-```bash
-synthpanel mcp-serve
-```
-
-Add to your editor's MCP config (Claude Code, Cursor, Windsurf, etc.):
-
-```json
-{
-  "mcpServers": {
-    "synth_panel": {
-      "command": "synthpanel",
-      "args": ["mcp-serve"],
-      "env": { "ANTHROPIC_API_KEY": "sk-..." }
-    }
-  }
-}
-```
-
-Tools exposed (12): `run_prompt`, `run_panel`, `run_quick_poll`, `extend_panel`, `list_persona_packs`, `get_persona_pack`, `save_persona_pack`, `list_instrument_packs`, `get_instrument_pack`, `save_instrument_pack`, `list_panel_results`, `get_panel_result`.
-
-`run_panel` accepts an inline `instrument` dict or an `instrument_pack`
-name, so an agent can offload research-design judgment in a single tool
-call. v3 responses include `rounds`, `path`, `terminal_round`, and
-`warnings` alongside the back-compat `results` array.
-
-`extend_panel` appends a single ad-hoc round to a saved panel result —
-it is **not** a re-entry into the authored DAG. Use it for follow-up
-probes that the original instrument didn't anticipate.
-
 ## Output Formats
 
 ```bash
@@ -452,10 +461,6 @@ See [CHANGELOG.md](CHANGELOG.md) for detailed release notes.
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, and how to submit changes.
-
-## MCP Server Documentation
-
-For detailed MCP server documentation (all 12 tools, 4 resources, 3 prompt templates), see [docs/mcp.md](docs/mcp.md).
 
 ## Benchmarked on SynthBench
 
