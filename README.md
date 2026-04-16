@@ -365,6 +365,127 @@ call. v3 responses include `rounds`, `path`, `terminal_round`, and
 it is **not** a re-entry into the authored DAG. Use it for follow-up
 probes that the original instrument didn't anticipate.
 
+## Use with Claude Code / Cursor / Windsurf / Zed
+
+Copy the JSON snippet for your editor into the listed config file, set
+your API key, and restart the editor. `synthpanel mcp-serve` is launched
+on demand over stdio — no long-running process to manage.
+
+<details>
+<summary><b>Claude Code</b></summary>
+
+Add to `.mcp.json` at your project root (or `~/.claude.json` for all projects):
+
+```json
+{
+  "mcpServers": {
+    "synth_panel": {
+      "command": "synthpanel",
+      "args": ["mcp-serve"],
+      "env": { "ANTHROPIC_API_KEY": "sk-..." }
+    }
+  }
+}
+```
+
+Or install the bundled plugin (adds a `/focus-group` skill):
+
+```
+/plugin install synthpanel
+```
+
+</details>
+
+<details>
+<summary><b>Cursor</b></summary>
+
+Add to `.cursor/mcp.json` at your project root (or `~/.cursor/mcp.json` for all projects):
+
+```json
+{
+  "mcpServers": {
+    "synth_panel": {
+      "command": "synthpanel",
+      "args": ["mcp-serve"],
+      "env": { "ANTHROPIC_API_KEY": "sk-..." }
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>Windsurf</b></summary>
+
+Add to `~/.codeium/windsurf/mcp_config.json` (or open
+**Settings → Windsurf Settings → MCP Servers → View Raw Config**):
+
+```json
+{
+  "mcpServers": {
+    "synth_panel": {
+      "command": "synthpanel",
+      "args": ["mcp-serve"],
+      "env": { "ANTHROPIC_API_KEY": "sk-..." }
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>Zed</b></summary>
+
+Zed uses `context_servers` (not `mcpServers`). Add to `~/.config/zed/settings.json`:
+
+```json
+{
+  "context_servers": {
+    "synth_panel": {
+      "source": "custom",
+      "command": "synthpanel",
+      "args": ["mcp-serve"],
+      "env": { "ANTHROPIC_API_KEY": "sk-..." }
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>Claude Desktop</b></summary>
+
+Open **Settings → Developer → Edit Config** (or edit the file directly):
+
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "synth_panel": {
+      "command": "synthpanel",
+      "args": ["mcp-serve"],
+      "env": { "ANTHROPIC_API_KEY": "sk-..." }
+    }
+  }
+}
+```
+
+Restart Claude Desktop after editing.
+
+</details>
+
+> **Using a non-Anthropic provider?** Swap `ANTHROPIC_API_KEY` for
+> `OPENAI_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY`, or
+> `OPENROUTER_API_KEY` — see [LLM Provider Support](#llm-provider-support).
+> The `synthpanel` binary must be on the editor's `PATH`; if you installed
+> into a virtualenv, point `command` at its absolute path
+> (e.g. `/path/to/.venv/bin/synthpanel`).
+
 ## Output Formats
 
 ```bash
