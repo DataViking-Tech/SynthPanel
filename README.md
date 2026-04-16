@@ -123,6 +123,32 @@ Add to your editor's MCP config (Claude Code, Cursor, Windsurf):
 }
 ```
 
+### Zero-config first run via sampling
+
+No API key? No problem. When the invoking MCP client (Claude Desktop,
+Claude Code, Cursor, Windsurf) advertises the `sampling` capability,
+synthpanel falls back to asking the client to run the LLM completion on
+its behalf — using the client's own subscription. That means `run_prompt`
+and small `run_quick_poll` calls (up to 3 personas) work with zero env
+setup:
+
+```json
+{
+  "mcpServers": {
+    "synth_panel": {
+      "command": "synthpanel",
+      "args": ["mcp-serve"]
+    }
+  }
+}
+```
+
+Sampling mode is great for first-touch UX and quick exploratory polls.
+For cross-provider ensembles, larger panels, and reproducible model
+versioning, set a provider key in `env` to graduate to BYOK. See
+[docs/mcp.md#sampling-mode](docs/mcp.md#sampling-mode) for the full
+matrix of when sampling kicks in and what it costs.
+
 ### Tools (12)
 
 | Tool | Description |

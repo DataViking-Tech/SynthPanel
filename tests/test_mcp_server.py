@@ -12,8 +12,14 @@ pytest.importorskip("mcp")
 
 @pytest.fixture(autouse=True)
 def _data_dir(tmp_path, monkeypatch):
-    """Point data dir at temp for all tests."""
+    """Point data dir at temp for all tests.
+
+    Also sets a fake ``ANTHROPIC_API_KEY`` so tests simulate the BYOK
+    path by default — the sampling-mode tests clear these env vars
+    explicitly to exercise the sampling branch.
+    """
     monkeypatch.setenv("SYNTH_PANEL_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-placeholder")
 
 
 from synth_panel.mcp.server import MCP_DEFAULT_MODEL, mcp
