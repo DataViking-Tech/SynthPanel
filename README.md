@@ -53,6 +53,53 @@ synthpanel panel run \
   --instrument examples/survey.yaml
 ```
 
+## Use as a Python Library
+
+Everything the CLI and MCP server can do is also callable from Python.
+No subprocess, no extra install — just import and go.
+
+```python
+from synth_panel import quick_poll, run_panel, run_prompt
+
+# One-shot LLM call
+reply = run_prompt("What makes a name feel trustworthy?")
+print(reply.response, reply.cost)
+
+# Ask a bundled persona pack a single question
+poll = quick_poll(
+    "Which pricing tier name feels most premium: Core, Plus, or Pro?",
+    pack_id="general-consumer",
+)
+print(poll.synthesis["recommendation"])
+
+# Run a full branching instrument against a bundled pack
+panel = run_panel(
+    pack_id="general-consumer",
+    instrument_pack="pricing-discovery",
+)
+print(panel.path)         # e.g. ["discovery", "probe_pricing", "validation"]
+print(panel.total_cost)
+```
+
+The package root exposes eight functions plus three typed return
+dataclasses — `PromptResult`, `PollResult`, `PanelResult`. Every
+result is dict-compatible (`result["model"]`) so code that used to
+consume the MCP JSON payload works unchanged.
+
+| Function | What it does |
+|----------|--------------|
+| `run_prompt(prompt, *, model=...)` | Single LLM call — no personas |
+| `quick_poll(question, pack_id=...)` | One question across a panel + synthesis |
+| `run_panel(pack_id=..., instrument_pack=...)` | Full branching panel run |
+| `extend_panel(result_id, questions)` | Append an ad-hoc follow-up round |
+| `list_personas()` / `list_instruments()` | Discover installed packs |
+| `list_panel_results()` / `get_panel_result(id)` | Reload saved results |
+
+Use this path when subprocess overhead hurts (Jupyter, serverless, CI)
+or when you want to wrap SynthPanel in a LangChain / LlamaIndex tool
+in three lines. See [`examples/sdk_usage.py`](examples/sdk_usage.py)
+for a runnable end-to-end walkthrough.
+
 ## MCP Server (Agent Integration)
 
 synthpanel ships an MCP server so AI agents can run synthetic focus groups as tool calls.
