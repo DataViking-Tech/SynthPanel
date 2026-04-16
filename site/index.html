@@ -171,8 +171,9 @@
           <span class="rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-slate-300">Cursor</span>
           <span class="rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-slate-300">Windsurf</span>
           <span class="rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-slate-300">Zed</span>
+          <span class="rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-slate-300">Claude Desktop</span>
           <a
-            href="https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/mcp.md"
+            href="/mcp"
             class="text-emerald-400 underline decoration-emerald-400/40 underline-offset-2 hover:text-emerald-300"
           >Full MCP docs →</a>
         </div>
@@ -207,7 +208,21 @@ synthpanel panel run \
       </section>
 
       <!-- Cards -->
-      <section class="mt-20 grid gap-4 sm:grid-cols-3">
+      <section class="mt-20 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <a
+          href="/mcp"
+          class="group rounded-lg border border-slate-800 bg-slate-900/40 p-5 transition hover:border-emerald-400/40 hover:bg-slate-900/70"
+        >
+          <div class="flex items-center justify-between">
+            <h3 class="font-semibold text-white">MCP server</h3>
+            <span class="text-slate-500 transition group-hover:text-emerald-300">→</span>
+          </div>
+          <p class="mt-2 text-sm text-slate-400">
+            Drop-in config for Claude Code, Cursor, Windsurf, Zed, and Claude
+            Desktop. 12 tools.
+          </p>
+        </a>
+
         <a
           href="https://pypi.org/project/synthpanel/"
           class="group rounded-lg border border-slate-800 bg-slate-900/40 p-5 transition hover:border-emerald-400/40 hover:bg-slate-900/70"
