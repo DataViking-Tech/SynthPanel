@@ -24,6 +24,8 @@ SynthPanel-specific library beyond the MCP server that already ships with
 | [langchain_tool.py](langchain_tool.py) | LangChain / LangGraph | `langchain-mcp-adapters` | `pip install langchain-mcp-adapters langgraph langchain-anthropic synthpanel[mcp]` |
 | [microsoft_agent.py](microsoft_agent.py) | Microsoft Agent Framework 1.0 | Built-in `MCPStdioTool` | `pip install agent-framework synthpanel[mcp]` |
 | [n8n_workflow.json](n8n_workflow.json) | n8n | Built-in MCP Client tool | Import into n8n + install `synthpanel[mcp]` on the runner |
+| [composio_langchain.py](composio_langchain.py) | LangChain via Composio | `synth_panel.integrations.composio` | `pip install composio composio_langchain langchain langchain-anthropic synthpanel` |
+| [composio_crewai.py](composio_crewai.py) | CrewAI via Composio | `synth_panel.integrations.composio` | `pip install composio composio_crewai crewai synthpanel` |
 
 ---
 
@@ -110,6 +112,34 @@ runner's `PATH`. The workflow fires `run_quick_poll` via the agent.
 pip install synthpanel[mcp]
 export ANTHROPIC_API_KEY=sk-...
 ```
+
+## Composio (LangChain / CrewAI / Semantic Kernel / AutoGen)
+
+Unlike the other examples in this directory, the Composio path does **not**
+go through MCP. SynthPanel ships a native [Composio
+toolkit](../../src/synth_panel/integrations/composio.py) that runs the
+SynthPanel SDK in-process, so any framework Composio supports
+(LangChain, CrewAI, Semantic Kernel, AutoGen, OpenAI Agents, Google ADK)
+can reach five SynthPanel actions — `quick_poll`, `run_panel`,
+`list_personas`, `list_instruments`, `get_panel_result` — through
+`session.tools()`.
+
+```bash
+# LangChain via Composio
+pip install composio composio_langchain langchain langchain-anthropic synthpanel
+export ANTHROPIC_API_KEY=sk-...
+export COMPOSIO_API_KEY=...
+python composio_langchain.py
+
+# CrewAI via Composio (same toolkit, different provider)
+pip install composio composio_crewai crewai synthpanel
+python composio_crewai.py
+```
+
+See [composio_langchain.py](composio_langchain.py) and
+[composio_crewai.py](composio_crewai.py). The submission runbook for
+listing SynthPanel in the Composio public catalog lives at
+[`docs/composio-submission.md`](../../docs/composio-submission.md).
 
 ---
 

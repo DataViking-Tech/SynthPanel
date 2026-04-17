@@ -221,6 +221,13 @@ test with LangChain + CrewAI, submit to Composio's marketplace.
 **Impact:** HIGH — marketplace network effect. But requires understanding
 Composio's tooling, which has its own learning curve.
 
+**Status (2026-04-16):** Connector code committed in
+[`src/synth_panel/integrations/composio.py`](../src/synth_panel/integrations/composio.py);
+LangChain and CrewAI examples in
+[`examples/integrations/`](../examples/integrations/); marketplace submission
+runbook at [`docs/composio-submission.md`](composio-submission.md). Only the
+human-only submit-and-verify steps remain.
+
 ### C.4 Claude Code Skills Library Expansion
 
 **What:** Expand beyond the single `/focus-group` skill to a library of
