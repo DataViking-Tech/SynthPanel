@@ -53,6 +53,40 @@ synthpanel panel run \
   --instrument examples/survey.yaml
 ```
 
+## Works with
+
+SynthPanel is **MCP-native** — it ships an MCP server, and every major
+agent framework now supports MCP as a first-class tool source. That
+means SynthPanel works out of the box with any framework that speaks
+MCP, with zero framework-specific wrapper packages to install. Runnable
+examples for each framework live in
+[`examples/integrations/`](examples/integrations/README.md).
+
+| Framework | Example | Bridge | One-line install |
+|-----------|---------|--------|------------------|
+| [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/mcp/) | [openai_agents.py](examples/integrations/openai_agents.py) | Built-in `MCPServerStdio` | `pip install openai-agents synthpanel[mcp]` |
+| [LlamaIndex](https://docs.llamaindex.ai/) | [llamaindex_tool.py](examples/integrations/llamaindex_tool.py) | `llama-index-tools-mcp` | `pip install llama-index-tools-mcp llama-index-llms-anthropic synthpanel[mcp]` |
+| [CrewAI](https://docs.crewai.com/) | [crewai_tool.py](examples/integrations/crewai_tool.py) | `crewai-tools[mcp]` | `pip install "crewai-tools[mcp]" crewai synthpanel[mcp]` |
+| [LangChain](https://python.langchain.com/) | [langchain_tool.py](examples/integrations/langchain_tool.py) | `langchain-mcp-adapters` | `pip install langchain-mcp-adapters langchain-anthropic synthpanel[mcp]` |
+| [LangGraph](https://langchain-ai.github.io/langgraph/) | [langchain_tool.py](examples/integrations/langchain_tool.py) | `langchain-mcp-adapters` | `pip install langchain-mcp-adapters langgraph langchain-anthropic synthpanel[mcp]` |
+| [Microsoft Agent Framework 1.0](https://learn.microsoft.com/en-us/agent-framework/) | [microsoft_agent.py](examples/integrations/microsoft_agent.py) | Built-in `MCPStdioTool` | `pip install agent-framework synthpanel[mcp]` |
+| [n8n](https://n8n.io/) | [n8n_workflow.json](examples/integrations/n8n_workflow.json) | Built-in MCP Client tool | `pip install synthpanel[mcp]` on the n8n runner |
+
+Also reaches [Zapier MCP](https://zapier.com/mcp) (30K+ actions), the
+[VS Code AI Toolkit](https://code.visualstudio.com/api/extension-guides/ai/mcp),
+Windsurf, Cursor, Zed, Claude Code, and Claude Desktop via the same MCP
+server — all clients in that list install SynthPanel with
+`pip install synthpanel[mcp]` and a one-line MCP config entry (see
+[Use with Claude Code / Cursor / Windsurf / Zed](#use-with-claude-code--cursor--windsurf--zed)).
+
+> **Don't see your framework?** MCP bridges are available for nearly
+> every major agent framework. Start from
+> [`examples/integrations/README.md`](examples/integrations/README.md)
+> — the pattern is identical in each case (point the client at
+> `synthpanel mcp-serve` over stdio) — or
+> [file an issue](https://github.com/DataViking-Tech/SynthPanel/issues)
+> so we can add a sibling example.
+
 ## Use as a Python Library
 
 Everything the CLI and MCP server can do is also callable from Python.
@@ -288,27 +322,6 @@ Restart Claude Desktop after editing.
 > The `synthpanel` binary must be on the editor's `PATH`; if you installed
 > into a virtualenv, point `command` at its absolute path
 > (e.g. `/path/to/.venv/bin/synthpanel`).
-
-## Works with
-
-Every major agent framework now supports MCP as a first-class tool source,
-which means SynthPanel's MCP server plugs into all of them with zero
-additional library code. Runnable examples for each framework live in
-[`examples/integrations/`](examples/integrations/README.md):
-
-| Framework | Example | Bridge |
-|-----------|---------|--------|
-| [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/mcp/) | [openai_agents.py](examples/integrations/openai_agents.py) | Built-in `MCPServerStdio` |
-| [LlamaIndex](https://docs.llamaindex.ai/) | [llamaindex_tool.py](examples/integrations/llamaindex_tool.py) | `llama-index-tools-mcp` |
-| [CrewAI](https://docs.crewai.com/) | [crewai_tool.py](examples/integrations/crewai_tool.py) | `crewai-tools[mcp]` |
-| [LangChain / LangGraph](https://python.langchain.com/) | [langchain_tool.py](examples/integrations/langchain_tool.py) | `langchain-mcp-adapters` |
-| [Microsoft Agent Framework 1.0](https://learn.microsoft.com/en-us/agent-framework/) | [microsoft_agent.py](examples/integrations/microsoft_agent.py) | Built-in `MCPStdioTool` |
-| [n8n](https://n8n.io/) | [n8n_workflow.json](examples/integrations/n8n_workflow.json) | Built-in MCP Client tool |
-
-Also reaches [Zapier MCP](https://zapier.com/mcp) (30K+ actions), the
-[VS Code AI Toolkit](https://code.visualstudio.com/api/extension-guides/ai/mcp),
-Windsurf, Cursor, Zed, and Claude Desktop via the same MCP server. If your
-framework speaks MCP, it works with SynthPanel today.
 
 ## What You Get
 
