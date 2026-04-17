@@ -1,0 +1,71 @@
+# Keep the build context lean. Anything not listed in the Dockerfile's
+# COPY statements is dead weight and slows builds + leaks size into layers.
+
+# VCS / CI / dev-only tooling
+.git
+.github
+.gitignore
+.pre-commit-config.yaml
+.devcontainer
+.claude
+.claude-plugin
+.runtime
+.logs
+.beads
+.ruff_cache
+
+# Build / test artifacts
+__pycache__
+*.py[cod]
+*.egg-info
+*.egg
+.eggs
+build
+dist
+.coverage
+.coverage.*
+htmlcov
+.pytest_cache
+.mypy_cache
+.tox
+
+# Virtual environments
+.venv
+venv
+env
+
+# uv
+uv.lock
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Runtime state
+state.json
+
+# Docs / site / examples / tests are not needed in the runtime image
+docs
+site
+examples
+tests
+templates
+skills
+SPEC.md
+CHANGELOG.md
+CONTRIBUTING.md
+CODE_OF_CONDUCT.md
+SECURITY.md
+CLAUDE.md
+CLAUDE.local.md
+AGENTS.md
+
+# Environment files — never bake credentials into images
+.env
+.env.*

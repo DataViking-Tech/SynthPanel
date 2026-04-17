@@ -5,6 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python versions](https://img.shields.io/pypi/pyversions/synthpanel.svg)](https://pypi.org/project/synthpanel/)
 [![MCP](https://img.shields.io/badge/MCP-enabled-brightgreen.svg)](https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/mcp.md)
+[![GHCR](https://img.shields.io/badge/ghcr.io-dataviking--tech%2Fsynthpanel-2496ED?logo=docker&logoColor=white)](https://github.com/DataViking-Tech/SynthPanel/pkgs/container/synthpanel)
 
 Site: <https://synthpanel.dev> · Benchmark: <https://synthbench.org>
 
@@ -86,6 +87,46 @@ server — all clients in that list install SynthPanel with
 > `synthpanel mcp-serve` over stdio) — or
 > [file an issue](https://github.com/DataViking-Tech/SynthPanel/issues)
 > so we can add a sibling example.
+
+## Run via Docker
+
+A pre-built image is published to both
+[GitHub Container Registry](https://github.com/DataViking-Tech/SynthPanel/pkgs/container/synthpanel)
+and Docker Hub on every tagged release. Use it for ephemeral or serverless
+invocation (Lambda, Cloud Run, GitHub Actions, n8n) where you'd rather
+spin up a container than pip-install.
+
+```bash
+# Pull (either registry works — same image, multi-arch: amd64 + arm64)
+docker pull ghcr.io/dataviking-tech/synthpanel:latest
+docker pull synthpanel/synthpanel:latest
+
+# One-off prompt
+docker run --rm \
+  -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
+  synthpanel/synthpanel \
+  prompt "What makes a name feel trustworthy?"
+
+# MCP server on stdio (default CMD — wire this into an agent's MCP config)
+docker run --rm -i \
+  -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
+  synthpanel/synthpanel
+
+# Panel run with a mounted instrument file
+docker run --rm \
+  -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
+  -v "$PWD":/work -w /work \
+  synthpanel/synthpanel \
+  panel run --personas personas.yaml --instrument survey.yaml
+```
+
+The image's default `CMD` is `mcp-serve`, so omitting the command starts
+the MCP stdio server. Any `synthpanel` subcommand can be passed as
+arguments to override. Provider keys are read from environment variables
+(`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`/`GEMINI_API_KEY`,
+`XAI_API_KEY`) — pass whichever your model requires.
+
+Pin to a specific version (`:0.9.1`) in production rather than `:latest`.
 
 ## Use as a Python Library
 

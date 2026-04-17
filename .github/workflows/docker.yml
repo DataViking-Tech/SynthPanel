@@ -1,0 +1,167 @@
+name: Build and Publish Docker Image
+
+# Builds the production runtime image (Dockerfile at repo root) and pushes
+# it to both GitHub Container Registry and Docker Hub. Tagged-release-only;
+# main pushes do not republish images (mirrors the publish.yml policy).
+#
+# Triggers:
+#   - tag push matching v*           (normal release path)
+#   - workflow_dispatch              (manual republish, takes a tag input)
+#
+# Required repo secrets:
+#   DOCKERHUB_USERNAME   Docker Hub user/org with push access to synthpanel/synthpanel
+#   DOCKERHUB_TOKEN      Docker Hub access token (NOT account password)
+#
+# GHCR uses GITHUB_TOKEN with packages:write — no extra secret needed.
+#
+# Action refs are tag-pinned for now; renovate (config:recommended +
+# matchManagers github-actions) will pin them to SHAs on its next run,
+# matching the pattern in ci.yml / publish.yml.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to (re)publish (e.g. v0.9.1). Must exist in the repo."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    environment: docker
+    steps:
+      - name: Determine tag, version, and build date
+        id: ref
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ -n "$INPUT_TAG" ]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          if [ -z "$TAG" ]; then
+            echo "::error::Could not determine release tag from event context"
+            exit 1
+          fi
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]]; then
+            echo "::error::Tag '$TAG' does not look like a semver release (vMAJOR.MINOR.PATCH[-pre])."
+            exit 1
+          fi
+          VERSION="${TAG#v}"
+          # Pre-releases (anything with a hyphen, e.g. v0.9.1-rc.1) get only
+          # the exact version tag; stable releases also get latest + major +
+          # major.minor floats.
+          if [[ "$TAG" == *-* ]]; then
+            IS_STABLE=false
+          else
+            IS_STABLE=true
+          fi
+          {
+            echo "tag=$TAG"
+            echo "version=$VERSION"
+            echo "is_stable=$IS_STABLE"
+            echo "build_date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          } >> "$GITHUB_OUTPUT"
+          echo "Building tag $TAG (version $VERSION, stable=$IS_STABLE)"
+
+      - name: Checkout at tag
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ steps.ref.outputs.tag }}
+          persist-credentials: false
+
+      - name: Set up QEMU (multi-arch emulation)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Compute image tag list
+        id: tags
+        env:
+          VERSION: ${{ steps.ref.outputs.version }}
+          IS_STABLE: ${{ steps.ref.outputs.is_stable }}
+        run: |
+          set -euo pipefail
+          IMAGES=("ghcr.io/dataviking-tech/synthpanel" "synthpanel/synthpanel")
+          MAJOR="${VERSION%%.*}"
+          REST="${VERSION#*.}"
+          MINOR="${REST%%.*}"
+          TAGS=()
+          for img in "${IMAGES[@]}"; do
+            TAGS+=("${img}:${VERSION}")
+            if [ "$IS_STABLE" = "true" ]; then
+              TAGS+=("${img}:${MAJOR}.${MINOR}" "${img}:${MAJOR}" "${img}:latest")
+            fi
+          done
+          # Newline-separated for build-push-action's `tags:` input.
+          {
+            echo "tags<<EOF"
+            printf '%s\n' "${TAGS[@]}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            SYNTHPANEL_VERSION=${{ steps.ref.outputs.version }}
+            VCS_REF=${{ github.sha }}
+            BUILD_DATE=${{ steps.ref.outputs.build_date }}
+          provenance: true
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summarize push
+        env:
+          VERSION: ${{ steps.ref.outputs.version }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.tags.outputs.tags }}
+        run: |
+          {
+            echo "## Pushed synthpanel ${VERSION}"
+            echo ""
+            echo "**Digest:** \`${DIGEST}\`"
+            echo ""
+            echo "**Tags:**"
+            echo ""
+            echo '```'
+            echo "${TAGS}"
+            echo '```'
+            echo ""
+            echo "**Try it:**"
+            echo '```bash'
+            echo "docker pull ghcr.io/dataviking-tech/synthpanel:${VERSION}"
+            echo "docker run --rm -e ANTHROPIC_API_KEY=\$KEY synthpanel/synthpanel:${VERSION} prompt 'hello'"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
