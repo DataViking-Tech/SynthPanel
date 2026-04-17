@@ -10,6 +10,10 @@
     }
   },
   "skills": [
-    "skills/focus-group/SKILL.md"
+    "skills/focus-group/SKILL.md",
+    "skills/name-test/SKILL.md",
+    "skills/concept-test/SKILL.md",
+    "skills/survey-prescreen/SKILL.md",
+    "skills/pricing-probe/SKILL.md"
   ]
 }
