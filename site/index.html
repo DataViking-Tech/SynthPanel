@@ -76,7 +76,7 @@
           class="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/5 px-3 py-1 text-xs font-medium text-emerald-300"
         >
           <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
-          v0.9.0 — public beta
+          v0.9.1 — public beta
         </p>
         <h1
           class="bg-gradient-to-br from-white to-slate-400 bg-clip-text font-mono text-5xl font-bold tracking-tight text-transparent sm:text-6xl"
@@ -111,10 +111,16 @@
               Copy
             </button>
           </div>
-          <p class="mt-2 text-xs text-slate-500">
-            Add <code class="text-slate-400">[mcp]</code> for
-            Claude&nbsp;Code&nbsp;/&nbsp;Cursor&nbsp;/&nbsp;Windsurf agent
-            integration.
+          <p class="mt-2 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs text-slate-500">
+            <span class="inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-400/5 px-2 py-0.5 font-medium text-emerald-300">
+              <span aria-hidden="true">✓</span>
+              <code class="text-emerald-200">[mcp]</code> extra built in
+            </span>
+            <span>
+              Add <code class="text-slate-400">[mcp]</code> for
+              Claude&nbsp;Code&nbsp;/&nbsp;Cursor&nbsp;/&nbsp;Windsurf agent
+              integration.
+            </span>
           </p>
         </div>
 
@@ -145,7 +151,7 @@
           Drop this config into your editor and start running panels from chat.
         </p>
         <div
-          class="group relative rounded-lg border border-slate-800 bg-slate-950/70 p-5 font-mono text-sm leading-relaxed shadow-xl"
+          class="group relative overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/70 p-5 font-mono text-sm leading-relaxed shadow-xl [-webkit-overflow-scrolling:touch]"
         >
 <pre class="text-slate-300"><span class="text-slate-500">// Claude Code · Cursor · Windsurf · Zed</span>
 {
@@ -189,7 +195,7 @@
           Quick start
         </h2>
         <div
-          class="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/70 p-5 font-mono text-sm leading-relaxed shadow-xl"
+          class="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/70 p-5 font-mono text-sm leading-relaxed shadow-xl [-webkit-overflow-scrolling:touch]"
         >
 <pre class="text-slate-300"><span class="text-slate-500"># 1. install</span>
 <span class="text-emerald-400">pip install</span> synthpanel
@@ -294,12 +300,13 @@ synthpanel panel run \
           Further reading
         </h2>
         <ul class="space-y-1">
-          <li>
+          <li class="flex flex-wrap items-baseline gap-x-2">
             <a
               href="/blog/synthpanel-vs-commercial-alternatives.html"
               class="text-emerald-400 underline decoration-emerald-400/40 underline-offset-2 hover:text-emerald-300"
               >SynthPanel vs Synthetic Users vs FocusPanel.ai — when open-source MCP beats the SaaS →</a
             >
+            <time datetime="2026-04-15" class="text-xs text-slate-500">2026-04-15</time>
           </li>
         </ul>
       </section>
@@ -310,7 +317,7 @@ synthpanel panel run \
       >
         <div class="flex flex-wrap items-center justify-between gap-3">
           <span>
-            MIT-licensed · v0.9.0 ·
+            MIT-licensed · v0.9.1 ·
             <a
               href="https://github.com/DataViking-Tech/SynthPanel"
               class="hover:text-slate-300"
