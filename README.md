@@ -126,7 +126,7 @@ arguments to override. Provider keys are read from environment variables
 (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`/`GEMINI_API_KEY`,
 `XAI_API_KEY`) — pass whichever your model requires.
 
-Pin to a specific version (`:0.9.1`) in production rather than `:latest`.
+Pin to a specific version (`:0.9.3`) in production rather than `:latest`.
 
 ## Use as a Python Library
 
