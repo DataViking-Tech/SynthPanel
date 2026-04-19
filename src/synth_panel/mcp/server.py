@@ -96,6 +96,7 @@ from synth_panel.mcp.data import (
 from synth_panel.mcp.sampling import (
     SAMPLING_MAX_PERSONAS,
     SAMPLING_MAX_QUESTIONS,
+    SAMPLING_MAX_TOKENS_DEFAULT,
 )
 from synth_panel.mcp.sampling import (
     decide_mode as _decide_sampling_mode,
@@ -630,6 +631,7 @@ async def run_panel(
     models: list[str] | None = None,
     synthesis_temperature: float | None = None,
     variants: int | None = None,
+    use_sampling: bool | None = None,
     ctx: Context = None,
 ) -> str:
     """Run a full synthetic focus group panel.
@@ -696,6 +698,13 @@ async def run_panel(
             robustness analysis. When > 0, each persona is perturbed K times
             and all variants run through the same questions. Results include
             robustness_scores and per_persona_robustness. Default: no variants.
+        use_sampling: Explicit mode override. ``True`` forces sampling
+            (error if unsupported or if limits exceeded), ``False`` forces
+            BYOK. ``None`` auto-picks based on creds + client capability.
+            Sampling mode is capped at :data:`SAMPLING_MAX_PERSONAS`
+            personas by :data:`SAMPLING_MAX_QUESTIONS` questions; larger
+            panels require BYOK. Ensemble mode (``models``) and v3
+            branching are BYOK-only.
     """
     model = model or MCP_DEFAULT_MODEL
     variants_k = variants or 0
@@ -734,6 +743,94 @@ async def run_panel(
                 return json.dumps({"error": f"Question at index {i} is missing required field 'text'."})
         if len(questions) > MAX_QUESTIONS:
             return json.dumps({"error": f"Too many questions ({len(questions)}). Maximum is {MAX_QUESTIONS}."})
+
+    # ── Sampling fallback: route through MCP sampling when no BYOK creds ─
+    # Ensemble mode is BYOK-only (sampling host exposes only one model),
+    # so we only consult the decision in the non-ensemble branch.
+    if not (models and len(models) >= 2):
+        decision = _decide_sampling_mode(ctx, use_sampling=use_sampling)
+        if decision.mode == "error":
+            return json.dumps({"error": decision.error})
+        if decision.mode == "sampling":
+            # Resolve question stream for sampling — no v3 branching.
+            sampling_questions: list[dict[str, Any]]
+            if instrument_pack is not None:
+                pack_body = _data_load_instrument_pack(instrument_pack)
+                raw = pack_body.get("instrument", pack_body)
+                inst = parse_instrument(raw)
+                if len(inst.rounds) > 1:
+                    return json.dumps(
+                        {
+                            "error": (
+                                "Sampling mode does not support v3 branching "
+                                "instruments (multiple rounds). Set a provider "
+                                "API key (e.g. ANTHROPIC_API_KEY) to run this "
+                                "pack under BYOK."
+                            )
+                        }
+                    )
+                sampling_questions = [{"text": q["text"]} for q in inst.questions]
+            elif instrument is not None:
+                raw = instrument.get("instrument", instrument)
+                inst = parse_instrument(raw)
+                if len(inst.rounds) > 1:
+                    return json.dumps(
+                        {
+                            "error": (
+                                "Sampling mode does not support v3 branching "
+                                "instruments (multiple rounds). Set a provider "
+                                "API key (e.g. ANTHROPIC_API_KEY) to run this "
+                                "instrument under BYOK."
+                            )
+                        }
+                    )
+                sampling_questions = [{"text": q["text"]} for q in inst.questions]
+            elif questions:
+                sampling_questions = questions
+            else:
+                return json.dumps({"error": "No questions or instrument provided."})
+
+            if len(merged) > SAMPLING_MAX_PERSONAS:
+                return json.dumps(
+                    {
+                        "error": (
+                            f"Sampling mode is capped at {SAMPLING_MAX_PERSONAS} personas "
+                            f"to protect the host agent's context window (got {len(merged)}). "
+                            f"Set ANTHROPIC_API_KEY (or another provider key) in your "
+                            f"environment to run larger panels via BYOK."
+                        )
+                    }
+                )
+            if len(sampling_questions) > SAMPLING_MAX_QUESTIONS:
+                return json.dumps(
+                    {
+                        "error": (
+                            f"Sampling mode is capped at {SAMPLING_MAX_QUESTIONS} questions "
+                            f"(got {len(sampling_questions)}). Set a provider API key to "
+                            f"run larger panels via BYOK."
+                        )
+                    }
+                )
+            if variants_k > 0:
+                return json.dumps(
+                    {
+                        "error": (
+                            "Sampling mode does not support persona variants. "
+                            "Set a provider API key to use robustness analysis."
+                        )
+                    }
+                )
+
+            sampling_result = await _run_panel_sampling(
+                ctx,
+                personas=merged,
+                questions=sampling_questions,
+                synthesis=synthesis,
+                synthesis_prompt=synthesis_prompt,
+                temperature=temperature,
+                hint=decision.hint,
+            )
+            return json.dumps(sampling_result, indent=2)
 
     # ── Ensemble mode: run with each model, compare across models ────────
     if models and len(models) >= 2:
@@ -920,6 +1017,111 @@ async def run_quick_poll(
     )
     result["mode"] = "byok"
     return json.dumps(result, indent=2)
+
+
+async def _run_panel_sampling(
+    ctx: Context,
+    *,
+    personas: list[dict[str, Any]],
+    questions: list[dict[str, Any]],
+    synthesis: bool,
+    synthesis_prompt: str | None,
+    temperature: float | None,
+    hint: str | None,
+) -> dict[str, Any]:
+    """Run a full panel via MCP sampling.
+
+    Mirrors :func:`_run_panel_async`'s shape for the fields callers
+    depend on (``results``, ``rounds``, ``synthesis``, ``persona_count``,
+    ``question_count``, ``path``, ``warnings``) so downstream tooling
+    doesn't have to special-case sampling-mode output. BYOK-only fields
+    (``usage``, ``cost``, ``metadata``) are ``None`` — the host agent
+    absorbs token cost.
+
+    Serial across personas (host agents rate-limit sampling) but each
+    persona answers all questions in a single sampling call to keep
+    round-trips small.
+    """
+    from synth_panel.prompts import SYNTHESIS_PROMPT
+
+    await ctx.report_progress(0, len(personas))
+    panelist_entries: list[dict[str, Any]] = []
+    host_model: str | None = None
+
+    question_texts = [str(q["text"]) for q in questions]
+    joined_questions = "\n\n".join(f"Q{i + 1}: {t}" for i, t in enumerate(question_texts))
+
+    for i, persona in enumerate(personas):
+        system_prompt = persona_system_prompt(persona)
+        user_prompt = (
+            "Answer each of the following questions in order. "
+            "Label each answer with the matching Q number.\n\n" + joined_questions
+        )
+        sample = await _sample_text(
+            ctx,
+            prompt=user_prompt,
+            system_prompt=system_prompt,
+            max_tokens=SAMPLING_MAX_TOKENS_DEFAULT,
+            temperature=temperature,
+        )
+        host_model = sample["model"]
+        # Surface the full answer string against every question so the
+        # output matches BYOK shape: one response entry per question.
+        responses = [{"question": q_text, "answer": sample["text"]} for q_text in question_texts]
+        panelist_entries.append(
+            {
+                "persona": persona,
+                "responses": responses,
+                "model": sample["model"],
+                "usage": None,
+            }
+        )
+        await ctx.report_progress(i + 1, len(personas))
+
+    synthesis_block: dict[str, Any] | None = None
+    if synthesis and panelist_entries:
+        synth_prompt = synthesis_prompt or SYNTHESIS_PROMPT
+        rendered_panel = "\n\n".join(
+            "Panelist: {name}\n{responses}".format(
+                name=entry["persona"].get("name", "anon"),
+                responses="\n".join(f"Q: {r['question']}\nA: {r['answer']}" for r in entry["responses"]),
+            )
+            for entry in panelist_entries
+        )
+        synth = await _sample_text(
+            ctx,
+            prompt=rendered_panel,
+            system_prompt=synth_prompt,
+            max_tokens=SAMPLING_MAX_TOKENS_DEFAULT,
+            temperature=temperature,
+        )
+        synthesis_block = {
+            "summary": synth["text"],
+            "model": synth["model"],
+            "usage": None,
+        }
+
+    return {
+        "mode": "sampling",
+        "hint": hint,
+        "model": host_model,
+        "persona_count": len(personas),
+        "question_count": len(questions),
+        "results": panelist_entries,
+        "rounds": [
+            {
+                "name": "default",
+                "results": panelist_entries,
+                "synthesis": synthesis_block,
+            }
+        ],
+        "synthesis": synthesis_block,
+        "path": [],
+        "warnings": [],
+        "usage": None,
+        "cost": None,
+        "metadata": None,
+    }
 
 
 async def _run_quick_poll_sampling(
