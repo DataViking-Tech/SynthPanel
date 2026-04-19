@@ -38,6 +38,19 @@ SAMPLING_MAX_PERSONAS = 3
 SAMPLING_MAX_QUESTIONS = 5
 SAMPLING_MAX_TOKENS_DEFAULT = 2048
 
+__all__ = [
+    "SAMPLING_CRED_ENV_VARS",
+    "SAMPLING_FIRST_RUN_HINT",
+    "SAMPLING_MAX_PERSONAS",
+    "SAMPLING_MAX_QUESTIONS",
+    "SAMPLING_MAX_TOKENS_DEFAULT",
+    "SamplingDecision",
+    "client_supports_sampling",
+    "decide_mode",
+    "has_byok_credentials",
+    "sample_text",
+]
+
 # Environment variables we treat as "BYOK present". Matches the provider
 # set in synth_panel.llm.providers.
 SAMPLING_CRED_ENV_VARS: tuple[str, ...] = (

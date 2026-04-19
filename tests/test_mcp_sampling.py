@@ -331,3 +331,126 @@ class TestRunQuickPollSampling:
         data = json.loads(raw)
         assert "error" in data
         assert "ANTHROPIC_API_KEY" in data["error"]
+
+
+# ---------------------------------------------------------------------------
+# Integration — run_panel sampling fallback (sp-5no)
+# ---------------------------------------------------------------------------
+
+
+class TestRunPanelSampling:
+    @pytest.mark.asyncio
+    async def test_sampling_supported_no_creds_runs_panel(self):
+        from synth_panel.mcp.server import run_panel
+
+        ctx = _make_sampling_ctx(supports=True, sample_text="panel-answer")
+        raw = await run_panel(
+            questions=[{"text": "What do you think?"}],
+            personas=[{"name": "Alice"}, {"name": "Bob"}],
+            ctx=ctx,
+        )
+        data = json.loads(raw)
+
+        assert data["mode"] == "sampling"
+        assert data["persona_count"] == 2
+        assert data["question_count"] == 1
+        # 2 persona calls + 1 synthesis (default on)
+        assert ctx.session.create_message.await_count == 3
+        # sampling path never raises on the 'usage' field
+        assert data["usage"] is None
+        assert data["results"][0]["responses"][0]["answer"] == "panel-answer"
+
+    @pytest.mark.asyncio
+    async def test_sampling_persona_cap_enforced(self):
+        from synth_panel.mcp.server import SAMPLING_MAX_PERSONAS, run_panel
+
+        ctx = _make_sampling_ctx(supports=True)
+        personas = [{"name": f"P{i}"} for i in range(SAMPLING_MAX_PERSONAS + 1)]
+        raw = await run_panel(
+            questions=[{"text": "q?"}],
+            personas=personas,
+            ctx=ctx,
+        )
+        data = json.loads(raw)
+        assert "error" in data
+        assert f"{SAMPLING_MAX_PERSONAS} personas" in data["error"]
+        ctx.session.create_message.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_sampling_question_cap_enforced(self):
+        from synth_panel.mcp.server import SAMPLING_MAX_QUESTIONS, run_panel
+
+        ctx = _make_sampling_ctx(supports=True)
+        questions = [{"text": f"Q{i}"} for i in range(SAMPLING_MAX_QUESTIONS + 1)]
+        raw = await run_panel(
+            questions=questions,
+            personas=[{"name": "Alice"}],
+            ctx=ctx,
+        )
+        data = json.loads(raw)
+        assert "error" in data
+        assert f"{SAMPLING_MAX_QUESTIONS} questions" in data["error"]
+        ctx.session.create_message.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_sampling_rejects_variants(self):
+        from synth_panel.mcp.server import run_panel
+
+        ctx = _make_sampling_ctx(supports=True)
+        raw = await run_panel(
+            questions=[{"text": "q?"}],
+            personas=[{"name": "Alice"}],
+            variants=3,
+            ctx=ctx,
+        )
+        data = json.loads(raw)
+        assert "error" in data
+        assert "variants" in data["error"].lower()
+
+    @pytest.mark.asyncio
+    async def test_sampling_rejects_v3_branching_instrument(self):
+        from synth_panel.mcp.server import run_panel
+
+        ctx = _make_sampling_ctx(supports=True)
+        instrument = {
+            "version": 3,
+            "rounds": [
+                {
+                    "name": "discovery",
+                    "questions": [{"text": "What frustrates you?"}],
+                    "route_when": [
+                        {"if": {"field": "themes", "op": "contains", "value": "price"}, "goto": "probe"},
+                        {"else": "__end__"},
+                    ],
+                },
+                {
+                    "name": "probe",
+                    "questions": [{"text": "Dig deeper?"}],
+                },
+            ],
+        }
+        raw = await run_panel(
+            instrument=instrument,
+            personas=[{"name": "Alice"}],
+            ctx=ctx,
+        )
+        data = json.loads(raw)
+        assert "error" in data
+        assert "branching" in data["error"].lower()
+
+    @pytest.mark.asyncio
+    async def test_no_sampling_no_creds_returns_friendly_error(self):
+        from synth_panel.mcp.server import run_panel
+
+        ctx = _make_sampling_ctx(supports=False)
+        raw = await run_panel(
+            questions=[{"text": "q?"}],
+            personas=[{"name": "Alice"}],
+            ctx=ctx,
+        )
+        data = json.loads(raw)
+        # The critical regression: no 'usage' KeyError, a structured
+        # error payload instead.
+        assert "error" in data
+        assert "ANTHROPIC_API_KEY" in data["error"]
+        ctx.session.create_message.assert_not_called()
