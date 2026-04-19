@@ -138,6 +138,84 @@ async def test_stdio_quick_poll_routes_through_sampling():
 
 
 @pytest.mark.asyncio
+async def test_stdio_initialize_advertises_sampling_and_version():
+    """sp-lsc regression: the server's initialize handshake must declare
+    that it uses MCP sampling (under experimental capabilities) and must
+    report the synthpanel package version in serverInfo — not the MCP
+    SDK version leaked through FastMCP's default behaviour."""
+    import synth_panel
+
+    params = _locate_server_entry()
+
+    async with (
+        stdio_client(params) as (read, write),
+        ClientSession(
+            read,
+            write,
+            sampling_callback=_sampling_callback,
+        ) as session,
+    ):
+        init_result = await session.initialize()
+
+        assert init_result.serverInfo.name == "synthpanel"
+        assert init_result.serverInfo.version == synth_panel.__version__, (
+            f"serverInfo.version should be the synthpanel package version "
+            f"({synth_panel.__version__}); got {init_result.serverInfo.version}. "
+            f"FastMCP defaults to importlib.metadata.version('mcp') when the "
+            f"underlying Server.version is unset, which leaks the SDK version."
+        )
+
+        experimental = init_result.capabilities.experimental or {}
+        assert "sampling" in experimental, (
+            f"Server must advertise the 'sampling' experimental capability "
+            f"so MCP clients can surface the dependency in their UI. "
+            f"Got capabilities.experimental = {experimental!r}"
+        )
+
+
+@pytest.mark.asyncio
+async def test_stdio_quick_poll_without_personas_uses_defaults():
+    """sp-lsc regression: run_quick_poll must work with zero configuration
+    — omitting personas falls back to the built-in diverse persona set so
+    first-run users aren't forced to hand-craft a personas list."""
+    params = _locate_server_entry()
+
+    async with (
+        stdio_client(params) as (read, write),
+        ClientSession(
+            read,
+            write,
+            sampling_callback=_sampling_callback,
+        ) as session,
+    ):
+        await session.initialize()
+
+        response = await session.call_tool(
+            "run_quick_poll",
+            {
+                "question": "Is the sky blue?",
+                "synthesis": False,
+            },
+        )
+
+        assert response.content
+        text_block = next(
+            (b for b in response.content if getattr(b, "type", None) == "text"),
+            None,
+        )
+        assert text_block is not None
+        payload = json.loads(text_block.text)
+
+        # Must not be a 'personas field required' validation error — that
+        # was the exact regression introduced by sp-5no.
+        assert "error" not in payload or "personas" not in payload["error"].lower(), payload
+
+        if "error" not in payload:
+            assert payload["mode"] == "sampling"
+            assert payload["persona_count"] >= 1
+
+
+@pytest.mark.asyncio
 async def test_stdio_run_panel_routes_through_sampling():
     """Companion: the same fallback must also be wired for run_panel,
     since sp-5no audit specifically called out the usage KeyError on the
