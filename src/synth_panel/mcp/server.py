@@ -38,6 +38,7 @@ from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
 
+from synth_panel import __version__ as _synthpanel_version
 from synth_panel._runners import (
     EXTRACT_SCHEMA_REGISTRY,
     MAX_PERSONAS,
@@ -140,6 +141,40 @@ mcp = FastMCP(
         "structured qualitative feedback on products, concepts, and names."
     ),
 )
+# FastMCP forwards to an internal low-level Server whose ``version`` falls
+# back to ``importlib.metadata.version("mcp")`` when left unset — that
+# leaks the MCP SDK version into serverInfo. Pin the synthpanel package
+# version so clients see the correct release string on initialize.
+mcp._mcp_server.version = _synthpanel_version
+
+
+# Minimal default persona set for ``run_quick_poll`` — three diverse
+# voices so the first-run story works without hand-crafting personas.
+# Kept intentionally small: sampling mode caps at SAMPLING_MAX_PERSONAS
+# and we want the BYOK path to stay cheap by default too.
+DEFAULT_QUICK_POLL_PERSONAS: list[dict[str, Any]] = [
+    {
+        "name": "Alex Rivera",
+        "age": 29,
+        "occupation": "Software Engineer",
+        "background": "Early-career developer at a mid-sized SaaS company.",
+        "personality_traits": ["analytical", "curious", "pragmatic"],
+    },
+    {
+        "name": "Jordan Park",
+        "age": 42,
+        "occupation": "Small Business Owner",
+        "background": "Runs an independent retail shop; values clarity and ROI.",
+        "personality_traits": ["practical", "skeptical", "value-driven"],
+    },
+    {
+        "name": "Sam Okafor",
+        "age": 35,
+        "occupation": "Marketing Manager",
+        "background": "Leads growth at a consumer brand; follows trends closely.",
+        "personality_traits": ["creative", "social", "brand-aware"],
+    },
+]
 
 # Shared LLM client — reused across tool calls to avoid rebuilding the
 # provider cache on every invocation.  Thread-safe by design (see LLMClient).
@@ -913,7 +948,7 @@ async def run_panel(
 @mcp.tool()
 async def run_quick_poll(
     question: str,
-    personas: list[dict[str, Any]],
+    personas: list[dict[str, Any]] | None = None,
     model: str | None = None,
     response_schema: dict[str, Any] | None = None,
     synthesis: bool = True,
@@ -939,7 +974,9 @@ async def run_quick_poll(
 
     Args:
         question: The question to ask all personas.
-        personas: List of persona definitions.
+        personas: List of persona definitions. Optional — when omitted,
+            a small built-in pack of diverse personas is used so the
+            tool works with zero configuration.
         model: LLM model to use. Defaults to haiku. Ignored in sampling
             mode (the host agent picks its own model).
         response_schema: Optional JSON Schema for structured output. When
@@ -961,6 +998,11 @@ async def run_quick_poll(
 
     if not question or not question.strip():
         return json.dumps({"error": "Question text must be a non-empty string."})
+
+    # Fall back to the built-in diverse persona set when the caller
+    # omits personas — preserves the zero-config first-run story.
+    if personas is None or len(personas) == 0:
+        personas = [dict(p) for p in DEFAULT_QUICK_POLL_PERSONAS]
 
     # Validate personas: must be dicts with "name"
     for i, p in enumerate(personas):
@@ -1572,6 +1614,30 @@ def concept_test(
 
 
 def serve() -> None:
-    """Run the MCP server on stdio transport."""
+    """Run the MCP server on stdio transport.
+
+    FastMCP's default ``run_stdio_async`` calls
+    ``create_initialization_options()`` with no arguments, so synthpanel
+    cannot advertise that it *uses* MCP sampling. We reimplement the
+    stdio loop here with ``experimental_capabilities={"sampling": {}}``
+    so MCP clients can surface the dependency in their capability UI
+    and users can see at-a-glance that this server will ask the host
+    agent to run completions when no BYOK creds are set.
+    """
+    import anyio
+    from mcp.server.stdio import stdio_server
+
     logger.info("MCP server starting (stdio transport)")
-    mcp.run(transport="stdio")
+
+    async def _run() -> None:
+        server = mcp._mcp_server
+        async with stdio_server() as (read_stream, write_stream):
+            await server.run(
+                read_stream,
+                write_stream,
+                server.create_initialization_options(
+                    experimental_capabilities={"sampling": {}},
+                ),
+            )
+
+    anyio.run(_run)
