@@ -6,8 +6,22 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-04-19
+
+### Fixed
+- (sp-6gd) P0 demo blocker: confirm `from synth_panel import quick_poll` works. The public SDK re-exports landed in `src/synth_panel/__init__.py` via sp-2cw.1 but were never published to PyPI — 0.9.0 shipped an empty `__init__.py`. This release cuts the first PyPI build that actually exposes the advertised surface (`quick_poll`, `run_prompt`, `run_panel`, `extend_panel`, `get_panel_result`, `list_instruments`, `list_panel_results`, `list_personas`, plus `PanelResult`, `PollResult`, `PromptResult`).
+
 ### Added
+- (sp-2cw.1) Public Python SDK convenience layer: `from synth_panel import quick_poll, run_prompt, run_panel, …` now resolves against `synth_panel.sdk`. See `docs/stability.md` for the supported surface.
+- (sp-2cw.2) `docs/examples/` — "Works with X" integration examples for 6 agent frameworks (Claude Agent SDK, OpenAI Agents, LangGraph, AutoGen, CrewAI, LlamaIndex).
+- (sp-2cw.3) Composio toolkit registration manifest.
+- (sp-2cw.4) Expanded Claude Code skills library under `skills/`.
 - (sp-2cw.5) Production Docker image published to `ghcr.io/dataviking-tech/synthpanel` and `synthpanel/synthpanel` on tagged releases. Multi-arch (linux/amd64, linux/arm64), python:3.12-slim base, default CMD is `synthpanel mcp-serve`. Reads provider keys from env (`ANTHROPIC_API_KEY` etc.). New CI workflow `.github/workflows/docker.yml` builds and pushes on `v*` tag push or `workflow_dispatch`. README gains a "Run via Docker" section and a GHCR badge.
+- (sp-6at) MCP sampling fallback for `run_prompt` and `run_quick_poll` so tools still function when the host supports MCP sampling but no provider key is configured.
+
+### Documentation
+- (sp-2cw.6) README "Works with" section lifted above the fold and expanded to seven frameworks.
+- (sp-4rp) Landing-page sync for v0.9.x and demo polish.
 
 ## [0.9.0] - 2026-04-15
 
