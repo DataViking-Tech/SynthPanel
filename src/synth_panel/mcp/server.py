@@ -34,6 +34,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
@@ -116,8 +117,40 @@ from synth_panel.synthesis import synthesize_panel
 
 logger = logging.getLogger(__name__)
 
-# Default model for MCP mode
+# Default model for MCP mode — used as the terminal fallback when no
+# provider credentials are present in the environment. Prefer
+# :func:`_resolve_mcp_default_model` at call sites so users with a
+# non-Anthropic key (OpenRouter, Gemini, xAI, OpenAI) aren't silently
+# routed into the Anthropic provider and a misleading missing-key error.
 MCP_DEFAULT_MODEL = "haiku"
+
+# Preference chain for the MCP default model. Mirrors the CLI's
+# _DEFAULT_MODEL_PREFERENCE and sdk._DEFAULT_MODEL_PREFERENCE, but picks
+# the cheap/fast model per provider since MCP is optimised for
+# iterative use (whereas the CLI defaults to workhorse models).
+_MCP_DEFAULT_MODEL_PREFERENCE: list[tuple[str, str]] = [
+    ("ANTHROPIC_API_KEY", "haiku"),
+    ("OPENAI_API_KEY", "gpt-4o-mini"),
+    ("GEMINI_API_KEY", "gemini-2.5-flash"),
+    ("GOOGLE_API_KEY", "gemini-2.5-flash"),
+    ("XAI_API_KEY", "grok-3"),
+    ("OPENROUTER_API_KEY", "openrouter/auto"),
+]
+
+
+def _resolve_mcp_default_model() -> str:
+    """Pick a cheap/fast default model based on available provider creds.
+
+    Walks :data:`_MCP_DEFAULT_MODEL_PREFERENCE` and returns the first
+    alias whose env var is set. Falls back to :data:`MCP_DEFAULT_MODEL`
+    when nothing is set so the LLM client's missing-credentials error
+    is the one the user sees.
+    """
+    for env_var, alias in _MCP_DEFAULT_MODEL_PREFERENCE:
+        if os.environ.get(env_var, "").strip():
+            return alias
+    return MCP_DEFAULT_MODEL
+
 
 # Re-export for backward compatibility — callers patch these names.
 __all__ = [
@@ -592,7 +625,7 @@ async def run_prompt(
             (error if unsupported), ``False`` forces BYOK. ``None``
             auto-picks based on creds + client capability.
     """
-    model = model or MCP_DEFAULT_MODEL
+    model = model or _resolve_mcp_default_model()
     decision = _decide_sampling_mode(ctx, use_sampling=use_sampling)
     logger.info("run_prompt: mode=%s model=%s prompt_len=%d", decision.mode, model, len(prompt))
 
@@ -741,7 +774,7 @@ async def run_panel(
             panels require BYOK. Ensemble mode (``models``) and v3
             branching are BYOK-only.
     """
-    model = model or MCP_DEFAULT_MODEL
+    model = model or _resolve_mcp_default_model()
     variants_k = variants or 0
     if variants_k < 0 or variants_k > 20:
         return json.dumps({"error": "variants must be between 0 and 20."})
@@ -994,7 +1027,7 @@ async def run_quick_poll(
             (error if unsupported), ``False`` forces BYOK. ``None``
             auto-picks based on creds + client capability.
     """
-    model = model or MCP_DEFAULT_MODEL
+    model = model or _resolve_mcp_default_model()
 
     if not question or not question.strip():
         return json.dumps({"error": "Question text must be a non-empty string."})
@@ -1378,7 +1411,7 @@ async def extend_panel(
         synthesis_model: Synthesis model. Defaults to panelist model.
         synthesis_prompt: Custom synthesis prompt for the new round.
     """
-    model = model or MCP_DEFAULT_MODEL
+    model = model or _resolve_mcp_default_model()
     logger.info("extend_panel: result_id=%s questions=%d model=%s", result_id, len(questions), model)
     existing = _data_get_panel_result(result_id)
 

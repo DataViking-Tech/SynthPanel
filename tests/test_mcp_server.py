@@ -35,6 +35,53 @@ class TestServerRegistration:
     def test_default_model_is_haiku(self):
         assert MCP_DEFAULT_MODEL == "haiku"
 
+    def test_resolve_default_model_prefers_provider_with_credentials(self, monkeypatch):
+        """sp-t6r: when the only key set is non-Anthropic, the MCP default
+        must match that provider — otherwise we default to ``haiku``
+        (Anthropic) and the LLM client rejects the run with a misleading
+        missing-key error despite the user having valid credentials."""
+        from synth_panel.mcp.server import _resolve_mcp_default_model
+
+        for var in (
+            "ANTHROPIC_API_KEY",
+            "OPENAI_API_KEY",
+            "XAI_API_KEY",
+            "GOOGLE_API_KEY",
+            "GEMINI_API_KEY",
+            "OPENROUTER_API_KEY",
+        ):
+            monkeypatch.delenv(var, raising=False)
+
+        # Preference chain — each provider should light up its own alias.
+        cases = [
+            ("ANTHROPIC_API_KEY", "haiku"),
+            ("OPENAI_API_KEY", "gpt-4o-mini"),
+            ("GEMINI_API_KEY", "gemini-2.5-flash"),
+            ("GOOGLE_API_KEY", "gemini-2.5-flash"),
+            ("XAI_API_KEY", "grok-3"),
+            ("OPENROUTER_API_KEY", "openrouter/auto"),
+        ]
+        for env_var, expected_alias in cases:
+            monkeypatch.setenv(env_var, "sk-x")
+            try:
+                assert _resolve_mcp_default_model() == expected_alias, env_var
+            finally:
+                monkeypatch.delenv(env_var, raising=False)
+
+    def test_resolve_default_model_falls_back_to_haiku(self, monkeypatch):
+        from synth_panel.mcp.server import _resolve_mcp_default_model
+
+        for var in (
+            "ANTHROPIC_API_KEY",
+            "OPENAI_API_KEY",
+            "XAI_API_KEY",
+            "GOOGLE_API_KEY",
+            "GEMINI_API_KEY",
+            "OPENROUTER_API_KEY",
+        ):
+            monkeypatch.delenv(var, raising=False)
+        assert _resolve_mcp_default_model() == MCP_DEFAULT_MODEL
+
     @pytest.mark.asyncio
     async def test_tools_registered(self):
         tools = await mcp.list_tools()

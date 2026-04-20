@@ -52,13 +52,17 @@ __all__ = [
 ]
 
 # Environment variables we treat as "BYOK present". Matches the provider
-# set in synth_panel.llm.providers.
+# set in synth_panel.llm.providers — must stay in sync with the CLI's
+# _DEFAULT_MODEL_PREFERENCE and sdk._DEFAULT_MODEL_PREFERENCE, otherwise
+# a user who set (e.g.) OPENROUTER_API_KEY gets routed to sampling or a
+# "missing credentials" error despite the CLI recognising the same key.
 SAMPLING_CRED_ENV_VARS: tuple[str, ...] = (
     "ANTHROPIC_API_KEY",
     "OPENAI_API_KEY",
     "XAI_API_KEY",
     "GOOGLE_API_KEY",
     "GEMINI_API_KEY",
+    "OPENROUTER_API_KEY",
 )
 
 # First-run hint surfaced on successful sampling runs so users know they
@@ -183,8 +187,9 @@ def decide_mode(
         mode="error",
         error=(
             "No provider credentials found (ANTHROPIC_API_KEY / "
-            "OPENAI_API_KEY / XAI_API_KEY / GOOGLE_API_KEY) and the "
-            "invoking MCP client did not advertise 'sampling' capability. "
+            "OPENAI_API_KEY / XAI_API_KEY / GOOGLE_API_KEY / "
+            "GEMINI_API_KEY / OPENROUTER_API_KEY) and the invoking "
+            "MCP client did not advertise 'sampling' capability. "
             "Set a provider key in your environment, or run synthpanel "
             "from a sampling-capable client such as Claude Desktop. "
             "See https://synthpanel.dev/mcp#credentials."

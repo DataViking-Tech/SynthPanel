@@ -35,6 +35,7 @@ def _clean_env(tmp_path, monkeypatch):
         "XAI_API_KEY",
         "GOOGLE_API_KEY",
         "GEMINI_API_KEY",
+        "OPENROUTER_API_KEY",
     ):
         monkeypatch.delenv(var, raising=False)
 
@@ -53,8 +54,30 @@ class TestHasByokCredentials:
     def test_any_known_var_returns_true(self, monkeypatch):
         from synth_panel.mcp.sampling import has_byok_credentials
 
-        for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY"):
+        # Must cover every provider the CLI auto-detects, otherwise a user
+        # whose only key is (e.g.) OPENROUTER_API_KEY gets misrouted into
+        # sampling or a "missing credentials" error despite the CLI
+        # recognising the same key (see sp-t6r).
+        for var in (
+            "ANTHROPIC_API_KEY",
+            "OPENAI_API_KEY",
+            "XAI_API_KEY",
+            "GOOGLE_API_KEY",
+            "GEMINI_API_KEY",
+            "OPENROUTER_API_KEY",
+        ):
             assert has_byok_credentials({var: "x"}) is True, var
+
+    def test_openrouter_key_is_recognised_in_decide_mode(self):
+        from synth_panel.mcp.sampling import decide_mode
+
+        # sp-t6r regression: OPENROUTER_API_KEY must route to BYOK, not
+        # sampling, even when the client supports sampling — otherwise we
+        # silently downgrade users with a valid provider key.
+        ctx = MagicMock()
+        ctx.session.check_client_capability.return_value = True
+        d = decide_mode(ctx, env={"OPENROUTER_API_KEY": "sk-or-x"})
+        assert d.mode == "byok"
 
     def test_empty_string_is_not_creds(self):
         from synth_panel.mcp.sampling import has_byok_credentials
