@@ -6,6 +6,25 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-04-20
+
+### Fixed
+- (sp-1ez) P0 release packaging: `synthpanel login`/`logout`/`whoami` subcommands were merged to main via PR #178 (sp-lve) on 2026-04-20 but the PR carried no `semver:*` label, so auto-tag never fired and 0.9.3 shipped without the credential-store CLI. This release re-cuts the wheel so the advertised commands actually appear in `synthpanel --help`.
+
+### Added
+- (sp-lve) `synthpanel login` / `logout` / `whoami` — persist a per-provider API key to the on-disk credential store so the CLI works without exporting env vars. Key can also be piped (`echo sk-... | synthpanel login`) for CI/script use.
+
+### Fixed
+- (sp-t6r) MCP: recognise `OPENROUTER_API_KEY` as a BYOK credential and pick a sensible default model when OpenRouter is the only configured provider.
+- (sp-d86) Site: prevent iOS Safari overscroll white flash on the landing page.
+- (sp-v1w) Site: bump copy-button touch target to 44px to meet iOS Human Interface Guidelines.
+
+### Documentation
+- (sp-dub) Promote the MCP sampling-fallback story to the README opener and landing page; align framework count at 8 across surfaces.
+- (sp-ovl) SEO: Schema.org JSON-LD, tightened meta descriptions, and `og:site_name`.
+- (sp-fiv) Smithery registry section + refreshed registry-submissions runbook.
+- (sp-f12) Add Anthropic Cookbook notebook as the canonical integration-example source.
+
 ## [0.9.2] - 2026-04-19
 
 ### Fixed
