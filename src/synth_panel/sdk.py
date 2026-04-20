@@ -29,7 +29,6 @@ that used to receive the raw MCP payload.
 
 from __future__ import annotations
 
-import os
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -112,15 +111,18 @@ _DEFAULT_MODEL_PREFERENCE: list[tuple[str, str]] = [
 
 
 def _default_model() -> str:
-    """Pick a default alias from the first provider with credentials in the env.
+    """Pick a default alias from the first provider with credentials.
 
     Mirrors the CLI's resolution order so ``from synth_panel import quick_poll``
-    works with whichever API key the user has set, falling back to
-    ``"sonnet"`` when nothing is set (so the LLM client's missing-
-    credentials error is the one the user sees).
+    works with whichever API key the user has set (env var or
+    ``synthpanel login``), falling back to ``"sonnet"`` when nothing is
+    set (so the LLM client's missing-credentials error is the one the
+    user sees).
     """
+    from synth_panel.credentials import has_credential
+
     for env_var, alias in _DEFAULT_MODEL_PREFERENCE:
-        if os.environ.get(env_var, "").strip():
+        if has_credential(env_var):
             return alias
     return "sonnet"
 

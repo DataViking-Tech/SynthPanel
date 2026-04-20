@@ -7,11 +7,11 @@ so this provider translates our internal request/response models to that format.
 from __future__ import annotations
 
 import json
-import os
 from collections.abc import Iterator
 
 import httpx
 
+from synth_panel.credentials import get_credential
 from synth_panel.llm.errors import LLMError, LLMErrorCategory, classify_http_status
 from synth_panel.llm.models import (
     CompletionRequest,
@@ -39,13 +39,12 @@ class GeminiProvider(LLMProvider):
     config = GEMINI_CONFIG
 
     def __init__(self) -> None:
-        # Support both GEMINI_API_KEY and GOOGLE_API_KEY
-        key = os.environ.get("GEMINI_API_KEY", "").strip()
-        if not key:
-            key = os.environ.get("GOOGLE_API_KEY", "").strip()
+        # Support both GEMINI_API_KEY and GOOGLE_API_KEY, resolved via env
+        # or the on-disk credential store.
+        key = get_credential("GEMINI_API_KEY") or get_credential("GOOGLE_API_KEY")
         if not key:
             raise LLMError(
-                "Missing API key: set GEMINI_API_KEY or GOOGLE_API_KEY",
+                "Missing API key: set GEMINI_API_KEY / GOOGLE_API_KEY or run `synthpanel login --provider gemini`",
                 LLMErrorCategory.MISSING_CREDENTIALS,
             )
         self._api_key = key

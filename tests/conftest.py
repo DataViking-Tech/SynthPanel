@@ -11,6 +11,7 @@ class of bugs structurally impossible in CI.
 from __future__ import annotations
 
 import socket
+from pathlib import Path
 
 import pytest
 
@@ -41,3 +42,16 @@ def _block_network(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPat
     if "acceptance" in markers:
         return  # Let acceptance tests use real network
     monkeypatch.setattr(socket.socket, "connect", _guarded_connect)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_credentials_store(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Point the SynthPanel credential store at a unique tmp path per test.
+
+    Prevents a developer's real ``~/.config/synthpanel/credentials.json``
+    from bleeding into tests that assume ``MISSING_CREDENTIALS`` (sp-lve).
+    Individual tests can still write to the path by calling
+    :func:`synth_panel.credentials.save_credential`.
+    """
+    sandbox: Path = tmp_path_factory.mktemp("synthpanel-creds")
+    monkeypatch.setenv("SYNTHPANEL_CREDENTIALS_PATH", str(sandbox / "credentials.json"))

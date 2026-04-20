@@ -83,7 +83,9 @@ class LLMClient:
                     return provider
 
         raise LLMError(
-            "No LLM provider credentials found. Set ANTHROPIC_API_KEY, GEMINI_API_KEY, XAI_API_KEY, OPENROUTER_API_KEY, or OPENAI_API_KEY.",
+            "No LLM provider credentials found. Run `synthpanel login` or set "
+            "ANTHROPIC_API_KEY, GEMINI_API_KEY, XAI_API_KEY, OPENROUTER_API_KEY, "
+            "or OPENAI_API_KEY.",
             LLMErrorCategory.MISSING_CREDENTIALS,
         )
 

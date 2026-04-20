@@ -14,6 +14,8 @@ from synth_panel.cli.commands import (
     handle_instruments_install,
     handle_instruments_list,
     handle_instruments_show,
+    handle_login,
+    handle_logout,
     handle_mcp_serve,
     handle_pack_export,
     handle_pack_generate,
@@ -23,6 +25,7 @@ from synth_panel.cli.commands import (
     handle_panel_run,
     handle_panel_synthesize,
     handle_prompt,
+    handle_whoami,
 )
 from synth_panel.cli.output import OutputFormat
 from synth_panel.cli.parser import build_parser
@@ -87,6 +90,12 @@ def main(argv: list[str] | None = None) -> int:
         return handle_analyze(args, output_format)
     elif args.command == "mcp-serve":
         return handle_mcp_serve(args, output_format)
+    elif args.command == "login":
+        return handle_login(args, output_format)
+    elif args.command == "logout":
+        return handle_logout(args, output_format)
+    elif args.command == "whoami":
+        return handle_whoami(args, output_format)
     else:
         # No subcommand → interactive REPL
         return run_repl(args, output_format)
