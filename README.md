@@ -11,7 +11,7 @@ Site: <https://synthpanel.dev> · Benchmark: <https://synthbench.org>
 
 Open-source synthetic focus groups. Any LLM. Your terminal or your agent's tool call.
 
-Define personas in YAML. Define your research instrument in YAML. Run against any LLM — from your terminal, from a pipeline, or from an AI agent's MCP tool call. Get structured, reproducible output with full cost transparency.
+**Zero-config inside any MCP host that speaks sampling** (Claude Desktop, Claude Code, Cursor, Windsurf) — drop the config in and run a panel with **no API key set**. The host runs the model on your behalf, using its own subscription. Bring your own provider key (Claude, GPT, Gemini, Grok, local) when you want reproducibility, ensembles, or larger panels. Personas and instruments are plain YAML; every response is schema-validated with per-turn cost telemetry. Runs from your terminal, a pipeline, or an AI agent's MCP tool call.
 
 ```bash
 pip install synthpanel
@@ -72,6 +72,8 @@ examples for each framework live in
 | [LangGraph](https://langchain-ai.github.io/langgraph/) | [langchain_tool.py](examples/integrations/langchain_tool.py) | `langchain-mcp-adapters` | `pip install langchain-mcp-adapters langgraph langchain-anthropic synthpanel[mcp]` |
 | [Microsoft Agent Framework 1.0](https://learn.microsoft.com/en-us/agent-framework/) | [microsoft_agent.py](examples/integrations/microsoft_agent.py) | Built-in `MCPStdioTool` | `pip install agent-framework synthpanel[mcp]` |
 | [n8n](https://n8n.io/) | [n8n_workflow.json](examples/integrations/n8n_workflow.json) | Built-in MCP Client tool | `pip install synthpanel[mcp]` on the n8n runner |
+| [LangChain via Composio](https://composio.dev/) | [composio_langchain.py](examples/integrations/composio_langchain.py) | `synth_panel.integrations.composio` (in-process, non-MCP) | `pip install composio composio_langchain langchain langchain-anthropic synthpanel` |
+| [CrewAI via Composio](https://composio.dev/) | [composio_crewai.py](examples/integrations/composio_crewai.py) | `synth_panel.integrations.composio` (in-process, non-MCP) | `pip install composio composio_crewai crewai synthpanel` |
 
 Also reaches [Zapier MCP](https://zapier.com/mcp) (30K+ actions), the
 [VS Code AI Toolkit](https://code.visualstudio.com/api/extension-guides/ai/mcp),

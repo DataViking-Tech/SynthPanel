@@ -20,7 +20,7 @@ not for anything missing from the product itself.
 - ✅ 8 agent-framework examples live (OpenAI Agents, LangChain/LangGraph, CrewAI, LlamaIndex, MS Agent Framework, n8n, plus 2 Composio flavors)
 - ✅ awesome-mcp-servers PR #4930 pending — can reference it ("we're getting listed upstream")
 - ⚠️ CLI ergonomic gotcha: `--model` must precede the subcommand (`synthpanel --model sonnet prompt …`). Trivial, but it will trip the founder live if they type it the other way.
-- ⚠️ "Works with 7 frameworks" above-the-fold claim is technically 8 examples / 6 frameworks. Keep the pitch consistent with whichever number is on the site at showtime.
+- ✅ Framework-count drift resolved (sp-dub): README table and `examples/integrations/` both list **8 framework entries** (6 MCP-native + 2 Composio bridges). Founder's script, README, and directory now agree on "eight agent frameworks." Cite that number on stage.
 
 ---
 
@@ -187,7 +187,7 @@ forcing. You get JSON, not vibes."*
 Open `examples/integrations/openai_agents.py` in a second pane (or the
 web page if it renders better). Scroll — do not read. Say:
 
-> "Six agent frameworks, one MCP server. No SynthPanel-specific SDK.
+> "Eight agent frameworks, one MCP server. No SynthPanel-specific SDK.
 > If your framework speaks MCP, you already have a SynthPanel adapter."
 
 Highlight the shortest example (OpenAI Agents SDK is ~20 lines). Call
@@ -242,9 +242,10 @@ booth."*
   direct CLI call instead of MCP-sampling and the laptop doesn't have
   a key set, the demo dies. Mitigation: the aliased `synthpanel demo`
   above should force the MCP-sampling path, not a direct provider call.
-- **Framework-integration claim drift:** six frameworks in the mail,
-  seven on the landing page, eight files in the directory. Pick one
-  number for the founder's script and make the site match before stage.
+- ~~**Framework-integration claim drift:**~~ **Resolved (sp-dub):** README
+  table, `examples/integrations/` directory, and founder's script all
+  now agree on **eight agent frameworks** (6 MCP-native + 2 Composio
+  bridges). Use that number on stage.
 - **Dolt / backend dependency:** if any of the demo assets (panel
   result persistence, saved sessions) touches the Dolt server and it
   hiccups mid-demo, there's no graceful fallback on stage. For tonight,
