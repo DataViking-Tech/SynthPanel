@@ -1,7 +1,8 @@
 # Registry Submission Runbook
 
-**Parent bead:** sp-ege.7 · **Status:** Prep artifacts committed; human-only submit steps below
-**Last updated:** 2026-04-15
+**Parent beads:** sp-ege.7 (initial prep), sp-fiv (Smithery + Glama sweep)
+**Status:** Prep artifacts committed; human-only submit steps below
+**Last updated:** 2026-04-19
 
 This is a checklist for submitting SynthPanel to major MCP registries. The
 code-doable prep work is already done (`glama.json`, `server.json`); the
@@ -77,7 +78,59 @@ both org admins listed as maintainers.
 
 ---
 
-## 2. Official MCP Registry — `registry.modelcontextprotocol.io`
+## 2. Smithery — `smithery.ai`
+
+**Status:** No repo-committed prep applicable · CLI publish required
+
+Smithery is the other major MCP registry. Unlike Glama, Smithery does **not**
+auto-index GitHub repos by topic, and there is no equivalent of `glama.json`
+that we can commit to claim ownership from the repo side. Submissions happen
+either through the `smithery` CLI (authenticated via Smithery API key) or
+through Smithery's web UI.
+
+A `smithery.yaml` manifest is useful only for Smithery's hosted/bundled
+deployment modes (JS module upload, MCPB bundle, container build). SynthPanel
+ships as a PyPI package invoked via `uvx`, so the appropriate submission path
+is **URL-based** — point Smithery at the GitHub repo; it will scan and index
+the server metadata (tools, README, install instructions).
+
+**Human steps (one-time, ~10 min):**
+
+1. Sign in at <https://smithery.ai> with GitHub (as `the-data-viking` or
+   `openclaw-dv`).
+2. Generate a Smithery API key from the account settings page and export it:
+   ```bash
+   export SMITHERY_API_KEY=sk_...
+   ```
+3. Install and run the Smithery CLI to publish the repo URL:
+   ```bash
+   npx @smithery/cli mcp publish \
+     https://github.com/DataViking-Tech/SynthPanel \
+     -n synthpanel
+   ```
+   The CLI registers SynthPanel under the qualified name `synthpanel` and
+   scans the linked repo for metadata. If the CLI path fails, fall back
+   to the web submission form at <https://smithery.ai/new>.
+4. Edit the listing via the Smithery dashboard to set:
+   - **Title:** SynthPanel
+   - **Tagline:** (use the one-liner above)
+   - **Description:** (use the standard description above)
+   - **Tags:** research, survey, personas, llm, mcp, python
+5. Record the live URL below.
+
+**Recorded URL:** `__ TBD — fill after publish __`
+
+**If Smithery requires a deployable bundle (MCPB / container) rather than a
+URL-only listing:** this escalates from a ~10 min submission into a packaging
+project. File a separate bead (`Package SynthPanel as MCPB bundle for
+Smithery hosted deploy`) before attempting — do not improvise the packaging
+inside this submission sweep.
+
+**Reference:** <https://smithery.ai/docs/build/publish>
+
+---
+
+## 3. Official MCP Registry — `registry.modelcontextprotocol.io`
 
 **Status:** Prep committed · Publish required (upstream of PulseMCP)
 
@@ -122,7 +175,7 @@ PyPI, then `mcp-publisher publish` again.
 
 ---
 
-## 3. PulseMCP — `pulsemcp.com/submit`
+## 4. PulseMCP — `pulsemcp.com/submit`
 
 **Status:** Downstream of Official MCP Registry — should auto-populate
 
@@ -144,7 +197,7 @@ should appear within 7 days with no additional action.
 
 ---
 
-## 4. MCPHub — `mcphub.com`
+## 5. MCPHub — `mcphub.com`
 
 **Status:** Submission mechanism not publicly documented · Best-effort
 
@@ -170,7 +223,7 @@ that appears to be a different curator; worth checking both domains.
 
 ---
 
-## 5. Klavis AI — NOT a registry (out of scope)
+## 6. Klavis AI — NOT a registry (out of scope)
 
 **Status:** Deferred · Out of scope for a "submission sweep"
 
@@ -186,9 +239,12 @@ requires servers to be integrated **into their monorepo** at
 - Ongoing maintenance inside their repo
 
 This is a fork-and-integrate engineering project, not a one-form
-submission. It parallels the Smithery note in the original bead
-("Skip Smithery unless their Python hosting model works for synthpanel
-— it likely requires deployable to their infra").
+submission.
+
+(Historical note: the original sp-ege.7 bead grouped Smithery with Klavis
+under "skip unless Python hosting works." sp-fiv revisited Smithery and
+confirmed a URL-based publish path exists — see Section 2 above. Klavis
+remains out of scope.)
 
 **Recommendation:** skip for this submission sweep. If Klavis listing
 becomes strategically important, file a separate bead scoped as
@@ -218,9 +274,10 @@ bead (the test itself is deliverable-producing work).
 | Registry | Prep | Human step | Recorded URL |
 |---|---|---|---|
 | Glama.ai | ✓ `glama.json` | Claim flow (GitHub OAuth) | TBD |
+| Smithery | — (URL-based, no repo manifest) | `smithery mcp publish <url>` or web form | TBD |
 | Official MCP Registry | ✓ `server.json` | `mcp-publisher publish` | TBD |
 | PulseMCP | (downstream auto-ingest) | Verify after 7d | TBD |
 | MCPHub | — | Investigate submit path | TBD |
 | Klavis AI | — | Deferred (separate bead) | N/A |
 
-When all URLs are recorded, update this doc and close sp-ege.7.
+When all URLs are recorded, update this doc and close sp-ege.7 + sp-fiv.
