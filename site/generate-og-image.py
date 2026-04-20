@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""Regenerate site/og-image.png (1200x630) from the synthpanel brand palette.
+"""Regenerate brand social cards from the synthpanel brand palette.
 
 Run from repo root: ``python3 site/generate-og-image.py``.
 
-Produces a dark-slate PNG with an emerald radial glow and the wordmark +
-tagline, matching the synthpanel.dev visual identity.
+Produces two dark-slate PNGs with an emerald radial glow and the wordmark +
+tagline, matching the synthpanel.dev visual identity:
+
+* ``site/og-image.png`` (1200x630) — embedded in landing/mcp/blog pages via
+  ``og:image`` / ``twitter:image`` meta tags.
+* ``site/github-social-preview.png`` (1280x640) — dimensioned for GitHub's
+  repo Settings → Social preview (upload is manual, no API exists).
 """
 
 from __future__ import annotations
@@ -15,7 +20,6 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-WIDTH, HEIGHT = 1200, 630
 BG = (15, 23, 42)  # slate-900  #0f172a
 FG_HI = (248, 250, 252)  # slate-50
 FG_LO = (148, 163, 184)  # slate-400
@@ -84,18 +88,16 @@ def draw_pill(
     return box
 
 
-def main() -> int:
-    out = Path(__file__).resolve().parent / "og-image.png"
+def render(width: int, height: int, out: Path) -> None:
+    img = Image.new("RGB", (width, height), BG)
 
-    img = Image.new("RGB", (WIDTH, HEIGHT), BG)
-
-    glow = radial_glow((WIDTH, HEIGHT), EMERALD, strength=0.18)
+    glow = radial_glow((width, height), EMERALD, strength=0.18)
     img.paste(glow, (0, 0), glow)
 
-    overlay = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+    overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
 
-    draw.rectangle((0, HEIGHT - 4, WIDTH, HEIGHT), fill=(*EMERALD_DIM, 160))
+    draw.rectangle((0, height - 4, width, height), fill=(*EMERALD_DIM, 160))
 
     font_badge = load_font(SANS_CANDIDATES, 22)
     font_title = load_font(MONO_CANDIDATES, 148)
@@ -127,7 +129,7 @@ def main() -> int:
     foot_h = foot_bbox[3] - foot_bbox[1]
     foot_pad_x, foot_pad_y = 22, 14
     fx = margin_x
-    fy = HEIGHT - 88 - foot_h - foot_pad_y * 2
+    fy = height - 88 - foot_h - foot_pad_y * 2
     draw.rounded_rectangle(
         (fx, fy, fx + foot_w + foot_pad_x * 2, fy + foot_h + foot_pad_y * 2 + 6),
         radius=10,
@@ -149,7 +151,7 @@ def main() -> int:
     brand_bbox = draw.textbbox((0, 0), brand, font=font_meta)
     brand_w = brand_bbox[2] - brand_bbox[0]
     draw.text(
-        (WIDTH - margin_x - brand_w, HEIGHT - 88 - (brand_bbox[3] - brand_bbox[1])),
+        (width - margin_x - brand_w, height - 88 - (brand_bbox[3] - brand_bbox[1])),
         brand,
         font=font_meta,
         fill=FG_LO,
@@ -158,6 +160,12 @@ def main() -> int:
     img.paste(overlay, (0, 0), overlay)
     img.save(out, "PNG", optimize=True)
     print(f"wrote {out} ({out.stat().st_size} bytes)")
+
+
+def main() -> int:
+    site_dir = Path(__file__).resolve().parent
+    render(1200, 630, site_dir / "og-image.png")
+    render(1280, 640, site_dir / "github-social-preview.png")
     return 0
 
 
