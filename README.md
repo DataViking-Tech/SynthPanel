@@ -273,7 +273,8 @@ Add to `.mcp.json` at your project root (or `~/.claude.json` for all projects):
 }
 ```
 
-Or install the bundled plugin (adds a `/focus-group` skill):
+Or install the bundled plugin (adds the `/focus-group` skill plus the
+`/synthpanel-poll <question>` slash command for one-shot quick polls):
 
 ```
 /plugin install synthpanel

@@ -6,6 +6,9 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [Unreleased]
 
+### Added
+- (sp-ftr) Ship the advertised `/synthpanel-poll` slash command. `commands/synthpanel-poll.md` wraps the `run_quick_poll` MCP tool so installed plugin users get a one-shot poll command — sp-tcf claimed this was done but never actually added the file.
+
 ## [0.9.7] - 2026-04-21
 
 ### Fixed
