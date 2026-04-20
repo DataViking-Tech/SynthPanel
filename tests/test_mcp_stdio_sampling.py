@@ -139,10 +139,12 @@ async def test_stdio_quick_poll_routes_through_sampling():
 
 @pytest.mark.asyncio
 async def test_stdio_initialize_advertises_sampling_and_version():
-    """sp-lsc regression: the server's initialize handshake must declare
-    that it uses MCP sampling (under experimental capabilities) and must
-    report the synthpanel package version in serverInfo — not the MCP
-    SDK version leaked through FastMCP's default behaviour."""
+    """sp-lsc/sp-a59 regression: the server's initialize handshake must
+    declare that it uses MCP sampling — both at the top level of
+    ``capabilities`` (so inspectors enumerating top-level keys see it)
+    and under ``experimental`` (back-compat nesting) — and must report
+    the synthpanel package version in serverInfo rather than leaking
+    the MCP SDK version through FastMCP's default behaviour."""
     import synth_panel
 
     params = _locate_server_entry()
@@ -170,6 +172,18 @@ async def test_stdio_initialize_advertises_sampling_and_version():
             f"Server must advertise the 'sampling' experimental capability "
             f"so MCP clients can surface the dependency in their UI. "
             f"Got capabilities.experimental = {experimental!r}"
+        )
+
+        # sp-a59: top-level advertisement too — ServerCapabilities is
+        # ``extra="allow"`` so the key round-trips even though the MCP
+        # spec defines sampling as a client capability. Many hosts and
+        # MCP inspectors enumerate top-level keys only, and will miss
+        # sampling if it's hidden under ``experimental``.
+        top_level = init_result.capabilities.model_dump(exclude_none=True)
+        assert "sampling" in top_level, (
+            f"Server must advertise 'sampling' at the top level of "
+            f"ServerCapabilities (alongside prompts/resources/tools). "
+            f"Got top-level capability keys = {sorted(top_level)!r}"
         )
 
 
