@@ -16,6 +16,7 @@ import yaml
 
 from synth_panel.cli.output import OutputFormat, emit
 from synth_panel.cost import ZERO_USAGE, TokenUsage, estimate_cost, format_summary, lookup_pricing
+from synth_panel.credentials import has_credential
 from synth_panel.instrument import Instrument, InstrumentError, parse_instrument
 from synth_panel.llm.client import LLMClient
 from synth_panel.metadata import PanelTimer, build_metadata
@@ -51,15 +52,14 @@ _DEFAULT_MODEL_PREFERENCE: list[tuple[str, str]] = [
 def _resolve_default_model() -> tuple[str, str | None]:
     """Pick a default model alias based on which API keys are present.
 
-    Returns ``(model_alias, source_env_var)``. If no provider credentials
-    are available the fallback is still ``"sonnet"`` (the previous
-    hard-coded default) so the LLM client's own credential check can
-    emit its canonical error message.
+    Returns ``(model_alias, source_env_var)``. Consults both the
+    environment and the on-disk credential store so ``synthpanel login``
+    is enough to get a working default. If nothing is available the
+    fallback is still ``"sonnet"`` so the LLM client's own credential
+    check emits the canonical error message.
     """
-    import os
-
     for env_var, alias in _DEFAULT_MODEL_PREFERENCE:
-        if os.environ.get(env_var, "").strip():
+        if has_credential(env_var):
             return alias, env_var
     return "sonnet", None
 
@@ -1695,3 +1695,177 @@ def _format_path(path: list[dict[str, Any]]) -> str:
         else:
             parts.append(f"-> {nxt}")
     return " ".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Credential commands (sp-lve)
+# ---------------------------------------------------------------------------
+
+
+_PROVIDER_ENV_VAR: dict[str, str] = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+    "google": "GOOGLE_API_KEY",
+    "xai": "XAI_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
+}
+
+
+def _read_api_key_interactive() -> str:
+    """Read an API key from stdin.
+
+    Uses :func:`getpass.getpass` when attached to a TTY so the key
+    doesn't echo; falls back to a plain ``input`` read when stdin is
+    piped (CI, scripts) so ``echo sk-... | synthpanel login`` still
+    works.
+    """
+    import getpass
+
+    if sys.stdin.isatty():
+        return getpass.getpass("API key: ").strip()
+    return sys.stdin.readline().strip()
+
+
+def handle_login(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Store an API key for the selected provider.
+
+    Reads the key from ``--api-key`` or stdin (hidden on TTY) and writes
+    it to the on-disk credential store. Validates that the provider
+    name maps to a recognised env var so typos don't silently persist.
+    """
+    from synth_panel.credentials import (
+        KNOWN_CREDENTIAL_ENV_VARS,
+        PROVIDER_LABELS,
+        save_credential,
+    )
+
+    provider = getattr(args, "provider", None) or "anthropic"
+    env_var = _PROVIDER_ENV_VAR.get(provider)
+    if env_var is None or env_var not in KNOWN_CREDENTIAL_ENV_VARS:
+        msg = f"Unknown provider: {provider!r}"
+        if fmt is OutputFormat.TEXT:
+            print(msg, file=sys.stderr)
+        else:
+            emit(fmt, message=msg, extra={"error": "unknown_provider"})
+        return 2
+
+    key = (getattr(args, "api_key", None) or "").strip()
+    if not key:
+        key = _read_api_key_interactive()
+    if not key:
+        msg = "No API key provided."
+        if fmt is OutputFormat.TEXT:
+            print(msg, file=sys.stderr)
+        else:
+            emit(fmt, message=msg, extra={"error": "empty_key"})
+        return 2
+
+    path = save_credential(env_var, key)
+    label = PROVIDER_LABELS.get(env_var, provider)
+    if fmt is OutputFormat.TEXT:
+        print(f"Stored {label} key ({env_var}) in {path}")
+    else:
+        emit(
+            fmt,
+            message="credential_stored",
+            extra={"provider": provider, "env_var": env_var, "path": str(path)},
+        )
+    return 0
+
+
+def handle_logout(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Remove one or all stored API keys."""
+    from synth_panel.credentials import (
+        KNOWN_CREDENTIAL_ENV_VARS,
+        delete_credential,
+        load_credentials,
+    )
+
+    provider = getattr(args, "provider", None) or "anthropic"
+
+    if provider == "all":
+        stored = list(load_credentials().keys())
+        removed = [env for env in stored if delete_credential(env)]
+        if fmt is OutputFormat.TEXT:
+            if removed:
+                print(f"Removed {len(removed)} stored credential(s): {', '.join(removed)}")
+            else:
+                print("No stored credentials to remove.")
+        else:
+            emit(fmt, message="credentials_removed", extra={"removed": removed})
+        return 0
+
+    env_var = _PROVIDER_ENV_VAR.get(provider)
+    if env_var is None or env_var not in KNOWN_CREDENTIAL_ENV_VARS:
+        msg = f"Unknown provider: {provider!r}"
+        if fmt is OutputFormat.TEXT:
+            print(msg, file=sys.stderr)
+        else:
+            emit(fmt, message=msg, extra={"error": "unknown_provider"})
+        return 2
+
+    removed = delete_credential(env_var)
+    if fmt is OutputFormat.TEXT:
+        if removed:
+            print(f"Removed stored credential: {env_var}")
+        else:
+            print(f"No stored credential for {env_var}")
+    else:
+        emit(
+            fmt,
+            message="credential_removed" if removed else "credential_absent",
+            extra={"provider": provider, "env_var": env_var, "removed": removed},
+        )
+    return 0
+
+
+def handle_whoami(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Report which providers have credentials available (env or stored)."""
+    import os
+
+    from synth_panel.credentials import (
+        KNOWN_CREDENTIAL_ENV_VARS,
+        PROVIDER_LABELS,
+        credentials_path,
+        load_credentials,
+    )
+
+    stored = load_credentials()
+    rows: list[dict[str, Any]] = []
+    for env_var in KNOWN_CREDENTIAL_ENV_VARS:
+        env_set = bool(os.environ.get(env_var, "").strip())
+        stored_set = env_var in stored
+        source: str | None = None
+        if env_set:
+            source = "env"
+        elif stored_set:
+            source = "stored"
+        rows.append(
+            {
+                "provider": PROVIDER_LABELS.get(env_var, env_var),
+                "env_var": env_var,
+                "available": env_set or stored_set,
+                "source": source,
+            }
+        )
+
+    if fmt is OutputFormat.TEXT:
+        any_available = any(r["available"] for r in rows)
+        if not any_available:
+            print("No provider credentials found.")
+            print("Run `synthpanel login` or export an API key env var.")
+        else:
+            print(f"Credential store: {credentials_path()}")
+            for row in rows:
+                if not row["available"]:
+                    continue
+                print(f"  [{row['source']:<6}] {row['env_var']:<20} — {row['provider']}")
+        return 0
+
+    emit(
+        fmt,
+        message="credentials_status",
+        extra={"credentials_path": str(credentials_path()), "providers": rows},
+    )
+    return 0

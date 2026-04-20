@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass
 
+from synth_panel.credentials import get_credential, has_credential
 from synth_panel.llm.errors import LLMError, LLMErrorCategory
 from synth_panel.llm.models import CompletionRequest, CompletionResponse, StreamEvent
 
@@ -21,11 +22,11 @@ class ProviderConfig:
     model_prefixes: tuple[str, ...]
 
     def get_api_key(self) -> str:
-        """Read the API key from the environment, raising on missing."""
-        key = os.environ.get(self.api_key_env, "").strip()
+        """Return the API key from env or the on-disk credential store."""
+        key = get_credential(self.api_key_env)
         if not key:
             raise LLMError(
-                f"Missing API key: set {self.api_key_env}",
+                f"Missing API key: set {self.api_key_env} or run `synthpanel login`",
                 LLMErrorCategory.MISSING_CREDENTIALS,
             )
         return key
@@ -35,8 +36,8 @@ class ProviderConfig:
         return os.environ.get(self.base_url_env, "").strip() or self.default_base_url
 
     def has_credentials(self) -> bool:
-        """Return True if the API key is present in the environment."""
-        return bool(os.environ.get(self.api_key_env, "").strip())
+        """Return True if the API key is set in env or on disk."""
+        return has_credential(self.api_key_env)
 
 
 class LLMProvider(ABC):

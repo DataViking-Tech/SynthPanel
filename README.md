@@ -42,8 +42,13 @@ pip install synthpanel[mcp]
 # Or install from source for the latest unreleased changes
 pip install git+https://github.com/DataViking-Tech/SynthPanel.git@main
 
-# Set your API key (Claude, OpenAI, Gemini, xAI, or any OpenAI-compatible provider)
+# Provide an API key (Claude, OpenAI, Gemini, xAI, or any OpenAI-compatible provider)
+# — either export it in your shell:
 export ANTHROPIC_API_KEY="sk-..."
+# — or persist it once with `synthpanel login` (stored at
+#   ~/.config/synthpanel/credentials.json, mode 0600):
+synthpanel login --provider anthropic --api-key sk-...
+synthpanel whoami   # see which providers have credentials available
 
 # Run a single prompt
 synthpanel prompt "What do you think of the name Traitprint for a career app?"

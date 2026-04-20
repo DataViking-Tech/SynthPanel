@@ -485,4 +485,41 @@ def build_parser() -> argparse.ArgumentParser:
         help="Start the MCP server (stdio transport).",
     )
 
+    # login (sp-lve: credential UX — persist an API key to disk so CLI
+    # use without exported env vars isn't a dead end).
+    login_parser = subparsers.add_parser(
+        "login",
+        help="Store an LLM provider API key at ~/.config/synthpanel/credentials.json (mode 0600).",
+    )
+    login_parser.add_argument(
+        "--provider",
+        default="anthropic",
+        choices=["anthropic", "openai", "gemini", "google", "xai", "openrouter"],
+        help="Provider to log in to (default: anthropic).",
+    )
+    login_parser.add_argument(
+        "--api-key",
+        default=None,
+        metavar="KEY",
+        help="API key. If omitted, reads from stdin (hidden when attached to a TTY).",
+    )
+
+    # logout
+    logout_parser = subparsers.add_parser(
+        "logout",
+        help="Remove a stored API key from the credential store.",
+    )
+    logout_parser.add_argument(
+        "--provider",
+        default=None,
+        choices=["anthropic", "openai", "gemini", "google", "xai", "openrouter", "all"],
+        help="Provider to log out (default: anthropic). Use 'all' to remove every stored key.",
+    )
+
+    # whoami — show which providers have usable creds
+    subparsers.add_parser(
+        "whoami",
+        help="Show which providers have credentials available (env or stored).",
+    )
+
     return parser
