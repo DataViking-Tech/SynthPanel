@@ -1652,10 +1652,14 @@ def serve() -> None:
     FastMCP's default ``run_stdio_async`` calls
     ``create_initialization_options()`` with no arguments, so synthpanel
     cannot advertise that it *uses* MCP sampling. We reimplement the
-    stdio loop here with ``experimental_capabilities={"sampling": {}}``
-    so MCP clients can surface the dependency in their capability UI
-    and users can see at-a-glance that this server will ask the host
-    agent to run completions when no BYOK creds are set.
+    stdio loop here to advertise sampling in two places on the
+    initialize response: at the top level of ``capabilities`` so hosts
+    and inspectors that scan top-level keys can discover the dependency
+    directly, and nested under ``experimental`` for backwards
+    compatibility with clients that only look there. The MCP spec does
+    not reserve a ``sampling`` field on ``ServerCapabilities`` (sampling
+    is defined as a client capability), but ``ServerCapabilities`` is
+    declared ``extra="allow"`` so the top-level key round-trips cleanly.
     """
     import anyio
     from mcp.server.stdio import stdio_server
@@ -1664,13 +1668,14 @@ def serve() -> None:
 
     async def _run() -> None:
         server = mcp._mcp_server
+        init_opts = server.create_initialization_options(
+            experimental_capabilities={"sampling": {}},
+        )
+        # Also surface `sampling` at the top of ServerCapabilities —
+        # multiple MCP inspectors and hosts enumerate top-level
+        # capability keys and miss the experimental nesting.
+        init_opts.capabilities = init_opts.capabilities.model_copy(update={"sampling": {}})
         async with stdio_server() as (read_stream, write_stream):
-            await server.run(
-                read_stream,
-                write_stream,
-                server.create_initialization_options(
-                    experimental_capabilities={"sampling": {}},
-                ),
-            )
+            await server.run(read_stream, write_stream, init_opts)
 
     anyio.run(_run)
