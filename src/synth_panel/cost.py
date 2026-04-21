@@ -16,32 +16,58 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class TokenUsage:
-    """Immutable snapshot of token counts for a single LLM turn."""
+    """Immutable snapshot of token counts for a single LLM turn.
+
+    ``provider_reported_cost`` is the authoritative USD cost as billed by
+    the upstream provider (e.g. OpenRouter's ``usage.cost``). When present,
+    ``resolve_cost`` prefers it over the local pricing table; the local
+    table becomes a divergence sanity-check rather than a billing source.
+
+    ``reasoning_tokens`` / ``cached_tokens`` are informational sub-counts
+    already included in ``output_tokens`` / ``input_tokens`` respectively.
+    """
 
     input_tokens: int = 0
     output_tokens: int = 0
     cache_creation_input_tokens: int = 0
     cache_read_input_tokens: int = 0
+    provider_reported_cost: float | None = None
+    reasoning_tokens: int = 0
+    cached_tokens: int = 0
 
     @property
     def total_tokens(self) -> int:
         return self.input_tokens + self.output_tokens + self.cache_creation_input_tokens + self.cache_read_input_tokens
 
     def __add__(self, other: TokenUsage) -> TokenUsage:
+        if self.provider_reported_cost is None and other.provider_reported_cost is None:
+            summed_cost: float | None = None
+        else:
+            summed_cost = (self.provider_reported_cost or 0.0) + (other.provider_reported_cost or 0.0)
         return TokenUsage(
             input_tokens=self.input_tokens + other.input_tokens,
             output_tokens=self.output_tokens + other.output_tokens,
             cache_creation_input_tokens=(self.cache_creation_input_tokens + other.cache_creation_input_tokens),
             cache_read_input_tokens=(self.cache_read_input_tokens + other.cache_read_input_tokens),
+            provider_reported_cost=summed_cost,
+            reasoning_tokens=self.reasoning_tokens + other.reasoning_tokens,
+            cached_tokens=self.cached_tokens + other.cached_tokens,
         )
 
     def to_dict(self) -> dict:
-        return {
+        d: dict = {
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
             "cache_creation_input_tokens": self.cache_creation_input_tokens,
             "cache_read_input_tokens": self.cache_read_input_tokens,
         }
+        if self.provider_reported_cost is not None:
+            d["provider_reported_cost"] = self.provider_reported_cost
+        if self.reasoning_tokens:
+            d["reasoning_tokens"] = self.reasoning_tokens
+        if self.cached_tokens:
+            d["cached_tokens"] = self.cached_tokens
+        return d
 
     @classmethod
     def from_dict(cls, data: dict) -> TokenUsage:
@@ -50,6 +76,9 @@ class TokenUsage:
             output_tokens=data.get("output_tokens", 0),
             cache_creation_input_tokens=data.get("cache_creation_input_tokens", 0),
             cache_read_input_tokens=data.get("cache_read_input_tokens", 0),
+            provider_reported_cost=data.get("provider_reported_cost"),
+            reasoning_tokens=data.get("reasoning_tokens", 0),
+            cached_tokens=data.get("cached_tokens", 0),
         )
 
 
@@ -363,6 +392,64 @@ def estimate_cost(
     )
 
 
+# Local-vs-provider divergence threshold for the sanity-check warning.
+# Below this ratio we assume the local pricing table is still calibrated;
+# above it we flag a likely stale or mis-keyed entry.
+_DIVERGENCE_WARN_RATIO = 0.20
+
+
+def resolve_cost(
+    usage: TokenUsage,
+    model: str | None = None,
+) -> CostEstimate:
+    """Return the authoritative ``CostEstimate`` for *usage*.
+
+    Precedence:
+
+    1. If ``usage.provider_reported_cost`` is set (e.g. OpenRouter's
+       ``usage.cost``), use it verbatim — this is what was actually
+       billed and already reflects BYOK discounts, upstream pricing
+       changes, and per-token promos the local table cannot track. The
+       amount is deposited on ``CostEstimate.output_cost`` so totals are
+       preserved; input/cache buckets are left at zero because the
+       provider does not always return a breakdown.
+    2. Otherwise fall back to the local pricing table via ``lookup_pricing``.
+
+    When both the provider value and a local estimate are available and
+    they diverge by more than ``_DIVERGENCE_WARN_RATIO`` (20%), a
+    warning is logged so a stale pricing table can be caught during
+    development. The warning is informational only — the provider value
+    is always returned.
+    """
+    pricing, _is_estimated = lookup_pricing(model)
+    local = estimate_cost(usage, pricing)
+
+    if usage.provider_reported_cost is None:
+        return local
+
+    provider_total = float(usage.provider_reported_cost)
+    local_total = local.total_cost
+
+    if local_total > 0 and provider_total > 0:
+        ratio = abs(provider_total - local_total) / max(provider_total, local_total)
+        if ratio > _DIVERGENCE_WARN_RATIO:
+            logger.warning(
+                "Local cost estimate diverges from provider-reported for model=%s: "
+                "local=$%.6f provider=$%.6f ratio=%.1f%% — pricing table may be stale.",
+                model,
+                local_total,
+                provider_total,
+                ratio * 100.0,
+            )
+
+    return CostEstimate(
+        input_cost=0.0,
+        output_cost=provider_total,
+        cache_creation_cost=0.0,
+        cache_read_cost=0.0,
+    )
+
+
 def aggregate_per_model(
     panelist_results,  # Iterable[PanelistResult]; untyped to avoid circular import
     default_model: str,
@@ -386,8 +473,7 @@ def aggregate_per_model(
 
     per_cost: dict[str, CostEstimate] = {}
     for m, usage in per_usage.items():
-        pricing, _ = lookup_pricing(m)
-        per_cost[m] = estimate_cost(usage, pricing)
+        per_cost[m] = resolve_cost(usage, m)
     return per_usage, per_cost
 
 
@@ -488,8 +574,13 @@ class UsageTracker:
         *,
         model: str | None = None,
     ) -> str:
-        pricing, is_estimated = lookup_pricing(model)
-        cost = estimate_cost(self._cumulative, pricing)
+        _, is_estimated = lookup_pricing(model)
+        cost = resolve_cost(self._cumulative, model)
+        # When the provider billed this usage directly, the ``estimated``
+        # tag from the local table is misleading — provider-reported cost
+        # is always authoritative.
+        if self._cumulative.provider_reported_cost is not None:
+            is_estimated = False
         return format_summary(
             label,
             self._cumulative,

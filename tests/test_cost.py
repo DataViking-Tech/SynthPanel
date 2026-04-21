@@ -310,6 +310,113 @@ class TestEstimateCost:
         assert cost.cache_read_cost == pytest.approx(0.10)
 
 
+# --- resolve_cost (sp-j3vk) -----------------------------------------------
+
+
+class TestResolveCost:
+    """sp-j3vk: provider-reported cost must override local pricing table."""
+
+    def test_falls_back_to_local_when_provider_absent(self):
+        from synth_panel.cost import resolve_cost
+
+        usage = TokenUsage(input_tokens=1_000_000, output_tokens=0)
+        cost = resolve_cost(usage, "claude-haiku-3.5")
+        assert cost.total_cost == pytest.approx(1.0)
+
+    def test_provider_reported_overrides_local(self):
+        """Stale local table must not corrupt the actual billed cost."""
+        from synth_panel.cost import resolve_cost
+
+        # Local table would compute this at haiku rates ($1/M input). The
+        # provider says we were billed $0.42 (BYOK discount, promo, etc.).
+        # resolve_cost must return the provider value, not the local estimate.
+        usage = TokenUsage(
+            input_tokens=1_000_000,
+            output_tokens=0,
+            provider_reported_cost=0.42,
+        )
+        cost = resolve_cost(usage, "claude-haiku-3.5")
+        assert cost.total_cost == pytest.approx(0.42)
+
+    def test_provider_reported_preserved_when_local_would_be_zero(self):
+        """ollama/self-hosted case — provider reports cost with zero tokens."""
+        from synth_panel.cost import resolve_cost
+
+        usage = TokenUsage(provider_reported_cost=0.05)
+        cost = resolve_cost(usage, "ollama/llama3")
+        assert cost.total_cost == pytest.approx(0.05)
+
+    def test_divergence_warning_fires_above_20_percent(self, caplog):
+        """sp-j3vk: when local estimate wildly disagrees with provider, warn."""
+        from synth_panel.cost import resolve_cost
+
+        # Local: 1M input × $1/M = $1.00. Provider: $0.10 (90% divergence).
+        usage = TokenUsage(
+            input_tokens=1_000_000,
+            provider_reported_cost=0.10,
+        )
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="synth_panel.cost"):
+            cost = resolve_cost(usage, "claude-haiku-3.5")
+        assert cost.total_cost == pytest.approx(0.10)
+        assert any("diverges" in rec.message for rec in caplog.records)
+
+    def test_divergence_silent_within_20_percent(self, caplog):
+        from synth_panel.cost import resolve_cost
+
+        # Local: $1.00. Provider: $1.05 → 4.7% divergence, no warning.
+        usage = TokenUsage(
+            input_tokens=1_000_000,
+            provider_reported_cost=1.05,
+        )
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="synth_panel.cost"):
+            resolve_cost(usage, "claude-haiku-3.5")
+        assert not any("diverges" in rec.message for rec in caplog.records)
+
+
+class TestTokenUsageProviderCost:
+    """TokenUsage carries provider-reported cost through addition and (de)ser."""
+
+    def test_field_defaults_none(self):
+        u = TokenUsage()
+        assert u.provider_reported_cost is None
+        assert u.reasoning_tokens == 0
+        assert u.cached_tokens == 0
+
+    def test_addition_sums_provider_cost(self):
+        a = TokenUsage(provider_reported_cost=0.1, reasoning_tokens=5, cached_tokens=3)
+        b = TokenUsage(provider_reported_cost=0.2, reasoning_tokens=7, cached_tokens=4)
+        c = a + b
+        assert c.provider_reported_cost == pytest.approx(0.3)
+        assert c.reasoning_tokens == 12
+        assert c.cached_tokens == 7
+
+    def test_addition_preserves_none_when_both_absent(self):
+        a = TokenUsage(input_tokens=1)
+        b = TokenUsage(input_tokens=2)
+        c = a + b
+        assert c.provider_reported_cost is None
+
+    def test_addition_treats_missing_as_zero_when_one_present(self):
+        a = TokenUsage(provider_reported_cost=0.5)
+        b = TokenUsage()
+        assert (a + b).provider_reported_cost == pytest.approx(0.5)
+        assert (b + a).provider_reported_cost == pytest.approx(0.5)
+
+    def test_roundtrip_dict_preserves_provider_cost(self):
+        u = TokenUsage(
+            input_tokens=10,
+            output_tokens=20,
+            provider_reported_cost=0.123,
+            reasoning_tokens=5,
+            cached_tokens=2,
+        )
+        assert TokenUsage.from_dict(u.to_dict()) == u
+
+
 # --- aggregate_per_model --------------------------------------------------
 
 

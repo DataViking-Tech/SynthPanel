@@ -46,6 +46,7 @@ from synth_panel.cost import (
     build_cost_fallback_warnings,
     estimate_cost,
     lookup_pricing,
+    resolve_cost,
 )
 from synth_panel.cost import (
     TokenUsage as CostTokenUsage,
@@ -484,9 +485,11 @@ def run_prompt(
         output_tokens=response.usage.output_tokens,
         cache_creation_input_tokens=response.usage.cache_write_tokens,
         cache_read_input_tokens=response.usage.cache_read_tokens,
+        provider_reported_cost=response.usage.provider_reported_cost,
+        reasoning_tokens=response.usage.reasoning_tokens,
+        cached_tokens=response.usage.cached_tokens,
     )
-    pricing, _ = lookup_pricing(model)
-    cost = estimate_cost(usage, pricing)
+    cost = resolve_cost(usage, model)
     return PromptResult(
         response=response.text,
         model=response.model,
