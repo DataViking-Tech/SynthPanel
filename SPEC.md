@@ -488,7 +488,7 @@ Operations:
 | Model Family | Input | Output | Cache Write | Cache Read |
 |-------------|-------|--------|-------------|------------|
 | Haiku tier | $1.00 | $5.00 | $1.25 | $0.10 |
-| Sonnet tier (default) | $15.00 | $75.00 | $18.75 | $1.50 |
+| Sonnet tier (default) | $3.00 | $15.00 | $3.75 | $0.30 |
 | Opus tier | $15.00 | $75.00 | $18.75 | $1.50 |
 
 When a model does not match any known tier, the default (Sonnet) pricing is used and the output is annotated with "pricing=estimated-default".
