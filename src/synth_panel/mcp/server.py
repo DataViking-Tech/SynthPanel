@@ -610,7 +610,7 @@ async def _run_panel_async(
     from synth_panel.ensemble import build_mixed_model_rollup
 
     per_model_results, cost_breakdown = build_mixed_model_rollup(
-        _panelist_results,
+        panelist_results_full,
         default_model=model,
         panelist_formatter=lambda pr, m: _format_panelist_result(pr, m),
     )
