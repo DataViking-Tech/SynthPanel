@@ -31,6 +31,7 @@ from synth_panel.prompts import (
 )
 from synth_panel.runtime import AgentRuntime
 from synth_panel.synthesis import synthesize_panel
+from synth_panel.templates import find_unresolved_in_questions
 
 logger = logging.getLogger(__name__)
 
@@ -476,6 +477,35 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     except ValueError as exc:
         print(f"Error parsing --var / --vars-file: {exc}", file=sys.stderr)
         return 1
+
+    # ── sp-6yi: fail fast on unsubstituted placeholders ────────────────
+    # If any question still contains a literal {placeholder} whose key is
+    # not in template_vars, abort before burning LLM calls on a panel the
+    # personas will correctly refuse to answer. --allow-unresolved opts
+    # out for the rare case where the braces are genuinely intentional.
+    unresolved = find_unresolved_in_questions(
+        [q for rnd in instrument.rounds for q in rnd.questions],
+        template_vars,
+    )
+    if unresolved:
+        keys = ", ".join(unresolved)
+        example = unresolved[0]
+        if getattr(args, "allow_unresolved", False):
+            print(
+                f"Warning: instrument has unsubstituted placeholders ({keys}). "
+                f"Proceeding because --allow-unresolved was passed; personas "
+                f"will see the literal braces.",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"Error: instrument has unsubstituted placeholders: {keys}. "
+                f"Pass a value for each (e.g. --var {example}=...) or "
+                f"--allow-unresolved to proceed anyway.",
+                file=sys.stderr,
+            )
+            return 1
+
     if template_vars:
         _apply_vars_to_instrument(instrument, template_vars)
 

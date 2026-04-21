@@ -249,6 +249,18 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     panel_run_parser.add_argument(
+        "--allow-unresolved",
+        action="store_true",
+        default=False,
+        help=(
+            "Proceed even if instrument questions contain unsubstituted "
+            "{placeholder} tokens after --var / --vars-file are applied. "
+            "By default the run aborts with a descriptive error so that "
+            "empty panels are not launched against raw templates. Use "
+            "this flag when the literal braces are intentional."
+        ),
+    )
+    panel_run_parser.add_argument(
         "--variants",
         type=int,
         default=None,

@@ -120,3 +120,30 @@ def validate_template(text: str, context: dict[str, str]) -> list[str]:
         if base_key and base_key not in context:
             unresolvable.append(base_key)
     return unresolvable
+
+
+def find_unresolved_in_questions(questions: list[dict[str, Any]], context: dict[str, str]) -> list[str]:
+    """Return sorted unique placeholder keys in ``questions`` not present in ``context``.
+
+    Walks each question's ``text`` and ``follow_ups`` (string or dict form)
+    and collects any ``{key}`` whose base name is missing from ``context``.
+    Dynamic runtime keys (theme_*, agreement_*, disagreement_*, surprise_*,
+    ``summary``, ``recommendation``) are *not* exempted here — callers that
+    intend to resolve them later should merge those names into ``context``
+    before calling this helper.
+    """
+    found: set[str] = set()
+    for q in questions:
+        text = q.get("text")
+        if isinstance(text, str):
+            found.update(validate_template(text, context))
+        follow_ups = q.get("follow_ups")
+        if isinstance(follow_ups, list):
+            for fu in follow_ups:
+                if isinstance(fu, str):
+                    found.update(validate_template(fu, context))
+                elif isinstance(fu, dict):
+                    fu_text = fu.get("text")
+                    if isinstance(fu_text, str):
+                        found.update(validate_template(fu_text, context))
+    return sorted(found)
