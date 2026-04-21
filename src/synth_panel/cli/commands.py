@@ -432,10 +432,11 @@ def _apply_vars_to_instrument(instrument: Instrument, template_vars: dict[str, s
     """Substitute ``template_vars`` into every round's question text.
 
     Mutates the instrument in place: each ``Round.questions`` list is
-    replaced with its rendered form. The rendering is routed through
-    :func:`synth_panel.templates.render_questions` so we inherit safe-
-    failure behavior (unknown keys render as literal ``{placeholder}``
-    rather than raising).
+    replaced with its rendered form. Callers in ``handle_panel_run``
+    invoke :func:`find_unresolved_in_questions` *before* this function
+    so any missing key aborts the run (sp-6yi); any ``{placeholder}``
+    that survives here is either dynamic (resolved downstream) or
+    explicitly opted in via ``--allow-unresolved``.
     """
     from synth_panel.templates import render_questions
 
