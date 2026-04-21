@@ -15,7 +15,7 @@ import logging
 from collections import Counter
 from typing import Any
 
-from synth_panel.cost import ZERO_USAGE, estimate_cost, lookup_pricing
+from synth_panel.cost import ZERO_USAGE, resolve_cost
 from synth_panel.cost import TokenUsage as CostTokenUsage
 from synth_panel.instrument import Instrument
 from synth_panel.llm.client import LLMClient
@@ -229,8 +229,13 @@ def resolve_extract_schema(
 def format_panelist_result(pr: PanelistResult, model: str) -> dict[str, Any]:
     """Render a :class:`PanelistResult` into the serialisable dict shape callers expect."""
     pr_model = pr.model or model
-    pricing, _ = lookup_pricing(pr_model)
-    persona_cost = estimate_cost(pr.usage, pricing)
+    # sp-kvpx: route through resolve_cost so per-panelist ``cost`` honors
+    # sp-j3vk's precedence (provider-reported → local fallback). Prior to
+    # this, ensemble/mixed-model runs quoted per-persona cost from the
+    # local pricing table regardless of what the provider actually billed,
+    # so ``per_model_results[*].results[i].cost`` drifted from the top-level
+    # ``total_cost`` by the same ratio sp-j3vk fixed at the aggregate layer.
+    persona_cost = resolve_cost(pr.usage, pr_model)
     rd: dict[str, Any] = {
         "persona": pr.persona_name,
         "responses": pr.responses,
@@ -406,8 +411,9 @@ def run_panel_sync(
         result_dicts.append(format_panelist_result(pr, model))
         panelist_usage = panelist_usage + pr.usage
 
-    pricing, _ = lookup_pricing(model)
-    panelist_cost = estimate_cost(panelist_usage, pricing)
+    # sp-kvpx: use resolve_cost so panelist_cost honors sp-j3vk precedence
+    # (provider-reported → local fallback) for the MCP/SDK sync path too.
+    panelist_cost = resolve_cost(panelist_usage, model)
 
     base_results = [pr for pr in panelist_results if pr.persona_name not in variant_names]
     synthesis_dict: dict[str, Any] | None = None
