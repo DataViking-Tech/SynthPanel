@@ -245,6 +245,95 @@ class TestAssignModelsToPersonas:
         assert len(result) == 11
         assert sum(1 for v in result.values() if v in {"a", "b", "c"}) == 11
 
+    def test_determinism_same_inputs_same_output(self):
+        """Same personas + spec → same assignment. No RNG involved."""
+        personas = [{"name": f"P{i}"} for i in range(7)]
+        spec = [("haiku", 0.33), ("gemini", 0.33), ("sonnet", 0.33)]
+        first = assign_models_to_personas(personas, spec, "fallback")
+        second = assign_models_to_personas(personas, spec, "fallback")
+        assert first == second
+
+    def test_uneven_division_first_absorbs_remainder(self):
+        """7 personas across 3 equal models: Hamilton's method gives the
+        extra seat to the first model in spec order (deterministic tie-break
+        by position after equal fractional remainders)."""
+        personas = [{"name": f"P{i}"} for i in range(7)]
+        spec = [("a", 0.33), ("b", 0.33), ("c", 0.33)]
+        result, _ = assign_models_to_personas(personas, spec, "fallback")
+        counts = {m: 0 for m in ("a", "b", "c")}
+        for v in result.values():
+            counts[v] += 1
+        assert counts["a"] == 3  # wins the tie on position
+        assert counts["b"] == 2
+        assert counts["c"] == 2
+
+    def test_unnormalized_weights_equivalent_to_normalized(self):
+        """a:2,b:3 should produce the same split as a:0.4,b:0.6."""
+        personas = [{"name": f"P{i}"} for i in range(10)]
+        unnorm = assign_models_to_personas(personas, [("a", 2.0), ("b", 3.0)], "fallback")
+        norm = assign_models_to_personas(personas, [("a", 0.4), ("b", 0.6)], "fallback")
+        assert unnorm == norm
+
+
+# ---------------------------------------------------------------------------
+# Tests: weight-sum validation (sp-zdul)
+# ---------------------------------------------------------------------------
+
+
+class TestCheckWeightSum:
+    def test_exactly_one(self):
+        from synth_panel.cli.commands import check_weight_sum
+
+        total, ok = check_weight_sum([("a", 0.5), ("b", 0.5)])
+        assert total == pytest.approx(1.0)
+        assert ok is True
+
+    def test_within_tolerance(self):
+        from synth_panel.cli.commands import check_weight_sum
+
+        _total, ok = check_weight_sum([("a", 0.34), ("b", 0.33), ("c", 0.33)])
+        assert ok is True
+
+    def test_outside_tolerance(self):
+        from synth_panel.cli.commands import check_weight_sum
+
+        total, ok = check_weight_sum([("a", 0.3), ("b", 0.3), ("c", 0.3)])
+        assert total == pytest.approx(0.9)
+        assert ok is False
+
+    def test_normalizable_but_not_unit(self):
+        """a:2,b:3 sums to 5, far from 1.0 — should flag."""
+        from synth_panel.cli.commands import check_weight_sum
+
+        total, ok = check_weight_sum([("a", 2.0), ("b", 3.0)])
+        assert total == pytest.approx(5.0)
+        assert ok is False
+
+
+class TestFormatAssignmentBreakdown:
+    def test_includes_each_persona(self):
+        from synth_panel.cli.commands import format_assignment_breakdown
+
+        text = format_assignment_breakdown({"Alice": "haiku", "Bob": "gemini"})
+        assert "Alice" in text
+        assert "Bob" in text
+        assert "haiku" in text
+        assert "gemini" in text
+        assert "Model assignment:" in text
+
+    def test_includes_totals_summary(self):
+        from synth_panel.cli.commands import format_assignment_breakdown
+
+        text = format_assignment_breakdown({"A": "haiku", "B": "haiku", "C": "gemini"})
+        assert "Totals:" in text
+        assert "haiku=2" in text
+        assert "gemini=1" in text
+
+    def test_empty_returns_empty_string(self):
+        from synth_panel.cli.commands import format_assignment_breakdown
+
+        assert format_assignment_breakdown({}) == ""
+
 
 # ---------------------------------------------------------------------------
 # Tests: CLI parser --models

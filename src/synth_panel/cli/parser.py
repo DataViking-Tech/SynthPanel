@@ -128,9 +128,19 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="SPEC",
         help=(
-            "Multi-model ensemble spec: comma-separated model:weight pairs. "
-            "E.g. 'haiku:0.5,gemini-2.5-flash:0.5'. Personas are assigned "
-            "models proportionally by weight. Mutually exclusive with --model."
+            "Multi-model spec. Two shapes: "
+            "(1) **Weighted per-persona** — 'haiku:0.5,gemini:0.5' splits the "
+            "panel across models in list order; 6 personas at 0.5/0.5 → 3/3, "
+            "7 personas at 0.5/0.5 → 3/4 (the last model absorbs the "
+            "remainder). Weights are normalized, so 'a:2,b:3' and "
+            "'a:0.4,b:0.6' behave the same. Weights summing far from 1.0 "
+            "emit a warning. Assignment is fully deterministic (same "
+            "personas+spec → same split) and printed before the run. "
+            "Per-persona YAML 'model' overrides always win. "
+            "(2) **Ensemble** — 'haiku,sonnet' (no ':') runs the full panel "
+            "once per model. Combine with --blend to weight-average "
+            "distributions. Mutually exclusive with --model. "
+            "See docs/ensemble.md for the full algorithm."
         ),
     )
     panel_run_parser.add_argument(
