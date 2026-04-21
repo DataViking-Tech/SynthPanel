@@ -330,6 +330,17 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    # panel inspect (sp-76gm: stats + schema walker for a saved result)
+    panel_inspect_parser = panel_subparsers.add_parser(
+        "inspect",
+        help="Summarize a saved panel result: models, personas, failures, synthesis.",
+    )
+    panel_inspect_parser.add_argument(
+        "result",
+        metavar="RESULT",
+        help="Panel result ID (from 'panel run --save') or path to a result JSON file.",
+    )
+
     # panel synthesize (sp-5on.5: post-hoc re-synthesis of a saved result)
     panel_synth_parser = panel_subparsers.add_parser(
         "synthesize",

@@ -22,6 +22,7 @@ from synth_panel.cli.commands import (
     handle_pack_import,
     handle_pack_list,
     handle_pack_show,
+    handle_panel_inspect,
     handle_panel_run,
     handle_panel_synthesize,
     handle_prompt,
@@ -55,6 +56,8 @@ def main(argv: list[str] | None = None) -> int:
             return handle_panel_run(args, output_format)
         elif getattr(args, "panel_command", None) == "synthesize":
             return handle_panel_synthesize(args, output_format)
+        elif getattr(args, "panel_command", None) == "inspect":
+            return handle_panel_inspect(args, output_format)
         else:
             parser.parse_args(["panel", "--help"])
             return 1
