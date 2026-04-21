@@ -692,6 +692,78 @@ class TestEnsembleRun:
                 assert row["cost"] != "$0.0000"
                 assert row["error"] is None
 
+    def test_format_panelist_result_honors_provider_reported(self):
+        """sp-kvpx regression: per-panelist cost must use resolve_cost.
+
+        ``format_panelist_result`` is the common formatter used by ensemble,
+        mixed-model rollups, and SDK output. It previously always quoted
+        the local pricing estimate, so per-persona ``cost`` in
+        ``per_model_results[*].results[i]`` drifted from the top-level
+        authoritative number any time the provider bill and the local
+        rate differed (or the local entry was missing and fell through
+        to DEFAULT_PRICING).
+        """
+        from synth_panel._runners import format_panelist_result
+        from synth_panel.cost import TokenUsage as CostTokenUsage
+
+        pr = PanelistResult(
+            persona_name="Alice",
+            responses=[{"question": "Q1", "response": "ok", "error": False}],
+            usage=CostTokenUsage(input_tokens=100, output_tokens=50, provider_reported_cost=0.1234),
+            model="haiku",
+        )
+        row = format_panelist_result(pr, "haiku")
+        # Provider-reported cost wins over any local table estimate.
+        assert row["cost"] == "$0.1234"
+
+    def test_ensemble_cost_honors_provider_reported(self):
+        """sp-kvpx regression: ensemble_run per-model cost must use resolve_cost.
+
+        Prior to the fix, ``ensemble_run`` called
+        ``estimate_cost(model_usage, lookup_pricing(model))`` directly,
+        bypassing sp-j3vk's provider-reported precedence. A model whose
+        panelists reported ``usage.provider_reported_cost=0.42`` would
+        still be billed at the local-table rate, so ``per_model_cost``
+        (and therefore ``cost_breakdown`` in the public payload) drifted
+        from the authoritative top-level total.
+        """
+        from unittest.mock import patch as _patch
+
+        from synth_panel.cost import TokenUsage as CostTokenUsage
+        from synth_panel.ensemble import ensemble_run as _ensemble_run
+
+        def mock_with_provider_cost(**kwargs):
+            model = kwargs["model"]
+            personas = kwargs["personas"]
+            # Each panelist reports a wildly different cost from what the
+            # local pricing table would estimate for 100/50 tokens. If the
+            # fix works, that's the number that propagates; if it regresses,
+            # the per-model cost stays at the local-table estimate.
+            results = [
+                PanelistResult(
+                    persona_name=p["name"],
+                    responses=[{"question": "Q1", "response": "ok", "error": False}],
+                    usage=CostTokenUsage(
+                        input_tokens=100,
+                        output_tokens=50,
+                        provider_reported_cost=0.42,
+                    ),
+                    model=model,
+                )
+                for p in personas
+            ]
+            return results, MagicMock(), {p["name"]: MagicMock() for p in personas}
+
+        personas = [{"name": "Alice"}, {"name": "Bob"}]
+        with _patch("synth_panel.ensemble.run_panel_parallel") as mock_rpp:
+            mock_rpp.side_effect = mock_with_provider_cost
+            ens = _ensemble_run(personas, [{"text": "Q1"}], ["haiku"], MagicMock())
+
+        # Two panelists × $0.42 provider-reported = $0.84 authoritative.
+        assert ens.model_results[0].cost.total_cost == pytest.approx(0.84)
+        assert ens.per_model_cost["haiku"] == "$0.8400"
+        assert ens.total_cost.total_cost == pytest.approx(0.84)
+
 
 # ---------------------------------------------------------------------------
 # Tests: build_ensemble_output (public JSON shape)

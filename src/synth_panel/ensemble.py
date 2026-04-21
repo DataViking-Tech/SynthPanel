@@ -19,8 +19,7 @@ from synth_panel.cost import (
     CostEstimate,
     TokenUsage,
     build_cost_fallback_warnings,
-    estimate_cost,
-    lookup_pricing,
+    resolve_cost,
 )
 from synth_panel.llm.client import LLMClient
 from synth_panel.orchestrator import PanelistResult, run_panel_parallel
@@ -125,8 +124,14 @@ def ensemble_run(
         for pr in panelist_results:
             model_usage = model_usage + pr.usage
 
-        pricing, _ = lookup_pricing(model)
-        model_cost = estimate_cost(model_usage, pricing)
+        # sp-kvpx: route through resolve_cost so per-model cost honors
+        # sp-j3vk's precedence (provider-reported → local fallback). The
+        # prior ``estimate_cost(model_usage, pricing)`` ignored the
+        # summed ``usage.provider_reported_cost``, so ensemble
+        # ``cost_breakdown`` / ``per_model_cost`` drifted from the
+        # authoritative top-level total for every model whose local
+        # pricing entry diverged from the real OpenRouter bill.
+        model_cost = resolve_cost(model_usage, model)
 
         # Tag each result with its model
         for pr in panelist_results:
@@ -310,8 +315,8 @@ def build_mixed_model_rollup(
         model_usage = ZERO_USAGE
         for pr in prs:
             model_usage = model_usage + pr.usage
-        pricing, _ = lookup_pricing(model_name)
-        model_cost = estimate_cost(model_usage, pricing)
+        # sp-kvpx: resolve_cost for per-model mixed-model rollup too.
+        model_cost = resolve_cost(model_usage, model_name)
         per_model_results[model_name] = {
             "results": [fmt(pr, model_name) for pr in prs],
             "cost": model_cost.format_usd(),
