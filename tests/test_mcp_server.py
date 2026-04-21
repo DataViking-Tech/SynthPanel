@@ -830,3 +830,181 @@ class TestComputeVariantData:
         assert data["variant_count"] == 0
         assert data["robustness_scores"] == []
         assert data["per_persona_robustness"] == []
+
+
+# ---------------------------------------------------------------------------
+# Weighted model spec rejection at the MCP boundary (sp-2rj8)
+# ---------------------------------------------------------------------------
+
+
+class TestWeightedModelSpecRejection:
+    """MCP rejects CLI-style ``name:weight`` entries with a clear error.
+
+    The CLI's ``--models haiku:0.25,gpt-4o-mini:0.25`` grammar is not
+    parsed at the MCP boundary — each string was being treated as a
+    raw model name, so ``"haiku:0.25"`` routed to a nonexistent model
+    and produced a silent empty panel. These tests pin the boundary
+    behavior so future regressions fail loudly.
+    """
+
+    def test_looks_like_weighted_model_spec_detects_weights(self):
+        from synth_panel.mcp.server import _looks_like_weighted_model_spec
+
+        assert _looks_like_weighted_model_spec("haiku:0.25") is True
+        assert _looks_like_weighted_model_spec("gpt-4o-mini:0.5") is True
+        assert _looks_like_weighted_model_spec("claude-sonnet-4-6:1") is True
+
+    def test_looks_like_weighted_model_spec_allows_real_identifiers(self):
+        from synth_panel.mcp.server import _looks_like_weighted_model_spec
+
+        # Local model prefixes are preserved.
+        assert _looks_like_weighted_model_spec("ollama:llama3") is False
+        assert _looks_like_weighted_model_spec("ollama:llama3:8b") is False
+        assert _looks_like_weighted_model_spec("local:phi3") is False
+        # OpenRouter non-numeric tail suffixes.
+        assert _looks_like_weighted_model_spec("mistralai/mistral-nemo:free") is False
+        assert _looks_like_weighted_model_spec("anthropic/claude-3.5-sonnet:beta") is False
+        # Plain aliases.
+        assert _looks_like_weighted_model_spec("haiku") is False
+        assert _looks_like_weighted_model_spec("gpt-4o-mini") is False
+        assert _looks_like_weighted_model_spec("anthropic/claude-3-5-sonnet-20241022") is False
+
+    @pytest.mark.asyncio
+    async def test_run_panel_rejects_weighted_models_list(self):
+        """The exact sp-2rj8 repro: weighted ``models`` list must error out."""
+        with patch("synth_panel.mcp.server._run_ensemble_sync") as mock_ens:
+            result = await mcp.call_tool(
+                "run_panel",
+                {
+                    "personas": [{"name": "Alice"}],
+                    "questions": [{"text": "Hello?"}],
+                    "models": [
+                        "haiku:0.25",
+                        "gpt-4o-mini:0.25",
+                        "gemini-flash-lite:0.25",
+                        "qwen3-plus:0.25",
+                    ],
+                },
+            )
+            mock_ens.assert_not_called()
+            data = json.loads(result[0][0].text)
+            assert "error" in data
+            msg = data["error"]
+            assert "haiku:0.25" in msg
+            assert "gpt-4o-mini:0.25" in msg
+            assert "not supported via MCP" in msg
+
+    @pytest.mark.asyncio
+    async def test_run_panel_accepts_plain_alias_ensemble(self):
+        """Plain alias lists still reach the ensemble runner unchanged."""
+        with patch("synth_panel.mcp.server._run_ensemble_sync") as mock_ens:
+            mock_ens.return_value = {
+                "per_model_results": {},
+                "cost_breakdown": {},
+                "models": ["haiku", "gpt-4o-mini"],
+                "total_usage": {},
+            }
+            result = await mcp.call_tool(
+                "run_panel",
+                {
+                    "personas": [{"name": "Alice"}],
+                    "questions": [{"text": "Hello?"}],
+                    "models": ["haiku", "gpt-4o-mini"],
+                },
+            )
+            mock_ens.assert_called_once()
+            data = json.loads(result[0][0].text)
+            assert "error" not in data
+
+    @pytest.mark.asyncio
+    async def test_run_panel_rejects_weighted_single_model(self):
+        result = await mcp.call_tool(
+            "run_panel",
+            {
+                "personas": [{"name": "Alice"}],
+                "questions": [{"text": "Hello?"}],
+                "model": "haiku:0.5",
+            },
+        )
+        data = json.loads(result[0][0].text)
+        assert "error" in data
+        assert "haiku:0.5" in data["error"]
+
+    @pytest.mark.asyncio
+    async def test_run_panel_rejects_weighted_synthesis_model(self):
+        result = await mcp.call_tool(
+            "run_panel",
+            {
+                "personas": [{"name": "Alice"}],
+                "questions": [{"text": "Hello?"}],
+                "synthesis_model": "sonnet:1.0",
+            },
+        )
+        data = json.loads(result[0][0].text)
+        assert "error" in data
+        assert "sonnet:1.0" in data["error"]
+
+    @pytest.mark.asyncio
+    async def test_run_panel_rejects_weighted_persona_models(self):
+        result = await mcp.call_tool(
+            "run_panel",
+            {
+                "personas": [{"name": "Alice"}],
+                "questions": [{"text": "Hello?"}],
+                "persona_models": {"Alice": "haiku:0.25"},
+            },
+        )
+        data = json.loads(result[0][0].text)
+        assert "error" in data
+        assert "haiku:0.25" in data["error"]
+
+    @pytest.mark.asyncio
+    async def test_run_panel_accepts_ollama_prefix_model(self):
+        """``ollama:llama3`` is a legitimate model id and must not be rejected."""
+        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = {"results": []}
+            result = await mcp.call_tool(
+                "run_panel",
+                {
+                    "personas": [{"name": "Alice"}],
+                    "questions": [{"text": "Hello?"}],
+                    "model": "ollama:llama3",
+                },
+            )
+            mock_run.assert_called_once()
+            data = json.loads(result[0][0].text)
+            assert "error" not in data
+
+    @pytest.mark.asyncio
+    async def test_run_prompt_rejects_weighted_model(self):
+        result = await mcp.call_tool(
+            "run_prompt",
+            {"prompt": "hello", "model": "haiku:0.5"},
+        )
+        data = json.loads(result[0][0].text)
+        assert "error" in data
+        assert "haiku:0.5" in data["error"]
+
+    @pytest.mark.asyncio
+    async def test_run_quick_poll_rejects_weighted_model(self):
+        result = await mcp.call_tool(
+            "run_quick_poll",
+            {"question": "hello?", "model": "haiku:0.5"},
+        )
+        data = json.loads(result[0][0].text)
+        assert "error" in data
+        assert "haiku:0.5" in data["error"]
+
+    @pytest.mark.asyncio
+    async def test_extend_panel_rejects_weighted_model(self):
+        result = await mcp.call_tool(
+            "extend_panel",
+            {
+                "result_id": "nonexistent",
+                "questions": [{"text": "follow-up?"}],
+                "model": "haiku:0.5",
+            },
+        )
+        data = json.loads(result[0][0].text)
+        assert "error" in data
+        assert "haiku:0.5" in data["error"]

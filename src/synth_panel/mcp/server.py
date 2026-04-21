@@ -162,6 +162,78 @@ def _resolve_mcp_default_model() -> str:
     return MCP_DEFAULT_MODEL
 
 
+def _looks_like_weighted_model_spec(value: str) -> bool:
+    """Return True when *value* matches the CLI's ``name:weight`` spec shape.
+
+    The CLI's ``--models`` flag accepts ``haiku:0.25,gpt-4o-mini:0.25``
+    via :func:`synth_panel.cli.commands.parse_models_spec`. The MCP
+    surface does not parse that grammar — each string is treated as a
+    raw model alias — so ``"haiku:0.25"`` previously routed to a
+    nonexistent model and silently produced an empty panel (sp-2rj8).
+
+    Detection heuristic: a single trailing ``:<float>`` after the last
+    colon. Legitimate model identifiers that embed colons (``ollama:``
+    / ``local:`` prefixes, OpenRouter ``:free`` / ``:beta`` suffixes)
+    are preserved because their tail is non-numeric.
+    """
+    if ":" not in value:
+        return False
+    if value.startswith(("ollama:", "local:")):
+        return False
+    tail = value.rsplit(":", 1)[1].strip()
+    if not tail:
+        return False
+    try:
+        float(tail)
+    except ValueError:
+        return False
+    return True
+
+
+def _reject_weighted_model_spec(
+    *,
+    model: str | None = None,
+    models: list[str] | None = None,
+    synthesis_model: str | None = None,
+    persona_models: dict[str, str] | None = None,
+) -> str | None:
+    """Return a JSON error string if any model argument uses weighted spec syntax.
+
+    Returns ``None`` when every value is a plain alias. The check covers
+    all model-accepting parameters in the MCP surface so the failure is
+    caught uniformly at the boundary instead of surfacing as provider
+    400s downstream.
+    """
+    offenders: list[str] = []
+
+    def _check(val: Any) -> None:
+        if isinstance(val, str) and _looks_like_weighted_model_spec(val):
+            offenders.append(val)
+
+    _check(model)
+    _check(synthesis_model)
+    if models:
+        for m in models:
+            _check(m)
+    if persona_models:
+        for m in persona_models.values():
+            _check(m)
+
+    if not offenders:
+        return None
+
+    quoted = ", ".join(f"'{o}'" for o in offenders)
+    return json.dumps(
+        {
+            "error": (
+                f"Weighted model spec is not supported via MCP (got {quoted}). "
+                'Pass model aliases only, e.g. ["haiku", "gpt-4o-mini"]; '
+                "weights default to equal across the ensemble."
+            )
+        }
+    )
+
+
 # Re-export for backward compatibility — callers patch these names.
 __all__ = [
     "EXTRACT_SCHEMA_REGISTRY",
@@ -704,6 +776,9 @@ async def run_prompt(
             (error if unsupported), ``False`` forces BYOK. ``None``
             auto-picks based on creds + client capability.
     """
+    spec_error = _reject_weighted_model_spec(model=model)
+    if spec_error is not None:
+        return spec_error
     model = model or _resolve_mcp_default_model()
     decision = _decide_sampling_mode(ctx, use_sampling=use_sampling)
     logger.info("run_prompt: mode=%s model=%s prompt_len=%d", decision.mode, model, len(prompt))
@@ -876,8 +951,11 @@ async def run_panel(
             "themes", "rating") or an inline JSON Schema dict.
         models: List of model names for multi-model ensemble. When
             provided (length ≥ 2), the panel is run once per model and
-            results are compared. Mutually exclusive with ``model``. The
-            ensemble response replaces the single-model shape with:
+            results are compared. Mutually exclusive with ``model``.
+            Plain aliases only — the CLI's weighted ``"haiku:0.25"``
+            syntax is rejected at this boundary; weights default to
+            equal across the ensemble. The ensemble response replaces
+            the single-model shape with:
 
             * ``per_model_results`` — ``{model: {results, cost, usage}}``
               where ``results`` is the formatted panelist list for that
@@ -900,6 +978,14 @@ async def run_panel(
             panels require BYOK. Ensemble mode (``models``) and v3
             branching are BYOK-only.
     """
+    spec_error = _reject_weighted_model_spec(
+        model=model,
+        models=models,
+        synthesis_model=synthesis_model,
+        persona_models=persona_models,
+    )
+    if spec_error is not None:
+        return spec_error
     model = model or _resolve_mcp_default_model()
     variants_k = variants or 0
     if variants_k < 0 or variants_k > 20:
@@ -1176,6 +1262,12 @@ async def run_quick_poll(
             (error if unsupported), ``False`` forces BYOK. ``None``
             auto-picks based on creds + client capability.
     """
+    spec_error = _reject_weighted_model_spec(
+        model=model,
+        synthesis_model=synthesis_model,
+    )
+    if spec_error is not None:
+        return spec_error
     model = model or _resolve_mcp_default_model()
 
     if not question or not question.strip():
@@ -1560,6 +1652,12 @@ async def extend_panel(
         synthesis_model: Synthesis model. Defaults to panelist model.
         synthesis_prompt: Custom synthesis prompt for the new round.
     """
+    spec_error = _reject_weighted_model_spec(
+        model=model,
+        synthesis_model=synthesis_model,
+    )
+    if spec_error is not None:
+        return spec_error
     model = model or _resolve_mcp_default_model()
     logger.info("extend_panel: result_id=%s questions=%d model=%s", result_id, len(questions), model)
     existing = _data_get_panel_result(result_id)
