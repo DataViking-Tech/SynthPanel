@@ -102,14 +102,28 @@ GEMINI_PRO_PRICING = ModelPricing(
     cache_read_cost_per_million=0.31,
 )
 
+# OpenAI gpt-5-mini (also served via OpenRouter as ``openai/gpt-5-mini``).
+# Published rates: $0.25/M input, $2.00/M output, $0.025/M cached input.
+# cache_creation approximated at input rate (OpenAI/OpenRouter bill cache
+# writes as regular input); cache_read matches the published cached rate.
+GPT_5_MINI_PRICING = ModelPricing(
+    input_cost_per_million=0.25,
+    output_cost_per_million=2.00,
+    cache_creation_cost_per_million=0.25,
+    cache_read_cost_per_million=0.025,
+)
+
 DEFAULT_PRICING = SONNET_PRICING
 
+# NOTE: substring match order matters. Put the most specific keys first so
+# e.g. ``gpt-5-mini`` wins over any future shorter ``gpt-5`` key.
 _PRICING_TABLE: dict[str, ModelPricing] = {
     "haiku": HAIKU_PRICING,
     "sonnet": SONNET_PRICING,
     "opus": OPUS_PRICING,
     "gemini-2.5-pro": GEMINI_PRO_PRICING,
     "gemini": GEMINI_FLASH_PRICING,
+    "gpt-5-mini": GPT_5_MINI_PRICING,
 }
 
 
