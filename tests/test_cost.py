@@ -5,11 +5,18 @@ from __future__ import annotations
 import pytest
 
 from synth_panel.cost import (
+    DEEPSEEK_CHAT_PRICING,
     GEMINI_FLASH_PRICING,
     GEMINI_PRO_PRICING,
+    GPT_4_1_MINI_PRICING,
+    GPT_4O_MINI_PRICING,
+    GPT_4O_PRICING,
     GPT_5_MINI_PRICING,
     HAIKU_PRICING,
+    LLAMA_3_3_70B_PRICING,
+    MISTRAL_MEDIUM_PRICING,
     OPUS_PRICING,
+    QWEN3_PLUS_PRICING,
     SONNET_PRICING,
     ZERO_USAGE,
     BudgetError,
@@ -107,6 +114,42 @@ class TestPricingLookup:
         cost = estimate_cost(usage, pricing)
         assert cost.total_cost == pytest.approx(0.01296, abs=1e-4)
 
+    @pytest.mark.parametrize(
+        "model, expected",
+        [
+            # sp-5ggf: common OpenRouter models must resolve to their own
+            # rates, not fall through to DEFAULT ($15/$75 Opus-era rate).
+            ("gpt-4o-mini", GPT_4O_MINI_PRICING),
+            ("openrouter/openai/gpt-4o-mini", GPT_4O_MINI_PRICING),
+            ("openai/gpt-4o", GPT_4O_PRICING),
+            ("openrouter/openai/gpt-4.1-mini", GPT_4_1_MINI_PRICING),
+            ("openrouter/deepseek/deepseek-chat-v3", DEEPSEEK_CHAT_PRICING),
+            ("openrouter/deepseek/deepseek-chat-v3.1", DEEPSEEK_CHAT_PRICING),
+            ("openrouter/qwen/qwen3-plus", QWEN3_PLUS_PRICING),
+            ("openrouter/mistralai/mistral-medium-3", MISTRAL_MEDIUM_PRICING),
+            ("openrouter/meta-llama/llama-3.3-70b-instruct", LLAMA_3_3_70B_PRICING),
+        ],
+    )
+    def test_openrouter_common_models(self, model, expected):
+        p, est = lookup_pricing(model)
+        assert p is expected
+        assert est is False
+
+    def test_gpt_4o_mini_substring_precedence_over_gpt_4o(self):
+        """``gpt-4o-mini`` must win over ``gpt-4o`` — order in _PRICING_TABLE matters."""
+        p, _ = lookup_pricing("openai/gpt-4o-mini")
+        assert p is GPT_4O_MINI_PRICING
+        assert p is not GPT_4O_PRICING
+
+    def test_gpt_4o_mini_realistic_cost_not_sonnet(self):
+        """Regression for sp-5ggf: 11144in/1655out for gpt-4o-mini must cost
+        ~$0.0027, not ~$0.2913 (the Opus-rate fallthrough observed in the wild)."""
+        usage = TokenUsage(input_tokens=11144, output_tokens=1655)
+        pricing, _ = lookup_pricing("openrouter/openai/gpt-4o-mini")
+        cost = estimate_cost(usage, pricing)
+        # 11144 * 0.15/M + 1655 * 0.60/M = 0.001672 + 0.000993 = 0.002665
+        assert cost.total_cost == pytest.approx(0.002665, abs=1e-5)
+
 
 # --- Provider-string pricing lookup --------------------------------------
 
@@ -135,6 +178,14 @@ class TestProviderLookup:
             # sp-loil: gpt-5-mini via OpenRouter must price at its own rate.
             ("openrouter/openai/gpt-5-mini", GPT_5_MINI_PRICING),
             ("raw-openai/gpt-5-mini", GPT_5_MINI_PRICING),
+            # sp-5ggf: common OpenRouter models must resolve via provider lookup.
+            ("openrouter/openai/gpt-4o-mini", GPT_4O_MINI_PRICING),
+            ("raw-openai/gpt-4o", GPT_4O_PRICING),
+            ("openrouter/openai/gpt-4.1-mini", GPT_4_1_MINI_PRICING),
+            ("openrouter/deepseek/deepseek-chat-v3", DEEPSEEK_CHAT_PRICING),
+            ("openrouter/qwen/qwen3-plus", QWEN3_PLUS_PRICING),
+            ("openrouter/mistralai/mistral-medium-3", MISTRAL_MEDIUM_PRICING),
+            ("openrouter/meta-llama/llama-3.3-70b-instruct", LLAMA_3_3_70B_PRICING),
         ],
     )
     def test_positive_lookup(self, provider: str, expected: object) -> None:
