@@ -1391,6 +1391,117 @@ class TestVarSubstitution:
         assert "KEY=VALUE" in err
         mock_run.assert_not_called()
 
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_panel_run_aborts_on_unsubstituted_placeholder(
+        self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path
+    ):
+        """sp-6yi: missing --var aborts the run before any LLM call."""
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: A\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: 'Rate {features} for {problem}'\n")
+
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+            ]
+        )
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "unsubstituted placeholders" in err
+        assert "features" in err
+        assert "problem" in err
+        assert "--var features=" in err
+        mock_run.assert_not_called()
+
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_panel_run_allow_unresolved_warns_and_proceeds(
+        self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path
+    ):
+        """sp-6yi: --allow-unresolved keeps literal braces and emits a warning."""
+        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+
+        registry = WorkerRegistry()
+        mock_run.return_value = (
+            [
+                PanelistResult(
+                    persona_name="A",
+                    responses=[{"question": "Rate {features}", "response": "ok"}],
+                    usage=ZERO_USAGE,
+                )
+            ],
+            registry,
+            {},
+        )
+        mock_synth.return_value = _mock_synthesis_result()
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: A\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: 'Rate {features}'\n")
+
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--allow-unresolved",
+            ]
+        )
+        assert code == 0
+        err = capsys.readouterr().err
+        assert "Warning" in err
+        assert "features" in err
+        _, kwargs = mock_run.call_args
+        assert kwargs["questions"][0]["text"] == "Rate {features}"
+
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_panel_run_partial_vars_still_aborts_on_remaining_placeholder(
+        self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path
+    ):
+        """sp-6yi: supplying some --var values still fails when others are missing."""
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: A\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text(
+            "instrument:\n  questions:\n"
+            "    - text: 'Rate {features}'\n"
+            "      follow_ups:\n"
+            "        - 'And for {problem}?'\n"
+        )
+
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--var",
+                "features=X, Y",
+            ]
+        )
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "problem" in err
+        assert "features" not in err.split("placeholders:", 1)[-1].split(".")[0]
+        mock_run.assert_not_called()
+
 
 # --- Pack CLI tests ---
 

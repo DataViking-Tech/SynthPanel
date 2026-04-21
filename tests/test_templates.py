@@ -5,6 +5,7 @@ from __future__ import annotations
 from synth_panel.synthesis import SynthesisResult
 from synth_panel.templates import (
     build_template_context,
+    find_unresolved_in_questions,
     render_questions,
     validate_template,
 )
@@ -175,3 +176,45 @@ class TestValidateTemplate:
     def test_empty_text(self):
         result = validate_template("", {"theme_0": "usability"})
         assert result == []
+
+
+class TestFindUnresolvedInQuestions:
+    def test_returns_sorted_unique_keys(self):
+        questions = [
+            {"text": "Rate {features} for {problem}"},
+            {"text": "And what about {features}?"},
+        ]
+        assert find_unresolved_in_questions(questions, {}) == ["features", "problem"]
+
+    def test_respects_context(self):
+        questions = [{"text": "Rate {features} for {problem}"}]
+        assert find_unresolved_in_questions(questions, {"features": "X"}) == ["problem"]
+
+    def test_scans_follow_up_strings(self):
+        questions = [
+            {
+                "text": "Main question",
+                "follow_ups": ["Tell me about {landing_page}"],
+            }
+        ]
+        assert find_unresolved_in_questions(questions, {}) == ["landing_page"]
+
+    def test_scans_follow_up_dicts(self):
+        questions = [
+            {
+                "text": "Main",
+                "follow_ups": [{"text": "What about {alt_cta}?"}],
+            }
+        ]
+        assert find_unresolved_in_questions(questions, {}) == ["alt_cta"]
+
+    def test_no_placeholders_returns_empty(self):
+        questions = [{"text": "A plain question"}]
+        assert find_unresolved_in_questions(questions, {}) == []
+
+    def test_empty_questions_returns_empty(self):
+        assert find_unresolved_in_questions([], {"features": "X"}) == []
+
+    def test_ignores_non_string_text(self):
+        questions = [{"text": None, "follow_ups": [42, {"text": "{ok}"}]}]
+        assert find_unresolved_in_questions(questions, {}) == ["ok"]
