@@ -6,6 +6,9 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [Unreleased]
 
+### Fixed
+- (sp-0h9x) Panel results: `per_model_results` and `cost_breakdown` are now populated on every non-ensemble `panel run` (CLI + MCP), not just `models=[...]` ensemble runs. Mixed-model panels via `persona_models` surface one rollup entry per distinct model; single-model panels surface a one-entry dict. sp-gl9 only wired these fields in the ensemble path, so mayor's audits and other consumers reading the flat panel shape still saw `None`.
+
 ## [0.9.5] - 2026-04-21
 
 ### Added

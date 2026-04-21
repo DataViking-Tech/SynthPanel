@@ -158,6 +158,19 @@ def ensemble_run(
     )
 
 
+def _default_panelist_formatter(pr: PanelistResult, model: str) -> dict[str, Any]:
+    """Minimal panelist dict shared by ensemble + mixed-model rollups."""
+    out: dict[str, Any] = {
+        "persona": pr.persona_name,
+        "responses": pr.responses,
+    }
+    if pr.model or model:
+        out["model"] = pr.model or model
+    if pr.error:
+        out["error"] = pr.error
+    return out
+
+
 def build_ensemble_output(
     ens: EnsembleResult,
     *,
@@ -180,18 +193,7 @@ def build_ensemble_output(
     useful payload.
     """
 
-    def _default_formatter(pr: PanelistResult, model: str) -> dict[str, Any]:
-        out: dict[str, Any] = {
-            "persona": pr.persona_name,
-            "responses": pr.responses,
-        }
-        if pr.model or model:
-            out["model"] = pr.model or model
-        if pr.error:
-            out["error"] = pr.error
-        return out
-
-    fmt = panelist_formatter or _default_formatter
+    fmt = panelist_formatter or _default_panelist_formatter
 
     per_model_results: dict[str, dict[str, Any]] = {}
     for mr in ens.model_results:
@@ -210,6 +212,76 @@ def build_ensemble_output(
         "models": list(ens.models),
         "total_usage": ens.total_usage.to_dict(),
     }
+
+
+def build_mixed_model_rollup(
+    panelist_results: list[PanelistResult],
+    default_model: str,
+    *,
+    panelist_formatter: Callable[[PanelistResult, str], dict[str, Any]] | None = None,
+) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
+    """Group panelist results by model and produce ``per_model_results`` + ``cost_breakdown``.
+
+    Unlike :func:`build_ensemble_output`, this operates on the output of a
+    single :func:`run_panel_parallel` call where panelists may have run on
+    different models via ``persona_models``. The returned shape matches the
+    ensemble path so downstream consumers (dashboards, CI gates, cost
+    comparators) see the same keys regardless of how the mix arose.
+
+    Single-model panels still produce a one-entry ``per_model_results`` dict
+    rather than ``None`` — "only one model ran" is a valid rollup, and
+    keeping the field populated eliminates a None-vs-dict branch for
+    consumers.
+
+    Args:
+        panelist_results: Flat list of :class:`PanelistResult` objects from
+            a single panel run. Each result's ``model`` attribute is used
+            to key the rollup; untagged results fall back to ``default_model``.
+        default_model: Model to use for results whose ``model`` attribute
+            is ``None`` (e.g. pre-multi-model panels).
+        panelist_formatter: Callable returning the per-panelist dict shape.
+            Defaults to a minimal ``{persona, responses, model}`` dict; CLI
+            callers override this to emit the full ``cost`` + ``usage``
+            shape already used in ``results[]``.
+
+    Returns:
+        ``(per_model_results, cost_breakdown)`` where:
+
+        * ``per_model_results`` is ``{model: {results, cost, usage}}``
+        * ``cost_breakdown`` is ``{by_model: {model: "$X"}, total: "$Y"}``
+
+        Both are empty when ``panelist_results`` is empty.
+    """
+    fmt = panelist_formatter or _default_panelist_formatter
+
+    by_model: dict[str, list[PanelistResult]] = {}
+    for pr in panelist_results:
+        key = pr.model or default_model
+        by_model.setdefault(key, []).append(pr)
+
+    per_model_results: dict[str, dict[str, Any]] = {}
+    by_model_cost: dict[str, str] = {}
+    total_cost = CostEstimate()
+
+    for model_name, prs in by_model.items():
+        model_usage = ZERO_USAGE
+        for pr in prs:
+            model_usage = model_usage + pr.usage
+        pricing, _ = lookup_pricing(model_name)
+        model_cost = estimate_cost(model_usage, pricing)
+        per_model_results[model_name] = {
+            "results": [fmt(pr, model_name) for pr in prs],
+            "cost": model_cost.format_usd(),
+            "usage": model_usage.to_dict(),
+        }
+        by_model_cost[model_name] = model_cost.format_usd()
+        total_cost = total_cost + model_cost
+
+    cost_breakdown: dict[str, Any] = {
+        "by_model": by_model_cost,
+        "total": total_cost.format_usd(),
+    }
+    return per_model_results, cost_breakdown
 
 
 # ---------------------------------------------------------------------------
