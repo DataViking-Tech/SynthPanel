@@ -137,20 +137,22 @@ class TestAssignModelsToPersonas:
     def test_even_split_two_models(self):
         personas = [{"name": f"P{i}"} for i in range(10)]
         spec = [("haiku", 0.5), ("gemini", 0.5)]
-        result = assign_models_to_personas(personas, spec, "sonnet")
+        result, warnings = assign_models_to_personas(personas, spec, "sonnet")
         haiku_count = sum(1 for v in result.values() if v == "haiku")
         gemini_count = sum(1 for v in result.values() if v == "gemini")
         assert haiku_count == 5
         assert gemini_count == 5
+        assert warnings == []
 
     def test_uneven_split(self):
         personas = [{"name": f"P{i}"} for i in range(10)]
         spec = [("haiku", 0.7), ("gemini", 0.3)]
-        result = assign_models_to_personas(personas, spec, "sonnet")
+        result, warnings = assign_models_to_personas(personas, spec, "sonnet")
         haiku_count = sum(1 for v in result.values() if v == "haiku")
         gemini_count = sum(1 for v in result.values() if v == "gemini")
         assert haiku_count == 7
         assert gemini_count == 3
+        assert warnings == []
 
     def test_yaml_override_takes_precedence(self):
         personas = [
@@ -159,7 +161,7 @@ class TestAssignModelsToPersonas:
             {"name": "Charlie"},
         ]
         spec = [("haiku", 0.5), ("gemini", 0.5)]
-        result = assign_models_to_personas(personas, spec, "sonnet")
+        result, _ = assign_models_to_personas(personas, spec, "sonnet")
         assert result["Alice"] == "opus"
         # Bob and Charlie get weighted assignment
         assert result["Bob"] in ("haiku", "gemini")
@@ -171,22 +173,77 @@ class TestAssignModelsToPersonas:
             {"name": "Bob", "model": "haiku"},
         ]
         spec = [("gemini", 1.0)]
-        result = assign_models_to_personas(personas, spec, "sonnet")
+        result, warnings = assign_models_to_personas(personas, spec, "sonnet")
         assert result["Alice"] == "opus"
         assert result["Bob"] == "haiku"
+        # No weighted assignment occurred, so no warning for gemini.
+        assert warnings == []
 
     def test_single_persona(self):
         personas = [{"name": "Solo"}]
         spec = [("haiku", 0.5), ("gemini", 0.5)]
-        result = assign_models_to_personas(personas, spec, "sonnet")
+        result, _ = assign_models_to_personas(personas, spec, "sonnet")
         assert len(result) == 1
         assert result["Solo"] in ("haiku", "gemini")
 
     def test_all_assigned_to_single_model(self):
         personas = [{"name": f"P{i}"} for i in range(5)]
         spec = [("haiku", 1.0)]
-        result = assign_models_to_personas(personas, spec, "sonnet")
+        result, warnings = assign_models_to_personas(personas, spec, "sonnet")
         assert all(v == "haiku" for v in result.values())
+        assert warnings == []
+
+    def test_equal_weights_four_models_six_personas(self):
+        """sp-27rz regression: every model must receive >= 1 persona.
+
+        Pre-fix, round() banker's-rounding made the last model silently
+        collect 0 personas (2+2+2+0) and disappear from per_model_results.
+        Hamilton's method now guarantees each model gets at least one.
+        """
+        personas = [{"name": f"P{i}"} for i in range(6)]
+        spec = [("haiku", 0.25), ("gpt-4o-mini", 0.25), ("gemini-flash", 0.25), ("qwen3-plus", 0.25)]
+        result, warnings = assign_models_to_personas(personas, spec, "sonnet")
+        counts = {m: sum(1 for v in result.values() if v == m) for m, _ in spec}
+        assert sum(counts.values()) == 6
+        # Every weighted model is represented.
+        for m, _ in spec:
+            assert counts[m] >= 1, f"{m} received 0 personas (regression of sp-27rz)"
+        # And a fair allocation: 2+2+1+1 = 6.
+        assert sorted(counts.values(), reverse=True) == [2, 2, 1, 1]
+        assert warnings == []
+
+    def test_min_one_guarantee_with_skewed_weights(self):
+        """Even near-zero weights get one persona when personas suffice."""
+        personas = [{"name": f"P{i}"} for i in range(4)]
+        spec = [("heavy", 0.9), ("light", 0.1)]
+        result, warnings = assign_models_to_personas(personas, spec, "sonnet")
+        counts = {m: sum(1 for v in result.values() if v == m) for m, _ in spec}
+        assert counts["heavy"] >= 1
+        assert counts["light"] >= 1
+        assert sum(counts.values()) == 4
+        assert warnings == []
+
+    def test_warning_when_personas_fewer_than_models(self):
+        """Personas < models: cannot give every model >=1, warn loudly."""
+        personas = [{"name": "Solo"}]
+        spec = [("haiku", 0.5), ("gemini", 0.5)]
+        result, warnings = assign_models_to_personas(personas, spec, "sonnet")
+        # One model gets the persona, one is absent.
+        assigned_models = set(result.values())
+        assert len(assigned_models) == 1
+        # The absent model's name appears in the warning.
+        assert len(warnings) == 1
+        missing_model = ({"haiku", "gemini"} - assigned_models).pop()
+        assert missing_model in warnings[0]
+        assert "0 of 1" in warnings[0]
+
+    def test_total_assignment_count_preserved(self):
+        """Allocation must distribute exactly ``len(personas)`` assignments."""
+        personas = [{"name": f"P{i}"} for i in range(11)]
+        spec = [("a", 0.33), ("b", 0.33), ("c", 0.34)]
+        result, _ = assign_models_to_personas(personas, spec, "sonnet")
+        assert len(result) == 11
+        assert sum(1 for v in result.values() if v in {"a", "b", "c"}) == 11
 
 
 # ---------------------------------------------------------------------------
@@ -441,6 +498,30 @@ class TestEnsembleRun:
 
         with pytest.raises(ValueError, match="models list must not be empty"):
             _ensemble_run([], [], [], MagicMock())
+
+    def test_all_input_models_produce_buckets(self):
+        """sp-27rz: every input model must appear as a ModelRunResult bucket.
+
+        Regression guard for the invariant that motivated the defensive
+        check at the end of ensemble_run — a silent drop here is exactly
+        the bug weighted-assign already closed, and the ensemble path
+        must stay covered too.
+        """
+        from unittest.mock import patch as _patch
+
+        from synth_panel.ensemble import ensemble_run as _ensemble_run
+
+        personas = [{"name": "Alice"}, {"name": "Bob"}]
+        questions = [{"text": "Q1"}]
+        models = ["haiku", "sonnet", "gemini"]
+        client = MagicMock()
+
+        with _patch("synth_panel.ensemble.run_panel_parallel") as mock_rpp:
+            mock_rpp.side_effect = lambda **kw: self._mock_run_parallel(**kw)
+            result = _ensemble_run(personas, questions, models, client)
+
+        produced = {mr.model for mr in result.model_results}
+        assert produced == set(models)
 
     def test_panelist_results_tagged_with_model(self):
         from unittest.mock import patch as _patch

@@ -146,6 +146,19 @@ def ensemble_run(
         per_model_cost[model] = model_cost.format_usd()
         per_model_usage[model] = model_usage.to_dict()
 
+    # sp-27rz: defensive sanity check — every input model must have produced
+    # a bucket. Silent drops at this layer (mis-iteration, stray early return)
+    # would reintroduce the "absent model" bug the weighted-assign fix closes,
+    # so assert the invariant explicitly rather than trusting the loop.
+    produced = {mr.model for mr in model_results}
+    expected = set(models)
+    if produced != expected:
+        missing = expected - produced
+        raise RuntimeError(
+            f"ensemble_run: per_model_results is missing {sorted(missing)} "
+            f"(expected {sorted(expected)}, produced {sorted(produced)})"
+        )
+
     return EnsembleResult(
         model_results=model_results,
         models=models,
