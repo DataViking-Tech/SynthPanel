@@ -321,6 +321,34 @@ def _load_personas(path: str) -> list[dict[str, Any]]:
     raise ValueError(f"Invalid personas file: expected 'personas' key or a list, got {type(data).__name__}")
 
 
+def _merge_persona_lists(base: list[dict[str, Any]], merge_paths: list[str]) -> list[dict[str, Any]]:
+    """Append personas from each merge path onto *base*.
+
+    Files are loaded in order and their personas appended. If a later
+    persona shares a ``name`` with an earlier one, the later entry
+    replaces the earlier one in place (order of first occurrence is
+    preserved). Personas without a ``name`` are always appended — we
+    cannot safely dedupe them.
+    """
+    by_name: dict[str, int] = {}
+    merged: list[dict[str, Any]] = []
+    for p in base:
+        name = p.get("name") if isinstance(p, dict) else None
+        if isinstance(name, str) and name:
+            by_name[name] = len(merged)
+        merged.append(p)
+    for path in merge_paths:
+        for p in _load_personas(path):
+            name = p.get("name") if isinstance(p, dict) else None
+            if isinstance(name, str) and name and name in by_name:
+                merged[by_name[name]] = p
+            else:
+                if isinstance(name, str) and name:
+                    by_name[name] = len(merged)
+                merged.append(p)
+    return merged
+
+
 def _load_instrument(path_or_name: str) -> Instrument:
     """Load an instrument from a file path *or* an installed pack name.
 
@@ -454,6 +482,17 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     except (FileNotFoundError, ValueError) as exc:
         print(f"Error loading personas: {exc}", file=sys.stderr)
         return 1
+
+    # sp-on4: --personas-merge appends personas from additional files onto
+    # the base --personas pack. When a persona name collides, the later
+    # entry wins so callers can override pack defaults with a follow-on file.
+    merge_paths = getattr(args, "personas_merge", None) or []
+    if merge_paths:
+        try:
+            personas = _merge_persona_lists(personas, merge_paths)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Error loading --personas-merge: {exc}", file=sys.stderr)
+            return 1
 
     try:
         instrument = _load_instrument(args.instrument)

@@ -425,6 +425,20 @@ personas:
       - values personal relationships
 ```
 
+### Merging Additional Personas (`--personas-merge`)
+
+Layer extra personas onto a base file (or exported pack) without editing
+the original. `--personas-merge` is repeatable and appends in order; a
+later persona whose `name` matches an earlier one replaces it in place:
+
+```bash
+synthpanel panel run \
+  --personas developer.yaml \
+  --personas-merge contrarian.yaml \
+  --personas-merge intern.yaml \
+  --instrument pricing-discovery
+```
+
 ## Defining Instruments
 
 ```yaml

@@ -12,6 +12,7 @@ from synth_panel.cli.commands import (
     _load_instrument,
     _load_personas,
     _load_schema,
+    _merge_persona_lists,
 )
 from synth_panel.cli.output import OutputFormat, emit
 from synth_panel.cli.parser import build_parser
@@ -80,6 +81,38 @@ class TestParser:
         assert args.panel_command == "run"
         assert args.personas == "p.yaml"
         assert args.instrument == "i.yaml"
+
+    def test_panel_run_personas_merge_default_empty(self):
+        parser = build_parser()
+        args = parser.parse_args(
+            [
+                "panel",
+                "run",
+                "--personas",
+                "p.yaml",
+                "--instrument",
+                "i.yaml",
+            ]
+        )
+        assert args.personas_merge == []
+
+    def test_panel_run_personas_merge_repeatable(self):
+        parser = build_parser()
+        args = parser.parse_args(
+            [
+                "panel",
+                "run",
+                "--personas",
+                "p.yaml",
+                "--personas-merge",
+                "extra1.yaml",
+                "--personas-merge",
+                "extra2.yaml",
+                "--instrument",
+                "i.yaml",
+            ]
+        )
+        assert args.personas_merge == ["extra1.yaml", "extra2.yaml"]
 
     def test_panel_run_synthesis_flags(self):
         parser = build_parser()
@@ -326,6 +359,42 @@ class TestYAMLLoading:
     def test_load_personas_missing_file(self):
         with pytest.raises(FileNotFoundError):
             _load_personas("/nonexistent/path.yaml")
+
+    def test_merge_persona_lists_appends(self, tmp_path):
+        extra = tmp_path / "extra.yaml"
+        extra.write_text("personas:\n  - name: Carol\n    age: 40\n")
+        base = [{"name": "Alice", "age": 30}]
+        merged = _merge_persona_lists(base, [str(extra)])
+        assert [p["name"] for p in merged] == ["Alice", "Carol"]
+
+    def test_merge_persona_lists_multiple_files_in_order(self, tmp_path):
+        f1 = tmp_path / "f1.yaml"
+        f1.write_text("personas:\n  - name: Bob\n")
+        f2 = tmp_path / "f2.yaml"
+        f2.write_text("personas:\n  - name: Dan\n")
+        base = [{"name": "Alice"}]
+        merged = _merge_persona_lists(base, [str(f1), str(f2)])
+        assert [p["name"] for p in merged] == ["Alice", "Bob", "Dan"]
+
+    def test_merge_persona_lists_name_collision_overrides(self, tmp_path):
+        override = tmp_path / "override.yaml"
+        override.write_text("personas:\n  - name: Alice\n    age: 99\n")
+        base = [{"name": "Alice", "age": 30}, {"name": "Bob"}]
+        merged = _merge_persona_lists(base, [str(override)])
+        assert len(merged) == 2
+        assert merged[0] == {"name": "Alice", "age": 99}
+        assert merged[1] == {"name": "Bob"}
+
+    def test_merge_persona_lists_unnamed_always_appended(self, tmp_path):
+        extra = tmp_path / "extra.yaml"
+        extra.write_text("- occupation: Anonymous\n- occupation: Anonymous\n")
+        base: list = []
+        merged = _merge_persona_lists(base, [str(extra)])
+        assert len(merged) == 2
+
+    def test_merge_persona_lists_missing_file(self):
+        with pytest.raises(FileNotFoundError):
+            _merge_persona_lists([], ["/nonexistent/extra.yaml"])
 
     def test_load_instrument_with_key(self, tmp_path):
         p = tmp_path / "survey.yaml"
