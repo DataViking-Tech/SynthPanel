@@ -15,6 +15,10 @@ from typing import Any
 
 import yaml
 
+from synth_panel._runners import (
+    detect_total_failure,
+    format_total_failure_message,
+)
 from synth_panel.cli.output import OutputFormat, emit
 from synth_panel.cost import (
     ZERO_USAGE,
@@ -823,6 +827,29 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             top_p=top_p,
         )
         timer.stop()
+
+        # sp-efip: fail loud if every panelist of every model failed.
+        # Without this, ensemble runs with a knowingly-bad model name
+        # silently returned exit 0 + an empty-but-well-shaped result.
+        ensemble_panelists: list[PanelistResult] = []
+        for mr in ens_result.model_results:
+            ensemble_panelists.extend(mr.panelist_results)
+        ensemble_failure = detect_total_failure(ensemble_panelists)
+        if ensemble_failure is not None:
+            msg = format_total_failure_message(ensemble_failure)
+            print(_build_total_failure_banner(ensemble_failure), file=sys.stderr)
+            if fmt is not OutputFormat.TEXT:
+                emit(
+                    fmt,
+                    message=msg,
+                    extra={
+                        "run_invalid": True,
+                        "total_failure": ensemble_failure,
+                        "error": msg,
+                    },
+                )
+            return 2
+
         output = build_ensemble_output(ens_result)
         # sp-atvc: attach a metadata bundle whose cost.per_model covers
         # every ensemble model, not just the first in the spec.
@@ -924,6 +951,17 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     run_invalid = failure_stats["total_pairs"] > 0 and failure_stats["failure_rate"] > threshold
     strict_violation = strict and failure_stats["errored_pairs"] > 0
 
+    # sp-efip: separate total-failure short-circuit. _analyze_failures
+    # can report total_pairs==0 when every panelist bailed before
+    # recording any response (e.g. runtime init threw) — in that case
+    # the failure_rate math falls to 0 and run_invalid stays False.
+    # Regardless of the pair-rate, if no panelist produced usable data
+    # the run is invalid and the banner must name the failing model(s)
+    # and first upstream error.
+    total_failure = detect_total_failure(panelist_results)
+    if total_failure is not None:
+        run_invalid = True
+
     # sp-bjt4: detect the "polite refusal" failure mode — panelists returned
     # clean responses but uniformly flagged the question as unanswerable
     # because the source material never made it into the prompt. Without
@@ -1020,6 +1058,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         strict_violation=strict_violation,
         missing_input_stats=missing_input_stats,
         missing_input_invalid=missing_input_invalid,
+        total_failure=total_failure,
     )
 
     if fmt is OutputFormat.TEXT:
@@ -1109,6 +1148,13 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             # surfaces it — this is the critical fix for sp-2hg.
             print(banner, file=sys.stderr)
     else:
+        # sp-efip: mirror the TEXT-mode behaviour and print the fatal
+        # banner to stderr even when JSON/NDJSON is the primary output.
+        # Operators grep stderr for "PANEL RUN INVALID" in CI and the
+        # banner is where the failing model + upstream error surface.
+        if banner:
+            print(banner, file=sys.stderr)
+
         # sp-0h9x: always populate per_model_results + cost_breakdown, even
         # for single-model panels. mayor's ensemble audits use persona_models
         # (mixed-model mode) rather than the ``models=[...]`` ensemble path,
@@ -1167,6 +1213,11 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         extra["failure_stats"] = failure_stats
         extra["missing_input_stats"] = missing_input_stats
         extra["run_invalid"] = bool(run_invalid or strict_violation)
+        if total_failure is not None:
+            # sp-efip: carry the structured total-failure diagnostic so
+            # CI/MCP consumers can detect the "every panelist failed"
+            # case without parsing banner text.
+            extra["total_failure"] = total_failure
         if missing_input_invalid:
             # sp-bjt4: surface as a top-level warning so MCP / CI consumers
             # see the condition even if they don't special-case
@@ -1411,6 +1462,42 @@ def _detect_missing_input_refusals(
     }
 
 
+def _build_total_failure_banner(
+    total_failure: dict[str, Any],
+    stats: dict[str, Any] | None = None,
+) -> str:
+    """Render the sp-efip banner for a wholesale "every panelist failed" run.
+
+    Names the model(s) exercised and the first sample error so the user
+    sees the upstream failure (e.g. "OpenRouter API error 400: ...") at
+    the top of stderr — not buried inside a JSON blob or an aggregate
+    failure-rate line. Still prints the errored/total pair count when
+    available, so the aggregate sp-2hg diagnostic stays intact.
+    """
+    bar = "!" * 70
+    lines = [bar]
+    headline = (
+        f"PANEL RUN INVALID: every panelist failed"
+        f" ({total_failure.get('panelists', 0)} panelist(s), no usable Q/A pairs)"
+    )
+    if stats and stats.get("total_pairs"):
+        headline += f" — {stats['errored_pairs']}/{stats['total_pairs']} pairs errored"
+    lines.append(headline + ".")
+    models = total_failure.get("models") or []
+    if models:
+        lines.append(f"  Failing model(s): {', '.join(models)}")
+    sample_errors = total_failure.get("sample_errors") or []
+    for persona, err in sample_errors:
+        snippet = err.strip().splitlines()[0] if err else ""
+        if len(snippet) > 240:
+            snippet = snippet[:237] + "..."
+        lines.append(f"  {persona}: {snippet}")
+    lines.append("No synthesis was performed — the run produced no usable data.")
+    lines.append("Check the model name, provider credentials, and upstream status.")
+    lines.append(bar)
+    return "\n".join(lines)
+
+
 def _build_invalid_banner(
     stats: dict[str, Any],
     threshold: float,
@@ -1419,6 +1506,7 @@ def _build_invalid_banner(
     strict_violation: bool,
     missing_input_stats: dict[str, Any] | None = None,
     missing_input_invalid: bool = False,
+    total_failure: dict[str, Any] | None = None,
 ) -> str:
     """Render the fatal banner printed to stderr on an invalid run.
 
@@ -1431,8 +1519,14 @@ def _build_invalid_banner(
     errored = stats["errored_pairs"]
     rate = stats["failure_rate"] if total > 0 else 0.0
     over_threshold = total > 0 and rate > threshold
-    if not (over_threshold or strict_violation or missing_input_invalid):
+    if not (over_threshold or strict_violation or missing_input_invalid or total_failure):
         return ""
+
+    # sp-efip: total-wipeout banner takes precedence so the user sees
+    # the failing model and first upstream error at the top, not buried
+    # under aggregate failure-rate language.
+    if total_failure is not None:
+        return _build_total_failure_banner(total_failure, stats)
 
     bar = "!" * 70
     lines = [bar]

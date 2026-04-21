@@ -44,6 +44,8 @@ from synth_panel._runners import (
     MAX_PERSONAS,
     MAX_QUESTIONS,
     PANELIST_TIMEOUT,
+    PanelTotalFailureError,
+    detect_total_failure,
 )
 from synth_panel._runners import (
     compute_variant_data as _compute_variant_data,  # re-exported for back-compat
@@ -318,6 +320,7 @@ def _run_ensemble_sync(
     top_p: float | None = None,
 ) -> dict[str, Any]:
     """Run the same panel with each model and return comparative results."""
+    from synth_panel._runners import format_total_failure_message
     from synth_panel.ensemble import build_ensemble_output, ensemble_run
 
     client = LLMClient()
@@ -333,6 +336,20 @@ def _run_ensemble_sync(
         temperature=temperature,
         top_p=top_p,
     )
+
+    # sp-efip: fail loud when every panelist of every model failed.
+    # Without this, ensemble runs with a knowingly-bad model name
+    # returned a well-shaped result containing 0-token panelists.
+    ensemble_panelists: list[PanelistResult] = []
+    for mr in ens.model_results:
+        ensemble_panelists.extend(mr.panelist_results)
+    ensemble_failure = detect_total_failure(ensemble_panelists)
+    if ensemble_failure is not None:
+        raise PanelTotalFailureError(
+            format_total_failure_message(ensemble_failure),
+            diagnostic=ensemble_failure,
+        )
+
     return build_ensemble_output(ens, panelist_formatter=_format_panelist_result)
 
 
@@ -1042,16 +1059,27 @@ async def run_panel(
                 raw = pack_body.get("instrument", pack_body)
                 inst = parse_instrument(raw)
                 ens_questions = [{"text": q["text"]} for q in inst.questions]
-        ens_result = await asyncio.to_thread(
-            _run_ensemble_sync,
-            merged,
-            ens_questions,
-            models,
-            response_schema,
-            extract_schema,
-            temperature,
-            top_p,
-        )
+        try:
+            ens_result = await asyncio.to_thread(
+                _run_ensemble_sync,
+                merged,
+                ens_questions,
+                models,
+                response_schema,
+                extract_schema,
+                temperature,
+                top_p,
+            )
+        except PanelTotalFailureError as exc:
+            logger.error("run_panel ensemble: total failure: %s", exc)
+            return json.dumps(
+                {
+                    "error": str(exc),
+                    "run_invalid": True,
+                    "total_failure": exc.diagnostic,
+                },
+                indent=2,
+            )
         return json.dumps(ens_result, indent=2)
 
     # Resolve instrument source (pack > inline instrument > questions).
@@ -1065,9 +1093,41 @@ async def run_panel(
         instrument_obj = parse_instrument(raw)
 
     if instrument_obj is not None:
-        result = await _run_panel_async_instrument(
+        try:
+            result = await _run_panel_async_instrument(
+                merged,
+                instrument_obj,
+                model,
+                ctx,
+                response_schema,
+                synthesis=synthesis,
+                synthesis_model=synthesis_model,
+                synthesis_prompt=synthesis_prompt,
+                temperature=temperature,
+                top_p=top_p,
+                persona_models=persona_models,
+                extract_schema=resolved_extract_schema,
+                synthesis_temperature=synthesis_temperature,
+            )
+        except PanelTotalFailureError as exc:
+            logger.error("run_panel instrument: total failure: %s", exc)
+            return json.dumps(
+                {
+                    "error": str(exc),
+                    "run_invalid": True,
+                    "total_failure": exc.diagnostic,
+                },
+                indent=2,
+            )
+        return json.dumps(result, indent=2)
+
+    if not questions:
+        return json.dumps({"error": "No questions or instrument provided."})
+
+    try:
+        result = await _run_panel_async(
             merged,
-            instrument_obj,
+            questions,
             model,
             ctx,
             response_schema,
@@ -1079,28 +1139,18 @@ async def run_panel(
             persona_models=persona_models,
             extract_schema=resolved_extract_schema,
             synthesis_temperature=synthesis_temperature,
+            variants=variants_k,
         )
-        return json.dumps(result, indent=2)
-
-    if not questions:
-        return json.dumps({"error": "No questions or instrument provided."})
-
-    result = await _run_panel_async(
-        merged,
-        questions,
-        model,
-        ctx,
-        response_schema,
-        synthesis=synthesis,
-        synthesis_model=synthesis_model,
-        synthesis_prompt=synthesis_prompt,
-        temperature=temperature,
-        top_p=top_p,
-        persona_models=persona_models,
-        extract_schema=resolved_extract_schema,
-        synthesis_temperature=synthesis_temperature,
-        variants=variants_k,
-    )
+    except PanelTotalFailureError as exc:
+        logger.error("run_panel: total failure: %s", exc)
+        return json.dumps(
+            {
+                "error": str(exc),
+                "run_invalid": True,
+                "total_failure": exc.diagnostic,
+            },
+            indent=2,
+        )
     return json.dumps(result, indent=2)
 
 

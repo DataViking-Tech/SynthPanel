@@ -900,6 +900,243 @@ class TestPanelRun:
         assert data["failure_stats"]["failure_rate"] == 1.0
         mock_synth.assert_not_called()
 
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_panel_run_total_failure_names_model_and_upstream_error(
+        self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path
+    ):
+        """sp-efip: a knowingly-bad model name that 400s on every call must
+        exit non-zero and name the failing model + upstream status on stderr.
+
+        Regression guard: previously the CLI returned a normally-shaped
+        result with 0-token panelists and a misleading "panel complete"
+        exit code when every request was rejected upstream.
+        """
+        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+
+        registry = WorkerRegistry()
+        upstream_err = "OpenRouter API error 400: invalid model 'haiku:0.25' is not a recognized identifier"
+        mock_run.return_value = (
+            [
+                PanelistResult(
+                    persona_name="Alice",
+                    responses=[
+                        {"question": "Q1", "response": f"[error: {upstream_err}]", "error": True},
+                    ],
+                    usage=ZERO_USAGE,
+                    model="haiku:0.25",
+                ),
+                PanelistResult(
+                    persona_name="Bob",
+                    responses=[
+                        {"question": "Q1", "response": f"[error: {upstream_err}]", "error": True},
+                    ],
+                    usage=ZERO_USAGE,
+                    model="haiku:0.25",
+                ),
+            ],
+            registry,
+            {},
+        )
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n  - name: Bob\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: Q1\n")
+
+        code = main(
+            [
+                "--output-format",
+                "json",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--model",
+                "haiku:0.25",
+            ]
+        )
+        assert code == 2
+        captured = capsys.readouterr()
+        # Banner on stderr must name the failing model and the 400 status.
+        assert "PANEL RUN INVALID" in captured.err
+        assert "haiku:0.25" in captured.err
+        assert "400" in captured.err
+        # JSON payload must carry the structured diagnostic for MCP/CI.
+        data = json.loads(captured.out)
+        assert data["run_invalid"] is True
+        assert data["total_failure"]["panelists"] == 2
+        assert data["total_failure"]["models"] == ["haiku:0.25"]
+        assert data["total_failure"]["sample_errors"], "sample_errors must be populated"
+        first_persona, first_err = data["total_failure"]["sample_errors"][0]
+        assert first_persona in {"Alice", "Bob"}
+        assert "400" in first_err
+        mock_synth.assert_not_called()
+
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_panel_run_total_failure_when_every_panelist_exploded(
+        self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path
+    ):
+        """sp-efip: wholesale panelist exceptions (pr.error set, responses
+        empty) must also trigger the total-failure banner even if the
+        aggregate failure rate somehow rounds to the threshold."""
+        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+
+        registry = WorkerRegistry()
+        mock_run.return_value = (
+            [
+                PanelistResult(
+                    persona_name="Alice",
+                    responses=[],
+                    usage=ZERO_USAGE,
+                    error="OpenRouter API error 400: bad model 'haiku:0.25'",
+                    model="haiku:0.25",
+                ),
+            ],
+            registry,
+            {},
+        )
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: Q1\n")
+
+        code = main(
+            [
+                "--output-format",
+                "json",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+            ]
+        )
+        assert code == 2
+        captured = capsys.readouterr()
+        assert "PANEL RUN INVALID" in captured.err
+        assert "haiku:0.25" in captured.err
+        assert "400" in captured.err
+        mock_synth.assert_not_called()
+
+
+# --- sp-efip: total-failure detector unit tests ---------------------------
+
+
+class TestDetectTotalFailure:
+    """Unit coverage for the shared helper that the CLI + MCP both use."""
+
+    def test_detects_all_error_responses(self):
+        from synth_panel._runners import detect_total_failure
+        from synth_panel.orchestrator import PanelistResult
+
+        results = [
+            PanelistResult(
+                persona_name="Alice",
+                responses=[{"question": "Q", "response": "[error: 400]", "error": True}],
+                usage=ZERO_USAGE,
+                model="haiku:0.25",
+            ),
+        ]
+        failure = detect_total_failure(results)
+        assert failure is not None
+        assert failure["panelists"] == 1
+        assert failure["models"] == ["haiku:0.25"]
+        assert failure["sample_errors"][0][0] == "Alice"
+        assert "400" in failure["sample_errors"][0][1]
+
+    def test_detects_wholesale_panelist_error(self):
+        from synth_panel._runners import detect_total_failure
+        from synth_panel.orchestrator import PanelistResult
+
+        results = [
+            PanelistResult(
+                persona_name="Alice",
+                responses=[],
+                usage=ZERO_USAGE,
+                error="provider 400",
+                model="bad-model",
+            ),
+        ]
+        failure = detect_total_failure(results)
+        assert failure is not None
+        assert failure["models"] == ["bad-model"]
+        assert failure["sample_errors"][0] == ("Alice", "provider 400")
+
+    def test_returns_none_when_any_panelist_has_usable_data(self):
+        from synth_panel._runners import detect_total_failure
+        from synth_panel.orchestrator import PanelistResult
+
+        results = [
+            PanelistResult(
+                persona_name="Alice",
+                responses=[{"question": "Q", "response": "[error: boom]", "error": True}],
+                usage=ZERO_USAGE,
+                model="m1",
+            ),
+            PanelistResult(
+                persona_name="Bob",
+                responses=[{"question": "Q", "response": "a real answer"}],
+                usage=TokenUsage(input_tokens=10, output_tokens=5),
+                model="m1",
+            ),
+        ]
+        assert detect_total_failure(results) is None
+
+    def test_empty_results_is_total_failure(self):
+        from synth_panel._runners import detect_total_failure
+
+        failure = detect_total_failure([])
+        assert failure is not None
+        assert failure["panelists"] == 0
+
+
+# --- sp-efip: run_panel_sync raises on total failure ----------------------
+
+
+class TestRunPanelSyncTotalFailure:
+    """The shared runner used by MCP + SDK must raise, not silently return
+    a 'success' envelope, when every panelist failed."""
+
+    @patch("synth_panel._runners.run_panel_parallel")
+    def test_raises_when_every_panelist_errored(self, mock_run):
+        from synth_panel._runners import PanelTotalFailureError, run_panel_sync
+        from synth_panel.orchestrator import PanelistResult
+
+        mock_run.return_value = (
+            [
+                PanelistResult(
+                    persona_name="Alice",
+                    responses=[{"question": "Q", "response": "[error: 400]", "error": True}],
+                    usage=ZERO_USAGE,
+                    model="haiku:0.25",
+                ),
+            ],
+            None,
+            {},
+        )
+
+        client = MagicMock()
+        with pytest.raises(PanelTotalFailureError) as excinfo:
+            run_panel_sync(
+                client=client,
+                personas=[{"name": "Alice"}],
+                questions=[{"text": "Q"}],
+                model="haiku:0.25",
+                synthesis=False,
+            )
+        assert "haiku:0.25" in str(excinfo.value)
+        assert "400" in str(excinfo.value)
+        diag = excinfo.value.diagnostic
+        assert diag["models"] == ["haiku:0.25"]
+
 
 # --- sp-bjt4: missing-input refusal detection -----------------------------
 
