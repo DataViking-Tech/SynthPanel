@@ -903,6 +903,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         persona_count=len(personas),
         question_count=len(questions),
         timer=timer,
+        template_vars=template_vars or None,
     )
 
     # sp-prof: inject profile info into metadata for synthbench
