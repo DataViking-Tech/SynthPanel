@@ -755,7 +755,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
 
     # ── Ensemble mode: run with each model, compare across models ────────
     if ensemble_mode:
-        from synth_panel.ensemble import ensemble_run
+        from synth_panel.ensemble import build_ensemble_output, ensemble_run
 
         ensemble_models = [m for m, _w in model_spec]
         ens_result = ensemble_run(
@@ -771,15 +771,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             top_p=top_p,
         )
         timer.stop()
-        output = {
-            "per_model_results": {
-                mr.model: [{"persona": pr.persona_name, "responses": pr.responses} for pr in mr.panelist_results]
-                for mr in ens_result.model_results
-            },
-            "cost_breakdown": ens_result.per_model_cost,
-            "models": ens_result.models,
-            "total_usage": ens_result.total_usage.to_dict(),
-        }
+        output = build_ensemble_output(ens_result)
         emit(fmt, message="Ensemble complete", extra=output)
         return 0
 
