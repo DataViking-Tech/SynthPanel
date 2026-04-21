@@ -459,6 +459,89 @@ def _load_schema(value: str) -> dict[str, Any]:
     return schema
 
 
+def _emit_dry_run_preview(
+    *,
+    personas: list[dict[str, Any]],
+    instrument: Instrument,
+    system_prompt_fn,
+    model: str,
+    fmt: OutputFormat,
+) -> None:
+    """Print the fully substituted panel inputs without any LLM call.
+
+    Shows each question as it will appear to the LLM (after --var
+    substitution, which has already been applied to the instrument),
+    plus persona/question counts and a rough input-token estimate.
+    """
+    persona_count = len(personas)
+    questions = instrument.questions
+    question_count = len(questions)
+
+    system_prompt_chars = sum(len(system_prompt_fn(p)) for p in personas)
+    question_chars = sum(len(build_question_prompt(q)) for q in questions)
+    follow_up_chars = 0
+    for q in questions:
+        follow_ups = q.get("follow_ups") if isinstance(q, dict) else None
+        if not follow_ups:
+            continue
+        for fu in follow_ups:
+            if isinstance(fu, dict):
+                follow_up_chars += len(str(fu.get("text", "")))
+            else:
+                follow_up_chars += len(str(fu))
+    total_chars = system_prompt_chars + persona_count * (question_chars + follow_up_chars)
+    estimated_input_tokens = max(1, total_chars // 4)
+
+    if fmt is OutputFormat.TEXT:
+        print("DRY RUN — no LLM calls will be made", file=sys.stderr)
+        print(f"Model: {model}", file=sys.stderr)
+        print(f"Personas: {persona_count}", file=sys.stderr)
+        if instrument.is_multi_round:
+            print(f"Questions: {question_count} across {len(instrument.rounds)} rounds", file=sys.stderr)
+        else:
+            print(f"Questions: {question_count}", file=sys.stderr)
+        print("", file=sys.stderr)
+
+        for round_ in instrument.rounds:
+            if instrument.is_multi_round:
+                print(f"Round: {round_.name}", file=sys.stderr)
+            for idx, q in enumerate(round_.questions, start=1):
+                prompt_text = build_question_prompt(q)
+                prefix = f"  {idx}." if instrument.is_multi_round else f"{idx}."
+                print(f"{prefix} {prompt_text}", file=sys.stderr)
+                follow_ups = q.get("follow_ups") if isinstance(q, dict) else None
+                if follow_ups:
+                    for fu in follow_ups:
+                        fu_text = fu.get("text", "") if isinstance(fu, dict) else str(fu)
+                        indent = "     " if instrument.is_multi_round else "   "
+                        print(f"{indent}↳ (follow-up) {fu_text}", file=sys.stderr)
+            if instrument.is_multi_round:
+                print("", file=sys.stderr)
+
+        print(
+            f"Estimated input tokens: ~{estimated_input_tokens:,} "
+            f"({persona_count} personas x {question_count} questions, ~4 chars/token)",
+            file=sys.stderr,
+        )
+        return
+
+    preview: dict[str, Any] = {
+        "dry_run": True,
+        "model": model,
+        "persona_count": persona_count,
+        "question_count": question_count,
+        "estimated_input_tokens": estimated_input_tokens,
+        "rounds": [
+            {
+                "name": r.name,
+                "questions": [build_question_prompt(q) for q in r.questions],
+            }
+            for r in instrument.rounds
+        ],
+    }
+    emit(fmt, message="Dry-run preview", extra=preview)
+
+
 def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """Run a panel: load personas + instrument, run panelists in parallel."""
     # ── sp-prof: profile loading ──────────────────────────────────────
@@ -592,6 +675,21 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     # Generation parameters
     temperature: float | None = getattr(args, "temperature", None)
     top_p: float | None = getattr(args, "top_p", None)
+
+    # ── sp-x8g: --dry-run preview ────────────────────────────────────────
+    # Short-circuit before any LLM-invoking code (variant expansion,
+    # ensemble, blend, orchestrator). Shows the user what each question
+    # will look like after --var substitution + prompt templating, plus
+    # a rough input-token estimate, without spending any tokens.
+    if getattr(args, "dry_run", False):
+        _emit_dry_run_preview(
+            personas=personas,
+            instrument=instrument,
+            system_prompt_fn=system_prompt_fn,
+            model=model,
+            fmt=fmt,
+        )
+        return 0
 
     # ── sp-blend: multi-model ensemble ───────────────────────────────────
     # Parse --models spec and build per-persona model assignments.

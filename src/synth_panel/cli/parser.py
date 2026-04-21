@@ -307,6 +307,18 @@ def build_parser() -> argparse.ArgumentParser:
             "can be passed to 'synthpanel analyze <RESULT_ID>'."
         ),
     )
+    panel_run_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help=(
+            "Preview the panel without making any LLM calls. Loads personas "
+            "and the instrument, applies --var substitutions, then prints "
+            "each question as it would be sent to the LLM along with "
+            "persona/question counts and a rough input-token estimate. "
+            "Exits without calling any provider."
+        ),
+    )
 
     # panel synthesize (sp-5on.5: post-hoc re-synthesis of a saved result)
     panel_synth_parser = panel_subparsers.add_parser(
