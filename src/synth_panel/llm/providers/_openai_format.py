@@ -144,6 +144,74 @@ def build_openai_body(
 # ---------------------------------------------------------------------------
 
 
+def _extract_usage(usage_raw: dict[str, Any]) -> TokenUsage:
+    """Map an OpenAI-compatible ``usage`` block to ``TokenUsage``.
+
+    Beyond the base ``prompt_tokens`` / ``completion_tokens``, this
+    captures OpenRouter's authoritative cost fields and OpenAI-style
+    sub-counts that the upstream API only reports when asked for detail:
+
+    - ``usage.cost`` (float, USD): native cost as billed by OpenRouter,
+      reflecting BYOK discounts and actual upstream pricing. Preferred
+      over the local pricing table when present. ``cost_details`` may
+      expose ``upstream_inference_cost`` (preferred), otherwise the
+      sum of ``upstream_inference_prompt_cost`` and
+      ``upstream_inference_completions_cost``.
+    - ``prompt_tokens_details.cached_tokens``: the subset of
+      ``prompt_tokens`` that was served from cache.
+    - ``completion_tokens_details.reasoning_tokens``: the subset of
+      ``completion_tokens`` spent on reasoning (e.g. GPT-5).
+
+    ``reasoning_tokens`` and ``cached_tokens`` remain sub-counts —
+    callers should not subtract them from the base counts.
+    """
+
+    def _coerce_float(value: Any) -> float | None:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    provider_cost = _coerce_float(usage_raw.get("cost"))
+    cost_details = usage_raw.get("cost_details")
+    if provider_cost is None and isinstance(cost_details, dict):
+        upstream = _coerce_float(cost_details.get("upstream_inference_cost"))
+        if upstream is not None:
+            provider_cost = upstream
+        else:
+            prompt_cost = _coerce_float(cost_details.get("upstream_inference_prompt_cost"))
+            completion_cost = _coerce_float(cost_details.get("upstream_inference_completions_cost"))
+            if prompt_cost is not None or completion_cost is not None:
+                provider_cost = (prompt_cost or 0.0) + (completion_cost or 0.0)
+
+    prompt_details = usage_raw.get("prompt_tokens_details")
+    cached_tokens = 0
+    if isinstance(prompt_details, dict):
+        cached_tokens = int(prompt_details.get("cached_tokens") or 0)
+
+    completion_details = usage_raw.get("completion_tokens_details")
+    reasoning_tokens = 0
+    if isinstance(completion_details, dict):
+        reasoning_tokens = int(completion_details.get("reasoning_tokens") or 0)
+
+    # NOTE: ``cached_tokens`` is NOT propagated into ``cache_read_tokens``
+    # because OpenAI-style ``prompt_tokens`` already includes the cached
+    # subset. Adding it again would double-count under local pricing (which
+    # bills ``input_tokens`` + ``cache_read_tokens`` separately). The sub-
+    # count is preserved in the dedicated ``cached_tokens`` field for
+    # reporting. When provider_reported_cost is present (OpenRouter), the
+    # local estimate is overridden anyway.
+    return TokenUsage(
+        input_tokens=usage_raw.get("prompt_tokens") or 0,
+        output_tokens=usage_raw.get("completion_tokens") or 0,
+        provider_reported_cost=provider_cost,
+        reasoning_tokens=reasoning_tokens,
+        cached_tokens=cached_tokens,
+    )
+
+
 def _parse_openai_stop(reason: str | None) -> StopReason | None:
     if reason is None:
         return None
@@ -188,10 +256,7 @@ def parse_openai_response(
     usage_raw = data.get("usage") or {}
     if not isinstance(usage_raw, dict):
         usage_raw = {}
-    usage = TokenUsage(
-        input_tokens=usage_raw.get("prompt_tokens") or 0,
-        output_tokens=usage_raw.get("completion_tokens") or 0,
-    )
+    usage = _extract_usage(usage_raw)
 
     return CompletionResponse(
         id=data.get("id", ""),

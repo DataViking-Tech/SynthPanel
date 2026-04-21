@@ -314,6 +314,95 @@ class TestParseOpenaiResponse:
         resp = parse_openai_response(data, "m")
         assert resp.stop_reason == StopReason.MAX_TOKENS
 
+    def test_openrouter_cost_captured(self):
+        """sp-j3vk: OpenRouter's usage.cost must flow into TokenUsage."""
+        from synth_panel.llm.providers._openai_format import parse_openai_response
+
+        data = {
+            "id": "x",
+            "model": "openai/gpt-4o-mini",
+            "choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}],
+            "usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "cost": 0.000123,
+            },
+        }
+        resp = parse_openai_response(data, "openai/gpt-4o-mini")
+        assert resp.usage.provider_reported_cost == pytest.approx(0.000123)
+
+    def test_openrouter_cost_details_upstream_inference_cost(self):
+        """Prefer cost_details.upstream_inference_cost over absent top-level cost."""
+        from synth_panel.llm.providers._openai_format import parse_openai_response
+
+        data = {
+            "id": "x",
+            "model": "m",
+            "choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}],
+            "usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "cost_details": {"upstream_inference_cost": 0.000456},
+            },
+        }
+        resp = parse_openai_response(data, "m")
+        assert resp.usage.provider_reported_cost == pytest.approx(0.000456)
+
+    def test_openrouter_cost_details_prompt_plus_completion(self):
+        """Fall back to prompt+completion cost sum if upstream total is missing."""
+        from synth_panel.llm.providers._openai_format import parse_openai_response
+
+        data = {
+            "id": "x",
+            "model": "m",
+            "choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}],
+            "usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "cost_details": {
+                    "upstream_inference_prompt_cost": 0.0003,
+                    "upstream_inference_completions_cost": 0.0004,
+                },
+            },
+        }
+        resp = parse_openai_response(data, "m")
+        assert resp.usage.provider_reported_cost == pytest.approx(0.0007)
+
+    def test_reasoning_and_cached_tokens_captured(self):
+        """sp-loil: reasoning_tokens and cached_tokens subcounts land in TokenUsage."""
+        from synth_panel.llm.providers._openai_format import parse_openai_response
+
+        data = {
+            "id": "x",
+            "model": "openai/gpt-5-mini",
+            "choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}],
+            "usage": {
+                "prompt_tokens": 200,
+                "completion_tokens": 50,
+                "prompt_tokens_details": {"cached_tokens": 180},
+                "completion_tokens_details": {"reasoning_tokens": 30},
+            },
+        }
+        resp = parse_openai_response(data, "openai/gpt-5-mini")
+        assert resp.usage.cached_tokens == 180
+        assert resp.usage.reasoning_tokens == 30
+        # Sub-counts do NOT get promoted into cache_read_tokens, otherwise
+        # local cost estimates would double-bill on non-OR providers.
+        assert resp.usage.cache_read_tokens == 0
+
+    def test_missing_cost_is_none_not_zero(self):
+        """Absent provider cost must be None so resolve_cost falls back to table."""
+        from synth_panel.llm.providers._openai_format import parse_openai_response
+
+        data = {
+            "id": "x",
+            "model": "m",
+            "choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5},
+        }
+        resp = parse_openai_response(data, "m")
+        assert resp.usage.provider_reported_cost is None
+
 
 # ---------------------------------------------------------------------------
 # Tests: _openai_format.py — parse_openai_sse_stream

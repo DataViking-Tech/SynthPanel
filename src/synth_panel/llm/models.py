@@ -71,23 +71,43 @@ class InputMessage:
 
 @dataclass(frozen=True)
 class TokenUsage:
-    """Token consumption counters for a single LLM call."""
+    """Token consumption counters for a single LLM call.
+
+    ``provider_reported_cost`` is the authoritative USD cost as billed by
+    the upstream provider (e.g. OpenRouter's ``usage.cost``). When present,
+    downstream cost resolution prefers it over the local pricing table.
+
+    ``reasoning_tokens`` / ``cached_tokens`` are informational sub-counts
+    already included in ``output_tokens`` / ``input_tokens`` respectively.
+    They are surfaced separately so reports can show reasoning token spend
+    and cache-hit rates without double-counting tokens.
+    """
 
     input_tokens: int = 0
     output_tokens: int = 0
     cache_write_tokens: int = 0
     cache_read_tokens: int = 0
+    provider_reported_cost: float | None = None
+    reasoning_tokens: int = 0
+    cached_tokens: int = 0
 
     @property
     def total_tokens(self) -> int:
         return self.input_tokens + self.output_tokens + self.cache_write_tokens + self.cache_read_tokens
 
     def __add__(self, other: TokenUsage) -> TokenUsage:
+        if self.provider_reported_cost is None and other.provider_reported_cost is None:
+            summed_cost: float | None = None
+        else:
+            summed_cost = (self.provider_reported_cost or 0.0) + (other.provider_reported_cost or 0.0)
         return TokenUsage(
             input_tokens=self.input_tokens + other.input_tokens,
             output_tokens=self.output_tokens + other.output_tokens,
             cache_write_tokens=self.cache_write_tokens + other.cache_write_tokens,
             cache_read_tokens=self.cache_read_tokens + other.cache_read_tokens,
+            provider_reported_cost=summed_cost,
+            reasoning_tokens=self.reasoning_tokens + other.reasoning_tokens,
+            cached_tokens=self.cached_tokens + other.cached_tokens,
         )
 
 

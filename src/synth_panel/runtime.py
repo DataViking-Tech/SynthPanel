@@ -154,6 +154,9 @@ def _convert_usage(llm_usage: LLMTokenUsage) -> TokenUsage:
         output_tokens=llm_usage.output_tokens,
         cache_creation_input_tokens=llm_usage.cache_write_tokens,
         cache_read_input_tokens=llm_usage.cache_read_tokens,
+        provider_reported_cost=llm_usage.provider_reported_cost,
+        reasoning_tokens=llm_usage.reasoning_tokens,
+        cached_tokens=llm_usage.cached_tokens,
     )
 
 
