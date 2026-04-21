@@ -1571,6 +1571,43 @@ class TestVarSubstitution:
         assert "features" not in err.split("placeholders:", 1)[-1].split(".")[0]
         mock_run.assert_not_called()
 
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_panel_run_landing_page_pack_aborts_on_missing_landing_page(
+        self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path, monkeypatch
+    ):
+        """sp-anje: the exact Round 3 self-audit repro must fail fast.
+
+        Running the bundled ``landing-page-comprehension`` pack with only
+        an irrelevant ``--var product=anything`` previously let every
+        persona see a literal ``{landing_page}`` block. The guard must
+        abort with ``landing_page`` (and ``alt_cta``) named in stderr
+        and no LLM call issued.
+        """
+        monkeypatch.setenv("SYNTH_PANEL_DATA_DIR", str(tmp_path))
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: A\n")
+
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                "landing-page-comprehension",
+                "--var",
+                "product=anything",
+            ]
+        )
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "unsubstituted placeholders" in err
+        assert "landing_page" in err
+        assert "alt_cta" in err
+        mock_run.assert_not_called()
+
 
 # --- Pack CLI tests ---
 
