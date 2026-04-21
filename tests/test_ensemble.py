@@ -545,7 +545,62 @@ class TestBuildEnsembleOutput:
         from synth_panel.ensemble import build_ensemble_output
 
         out = build_ensemble_output(self._fixture())
-        assert set(out.keys()) == {"per_model_results", "cost_breakdown", "models", "total_usage", "metadata"}
+        assert set(out.keys()) == {
+            "per_model_results",
+            "cost_breakdown",
+            "models",
+            "total_usage",
+            "warnings",
+            "cost_is_estimated",
+            "metadata",
+        }
+
+    def test_priced_models_have_no_cost_warnings(self):
+        """sp-nn8k: when every model has an explicit pricing tier, warnings
+        is empty and cost_is_estimated is False."""
+        from synth_panel.ensemble import build_ensemble_output
+
+        out = build_ensemble_output(self._fixture())
+        assert out["warnings"] == []
+        assert out["cost_is_estimated"] is False
+
+    def test_unpriced_model_surfaces_fallback_warning(self):
+        """sp-nn8k: an unknown ensemble model must produce a DEFAULT_PRICING
+        warning and flip cost_is_estimated to True."""
+        from synth_panel.cost import CostEstimate, TokenUsage
+        from synth_panel.ensemble import EnsembleResult, ModelRunResult, build_ensemble_output
+
+        usage = TokenUsage(input_tokens=10, output_tokens=5)
+        cost = CostEstimate(input_cost=0.001, output_cost=0.001)
+        mystery_mr = ModelRunResult(
+            model="mystery-model-v9",
+            panelist_results=[
+                PanelistResult(
+                    persona_name="Alice",
+                    responses=[{"question": "Q1", "response": "a1", "error": False}],
+                    usage=usage,
+                    model="mystery-model-v9",
+                )
+            ],
+            usage=usage,
+            cost=cost,
+            sessions={},
+        )
+        ens = EnsembleResult(
+            model_results=[mystery_mr],
+            models=["mystery-model-v9"],
+            total_usage=usage,
+            total_cost=cost,
+            per_model_cost={"mystery-model-v9": cost.format_usd()},
+            per_model_usage={"mystery-model-v9": usage.to_dict()},
+            persona_count=1,
+            question_count=1,
+        )
+        out = build_ensemble_output(ens)
+        assert out["cost_is_estimated"] is True
+        assert len(out["warnings"]) == 1
+        assert "mystery-model-v9" in out["warnings"][0]
+        assert "DEFAULT_PRICING fallback" in out["warnings"][0]
 
     def test_per_model_results_has_results_cost_usage(self):
         from synth_panel.ensemble import build_ensemble_output

@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from synth_panel.cli.commands import (
+    _build_rounds_shape,
     _load_instrument,
     _load_personas,
     _load_schema,
@@ -2779,3 +2780,63 @@ class TestPanelRunDryRun:
         assert data["estimated_input_tokens"] >= 1
         assert data["rounds"][0]["questions"] == ["Why now?"]
         mock_run_panel.assert_not_called()
+
+
+# --- sp-nn8k: _build_rounds_shape propagates cost_fallback_warnings ------
+
+
+class _StubInstrument:
+    def __init__(self):
+        self.rounds = [type("R", (), {"name": "default"})()]
+        self.warnings = []
+
+
+class TestBuildRoundsShapeCostFallback:
+    """Cost fallback warnings must merge into ``warnings`` and flip the flag."""
+
+    def _zero_cost(self):
+        from synth_panel.cost import CostEstimate
+
+        return CostEstimate()
+
+    def _call(self, **overrides):
+        defaults = dict(
+            instrument=_StubInstrument(),
+            results=[],
+            synthesis_dict=None,
+            panelist_cost=self._zero_cost(),
+            total_usage=TokenUsage(),
+            total_cost=self._zero_cost(),
+            model="sonnet",
+            persona_count=0,
+            question_count=0,
+        )
+        defaults.update(overrides)
+        return _build_rounds_shape(**defaults)
+
+    def test_no_warnings_when_absent(self):
+        out = self._call()
+        assert out["warnings"] == []
+        assert out["cost_is_estimated"] is False
+
+    def test_cost_fallback_warnings_merge(self):
+        warnings_in = ["Cost for model 'novel-x' computed using DEFAULT_PRICING fallback — real charges may differ."]
+        out = self._call(cost_fallback_warnings=warnings_in)
+        assert warnings_in[0] in out["warnings"]
+        assert out["cost_is_estimated"] is True
+
+    def test_instrument_warnings_preserved_alongside_cost_warnings(self):
+        inst = _StubInstrument()
+        inst.warnings = ["unreachable round: dead_end"]
+        cost_warnings = [
+            "Cost for model 'mystery-v9' computed using DEFAULT_PRICING fallback — real charges may differ."
+        ]
+        out = self._call(instrument=inst, cost_fallback_warnings=cost_warnings)
+        assert "unreachable round: dead_end" in out["warnings"]
+        assert cost_warnings[0] in out["warnings"]
+        assert out["cost_is_estimated"] is True
+
+    def test_empty_list_equals_no_warnings(self):
+        out = self._call(cost_fallback_warnings=[])
+        assert out["warnings"] == []
+        assert out["cost_is_estimated"] is False

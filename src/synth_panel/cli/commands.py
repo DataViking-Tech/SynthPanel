@@ -21,6 +21,7 @@ from synth_panel.cost import (
     CostEstimate,
     TokenUsage,
     aggregate_per_model,
+    build_cost_fallback_warnings,
     estimate_cost,
     format_summary,
     lookup_pricing,
@@ -1095,6 +1096,14 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             panelist_formatter=_cli_panelist_formatter,
         )
 
+        # sp-nn8k: surface DEFAULT_PRICING fallbacks loudly. Contributing
+        # models are the per-panelist buckets we priced above plus the
+        # synthesis model when present.
+        synth_model_for_warning = synthesis_result.model if synthesis_result else None
+        cost_fallback_warnings = build_cost_fallback_warnings(
+            [*panelist_per_model_usage.keys(), synth_model_for_warning]
+        )
+
         extra: dict[str, Any] = _build_rounds_shape(
             instrument=instrument,
             results=results,
@@ -1109,6 +1118,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             metadata=metadata,
             per_model_results=per_model_results,
             cost_breakdown=cost_breakdown,
+            cost_fallback_warnings=cost_fallback_warnings,
         )
         extra["parameters"] = _build_params_metadata(args, temperature, top_p)
         # Surface failure stats + run validity in structured output so
@@ -1440,6 +1450,7 @@ def _build_rounds_shape(
     metadata: dict[str, Any] | None = None,
     per_model_results: dict[str, Any] | None = None,
     cost_breakdown: dict[str, Any] | None = None,
+    cost_fallback_warnings: list[str] | None = None,
 ) -> dict[str, Any]:
     """Build the rounds-shaped panel output payload.
 
@@ -1453,8 +1464,17 @@ def _build_rounds_shape(
     the sp-0h9x rollup shape alongside the primary ``model`` field — a
     superset of the mixed-model artifact that mayor's ensemble audits
     previously had to reconstruct by iterating ``rounds[].results[]``.
+
+    ``cost_fallback_warnings`` (sp-nn8k) is appended to ``warnings`` for
+    every model that was priced via ``DEFAULT_PRICING`` fallback; the
+    top-level ``cost_is_estimated`` boolean mirrors ``bool(...)`` of that
+    list so programmatic consumers can gate on it without string-matching
+    the warning text.
     """
     round_name = instrument.rounds[0].name if instrument.rounds else "default"
+    warnings = list(getattr(instrument, "warnings", []) or [])
+    fallback_warnings = list(cost_fallback_warnings or [])
+    warnings.extend(fallback_warnings)
     result: dict[str, Any] = {
         "rounds": [
             {
@@ -1464,7 +1484,8 @@ def _build_rounds_shape(
             }
         ],
         "path": [],
-        "warnings": list(getattr(instrument, "warnings", []) or []),
+        "warnings": warnings,
+        "cost_is_estimated": bool(fallback_warnings),
         "synthesis": synthesis_dict,
         "panelist_cost": panelist_cost.format_usd(),
         "panelist_usage": (panelist_usage.to_dict() if panelist_usage is not None else None),

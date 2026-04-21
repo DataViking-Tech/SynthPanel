@@ -18,6 +18,7 @@ from synth_panel.cost import (
     ZERO_USAGE,
     CostEstimate,
     TokenUsage,
+    build_cost_fallback_warnings,
     estimate_cost,
     lookup_pricing,
 )
@@ -224,6 +225,11 @@ def build_ensemble_output(
         panelist_per_model=panelist_per_model,
     )
 
+    # sp-nn8k: flag models priced via DEFAULT_PRICING fallback so the
+    # ensemble payload exposes estimated spend the same way the
+    # single-model + mixed-model rollups do.
+    cost_warnings = build_cost_fallback_warnings(ens.models)
+
     return {
         "per_model_results": per_model_results,
         "cost_breakdown": {
@@ -232,6 +238,8 @@ def build_ensemble_output(
         },
         "models": list(ens.models),
         "total_usage": ens.total_usage.to_dict(),
+        "warnings": list(cost_warnings),
+        "cost_is_estimated": bool(cost_warnings),
         "metadata": ens_metadata,
     }
 
