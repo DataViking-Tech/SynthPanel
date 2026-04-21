@@ -6,7 +6,12 @@ import json
 import time
 
 from synth_panel.cost import CostEstimate, TokenUsage, estimate_cost, lookup_pricing
-from synth_panel.metadata import PanelTimer, build_config_hash, build_metadata
+from synth_panel.metadata import (
+    PanelTimer,
+    build_config_hash,
+    build_metadata,
+    build_template_vars_fingerprint,
+)
 
 
 class TestBuildConfigHash:
@@ -29,6 +34,30 @@ class TestBuildConfigHash:
     def test_sha256_length(self):
         h = build_config_hash({"x": 1})
         assert len(h) == 64
+
+
+class TestBuildTemplateVarsFingerprint:
+    def test_none_returns_empty(self):
+        assert build_template_vars_fingerprint(None) == {}
+
+    def test_empty_dict_returns_empty(self):
+        assert build_template_vars_fingerprint({}) == {}
+
+    def test_keys_preserved_values_hashed(self):
+        fp = build_template_vars_fingerprint({"landing_page": "https://example.com"})
+        assert list(fp.keys()) == ["landing_page"]
+        assert fp["landing_page"] != "https://example.com"
+        assert len(fp["landing_page"]) == 16
+
+    def test_deterministic(self):
+        a = build_template_vars_fingerprint({"theme": "pricing", "region": "eu"})
+        b = build_template_vars_fingerprint({"region": "eu", "theme": "pricing"})
+        assert a == b
+
+    def test_different_values_different_hashes(self):
+        a = build_template_vars_fingerprint({"landing_page": "v1"})
+        b = build_template_vars_fingerprint({"landing_page": "v2"})
+        assert a["landing_page"] != b["landing_page"]
 
 
 class TestPanelTimer:
@@ -222,6 +251,98 @@ class TestBuildMetadata:
         m1 = build_metadata(**kwargs)
         m2 = build_metadata(**kwargs)
         assert m1["config_hash"] == m2["config_hash"]
+
+    def test_template_vars_changes_config_hash(self):
+        """sp-ui40: two runs that differ only in --var values must hash differently."""
+        usage = self._make_usage()
+        cost = self._make_cost(usage)
+        base = dict(
+            panelist_model="haiku",
+            panelist_usage=usage,
+            panelist_cost=cost,
+            total_usage=usage,
+            total_cost=cost,
+            persona_count=2,
+            question_count=3,
+        )
+        m_a = build_metadata(**base, template_vars={"landing_page": "v1"})
+        m_b = build_metadata(**base, template_vars={"landing_page": "v2"})
+        assert m_a["config_hash"] != m_b["config_hash"]
+
+    def test_template_vars_different_keys_different_hash(self):
+        usage = self._make_usage()
+        cost = self._make_cost(usage)
+        base = dict(
+            panelist_model="haiku",
+            panelist_usage=usage,
+            panelist_cost=cost,
+            total_usage=usage,
+            total_cost=cost,
+            persona_count=1,
+            question_count=1,
+        )
+        m_a = build_metadata(**base, template_vars={"theme": "pricing"})
+        m_b = build_metadata(**base, template_vars={"channel": "pricing"})
+        assert m_a["config_hash"] != m_b["config_hash"]
+
+    def test_template_vars_stable_across_key_order(self):
+        usage = self._make_usage()
+        cost = self._make_cost(usage)
+        base = dict(
+            panelist_model="haiku",
+            panelist_usage=usage,
+            panelist_cost=cost,
+            total_usage=usage,
+            total_cost=cost,
+            persona_count=1,
+            question_count=1,
+        )
+        m_a = build_metadata(**base, template_vars={"a": "1", "b": "2"})
+        m_b = build_metadata(**base, template_vars={"b": "2", "a": "1"})
+        assert m_a["config_hash"] == m_b["config_hash"]
+
+    def test_template_vars_none_preserves_legacy_hash(self):
+        """Runs without --var must produce the same hash as before sp-ui40."""
+        usage = self._make_usage()
+        cost = self._make_cost(usage)
+        base = dict(
+            panelist_model="haiku",
+            panelist_usage=usage,
+            panelist_cost=cost,
+            total_usage=usage,
+            total_cost=cost,
+            persona_count=1,
+            question_count=1,
+        )
+        m_none = build_metadata(**base)
+        m_empty = build_metadata(**base, template_vars={})
+        m_explicit_none = build_metadata(**base, template_vars=None)
+        assert m_none["config_hash"] == m_empty["config_hash"]
+        assert m_none["config_hash"] == m_explicit_none["config_hash"]
+        assert "template_vars_fingerprint" not in m_none
+        assert "template_vars_fingerprint" not in m_empty
+
+    def test_template_vars_fingerprint_exposed(self):
+        usage = self._make_usage()
+        cost = self._make_cost(usage)
+        meta = build_metadata(
+            panelist_model="haiku",
+            panelist_usage=usage,
+            panelist_cost=cost,
+            total_usage=usage,
+            total_cost=cost,
+            persona_count=1,
+            question_count=1,
+            template_vars={"theme": "pricing", "audience": "smb"},
+        )
+        fp = meta["template_vars_fingerprint"]
+        assert set(fp.keys()) == {"audience", "theme"}
+        # Each value is a truncated SHA256 hex digest
+        for v in fp.values():
+            assert len(v) == 16
+            int(v, 16)  # raises if non-hex
+        # Keys survive as cleartext; values are hashed
+        assert "pricing" not in fp.values()
 
     def test_json_serializable(self):
         usage = self._make_usage()

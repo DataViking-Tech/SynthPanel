@@ -38,6 +38,33 @@ def build_config_hash(config: dict[str, Any]) -> str:
     return hashlib.sha256(serialized.encode()).hexdigest()
 
 
+# Truncation length for per-value var hashes. 16 hex chars = 64 bits, enough
+# to distinguish var sets in practice while keeping the fingerprint compact.
+_VAR_VALUE_HASH_LEN = 16
+
+
+def build_template_vars_fingerprint(
+    template_vars: dict[str, str] | None,
+) -> dict[str, str]:
+    """Return ``{key: sha256(value)[:16]}`` for the resolved ``--var`` set.
+
+    Keys from ``template_vars`` are preserved (they are the *names* authors
+    reference in instrument placeholders and must be visible for audit).
+    Values are one-way hashed so the fingerprint can be persisted in
+    metadata without leaking the raw substitution (some vars carry
+    candidate names, URLs, or prices that callers may treat as sensitive).
+
+    Returns an empty dict when ``template_vars`` is ``None`` or empty so
+    callers can unconditionally splice the result into a config-hash input.
+    """
+    if not template_vars:
+        return {}
+    return {
+        key: hashlib.sha256(str(template_vars[key]).encode()).hexdigest()[:_VAR_VALUE_HASH_LEN]
+        for key in sorted(template_vars)
+    }
+
+
 class PanelTimer:
     """Wall-clock timer for panel execution."""
 
@@ -67,6 +94,7 @@ def build_metadata(
     persona_count: int,
     question_count: int,
     timer: PanelTimer | None = None,
+    template_vars: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Build the ``metadata`` dict for synthbench integration.
 
@@ -131,6 +159,11 @@ def build_metadata(
     }
 
     # -- config_hash --
+    # sp-ui40: fold resolved --var keys + hashed values into the hash so
+    # runs that differ only in their var substitution no longer collide.
+    # The fingerprint is only spliced in when a non-empty var set was
+    # provided so runs with no --var keep the same hash they had before.
+    vars_fingerprint = build_template_vars_fingerprint(template_vars)
     config_for_hash: dict[str, Any] = {
         "panelist_model": resolved_panelist,
         "synthesis_model": resolved_synthesis,
@@ -138,8 +171,10 @@ def build_metadata(
         "question_count": question_count,
         "generation_params": generation_params,
     }
+    if vars_fingerprint:
+        config_for_hash["template_vars"] = vars_fingerprint
 
-    return {
+    meta: dict[str, Any] = {
         "generation_params": generation_params,
         "models": models,
         "cost": cost,
@@ -147,3 +182,6 @@ def build_metadata(
         "version": version,
         "config_hash": build_config_hash(config_for_hash),
     }
+    if vars_fingerprint:
+        meta["template_vars_fingerprint"] = vars_fingerprint
+    return meta
