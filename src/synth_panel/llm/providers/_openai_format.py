@@ -181,10 +181,16 @@ def parse_openai_response(
             )
         )
 
-    usage_raw = data.get("usage", {})
+    # Some OpenAI-compatible providers (notably OpenRouter) occasionally
+    # return ``"usage": null`` or omit the block entirely. Treat any
+    # non-dict value as an absent usage block so the caller still gets
+    # a well-formed TokenUsage (all zeros) instead of an AttributeError.
+    usage_raw = data.get("usage") or {}
+    if not isinstance(usage_raw, dict):
+        usage_raw = {}
     usage = TokenUsage(
-        input_tokens=usage_raw.get("prompt_tokens", 0),
-        output_tokens=usage_raw.get("completion_tokens", 0),
+        input_tokens=usage_raw.get("prompt_tokens") or 0,
+        output_tokens=usage_raw.get("completion_tokens") or 0,
     )
 
     return CompletionResponse(

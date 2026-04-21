@@ -471,6 +471,19 @@ def _run_panelist(
             tracker.cumulative_usage.total_tokens,
         )
 
+        # sp-2xy: silent usage-capture failure produces $0 cost for the whole
+        # panel. If we successfully produced responses but tokens are 0, the
+        # upstream provider almost certainly returned an empty ``usage`` block —
+        # warn loudly so this doesn't slip through to JSON again.
+        if tracker.cumulative_usage.total_tokens == 0 and responses and not all(r.get("error") for r in responses):
+            logger.warning(
+                "panelist %s (model=%s) produced %d responses but usage=0 — "
+                "provider likely omitted the usage block; cost will be $0",
+                name,
+                model,
+                len(responses),
+            )
+
         result = PanelistResult(
             persona_name=name,
             responses=responses,
