@@ -187,10 +187,11 @@ class TestCostEstimate:
 
 class TestEstimateCost:
     def test_sonnet_pricing(self):
+        # sp-cxyb: Sonnet 4.5 rates are $3/M input, $15/M output.
         usage = TokenUsage(input_tokens=1_000_000, output_tokens=1_000_000)
         cost = estimate_cost(usage, SONNET_PRICING)
-        assert cost.input_cost == pytest.approx(15.0)
-        assert cost.output_cost == pytest.approx(75.0)
+        assert cost.input_cost == pytest.approx(3.0)
+        assert cost.output_cost == pytest.approx(15.0)
 
     def test_zero_usage(self):
         cost = estimate_cost(ZERO_USAGE)

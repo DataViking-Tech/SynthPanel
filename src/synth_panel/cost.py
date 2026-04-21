@@ -66,7 +66,7 @@ class ModelPricing:
 
 
 # Known pricing tiers from SPEC.md §7.
-# pricing snapshot_date: 2026-04-14
+# pricing snapshot_date: 2026-04-21
 HAIKU_PRICING = ModelPricing(
     input_cost_per_million=1.00,
     output_cost_per_million=5.00,
@@ -74,11 +74,15 @@ HAIKU_PRICING = ModelPricing(
     cache_read_cost_per_million=0.10,
 )
 
+# Sonnet 4.5 published rates (per Anthropic price list): $3/M in, $15/M out,
+# $3.75/M 5-min cache write, $0.30/M cache read. Prior to sp-cxyb this table
+# carried legacy Opus-3 rates ($15/$75/$18.75/$1.50), which also leaked into
+# DEFAULT_PRICING and over-billed every unknown model by ~5x.
 SONNET_PRICING = ModelPricing(
-    input_cost_per_million=15.00,
-    output_cost_per_million=75.00,
-    cache_creation_cost_per_million=18.75,
-    cache_read_cost_per_million=1.50,
+    input_cost_per_million=3.00,
+    output_cost_per_million=15.00,
+    cache_creation_cost_per_million=3.75,
+    cache_read_cost_per_million=0.30,
 )
 
 OPUS_PRICING = ModelPricing(
