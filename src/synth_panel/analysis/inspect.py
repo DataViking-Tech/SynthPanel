@@ -204,11 +204,7 @@ def _collect_persona_summaries(panelists: list[dict[str, Any]]) -> list[PersonaS
         model = p.get("model")
         responses = p.get("responses") or []
         resp_count = sum(1 for r in responses if isinstance(r, dict))
-        err_count = sum(
-            1
-            for r in responses
-            if isinstance(r, dict) and r.get("error") and not r.get("follow_up")
-        )
+        err_count = sum(1 for r in responses if isinstance(r, dict) and r.get("error") and not r.get("follow_up"))
         panelist_error = p.get("error")
         out.append(
             PersonaSummary(
@@ -405,16 +401,12 @@ def build_inspect_report(data: dict[str, Any]) -> InspectReport:
     total_usage = data.get("total_usage") or {}
     total_tokens = 0
     if isinstance(total_usage, dict):
-        total_tokens = int(total_usage.get("input_tokens", 0) or 0) + int(
-            total_usage.get("output_tokens", 0) or 0
-        )
+        total_tokens = int(total_usage.get("input_tokens", 0) or 0) + int(total_usage.get("output_tokens", 0) or 0)
 
     question_count = int(data.get("question_count") or 0)
     if not question_count and panelists:
         first_responses = panelists[0].get("responses") or []
-        question_count = sum(
-            1 for r in first_responses if isinstance(r, dict) and not r.get("follow_up")
-        )
+        question_count = sum(1 for r in first_responses if isinstance(r, dict) and not r.get("follow_up"))
 
     persona_count = int(data.get("persona_count") or 0) or len(panelists)
 
@@ -513,10 +505,7 @@ def format_inspect_text(report: InspectReport) -> str:
             lines.append(f"  {m.model}")
             lines.append(f"      personas:           {m.personas}")
             lines.append(f"      questions answered: {m.questions_answered}")
-            lines.append(
-                f"      tokens:             {m.total_tokens} "
-                f"(in={m.input_tokens} / out={m.output_tokens})"
-            )
+            lines.append(f"      tokens:             {m.total_tokens} (in={m.input_tokens} / out={m.output_tokens})")
             if m.cost_usd is not None:
                 lines.append(f"      cost:               ${m.cost_usd:.4f}")
 

@@ -150,9 +150,7 @@ def test_inspect_rounds_shape_full():
     assert report.synthesis.ran is True
     assert report.synthesis.model == "sonnet"
     assert report.synthesis.theme_count == 2
-    assert report.synthesis.summary_peek and report.synthesis.summary_peek.startswith(
-        "The panel converged"
-    )
+    assert report.synthesis.summary_peek and report.synthesis.summary_peek.startswith("The panel converged")
     per_model = {m.model: m for m in report.model_rollup}
     assert per_model["haiku"].cost_usd == 0.009
     assert per_model["sonnet"].cost_usd == 0.02
