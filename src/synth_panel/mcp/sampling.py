@@ -27,7 +27,6 @@ Tool handlers call :func:`sample_text` once the decision is made.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -65,6 +64,10 @@ SAMPLING_CRED_ENV_VARS: tuple[str, ...] = (
     "OPENROUTER_API_KEY",
 )
 
+# Importing here (module scope) would create a cycle if credentials ever
+# grew an MCP dependency; the function-local import in
+# :func:`has_byok_credentials` keeps the boundary one-directional.
+
 # First-run hint surfaced on successful sampling runs so users know they
 # can graduate to BYOK for larger panels / ensembles.
 SAMPLING_FIRST_RUN_HINT = (
@@ -94,9 +97,20 @@ class SamplingDecision:
 
 
 def has_byok_credentials(env: dict[str, str] | None = None) -> bool:
-    """Return True when any provider env var is present and non-empty."""
-    source = env if env is not None else os.environ
-    return any(source.get(var, "").strip() for var in SAMPLING_CRED_ENV_VARS)
+    """Return True when any provider credential is available to BYOK.
+
+    Checks both the process environment and the on-disk credential store
+    written by ``synthpanel login`` (sp-1ez / v0.9.4), so an MCP-launched
+    subprocess — which often runs without the invoking shell's env —
+    still recognises keys the CLI can see. When ``env`` is provided
+    (test harness), only that mapping is consulted; the disk store is
+    intentionally skipped so tests stay hermetic.
+    """
+    if env is not None:
+        return any(env.get(var, "").strip() for var in SAMPLING_CRED_ENV_VARS)
+    from synth_panel.credentials import has_credential
+
+    return any(has_credential(var) for var in SAMPLING_CRED_ENV_VARS)
 
 
 def client_supports_sampling(ctx: Any) -> bool:
@@ -145,7 +159,9 @@ def decide_mode(
         use_sampling: Explicit override from the tool caller. ``True``
             forces sampling (error if unsupported), ``False`` forces
             BYOK, ``None`` picks automatically.
-        env: Optional env dict for testing. Defaults to ``os.environ``.
+        env: Optional env dict for testing. When ``None`` both the
+            process environment and the on-disk credential store are
+            consulted via :func:`has_byok_credentials`.
 
     Rules (in order):
         * ``use_sampling=True`` + client supports sampling → sampling.

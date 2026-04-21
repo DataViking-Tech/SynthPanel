@@ -84,6 +84,54 @@ class TestHasByokCredentials:
 
         assert has_byok_credentials({"ANTHROPIC_API_KEY": "   "}) is False
 
+    def test_stored_credential_counts_as_byok(self, tmp_path, monkeypatch):
+        """sp-mkpo: ``synthpanel login`` keys must satisfy MCP BYOK.
+
+        A user who persists OPENROUTER_API_KEY via ``synthpanel login``
+        and launches mcp-serve from a client that doesn't inherit the
+        shell env (Claude Desktop bundles, Docker, systemd units) would
+        otherwise see a bogus 'No provider credentials' error even
+        though the CLI finds the same key.
+        """
+        from synth_panel.credentials import save_credential
+        from synth_panel.mcp.sampling import decide_mode, has_byok_credentials
+
+        monkeypatch.setenv("SYNTHPANEL_CREDENTIALS_PATH", str(tmp_path / "creds.json"))
+        save_credential("OPENROUTER_API_KEY", "sk-or-stored")
+
+        # Default path (env=None) must consult both sources.
+        assert has_byok_credentials() is True
+        # Explicit env override stays hermetic — only that dict is consulted.
+        assert has_byok_credentials({}) is False
+
+        ctx = MagicMock()
+        ctx.session.check_client_capability.return_value = False
+        assert decide_mode(ctx).mode == "byok"
+
+    def test_stored_gemini_credential_counts_as_byok(self, tmp_path, monkeypatch):
+        from synth_panel.credentials import save_credential
+        from synth_panel.mcp.sampling import has_byok_credentials
+
+        monkeypatch.setenv("SYNTHPANEL_CREDENTIALS_PATH", str(tmp_path / "creds.json"))
+        save_credential("GEMINI_API_KEY", "g-stored")
+
+        assert has_byok_credentials() is True
+
+    def test_default_model_picks_provider_from_stored_credential(self, tmp_path, monkeypatch):
+        """sp-mkpo: _resolve_mcp_default_model must also see disk creds.
+
+        Without this the default alias stays 'haiku' (Anthropic) even
+        for an OpenRouter-only user, so the LLM client raises a
+        misleading ANTHROPIC_API_KEY error.
+        """
+        from synth_panel.credentials import save_credential
+        from synth_panel.mcp.server import _resolve_mcp_default_model
+
+        monkeypatch.setenv("SYNTHPANEL_CREDENTIALS_PATH", str(tmp_path / "creds.json"))
+        save_credential("OPENROUTER_API_KEY", "sk-or-stored")
+
+        assert _resolve_mcp_default_model() == "openrouter/auto"
+
 
 class TestClientSupportsSampling:
     def test_none_ctx_returns_false(self):
