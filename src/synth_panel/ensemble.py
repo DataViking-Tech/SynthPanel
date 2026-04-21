@@ -187,11 +187,17 @@ def build_ensemble_output(
     exposes both the per-model USD breakdown (``by_model``) and the total
     (``total``).
 
+    ``metadata`` carries the synthbench-shaped ``cost.per_model`` bundle
+    populated from every model in the ensemble (sp-atvc). Without this,
+    downstream audits that read ``metadata.cost.per_model`` only saw the
+    first model and undercounted multi-model ensemble spend.
+
     ``panelist_formatter`` customises how each :class:`PanelistResult` is
     rendered; when omitted, a minimal ``{persona, responses, model}`` dict
     is produced so callers without the full runner context still get a
     useful payload.
     """
+    from synth_panel.metadata import build_metadata
 
     fmt = panelist_formatter or _default_panelist_formatter
 
@@ -203,6 +209,21 @@ def build_ensemble_output(
             "usage": mr.usage.to_dict(),
         }
 
+    # sp-atvc: build a metadata bundle whose cost.per_model covers every
+    # ensemble model so downstream audits see real per-provider spend.
+    primary_model = ens.models[0] if ens.models else ""
+    panelist_per_model = {mr.model: (mr.usage, mr.cost) for mr in ens.model_results}
+    ens_metadata = build_metadata(
+        panelist_model=primary_model,
+        panelist_usage=ens.total_usage,
+        panelist_cost=ens.total_cost,
+        total_usage=ens.total_usage,
+        total_cost=ens.total_cost,
+        persona_count=ens.persona_count,
+        question_count=ens.question_count,
+        panelist_per_model=panelist_per_model,
+    )
+
     return {
         "per_model_results": per_model_results,
         "cost_breakdown": {
@@ -211,6 +232,7 @@ def build_ensemble_output(
         },
         "models": list(ens.models),
         "total_usage": ens.total_usage.to_dict(),
+        "metadata": ens_metadata,
     }
 
 

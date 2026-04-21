@@ -16,7 +16,15 @@ from typing import Any
 import yaml
 
 from synth_panel.cli.output import OutputFormat, emit
-from synth_panel.cost import ZERO_USAGE, TokenUsage, estimate_cost, format_summary, lookup_pricing
+from synth_panel.cost import (
+    ZERO_USAGE,
+    CostEstimate,
+    TokenUsage,
+    aggregate_per_model,
+    estimate_cost,
+    format_summary,
+    lookup_pricing,
+)
 from synth_panel.credentials import has_credential
 from synth_panel.instrument import Instrument, InstrumentError, parse_instrument
 from synth_panel.llm.client import LLMClient
@@ -774,6 +782,21 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         )
         timer.stop()
         output = build_ensemble_output(ens_result)
+        # sp-atvc: attach a metadata bundle whose cost.per_model covers
+        # every ensemble model, not just the first in the spec.
+        ens_per_model_meta = {mr.model: (mr.usage, mr.cost) for mr in ens_result.model_results}
+        output["metadata"] = build_metadata(
+            panelist_model=ensemble_models[0],
+            panelist_usage=ens_result.total_usage,
+            panelist_cost=ens_result.total_cost,
+            total_usage=ens_result.total_usage,
+            total_cost=ens_result.total_cost,
+            persona_count=ens_result.persona_count,
+            question_count=ens_result.question_count,
+            timer=timer,
+            template_vars=template_vars or None,
+            panelist_per_model=ens_per_model_meta,
+        )
         emit(fmt, message="Ensemble complete", extra=output)
         return 0
 
@@ -838,6 +861,13 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         results.append(result_dict)
         panelist_usage = panelist_usage + pr.usage
 
+    # sp-atvc: bucket panelist usage/cost by actual model so multi-model
+    # runs (persona_models routing, --blend, ensemble) price each token
+    # at the rate its provider charged, instead of applying the primary
+    # model's rate to every bucket.
+    panelist_per_model_usage, panelist_per_model_cost = aggregate_per_model(panelist_results, model)
+    multi_model_run = len(panelist_per_model_usage) > 1
+
     # ── Failure analysis (sp-2hg) ──────────────────────────────────────
     # Count panelist-question pairs and determine how many errored. A pair
     # is considered errored if its response dict is flagged ``error: True``
@@ -865,9 +895,16 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     if missing_input_invalid:
         run_invalid = True
 
-    # Compute panelist costs (needed before synthesis for cost estimate)
+    # Compute panelist costs (needed before synthesis for cost estimate).
+    # For multi-model runs, sum the per-model costs so the total reflects
+    # each provider's real rate; single-model runs keep the legacy path.
     pricing, is_estimated = lookup_pricing(model)
-    panelist_cost_est = estimate_cost(panelist_usage, pricing)
+    if multi_model_run:
+        panelist_cost_est = CostEstimate()
+        for _m, _c in panelist_per_model_cost.items():
+            panelist_cost_est = panelist_cost_est + _c
+    else:
+        panelist_cost_est = estimate_cost(panelist_usage, pricing)
 
     # Synthesis step (unless --no-synthesis)
     skip_synthesis = getattr(args, "no_synthesis", False)
@@ -906,6 +943,12 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     timer.stop()
     synthesis_dict = synthesis_result.to_dict() if synthesis_result else None
 
+    panelist_per_model_meta: dict[str, tuple[TokenUsage, CostEstimate]] | None = None
+    if multi_model_run:
+        panelist_per_model_meta = {
+            _m: (panelist_per_model_usage[_m], panelist_per_model_cost[_m]) for _m in panelist_per_model_usage
+        }
+
     metadata = build_metadata(
         panelist_model=model,
         synthesis_model=getattr(args, "synthesis_model", None),
@@ -919,6 +962,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         question_count=len(questions),
         timer=timer,
         template_vars=template_vars or None,
+        panelist_per_model=panelist_per_model_meta,
     )
 
     # sp-prof: inject profile info into metadata for synthbench

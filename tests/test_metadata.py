@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import time
 
+import pytest
+
 from synth_panel.cost import CostEstimate, TokenUsage, estimate_cost, lookup_pricing
 from synth_panel.metadata import (
     PanelTimer,
@@ -364,3 +366,133 @@ class TestBuildMetadata:
         serialized = json.dumps(meta)
         parsed = json.loads(serialized)
         assert parsed["models"]["panelist"] == meta["models"]["panelist"]
+
+
+class TestBuildMetadataPerModelOverride:
+    """sp-atvc: multi-model ensemble runs must surface every model in
+    ``metadata.cost.per_model`` with its real tokens and cost — not collapse
+    into a single bucket for the default model.
+    """
+
+    def _usage(self, inp: int, out: int) -> TokenUsage:
+        return TokenUsage(input_tokens=inp, output_tokens=out)
+
+    def _cost(self, usage: TokenUsage, model: str) -> CostEstimate:
+        pricing, _ = lookup_pricing(model)
+        return estimate_cost(usage, pricing)
+
+    def test_three_model_ensemble_records_all_three(self):
+        """The bug repro: 3-model ensemble must produce 3 per_model entries."""
+        haiku_u = self._usage(10_000, 5_000)
+        gpt_u = self._usage(12_000, 4_000)
+        gem_u = self._usage(15_000, 6_000)
+        haiku_c = self._cost(haiku_u, "haiku")
+        gpt_c = self._cost(gpt_u, "gpt-4o-mini")
+        gem_c = self._cost(gem_u, "gemini-2.5-flash")
+        total_u = haiku_u + gpt_u + gem_u
+        total_c = haiku_c + gpt_c + gem_c
+
+        meta = build_metadata(
+            panelist_model="haiku",
+            panelist_usage=total_u,
+            panelist_cost=total_c,
+            total_usage=total_u,
+            total_cost=total_c,
+            persona_count=6,
+            question_count=4,
+            panelist_per_model={
+                "haiku": (haiku_u, haiku_c),
+                "gpt-4o-mini": (gpt_u, gpt_c),
+                "gemini-2.5-flash": (gem_u, gem_c),
+            },
+        )
+
+        per_model = meta["cost"]["per_model"]
+        # All three providers must appear — regression guard for the
+        # audited "only openrouter/anthropic/claude-haiku-4.5 present" bug.
+        assert len(per_model) == 3
+        # Every bucket carries its own tokens, not the total.
+        for entry in per_model.values():
+            assert entry["tokens"] < total_u.total_tokens
+            assert entry["cost_usd"] > 0
+        # Sum of per_model cost ≈ reported total cost.
+        summed = sum(e["cost_usd"] for e in per_model.values())
+        assert summed == pytest.approx(meta["cost"]["total_cost_usd"])
+
+    def test_override_plus_synthesis_different_model(self):
+        """Synthesis model gets its own bucket on top of ensemble panelists."""
+        haiku_u = self._usage(100, 50)
+        gpt_u = self._usage(100, 50)
+        haiku_c = self._cost(haiku_u, "haiku")
+        gpt_c = self._cost(gpt_u, "gpt-4o-mini")
+        synth_u = self._usage(200, 100)
+        synth_c = self._cost(synth_u, "sonnet")
+
+        meta = build_metadata(
+            panelist_model="haiku",
+            synthesis_model="sonnet",
+            panelist_usage=haiku_u + gpt_u,
+            panelist_cost=haiku_c + gpt_c,
+            synthesis_usage=synth_u,
+            synthesis_cost=synth_c,
+            total_usage=haiku_u + gpt_u + synth_u,
+            total_cost=haiku_c + gpt_c + synth_c,
+            persona_count=2,
+            question_count=1,
+            panelist_per_model={
+                "haiku": (haiku_u, haiku_c),
+                "gpt-4o-mini": (gpt_u, gpt_c),
+            },
+        )
+
+        per_model = meta["cost"]["per_model"]
+        # Three distinct buckets: haiku + gpt-mini + synthesis model.
+        assert len(per_model) == 3
+
+    def test_override_merges_when_synthesis_shares_model(self):
+        """Synthesis sharing a panelist model merges into that bucket."""
+        haiku_u = self._usage(100, 50)
+        gpt_u = self._usage(100, 50)
+        haiku_c = self._cost(haiku_u, "haiku")
+        gpt_c = self._cost(gpt_u, "gpt-4o-mini")
+        synth_u = self._usage(200, 100)
+        synth_c = self._cost(synth_u, "haiku")
+
+        meta = build_metadata(
+            panelist_model="haiku",
+            synthesis_model="haiku",
+            panelist_usage=haiku_u + gpt_u,
+            panelist_cost=haiku_c + gpt_c,
+            synthesis_usage=synth_u,
+            synthesis_cost=synth_c,
+            total_usage=haiku_u + gpt_u + synth_u,
+            total_cost=haiku_c + gpt_c + synth_c,
+            persona_count=2,
+            question_count=1,
+            panelist_per_model={
+                "haiku": (haiku_u, haiku_c),
+                "gpt-4o-mini": (gpt_u, gpt_c),
+            },
+        )
+
+        per_model = meta["cost"]["per_model"]
+        assert len(per_model) == 2
+        # haiku bucket should reflect panelist + synthesis tokens.
+        haiku_key = next(k for k in per_model if "haiku" in k)
+        assert per_model[haiku_key]["tokens"] == (haiku_u + synth_u).total_tokens
+
+    def test_legacy_single_model_path_unchanged(self):
+        """Omitting panelist_per_model preserves the original shape."""
+        u = self._usage(100, 50)
+        c = self._cost(u, "haiku")
+        meta = build_metadata(
+            panelist_model="haiku",
+            panelist_usage=u,
+            panelist_cost=c,
+            total_usage=u,
+            total_cost=c,
+            persona_count=1,
+            question_count=1,
+        )
+        per_model = meta["cost"]["per_model"]
+        assert len(per_model) == 1

@@ -60,7 +60,13 @@ from synth_panel._runners import (
 from synth_panel._runners import (
     run_panel_sync as _run_panel_sync,
 )
-from synth_panel.cost import ZERO_USAGE, estimate_cost, lookup_pricing
+from synth_panel.cost import (
+    ZERO_USAGE,
+    CostEstimate,
+    aggregate_per_model,
+    estimate_cost,
+    lookup_pricing,
+)
 from synth_panel.cost import TokenUsage as CostTokenUsage
 from synth_panel.instrument import Instrument, parse_instrument
 from synth_panel.llm.client import LLMClient
@@ -390,7 +396,6 @@ async def _run_panel_async_instrument(
         flat_results = round_dict_results
 
     pricing, _ = lookup_pricing(model)
-    total_cost = estimate_cost(mr.usage, pricing)
 
     timer.stop()
 
@@ -400,12 +405,24 @@ async def _run_panel_async_instrument(
         else None
     )
 
-    # Compute per-model cost breakdown for metadata
+    # sp-atvc: aggregate panelist usage/cost per actual model across all
+    # rounds so multi-model instrument runs get accurate per-model cost
+    # instead of pricing every bucket at the default model's rate.
+    all_panelist_results: list[Any] = [pr for rr in mr.rounds for pr in rr.panelist_results]
+    per_model_usage, per_model_cost = aggregate_per_model(all_panelist_results, model)
+    multi_model_run = len(per_model_usage) > 1
+
     panelist_usage = ZERO_USAGE
     for rr in mr.rounds:
         for pr in rr.panelist_results:
             panelist_usage = panelist_usage + pr.usage
-    panelist_cost_est = estimate_cost(panelist_usage, pricing)
+
+    if multi_model_run:
+        panelist_cost_est = CostEstimate()
+        for _c in per_model_cost.values():
+            panelist_cost_est = panelist_cost_est + _c
+    else:
+        panelist_cost_est = estimate_cost(panelist_usage, pricing)
 
     synthesis_usage_for_meta: CostTokenUsage | None = None
     synthesis_cost_for_meta = None
@@ -415,6 +432,13 @@ async def _run_panel_async_instrument(
         synth_pricing, _ = lookup_pricing(synth_model)
         synthesis_cost_for_meta = estimate_cost(synthesis_usage_for_meta, synth_pricing)
 
+    # Derive the run's reported total_cost from the accurate components
+    # instead of the single-model rollup that mr.usage assumes.
+    total_cost = panelist_cost_est + (synthesis_cost_for_meta or CostEstimate())
+
+    panelist_per_model_meta = (
+        {_m: (per_model_usage[_m], per_model_cost[_m]) for _m in per_model_usage} if multi_model_run else None
+    )
     inst_metadata = build_metadata(
         panelist_model=model,
         synthesis_model=getattr(mr.final_synthesis, "model", None) if mr.final_synthesis else None,
@@ -427,6 +451,7 @@ async def _run_panel_async_instrument(
         persona_count=len(personas),
         question_count=total_question_count,
         timer=timer,
+        panelist_per_model=panelist_per_model_meta,
     )
 
     result_id = save_panel_result(
@@ -496,7 +521,7 @@ async def _run_panel_async(
 
     # Run the blocking panel execution in a thread
     (
-        _panelist_results,
+        panelist_results_full,
         result_dicts,
         panelist_usage,
         panelist_cost,
@@ -524,6 +549,17 @@ async def _run_panel_async(
 
     await ctx.report_progress(total, total)
 
+    # sp-atvc: re-price panelist usage per actual model when panelists
+    # were dispatched across multiple providers (persona_models routing).
+    # Without this, total_cost prices every token at the default model's
+    # rate and metadata.cost.per_model hides the cheaper/dearer providers.
+    per_model_usage, per_model_cost = aggregate_per_model(panelist_results_full, model)
+    multi_model_run = len(per_model_usage) > 1
+    if multi_model_run:
+        panelist_cost = CostEstimate()
+        for _c in per_model_cost.values():
+            panelist_cost = panelist_cost + _c
+
     # Compute total cost (panelist + synthesis)
     synthesis_usage_obj: CostTokenUsage | None = None
     synthesis_cost_obj = None
@@ -538,6 +574,9 @@ async def _run_panel_async(
         total_cost = panelist_cost
 
     timer.stop()
+    panelist_per_model_meta = (
+        {_m: (per_model_usage[_m], per_model_cost[_m]) for _m in per_model_usage} if multi_model_run else None
+    )
     metadata = build_metadata(
         panelist_model=model,
         synthesis_model=synthesis_dict.get("model") if synthesis_dict else None,
@@ -550,6 +589,7 @@ async def _run_panel_async(
         persona_count=len(personas),
         question_count=len(questions),
         timer=timer,
+        panelist_per_model=panelist_per_model_meta,
     )
 
     # Save result

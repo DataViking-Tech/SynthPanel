@@ -12,7 +12,7 @@ import platform
 import time
 from typing import Any
 
-from synth_panel.cost import CostEstimate, TokenUsage, lookup_pricing
+from synth_panel.cost import CostEstimate, TokenUsage
 from synth_panel.llm.aliases import resolve_alias
 
 
@@ -95,12 +95,22 @@ def build_metadata(
     question_count: int,
     timer: PanelTimer | None = None,
     template_vars: dict[str, str] | None = None,
+    panelist_per_model: dict[str, tuple[TokenUsage, CostEstimate]] | None = None,
 ) -> dict[str, Any]:
     """Build the ``metadata`` dict for synthbench integration.
 
     Parameters correspond to data already available at the call site in
     both CLI and MCP output paths — no new tracking infrastructure is
     required.
+
+    ``panelist_per_model`` is an optional ``{model: (usage, cost)}`` map
+    that replaces the default single-model panelist bucket. Used by
+    ensemble, ``--blend``, and weighted ``persona_models`` runs where
+    panelists were dispatched across multiple providers; each bucket
+    carries the tokens actually billed to that model so
+    ``metadata.cost.per_model`` reflects real spend instead of pricing
+    every token at the default model's rate. When ``None``, the legacy
+    single-model (+ optional synthesis) shape is produced.
     """
     resolved_panelist = resolve_alias(panelist_model)
     resolved_synthesis = resolve_alias(synthesis_model) if synthesis_model else resolved_panelist
@@ -119,23 +129,36 @@ def build_metadata(
     }
 
     # -- cost --
-    _panelist_pricing, _ = lookup_pricing(panelist_model)
-    per_model: dict[str, Any] = {
-        resolved_panelist: {
+    per_model: dict[str, Any] = {}
+    if panelist_per_model:
+        for m, (u, c) in panelist_per_model.items():
+            key = resolve_alias(m)
+            existing = per_model.get(key)
+            if existing is None:
+                per_model[key] = {
+                    "tokens": u.total_tokens,
+                    "cost_usd": round(c.total_cost, 6),
+                }
+            else:
+                # Two aliases resolve to the same canonical id — merge.
+                existing["tokens"] += u.total_tokens
+                existing["cost_usd"] = round(existing["cost_usd"] + c.total_cost, 6)
+    else:
+        per_model[resolved_panelist] = {
             "tokens": panelist_usage.total_tokens,
             "cost_usd": round(panelist_cost.total_cost, 6),
-        },
-    }
-    if synthesis_usage is not None and synthesis_cost is not None and resolved_synthesis != resolved_panelist:
-        per_model[resolved_synthesis] = {
-            "tokens": synthesis_usage.total_tokens,
-            "cost_usd": round(synthesis_cost.total_cost, 6),
         }
-    elif synthesis_usage is not None and synthesis_cost is not None:
-        # Same model — merge into existing entry
-        existing = per_model[resolved_panelist]
-        existing["tokens"] += synthesis_usage.total_tokens
-        existing["cost_usd"] = round(existing["cost_usd"] + synthesis_cost.total_cost, 6)
+
+    if synthesis_usage is not None and synthesis_cost is not None:
+        existing = per_model.get(resolved_synthesis)
+        if existing is None:
+            per_model[resolved_synthesis] = {
+                "tokens": synthesis_usage.total_tokens,
+                "cost_usd": round(synthesis_cost.total_cost, 6),
+            }
+        else:
+            existing["tokens"] += synthesis_usage.total_tokens
+            existing["cost_usd"] = round(existing["cost_usd"] + synthesis_cost.total_cost, 6)
 
     cost: dict[str, Any] = {
         "total_tokens": total_usage.total_tokens,
