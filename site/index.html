@@ -134,12 +134,15 @@
           Run synthetic focus groups with any LLM.
         </p>
         <p class="mx-auto mt-3 max-w-2xl text-base text-slate-400">
-          <span class="text-emerald-300">Zero-config inside Claude Desktop, Claude Code, Cursor, or any MCP host
-          that advertises sampling</span> — drop the config in, run a panel with
-          <strong class="text-slate-200">no API key set</strong>. Or bring your own
-          key (Claude, GPT, Gemini, Grok, local) for reproducibility, ensembles,
-          and larger panels. Personas and instruments are plain YAML — run from
-          your terminal, a pipeline, or an AI agent's MCP tool call.
+          <span class="text-emerald-300">Zero-config inside Claude Desktop,
+          Claude Code, Cursor, and other MCP hosts</span> — the host's own model
+          powers every panelist, so you drop the config in and run a panel with
+          <strong class="text-slate-200">no API key set</strong>. Or bring your
+          own key (Claude, GPT, Gemini, Grok, local) for reproducibility,
+          ensembles, and larger panels. Personas and instruments are plain YAML
+          — run from your terminal, a pipeline, or an AI agent's tool call over
+          MCP <span class="text-slate-500">(Model Context Protocol, the open
+          standard that lets AI tools call external functions)</span>.
         </p>
 
         <!-- Install command -->
@@ -191,8 +194,111 @@
         </div>
       </section>
 
+      <!-- Who is this for? -->
+      <section class="mt-16" id="who">
+        <h2 class="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400">
+          Who is this for?
+        </h2>
+        <p class="mb-6 text-base text-slate-300">
+          Three jobs synthpanel does well — pick the one closest to yours.
+        </p>
+        <div class="grid gap-4 sm:grid-cols-3">
+          <div class="rounded-lg border border-slate-800 bg-slate-900/40 p-5">
+            <p class="text-xs font-semibold uppercase tracking-wider text-emerald-300">
+              Startup PM
+            </p>
+            <h3 class="mt-2 font-semibold text-white">
+              No research budget, still need signal
+            </h3>
+            <p class="mt-2 text-sm text-slate-400">
+              Pressure-test a landing headline, pricing tier, or feature
+              name in 5 minutes with
+              <code class="text-slate-200">run_quick_poll</code> — no
+              recruiting, no calendar tag, no screener. Paste the result
+              into your spec doc and keep moving.
+            </p>
+          </div>
+          <div class="rounded-lg border border-slate-800 bg-slate-900/40 p-5">
+            <p class="text-xs font-semibold uppercase tracking-wider text-emerald-300">
+              UX researcher
+            </p>
+            <h3 class="mt-2 font-semibold text-white">
+              Faster turnaround, sharper studies
+            </h3>
+            <p class="mt-2 text-sm text-slate-400">
+              Run a synthetic pre-filter before booking real participants —
+              shortlist the probes that land, kill the questions that
+              don't, and walk into every recruited session with a tighter
+              discussion guide.
+            </p>
+          </div>
+          <div class="rounded-lg border border-slate-800 bg-slate-900/40 p-5">
+            <p class="text-xs font-semibold uppercase tracking-wider text-emerald-300">
+              AI engineer
+            </p>
+            <h3 class="mt-2 font-semibold text-white">
+              Panels as a tool inside your agent
+            </h3>
+            <p class="mt-2 text-sm text-slate-400">
+              Embed synthpanel in an agent pipeline via MCP tool calls, or
+              drive it from Python to validate prompts, evals, and routing
+              decisions against simulated audiences at every build.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- See it in action -->
+      <section class="mt-20" id="example">
+        <h2 class="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400">
+          See it in action
+        </h2>
+        <p class="mb-4 text-base text-slate-300">
+          A <code class="text-slate-200">run_quick_poll</code> against three
+          personas, with the auto-synthesis at the bottom. This is the raw
+          shape of what you get back.
+        </p>
+        <div
+          class="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/70 p-5 font-mono text-sm leading-relaxed shadow-xl [-webkit-overflow-scrolling:touch]"
+        >
+<pre class="whitespace-pre-wrap text-slate-300"><span class="text-slate-500"># Question</span>
+<span class="text-slate-100">"Would you pay $29/month for a tool that runs synthetic focus groups?"</span>
+
+<span class="text-emerald-300">── Sarah Chen · 34 · Startup PM ───────────────────────────</span>
+Honestly? Yes, for a quarter. $29 is under my no-approval-needed
+threshold, and if it saves me one botched launch that's already paid
+back. I'd want to see at least one real-world validation case first.
+<span class="text-slate-500">verdict:</span> <span class="text-emerald-300">yes</span>  <span class="text-slate-500">confidence:</span> 0.7
+
+<span class="text-emerald-300">── Marcus Patel · 41 · Senior UX Researcher ───────────────</span>
+Not as a replacement for recruited studies, but as a pre-filter — yes.
+$29 is cheap enough that I'd expense it personally. My concern is bias:
+I need to know how the personas were selected before I trust the
+synthesis.
+<span class="text-slate-500">verdict:</span> <span class="text-amber-300">conditional</span>  <span class="text-slate-500">confidence:</span> 0.6
+
+<span class="text-emerald-300">── Priya Okafor · 29 · AI Engineer ────────────────────────</span>
+I'd pay it to skip building the scaffolding myself, but I'd want an
+API, not just a CLI. If it plugs into my agent via MCP I'm in at $29,
+probably $99 if the SDK is clean.
+<span class="text-slate-500">verdict:</span> <span class="text-emerald-300">yes</span>  <span class="text-slate-500">confidence:</span> 0.8
+
+<span class="text-amber-300">── Synthesis ──────────────────────────────────────────────</span>
+3/3 lean toward yes at $29, but each attaches a condition:
+  • PM wants a validation case study before committing
+  • Researcher wants transparency on persona selection / bias
+  • Engineer wants SDK + MCP parity, signals $99 ceiling
+Consensus: price is not the blocker; trust + integration depth are.
+<span class="text-slate-500">themes:</span> price-fit, bias-transparency, sdk-parity, mcp-integration</pre>
+        </div>
+        <p class="mt-3 text-xs text-slate-500">
+          Example output, formatted for readability. Real results are
+          returned as structured JSON via CLI or MCP tool call.
+        </p>
+      </section>
+
       <!-- MCP Server -->
-      <section class="mt-16">
+      <section class="mt-20">
         <h2 class="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400">
           MCP Server
         </h2>
