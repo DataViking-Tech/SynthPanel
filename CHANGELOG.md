@@ -6,8 +6,12 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [Unreleased]
 
+## [0.9.6] - 2026-04-21
+
 ### Fixed
+- (sp-atvc) Ensemble cost reporting: `metadata.cost.per_model` now buckets panelist token usage by the model that actually ran each panelist and prices each bucket at its own provider's rate. Previously ensemble, `--blend`, and `--models` weighted runs summed tokens across providers then priced the aggregate at the default model's rate, so multi-model runs held a single bucket for the default model only and `total_cost` undercounted by ~6x in the mayor round 4 audit.
 - (sp-0h9x) Panel results: `per_model_results` and `cost_breakdown` are now populated on every non-ensemble `panel run` (CLI + MCP), not just `models=[...]` ensemble runs. Mixed-model panels via `persona_models` surface one rollup entry per distinct model; single-model panels surface a one-entry dict. sp-gl9 only wired these fields in the ensemble path, so mayor's audits and other consumers reading the flat panel shape still saw `None`.
+- (sp-loil) Cost: price `openrouter/openai/gpt-5-mini` at the published OpenAI rate ($0.25/M in, $2.00/M out, $0.025/M cached input) instead of falling through to the Sonnet default pricing. Unknown-model fallback was inflating reported cost for gpt-5-mini by ~40x (13k/4.8k tokens reported $0.56 vs actual ~$0.013).
 
 ## [0.9.5] - 2026-04-21
 

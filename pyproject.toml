@@ -1,6 +1,6 @@
 [project]
 name = "synthpanel"
-version = "0.9.5"
+version = "0.9.6"
 description = "Run synthetic focus groups using AI personas, with an MCP server for Claude Code / Cursor / Windsurf. CLI tool, Python library, any LLM."
 requires-python = ">=3.10"
 license = {text = "MIT"}
