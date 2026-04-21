@@ -7,6 +7,7 @@ import pytest
 from synth_panel.cost import (
     GEMINI_FLASH_PRICING,
     GEMINI_PRO_PRICING,
+    GPT_5_MINI_PRICING,
     HAIKU_PRICING,
     OPUS_PRICING,
     SONNET_PRICING,
@@ -85,6 +86,26 @@ class TestPricingLookup:
         _p, est = lookup_pricing(None)
         assert est is True
 
+    def test_gpt_5_mini(self):
+        """sp-loil: gpt-5-mini must not silently fall back to SONNET rates."""
+        p, est = lookup_pricing("gpt-5-mini")
+        assert p is GPT_5_MINI_PRICING
+        assert est is False
+
+    def test_gpt_5_mini_openrouter_prefix(self):
+        """Provider strings like 'openrouter/openai/gpt-5-mini' must resolve
+        via substring match to GPT_5_MINI_PRICING, not DEFAULT (Sonnet)."""
+        p, est = lookup_pricing("openrouter/openai/gpt-5-mini")
+        assert p is GPT_5_MINI_PRICING
+        assert est is False
+
+    def test_gpt_5_mini_realistic_cost(self):
+        """Regression for sp-loil: 13087/4846 tokens must cost ~$0.013, not ~$0.56."""
+        usage = TokenUsage(input_tokens=13087, output_tokens=4846)
+        pricing, _ = lookup_pricing("openrouter/openai/gpt-5-mini")
+        cost = estimate_cost(usage, pricing)
+        assert cost.total_cost == pytest.approx(0.01296, abs=1e-4)
+
 
 # --- Provider-string pricing lookup --------------------------------------
 
@@ -110,6 +131,9 @@ class TestProviderLookup:
             ("openrouter/google/gemini-2.5-flash", GEMINI_FLASH_PRICING),
             ("raw-anthropic/claude-opus-4-6", OPUS_PRICING),
             ("raw-gemini/gemini-2.5-pro", GEMINI_PRO_PRICING),
+            # sp-loil: gpt-5-mini via OpenRouter must price at its own rate.
+            ("openrouter/openai/gpt-5-mini", GPT_5_MINI_PRICING),
+            ("raw-openai/gpt-5-mini", GPT_5_MINI_PRICING),
         ],
     )
     def test_positive_lookup(self, provider: str, expected: object) -> None:
