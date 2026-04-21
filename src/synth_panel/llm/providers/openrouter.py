@@ -74,6 +74,11 @@ class OpenRouterProvider(LLMProvider):
                 top_p=request.top_p,
             )
         body = build_openai_body(request)
+        # Ask OpenRouter to always return the detailed usage block (including
+        # token counts and native cost). Without this flag, some upstream
+        # providers omit ``usage`` entirely, causing synthpanel to compute
+        # $0 for the whole panel. See sp-2xy.
+        body["usage"] = {"include": True}
         try:
             resp = httpx.post(url, headers=self._headers(), json=body, timeout=120.0)
         except httpx.HTTPError as exc:
@@ -120,6 +125,9 @@ class OpenRouterProvider(LLMProvider):
                 top_p=request.top_p,
             )
         body = build_openai_body(request, stream=True)
+        # Mirror send(): ensure OpenRouter emits usage details in the final
+        # stream chunk so synthpanel can track cost accurately.
+        body["usage"] = {"include": True}
         try:
             with httpx.stream(
                 "POST",

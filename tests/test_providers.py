@@ -990,6 +990,85 @@ class TestOpenRouterProvider:
         headers = provider._headers()
         assert headers["Authorization"] == "Bearer or-test"
 
+    def test_send_requests_detailed_usage(self):
+        """sp-2xy: OpenRouter send() must set ``usage.include=true`` so cost data is reliable.
+
+        Without this flag, some upstream providers omit ``usage`` entirely,
+        which zeros out panelist_cost / total_cost in the panel JSON output.
+        """
+        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+
+        mock_resp = _mock_httpx_response(_openai_json_response("hi"))
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}, clear=False):
+            provider = OpenRouterProvider()
+        with patch("httpx.post", return_value=mock_resp) as mock_post:
+            provider.send(_simple_request("openrouter/meta-llama/llama-3"))
+        body = mock_post.call_args.kwargs["json"]
+        assert body.get("usage") == {"include": True}
+
+    def test_stream_requests_detailed_usage(self):
+        """sp-2xy: streaming requests must also set ``usage.include=true``."""
+        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+
+        # Minimal mock of an httpx streaming context manager
+        mock_stream_cm = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.iter_lines.return_value = iter(["data: [DONE]", ""])
+        mock_stream_cm.__enter__.return_value = mock_resp
+        mock_stream_cm.__exit__.return_value = False
+
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}, clear=False):
+            provider = OpenRouterProvider()
+        with patch("httpx.stream", return_value=mock_stream_cm) as mock_stream:
+            list(provider.stream(_simple_request("openrouter/meta-llama/llama-3")))
+        body = mock_stream.call_args.kwargs["json"]
+        assert body.get("usage") == {"include": True}
+
+    def test_usage_captured_from_response(self):
+        """sp-2xy: usage returned by OpenRouter must propagate into the CompletionResponse."""
+        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+
+        payload = _openai_json_response("hello")
+        payload["usage"] = {"prompt_tokens": 1234, "completion_tokens": 56, "total_tokens": 1290}
+        mock_resp = _mock_httpx_response(payload)
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}, clear=False):
+            provider = OpenRouterProvider()
+        with patch("httpx.post", return_value=mock_resp):
+            result = provider.send(_simple_request("openrouter/anthropic/claude-haiku-4-5"))
+        assert result.usage.input_tokens == 1234
+        assert result.usage.output_tokens == 56
+
+    def test_null_usage_does_not_crash(self):
+        """sp-2xy: some providers return ``"usage": null`` — parser must tolerate it."""
+        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+
+        payload = _openai_json_response("hello")
+        payload["usage"] = None  # Defensive: provider returned null instead of a dict
+        mock_resp = _mock_httpx_response(payload)
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}, clear=False):
+            provider = OpenRouterProvider()
+        with patch("httpx.post", return_value=mock_resp):
+            result = provider.send(_simple_request("openrouter/anthropic/claude-haiku-4-5"))
+        # Zero usage is the correct fallback — no AttributeError, no silent crash.
+        assert result.usage.input_tokens == 0
+        assert result.usage.output_tokens == 0
+        assert result.text == "hello"
+
+    def test_missing_usage_block_does_not_crash(self):
+        """sp-2xy: some providers omit the ``usage`` block entirely."""
+        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+
+        payload = _openai_json_response("hello")
+        payload.pop("usage", None)
+        mock_resp = _mock_httpx_response(payload)
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}, clear=False):
+            provider = OpenRouterProvider()
+        with patch("httpx.post", return_value=mock_resp):
+            result = provider.send(_simple_request("openrouter/anthropic/claude-haiku-4-5"))
+        assert result.usage.input_tokens == 0
+        assert result.usage.output_tokens == 0
+
 
 # ---------------------------------------------------------------------------
 # Tests: OpenAI-compatible provider — constructor overrides (for local models)
