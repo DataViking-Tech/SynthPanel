@@ -158,6 +158,60 @@ def ensemble_run(
     )
 
 
+def build_ensemble_output(
+    ens: EnsembleResult,
+    *,
+    panelist_formatter: Callable[[PanelistResult, str], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Shape an :class:`EnsembleResult` into the public JSON output.
+
+    Produces the shape documented on the ``run_panel`` MCP tool and the CLI
+    ``panel run`` ensemble path:
+
+    ``per_model_results`` is keyed by model and each value is a dict with
+    ``results`` (list of formatted panelist dicts), ``cost`` (formatted
+    USD string), and ``usage`` (token bucket dict). ``cost_breakdown``
+    exposes both the per-model USD breakdown (``by_model``) and the total
+    (``total``).
+
+    ``panelist_formatter`` customises how each :class:`PanelistResult` is
+    rendered; when omitted, a minimal ``{persona, responses, model}`` dict
+    is produced so callers without the full runner context still get a
+    useful payload.
+    """
+
+    def _default_formatter(pr: PanelistResult, model: str) -> dict[str, Any]:
+        out: dict[str, Any] = {
+            "persona": pr.persona_name,
+            "responses": pr.responses,
+        }
+        if pr.model or model:
+            out["model"] = pr.model or model
+        if pr.error:
+            out["error"] = pr.error
+        return out
+
+    fmt = panelist_formatter or _default_formatter
+
+    per_model_results: dict[str, dict[str, Any]] = {}
+    for mr in ens.model_results:
+        per_model_results[mr.model] = {
+            "results": [fmt(pr, mr.model) for pr in mr.panelist_results],
+            "cost": mr.cost.format_usd(),
+            "usage": mr.usage.to_dict(),
+        }
+
+    return {
+        "per_model_results": per_model_results,
+        "cost_breakdown": {
+            "by_model": dict(ens.per_model_cost),
+            "total": ens.total_cost.format_usd(),
+        },
+        "models": list(ens.models),
+        "total_usage": ens.total_usage.to_dict(),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Distribution blending
 # ---------------------------------------------------------------------------

@@ -308,7 +308,7 @@ def _run_ensemble_sync(
     top_p: float | None = None,
 ) -> dict[str, Any]:
     """Run the same panel with each model and return comparative results."""
-    from synth_panel.ensemble import ensemble_run
+    from synth_panel.ensemble import build_ensemble_output, ensemble_run
 
     client = LLMClient()
     ens = ensemble_run(
@@ -323,14 +323,7 @@ def _run_ensemble_sync(
         temperature=temperature,
         top_p=top_p,
     )
-    return {
-        "per_model_results": {
-            mr.model: [_format_panelist_result(pr, mr.model) for pr in mr.panelist_results] for mr in ens.model_results
-        },
-        "cost_breakdown": ens.per_model_cost,
-        "models": ens.models,
-        "total_usage": ens.total_usage.to_dict(),
-    }
+    return build_ensemble_output(ens, panelist_formatter=_format_panelist_result)
 
 
 async def _run_panel_async_instrument(
@@ -786,9 +779,17 @@ async def run_panel(
             free-text responses. Pass a built-in name ("sentiment",
             "themes", "rating") or an inline JSON Schema dict.
         models: List of model names for multi-model ensemble. When
-            provided, the panel is run once per model and results are
-            compared. Returns per_model_results and cost_breakdown.
-            Mutually exclusive with ``model``.
+            provided (length ≥ 2), the panel is run once per model and
+            results are compared. Mutually exclusive with ``model``. The
+            ensemble response replaces the single-model shape with:
+
+            * ``per_model_results`` — ``{model: {results, cost, usage}}``
+              where ``results`` is the formatted panelist list for that
+              model, ``cost`` is a formatted USD string, and ``usage``
+              is the token bucket dict for the model's run.
+            * ``cost_breakdown`` — ``{by_model: {model: "$X"}, total: "$Z"}``.
+            * ``models`` — the input model list.
+            * ``total_usage`` — summed token buckets across all models.
         synthesis_temperature: Sampling temperature for the synthesis step.
             Independent of the panelist temperature.
         variants: Number of persona variants to generate per persona for

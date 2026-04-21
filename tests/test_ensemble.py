@@ -480,6 +480,126 @@ class TestEnsembleRun:
 
 
 # ---------------------------------------------------------------------------
+# Tests: build_ensemble_output (public JSON shape)
+# ---------------------------------------------------------------------------
+
+
+class TestBuildEnsembleOutput:
+    """build_ensemble_output must emit the documented run_panel shape."""
+
+    def _fixture(self):
+        from synth_panel.cost import CostEstimate, TokenUsage
+        from synth_panel.ensemble import EnsembleResult, ModelRunResult
+
+        haiku_usage = TokenUsage(input_tokens=100, output_tokens=50)
+        sonnet_usage = TokenUsage(input_tokens=200, output_tokens=80)
+        haiku_cost = CostEstimate(input_cost=0.01, output_cost=0.02)
+        sonnet_cost = CostEstimate(input_cost=0.05, output_cost=0.04)
+
+        haiku_mr = ModelRunResult(
+            model="haiku",
+            panelist_results=[
+                PanelistResult(
+                    persona_name="Alice",
+                    responses=[{"question": "Q1", "response": "a1", "error": False}],
+                    usage=haiku_usage,
+                    model="haiku",
+                )
+            ],
+            usage=haiku_usage,
+            cost=haiku_cost,
+            sessions={},
+        )
+        sonnet_mr = ModelRunResult(
+            model="sonnet",
+            panelist_results=[
+                PanelistResult(
+                    persona_name="Alice",
+                    responses=[{"question": "Q1", "response": "s1", "error": False}],
+                    usage=sonnet_usage,
+                    model="sonnet",
+                )
+            ],
+            usage=sonnet_usage,
+            cost=sonnet_cost,
+            sessions={},
+        )
+        return EnsembleResult(
+            model_results=[haiku_mr, sonnet_mr],
+            models=["haiku", "sonnet"],
+            total_usage=haiku_usage + sonnet_usage,
+            total_cost=haiku_cost + sonnet_cost,
+            per_model_cost={
+                "haiku": haiku_cost.format_usd(),
+                "sonnet": sonnet_cost.format_usd(),
+            },
+            per_model_usage={
+                "haiku": haiku_usage.to_dict(),
+                "sonnet": sonnet_usage.to_dict(),
+            },
+            persona_count=1,
+            question_count=1,
+        )
+
+    def test_top_level_keys(self):
+        from synth_panel.ensemble import build_ensemble_output
+
+        out = build_ensemble_output(self._fixture())
+        assert set(out.keys()) == {"per_model_results", "cost_breakdown", "models", "total_usage"}
+
+    def test_per_model_results_has_results_cost_usage(self):
+        from synth_panel.ensemble import build_ensemble_output
+
+        out = build_ensemble_output(self._fixture())
+        pmr = out["per_model_results"]
+        assert set(pmr.keys()) == {"haiku", "sonnet"}
+        for model in ("haiku", "sonnet"):
+            entry = pmr[model]
+            assert set(entry.keys()) == {"results", "cost", "usage"}
+            assert isinstance(entry["results"], list)
+            assert entry["cost"].startswith("$")
+            assert isinstance(entry["usage"], dict)
+            assert "input_tokens" in entry["usage"]
+
+    def test_cost_breakdown_nested(self):
+        from synth_panel.ensemble import build_ensemble_output
+
+        out = build_ensemble_output(self._fixture())
+        cb = out["cost_breakdown"]
+        assert set(cb.keys()) == {"by_model", "total"}
+        assert set(cb["by_model"].keys()) == {"haiku", "sonnet"}
+        assert cb["total"].startswith("$")
+
+    def test_default_formatter_renders_panelists(self):
+        from synth_panel.ensemble import build_ensemble_output
+
+        out = build_ensemble_output(self._fixture())
+        results = out["per_model_results"]["haiku"]["results"]
+        assert len(results) == 1
+        assert results[0]["persona"] == "Alice"
+        assert results[0]["model"] == "haiku"
+        assert results[0]["responses"][0]["response"] == "a1"
+
+    def test_custom_formatter_used(self):
+        from synth_panel.ensemble import build_ensemble_output
+
+        def fmt(pr, model):
+            return {"n": pr.persona_name, "m": model}
+
+        out = build_ensemble_output(self._fixture(), panelist_formatter=fmt)
+        results = out["per_model_results"]["sonnet"]["results"]
+        assert results == [{"n": "Alice", "m": "sonnet"}]
+
+    def test_total_usage_summed(self):
+        from synth_panel.ensemble import build_ensemble_output
+
+        out = build_ensemble_output(self._fixture())
+        # haiku: 100+50, sonnet: 200+80
+        assert out["total_usage"]["input_tokens"] == 300
+        assert out["total_usage"]["output_tokens"] == 130
+
+
+# ---------------------------------------------------------------------------
 # Tests: CLI parser --models ensemble format
 # ---------------------------------------------------------------------------
 
