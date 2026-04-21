@@ -103,7 +103,21 @@ def parse_models_spec(spec: str) -> list[tuple[str, float]]:
     * **Ensemble** (no weights): ``"haiku,sonnet"`` — each model gets weight 1.0
 
     When no entry contains ``:``, the spec is treated as an ensemble list.
-    Weights must be positive and are normalized to sum to 1.0 by the caller.
+    Weights must be positive. Order is preserved as given (the assignment
+    algorithm walks the list left-to-right; see
+    :func:`assign_models_to_personas` for the full algorithm).
+
+    Validation:
+
+    * ``weight <= 0`` → ``ValueError``
+    * non-numeric weight → ``ValueError``
+    * empty spec or empty model name → ``ValueError``
+    * mixing weighted and unweighted entries (e.g. ``"haiku,sonnet:0.5"``)
+      → ``ValueError``
+
+    Sum-of-weights is **not** enforced here — specs like ``"a:2,b:3"`` parse
+    cleanly and are normalized by :func:`assign_models_to_personas`. Callers
+    that want to warn on non-unit sums should inspect the parsed pairs.
     """
     entries = [e.strip() for e in spec.split(",") if e.strip()]
     if not entries:
@@ -150,13 +164,40 @@ def assign_models_to_personas(
 
     Resolution order: persona YAML 'model' field > weighted assignment > default.
 
-    Guarantees every model in ``model_spec`` receives at least one persona
-    when ``len(needs_assignment) >= len(model_spec)`` (sp-27rz: the prior
-    round-based allocation could silently hand the last model 0 personas,
-    dropping it from per_model_results without any warning). When there
-    are fewer personas than models, affected models still end up at zero,
-    but a warning describing the miss is appended to the returned list so
-    callers can surface it to the user.
+    Algorithm (fully deterministic — same inputs produce the same output):
+
+    1. **YAML override pass.** Walk ``personas`` in list order. Any persona
+       with a ``model`` field keeps that model and is removed from the
+       assignment pool. This override takes precedence over the ``--models``
+       spec unconditionally.
+    2. **Normalize weights.** Compute ``total = sum(weights)`` and divide each
+       weight by it. Absolute weights don't matter, only ratios — so
+       ``"a:0.5,b:0.5"``, ``"a:1,b:1"`` and ``"a:50,b:50"`` all behave the
+       same.
+    3. **Largest-remainder allocation.** Floor each ``weight * N`` quota,
+       then hand out leftover seats in descending order of fractional
+       remainder. Ties are broken deterministically by position in the spec.
+    4. **Min-1 guarantee** (sp-27rz). When ``N >= len(model_spec)``, every
+       model in ``model_spec`` is guaranteed at least one persona: any
+       zero-count model pulls a seat from the currently largest bucket.
+       The prior round-based allocation could silently hand the last model
+       0 personas, dropping it from per_model_results without any warning.
+       When there are fewer personas than models, affected models still
+       end up at zero and a warning is appended to the returned list so
+       callers can surface it to the user.
+
+    Edge cases:
+
+    * **Empty pool** (every persona has a YAML ``model`` override):
+      ``model_spec`` is effectively ignored and the YAML map is returned.
+    * **Weights that don't sum to 1.0** (e.g. ``"a:2,b:3"``): normalized
+      internally, so the split still works. The CLI warns about this so
+      the user knows the ratio they intended is what got applied.
+    * **Zero weight**: rejected upstream by :func:`parse_models_spec`.
+    * **``default_model``**: currently unused by the algorithm — YAML
+      override and the ``--models`` spec between them cover every persona.
+      Kept in the signature so callers can pass the CLI's fallback for
+      future use.
 
     Returns a ``(assignments, warnings)`` tuple.
     """
@@ -221,6 +262,50 @@ def assign_models_to_personas(
             idx += 1
 
     return result, warnings
+
+
+# sp-zdul: display helpers for --models weighted assignment
+_WEIGHT_SUM_TOLERANCE = 0.02
+
+
+def check_weight_sum(
+    model_spec: list[tuple[str, float]],
+    tolerance: float = _WEIGHT_SUM_TOLERANCE,
+) -> tuple[float, bool]:
+    """Return ``(sum_of_weights, is_close_to_one)``.
+
+    Weights are normalized internally by :func:`assign_models_to_personas`,
+    but a user who wrote ``"a:0.3,b:0.3,c:0.3"`` probably meant ``0.33`` each
+    and is relying on equal split. Warning loudly when the sum deviates
+    from 1.0 by more than ``tolerance`` catches these typos.
+    """
+    total = sum(w for _, w in model_spec)
+    return total, abs(total - 1.0) <= tolerance
+
+
+def format_assignment_breakdown(persona_models: dict[str, str]) -> str:
+    """Format a per-persona → model breakdown for pre-run display.
+
+    Example output::
+
+        Model assignment:
+          Maya Chen       → haiku
+          Derek Washington → gpt-mini
+          ...
+        Totals: haiku=2, gpt-mini=2, gemini-flash=2
+    """
+    if not persona_models:
+        return ""
+    name_width = max(len(n) for n in persona_models)
+    lines = ["Model assignment:"]
+    for name, mdl in persona_models.items():
+        lines.append(f"  {name.ljust(name_width)} → {mdl}")
+    counts: dict[str, int] = {}
+    for mdl in persona_models.values():
+        counts[mdl] = counts.get(mdl, 0) + 1
+    totals = ", ".join(f"{m}={c}" for m, c in sorted(counts.items()))
+    lines.append(f"Totals: {totals}")
+    return "\n".join(lines)
 
 
 def _load_profile(args: argparse.Namespace) -> tuple[Any, int | None]:
@@ -728,24 +813,11 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     temperature: float | None = getattr(args, "temperature", None)
     top_p: float | None = getattr(args, "top_p", None)
 
-    # ── sp-x8g: --dry-run preview ────────────────────────────────────────
-    # Short-circuit before any LLM-invoking code (variant expansion,
-    # ensemble, blend, orchestrator). Shows the user what each question
-    # will look like after --var substitution + prompt templating, plus
-    # a rough input-token estimate, without spending any tokens.
-    if getattr(args, "dry_run", False):
-        _emit_dry_run_preview(
-            personas=personas,
-            instrument=instrument,
-            system_prompt_fn=system_prompt_fn,
-            model=model,
-            fmt=fmt,
-        )
-        return 0
-
     # ── sp-blend: multi-model ensemble ───────────────────────────────────
     # Parse --models spec and build per-persona model assignments.
     # Resolution order: persona YAML 'model' > --models weighted > --model.
+    # Resolved before --dry-run so the preview shows the same breakdown
+    # the real run would.
     blend_mode = getattr(args, "blend", False)
     persona_models: dict[str, str] | None = None
     model_spec: list[tuple[str, float]] | None = None
@@ -758,6 +830,17 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         except ValueError as exc:
             print(f"Error parsing --models: {exc}", file=sys.stderr)
             return 1
+        # sp-zdul: warn if weighted sum is far from 1.0 — the user likely
+        # intended an exact-ratio split and a typo (e.g. "0.3,0.3,0.3")
+        # silently reweights their panel.
+        if not ensemble_mode:
+            weight_sum, is_close = check_weight_sum(model_spec)
+            if not is_close:
+                print(
+                    f"Warning: --models weights sum to {weight_sum:.3f}, not 1.0. "
+                    f"Weights will be normalized, preserving the ratio.",
+                    file=sys.stderr,
+                )
         if not ensemble_mode and not blend_mode:
             persona_models, assignment_warnings = assign_models_to_personas(personas, model_spec, model)
             for w in assignment_warnings:
@@ -776,6 +859,28 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     if blend_mode and not has_models:
         print("Error: --blend requires --models.", file=sys.stderr)
         return 1
+
+    # sp-zdul: surface the deterministic persona→model assignment before
+    # any LLM calls happen. An operator can ^C if the split looks wrong
+    # (e.g. unbalanced due to rounding on small panels, or YAML overrides
+    # they forgot about).
+    if persona_models:
+        print(format_assignment_breakdown(persona_models), file=sys.stderr)
+
+    # ── sp-x8g: --dry-run preview ────────────────────────────────────────
+    # Short-circuit before any LLM-invoking code (variant expansion,
+    # ensemble, blend, orchestrator). Shows the user what each question
+    # will look like after --var substitution + prompt templating, plus
+    # a rough input-token estimate, without spending any tokens.
+    if getattr(args, "dry_run", False):
+        _emit_dry_run_preview(
+            personas=personas,
+            instrument=instrument,
+            system_prompt_fn=system_prompt_fn,
+            model=model,
+            fmt=fmt,
+        )
+        return 0
 
     import uuid as _uuid
 
@@ -1234,6 +1339,11 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             warnings_list = extra.setdefault("warnings", [])
             if isinstance(warnings_list, list):
                 warnings_list.extend(assignment_warnings)
+        # sp-zdul: surface the deterministic persona→model assignment so
+        # JSON consumers (dashboards, analyze pipelines) can record which
+        # model answered which persona without re-deriving from the spec.
+        if persona_models:
+            extra["model_assignment"] = dict(persona_models)
         # Include blend distributions when --blend is active
         if blend_result:
             extra["blend"] = {

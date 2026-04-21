@@ -963,12 +963,22 @@ async def run_panel(
         top_p: Nucleus sampling threshold (0.0-1.0) for panelist responses.
         persona_models: Per-persona model overrides. Maps persona name to
             model alias (e.g. {"Sarah Chen": "sonnet", "Mike": "haiku"}).
+            This is the MCP equivalent of the CLI's ``--models``
+            weighted-assignment feature: the caller pre-computes the
+            persona→model map (deterministic, no rounding ambiguity) and
+            passes it directly. Persona names not in the map fall back to
+            ``model``.
         extract_schema: Schema for post-hoc structured extraction from
             free-text responses. Pass a built-in name ("sentiment",
             "themes", "rating") or an inline JSON Schema dict.
         models: List of model names for multi-model ensemble. When
             provided (length ≥ 2), the panel is run once per model and
-            results are compared. Mutually exclusive with ``model``.
+            results are compared — every persona answers every model.
+            Mutually exclusive with ``model``. Unlike the CLI's weighted
+            ``--models`` spec (which splits personas across models), this
+            MCP ``models`` list is ensemble-only; use ``persona_models``
+            for the CLI-style split-assignment behavior.
+
             Plain aliases only — the CLI's weighted ``"haiku:0.25"``
             syntax is rejected at this boundary; weights default to
             equal across the ensemble. The ensemble response replaces
