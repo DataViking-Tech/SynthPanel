@@ -185,6 +185,35 @@ DEEPSEEK_CHAT_PRICING = ModelPricing(
     cache_read_cost_per_million=0.07,
 )
 
+# DeepSeek V3.2 (OpenRouter: ``deepseek/deepseek-v3.2``). Successor family to
+# deepseek-chat-v3; OpenRouter drops the ``-chat-`` infix, so the older
+# ``deepseek-chat`` substring no longer matches.
+# Rates: $0.252/M input, $0.378/M output. Cache not published — input rate.
+DEEPSEEK_V3_2_PRICING = ModelPricing(
+    input_cost_per_million=0.252,
+    output_cost_per_million=0.378,
+    cache_creation_cost_per_million=0.252,
+    cache_read_cost_per_million=0.252,
+)
+
+# DeepSeek V3.2 Speciale (OpenRouter: ``deepseek/deepseek-v3.2-speciale``).
+# Higher-tier sibling of v3.2. Rates: $0.40/M input, $1.20/M output.
+DEEPSEEK_V3_2_SPECIALE_PRICING = ModelPricing(
+    input_cost_per_million=0.40,
+    output_cost_per_million=1.20,
+    cache_creation_cost_per_million=0.40,
+    cache_read_cost_per_million=0.40,
+)
+
+# DeepSeek V3.2 Experimental (OpenRouter: ``deepseek/deepseek-v3.2-exp``).
+# Rates: $0.27/M input, $0.41/M output.
+DEEPSEEK_V3_2_EXP_PRICING = ModelPricing(
+    input_cost_per_million=0.27,
+    output_cost_per_million=0.41,
+    cache_creation_cost_per_million=0.27,
+    cache_read_cost_per_million=0.27,
+)
+
 # Qwen3 Plus (OpenRouter: ``qwen/qwen3-plus``, Alibaba DashScope rate).
 # Published rates: $0.33/M input, $1.95/M output. Cache rates not published —
 # defaulted to input rate (no-savings baseline).
@@ -193,6 +222,25 @@ QWEN3_PLUS_PRICING = ModelPricing(
     output_cost_per_million=1.95,
     cache_creation_cost_per_million=0.33,
     cache_read_cost_per_million=0.33,
+)
+
+# Qwen3.6 Plus (OpenRouter: ``qwen/qwen3.6-plus``). Minor-version bump on
+# qwen3-plus; the ``.6`` infix breaks the old ``qwen3-plus`` substring so an
+# explicit key is required. Same published rates as qwen3-plus.
+QWEN3_6_PLUS_PRICING = ModelPricing(
+    input_cost_per_million=0.33,
+    output_cost_per_million=1.95,
+    cache_creation_cost_per_million=0.33,
+    cache_read_cost_per_million=0.33,
+)
+
+# Qwen3 Max (OpenRouter: ``qwen/qwen3-max``). Top-tier sibling of qwen3-plus.
+# Published rates: $0.78/M input, $3.90/M output.
+QWEN3_MAX_PRICING = ModelPricing(
+    input_cost_per_million=0.78,
+    output_cost_per_million=3.90,
+    cache_creation_cost_per_million=0.78,
+    cache_read_cost_per_million=0.78,
 )
 
 # Mistral Medium 3 (OpenRouter: ``mistralai/mistral-medium-3``).
@@ -227,7 +275,18 @@ _PRICING_TABLE: dict[str, ModelPricing] = {
     "gpt-4.1-mini": GPT_4_1_MINI_PRICING,
     "gpt-4o-mini": GPT_4O_MINI_PRICING,
     "gpt-4o": GPT_4O_PRICING,
+    # DeepSeek entries — specific variant suffixes must precede the bare
+    # ``deepseek-v3.2`` key so ``-speciale`` / ``-exp`` don't get swallowed
+    # by the shorter match.
+    "deepseek-v3.2-speciale": DEEPSEEK_V3_2_SPECIALE_PRICING,
+    "deepseek-v3.2-exp": DEEPSEEK_V3_2_EXP_PRICING,
+    "deepseek-v3.2": DEEPSEEK_V3_2_PRICING,
     "deepseek-chat": DEEPSEEK_CHAT_PRICING,
+    # Qwen entries — ``qwen3.6-plus`` before ``qwen3-plus`` (the former
+    # contains the latter only by coincidence, but keep specific-first
+    # ordering consistent).
+    "qwen3.6-plus": QWEN3_6_PLUS_PRICING,
+    "qwen3-max": QWEN3_MAX_PRICING,
     "qwen3-plus": QWEN3_PLUS_PRICING,
     "mistral-medium": MISTRAL_MEDIUM_PRICING,
     "llama-3.3-70b": LLAMA_3_3_70B_PRICING,

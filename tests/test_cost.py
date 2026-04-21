@@ -6,6 +6,9 @@ import pytest
 
 from synth_panel.cost import (
     DEEPSEEK_CHAT_PRICING,
+    DEEPSEEK_V3_2_EXP_PRICING,
+    DEEPSEEK_V3_2_PRICING,
+    DEEPSEEK_V3_2_SPECIALE_PRICING,
     GEMINI_FLASH_PRICING,
     GEMINI_PRO_PRICING,
     GPT_4_1_MINI_PRICING,
@@ -16,6 +19,8 @@ from synth_panel.cost import (
     LLAMA_3_3_70B_PRICING,
     MISTRAL_MEDIUM_PRICING,
     OPUS_PRICING,
+    QWEN3_6_PLUS_PRICING,
+    QWEN3_MAX_PRICING,
     QWEN3_PLUS_PRICING,
     SONNET_PRICING,
     ZERO_USAGE,
@@ -130,12 +135,31 @@ class TestPricingLookup:
             ("openrouter/qwen/qwen3-plus", QWEN3_PLUS_PRICING),
             ("openrouter/mistralai/mistral-medium-3", MISTRAL_MEDIUM_PRICING),
             ("openrouter/meta-llama/llama-3.3-70b-instruct", LLAMA_3_3_70B_PRICING),
+            # sp-oshf: newer OpenRouter IDs with version suffixes the old
+            # substring keys could not match.
+            ("openrouter/deepseek/deepseek-v3.2", DEEPSEEK_V3_2_PRICING),
+            ("deepseek-v3.2", DEEPSEEK_V3_2_PRICING),
+            ("openrouter/deepseek/deepseek-v3.2-speciale", DEEPSEEK_V3_2_SPECIALE_PRICING),
+            ("openrouter/deepseek/deepseek-v3.2-exp", DEEPSEEK_V3_2_EXP_PRICING),
+            ("openrouter/qwen/qwen3.6-plus", QWEN3_6_PLUS_PRICING),
+            ("qwen3.6-plus", QWEN3_6_PLUS_PRICING),
+            ("openrouter/qwen/qwen3-max", QWEN3_MAX_PRICING),
         ],
     )
     def test_openrouter_common_models(self, model, expected):
         p, est = lookup_pricing(model)
         assert p is expected
         assert est is False
+
+    def test_deepseek_v3_2_variant_precedence(self):
+        """sp-oshf: ``-speciale`` and ``-exp`` suffixes must win over the bare
+        ``deepseek-v3.2`` key — order in _PRICING_TABLE matters."""
+        p, _ = lookup_pricing("openrouter/deepseek/deepseek-v3.2-speciale")
+        assert p is DEEPSEEK_V3_2_SPECIALE_PRICING
+        assert p is not DEEPSEEK_V3_2_PRICING
+        p, _ = lookup_pricing("openrouter/deepseek/deepseek-v3.2-exp")
+        assert p is DEEPSEEK_V3_2_EXP_PRICING
+        assert p is not DEEPSEEK_V3_2_PRICING
 
     def test_gpt_4o_mini_substring_precedence_over_gpt_4o(self):
         """``gpt-4o-mini`` must win over ``gpt-4o`` — order in _PRICING_TABLE matters."""
@@ -238,6 +262,12 @@ class TestProviderLookup:
             ("openrouter/qwen/qwen3-plus", QWEN3_PLUS_PRICING),
             ("openrouter/mistralai/mistral-medium-3", MISTRAL_MEDIUM_PRICING),
             ("openrouter/meta-llama/llama-3.3-70b-instruct", LLAMA_3_3_70B_PRICING),
+            # sp-oshf: newer version-suffixed IDs via provider-string route.
+            ("openrouter/deepseek/deepseek-v3.2", DEEPSEEK_V3_2_PRICING),
+            ("openrouter/deepseek/deepseek-v3.2-speciale", DEEPSEEK_V3_2_SPECIALE_PRICING),
+            ("openrouter/deepseek/deepseek-v3.2-exp", DEEPSEEK_V3_2_EXP_PRICING),
+            ("openrouter/qwen/qwen3.6-plus", QWEN3_6_PLUS_PRICING),
+            ("openrouter/qwen/qwen3-max", QWEN3_MAX_PRICING),
         ],
     )
     def test_positive_lookup(self, provider: str, expected: object) -> None:
