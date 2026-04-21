@@ -2150,3 +2150,187 @@ class TestVariantsFlag:
         assert code == 1
         err = capsys.readouterr().err
         assert "--variants must be between 1 and 20" in err
+
+
+# --- sp-x8g: --dry-run preview -------------------------------------------
+
+
+class TestPanelRunDryRun:
+    """--dry-run previews the substituted panel without any LLM call."""
+
+    def test_parser_accepts_dry_run_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(
+            [
+                "panel",
+                "run",
+                "--personas",
+                "p.yaml",
+                "--instrument",
+                "i.yaml",
+                "--dry-run",
+            ]
+        )
+        assert args.dry_run is True
+
+    def test_parser_dry_run_default_false(self):
+        parser = build_parser()
+        args = parser.parse_args(
+            [
+                "panel",
+                "run",
+                "--personas",
+                "p.yaml",
+                "--instrument",
+                "i.yaml",
+            ]
+        )
+        assert args.dry_run is False
+
+    @patch("synth_panel.cli.commands.generate_panel_variants")
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_dry_run_makes_no_llm_calls(
+        self,
+        mock_client_cls,
+        mock_runtime_cls,
+        mock_run_panel,
+        mock_synth,
+        mock_variants,
+        capsys,
+        tmp_path,
+    ):
+        """--dry-run must not trigger the orchestrator, variants, synthesis, or runtime."""
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n  - name: Bob\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: Question 1?\n    - text: Question 2?\n")
+
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--dry-run",
+            ]
+        )
+        assert code == 0
+        mock_run_panel.assert_not_called()
+        mock_synth.assert_not_called()
+        mock_variants.assert_not_called()
+        mock_runtime_cls.assert_not_called()
+
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_dry_run_text_output_shows_substituted_questions(self, mock_client_cls, mock_run_panel, capsys, tmp_path):
+        """Question text appears after {var} substitution."""
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n  - name: Bob\n  - name: Carol\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text(
+            "instrument:\n"
+            "  questions:\n"
+            "    - text: How do you feel about {product}?\n"
+            "    - text: What would {product} need to cost?\n"
+        )
+
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--dry-run",
+                "--var",
+                "product=Acme Widget",
+            ]
+        )
+        assert code == 0
+        err = capsys.readouterr().err
+        assert "DRY RUN" in err
+        assert "Personas: 3" in err
+        assert "Questions: 2" in err
+        assert "Acme Widget" in err
+        assert "{product}" not in err
+        assert "Estimated input tokens" in err
+        mock_run_panel.assert_not_called()
+
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_dry_run_multi_round_lists_rounds(self, mock_client_cls, mock_run_panel, capsys, tmp_path):
+        """Multi-round instruments show each round's questions."""
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text(
+            "instrument:\n"
+            "  version: 2\n"
+            "  rounds:\n"
+            "    - name: discovery\n"
+            "      questions:\n"
+            "        - text: What frustrates you?\n"
+            "    - name: deep_dive\n"
+            "      depends_on: discovery\n"
+            "      questions:\n"
+            "        - text: Tell me more.\n"
+        )
+
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--dry-run",
+            ]
+        )
+        assert code == 0
+        err = capsys.readouterr().err
+        assert "Round: discovery" in err
+        assert "Round: deep_dive" in err
+        assert "What frustrates you?" in err
+        assert "Tell me more." in err
+        assert "across 2 rounds" in err
+        mock_run_panel.assert_not_called()
+
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_dry_run_json_output(self, mock_client_cls, mock_run_panel, capsys, tmp_path):
+        """JSON output returns a structured dry-run payload on stdout."""
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n  - name: Bob\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: Why {x}?\n")
+
+        code = main(
+            [
+                "--output-format",
+                "json",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--dry-run",
+                "--var",
+                "x=now",
+            ]
+        )
+        assert code == 0
+        data = json.loads(capsys.readouterr().out)
+        assert data["dry_run"] is True
+        assert data["persona_count"] == 2
+        assert data["question_count"] == 1
+        assert data["estimated_input_tokens"] >= 1
+        assert data["rounds"][0]["questions"] == ["Why now?"]
+        mock_run_panel.assert_not_called()
