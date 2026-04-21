@@ -140,13 +140,22 @@ def assign_models_to_personas(
     personas: list[dict[str, Any]],
     model_spec: list[tuple[str, float]],
     default_model: str,
-) -> dict[str, str]:
-    """Assign models to personas based on weighted spec and YAML overrides.
+) -> tuple[dict[str, str], list[str]]:
+    """Assign models to personas using Hamilton's largest-remainder method.
 
     Resolution order: persona YAML 'model' field > weighted assignment > default.
-    Returns a dict mapping persona name → resolved model.
+
+    Guarantees every model in ``model_spec`` receives at least one persona
+    when ``len(needs_assignment) >= len(model_spec)`` (sp-27rz: the prior
+    round-based allocation could silently hand the last model 0 personas,
+    dropping it from per_model_results without any warning). When there
+    are fewer personas than models, affected models still end up at zero,
+    but a warning describing the miss is appended to the returned list so
+    callers can surface it to the user.
+
+    Returns a ``(assignments, warnings)`` tuple.
     """
-    # Personas with YAML model overrides are pre-assigned
+    warnings: list[str] = []
     needs_assignment: list[str] = []
     result: dict[str, str] = {}
     for p in personas:
@@ -157,28 +166,56 @@ def assign_models_to_personas(
             needs_assignment.append(name)
 
     if not needs_assignment:
-        return result
+        return result, warnings
 
-    # Normalize weights
+    n = len(needs_assignment)
     total_weight = sum(w for _, w in model_spec)
     normalized = [(m, w / total_weight) for m, w in model_spec]
 
-    # Assign proportionally: distribute personas across models by weight
-    remaining = len(needs_assignment)
-    assigned_idx = 0
-    for i, (model, weight) in enumerate(normalized):
-        if i == len(normalized) - 1:
-            # Last model gets all remaining to avoid rounding gaps
-            count = remaining
-        else:
-            count = max(0, round(weight * len(needs_assignment)))
-            remaining -= count
-        for _ in range(count):
-            if assigned_idx < len(needs_assignment):
-                result[needs_assignment[assigned_idx]] = model
-                assigned_idx += 1
+    # Hamilton's method (largest-remainder): floor each quota, then hand out
+    # leftover seats in descending order of fractional remainder. Deterministic
+    # ties broken by position in the spec.
+    quotas = [w * n for _, w in normalized]
+    counts = [int(q) for q in quotas]
+    remainders = [q - int(q) for q in quotas]
+    seats_left = n - sum(counts)
+    order = sorted(range(len(counts)), key=lambda i: (-remainders[i], i))
+    for i in order[:seats_left]:
+        counts[i] += 1
 
-    return result
+    # Min-1 guarantee: when there are enough personas to cover every model,
+    # ensure no model is left at zero by taking one seat from the currently
+    # largest bucket. Preserves proportions as closely as possible while
+    # eliminating the silent-drop bug.
+    if n >= len(model_spec):
+        for zi, c in enumerate(counts):
+            if c != 0:
+                continue
+            donor = max(
+                range(len(counts)),
+                key=lambda i: (counts[i], -i),
+            )
+            if counts[donor] <= 1:
+                break
+            counts[donor] -= 1
+            counts[zi] += 1
+
+    # Any remaining zeros mean personas < models — surface loudly.
+    for (model, _), c in zip(normalized, counts):
+        if c == 0:
+            warnings.append(
+                f"model_allocation: '{model}' received 0 of {n} personas "
+                f"(fewer personas than weighted models); it will be absent "
+                f"from per_model_results"
+            )
+
+    idx = 0
+    for (model, _), c in zip(normalized, counts):
+        for _ in range(c):
+            result[needs_assignment[idx]] = model
+            idx += 1
+
+    return result, warnings
 
 
 def _load_profile(args: argparse.Namespace) -> tuple[Any, int | None]:
@@ -708,6 +745,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     persona_models: dict[str, str] | None = None
     model_spec: list[tuple[str, float]] | None = None
     ensemble_mode = has_models and is_ensemble_spec(has_models)
+    assignment_warnings: list[str] = []
 
     if has_models:
         try:
@@ -716,7 +754,10 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             print(f"Error parsing --models: {exc}", file=sys.stderr)
             return 1
         if not ensemble_mode and not blend_mode:
-            persona_models = assign_models_to_personas(personas, model_spec, model)
+            persona_models, assignment_warnings = assign_models_to_personas(personas, model_spec, model)
+            for w in assignment_warnings:
+                logger.warning("model allocation: %s", w)
+                print(f"Warning: {w}", file=sys.stderr)
         # Use the first model in the spec as the "primary" for cost fallback
         if not has_model:
             model = model_spec[0][0]
@@ -1128,6 +1169,10 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                     f" panelists reported missing or unavailable input"
                     f" ({missing_input_stats['refusal_rate']:.0%})"
                 )
+        if assignment_warnings:
+            warnings_list = extra.setdefault("warnings", [])
+            if isinstance(warnings_list, list):
+                warnings_list.extend(assignment_warnings)
         # Include blend distributions when --blend is active
         if blend_result:
             extra["blend"] = {
