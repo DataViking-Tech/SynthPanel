@@ -117,10 +117,76 @@ GPT_5_MINI_PRICING = ModelPricing(
     cache_read_cost_per_million=0.025,
 )
 
+# OpenAI gpt-4o-mini (OpenRouter: ``openai/gpt-4o-mini``).
+# Published rates: $0.15/M input, $0.60/M output, $0.075/M cached input.
+GPT_4O_MINI_PRICING = ModelPricing(
+    input_cost_per_million=0.15,
+    output_cost_per_million=0.60,
+    cache_creation_cost_per_million=0.15,
+    cache_read_cost_per_million=0.075,
+)
+
+# OpenAI gpt-4o (OpenRouter: ``openai/gpt-4o``).
+# Published rates: $2.50/M input, $10.00/M output, $1.25/M cached input.
+GPT_4O_PRICING = ModelPricing(
+    input_cost_per_million=2.50,
+    output_cost_per_million=10.00,
+    cache_creation_cost_per_million=2.50,
+    cache_read_cost_per_million=1.25,
+)
+
+# OpenAI gpt-4.1-mini (OpenRouter: ``openai/gpt-4.1-mini``).
+# Published rates: $0.40/M input, $1.60/M output, $0.10/M cached input.
+GPT_4_1_MINI_PRICING = ModelPricing(
+    input_cost_per_million=0.40,
+    output_cost_per_million=1.60,
+    cache_creation_cost_per_million=0.40,
+    cache_read_cost_per_million=0.10,
+)
+
+# DeepSeek Chat V3 (OpenRouter: ``deepseek/deepseek-chat-v3``, ``deepseek-chat-v3.1``).
+# OpenRouter rates: $0.27/M input, $1.10/M output, $0.07/M cache read.
+# Covers the v3 family via the ``deepseek-chat`` substring; R1 is priced separately
+# (not included here — different product tier).
+DEEPSEEK_CHAT_PRICING = ModelPricing(
+    input_cost_per_million=0.27,
+    output_cost_per_million=1.10,
+    cache_creation_cost_per_million=0.27,
+    cache_read_cost_per_million=0.07,
+)
+
+# Qwen3 Plus (OpenRouter: ``qwen/qwen3-plus``, Alibaba DashScope rate).
+# Published rates: $0.33/M input, $1.95/M output. Cache rates not published —
+# defaulted to input rate (no-savings baseline).
+QWEN3_PLUS_PRICING = ModelPricing(
+    input_cost_per_million=0.33,
+    output_cost_per_million=1.95,
+    cache_creation_cost_per_million=0.33,
+    cache_read_cost_per_million=0.33,
+)
+
+# Mistral Medium 3 (OpenRouter: ``mistralai/mistral-medium-3``).
+# Published rates: $0.40/M input, $2.00/M output. Cache rates not published.
+MISTRAL_MEDIUM_PRICING = ModelPricing(
+    input_cost_per_million=0.40,
+    output_cost_per_million=2.00,
+    cache_creation_cost_per_million=0.40,
+    cache_read_cost_per_million=0.40,
+)
+
+# Meta Llama 3.3 70B Instruct (OpenRouter: ``meta-llama/llama-3.3-70b-instruct``).
+# Typical OpenRouter rate: $0.23/M input, $0.40/M output. Cache rates not published.
+LLAMA_3_3_70B_PRICING = ModelPricing(
+    input_cost_per_million=0.23,
+    output_cost_per_million=0.40,
+    cache_creation_cost_per_million=0.23,
+    cache_read_cost_per_million=0.23,
+)
+
 DEFAULT_PRICING = SONNET_PRICING
 
 # NOTE: substring match order matters. Put the most specific keys first so
-# e.g. ``gpt-5-mini`` wins over any future shorter ``gpt-5`` key.
+# e.g. ``gpt-4o-mini`` wins over the shorter ``gpt-4o`` key.
 _PRICING_TABLE: dict[str, ModelPricing] = {
     "haiku": HAIKU_PRICING,
     "sonnet": SONNET_PRICING,
@@ -128,6 +194,13 @@ _PRICING_TABLE: dict[str, ModelPricing] = {
     "gemini-2.5-pro": GEMINI_PRO_PRICING,
     "gemini": GEMINI_FLASH_PRICING,
     "gpt-5-mini": GPT_5_MINI_PRICING,
+    "gpt-4.1-mini": GPT_4_1_MINI_PRICING,
+    "gpt-4o-mini": GPT_4O_MINI_PRICING,
+    "gpt-4o": GPT_4O_PRICING,
+    "deepseek-chat": DEEPSEEK_CHAT_PRICING,
+    "qwen3-plus": QWEN3_PLUS_PRICING,
+    "mistral-medium": MISTRAL_MEDIUM_PRICING,
+    "llama-3.3-70b": LLAMA_3_3_70B_PRICING,
 }
 
 
