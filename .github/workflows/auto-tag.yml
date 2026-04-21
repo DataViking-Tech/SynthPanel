@@ -17,6 +17,7 @@ jobs:
       contents: write
       pull-requests: read
       checks: read
+      actions: write
     outputs:
       tag: ${{ steps.bump.outputs.tag }}
       skipped: ${{ steps.check.outputs.skipped }}
@@ -158,9 +159,19 @@ jobs:
           VERSION="${NEW_TAG#v}"
           gh release create "$NEW_TAG" --generate-notes --title "v$VERSION"
 
-  publish:
-    needs: auto-tag
-    if: needs.auto-tag.outputs.skipped != 'true'
-    uses: ./.github/workflows/publish.yml
-    with:
-      tag: ${{ needs.auto-tag.outputs.tag }}
+      # Dispatch publish.yml via workflow_dispatch at the tag ref.
+      # Why not `uses: ./.github/workflows/publish.yml` (reusable workflow_call)?
+      # A called workflow inherits the caller's ref — here refs/pull/N/merge —
+      # which the `pypi` environment's deployment ref rule rejects. Dispatching
+      # with --ref <tag> runs publish.yml at the tag ref, satisfying env
+      # protection. Why not rely on `on: push: tags` in publish.yml? Tags pushed
+      # via GITHUB_TOKEN do not trigger downstream workflows. workflow_dispatch
+      # is an explicit exception to that policy, so no PAT is required.
+      - name: Dispatch PyPI publish at tag ref
+        if: steps.check.outputs.skipped != 'true'
+        env:
+          NEW_TAG: ${{ steps.bump.outputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run publish.yml --ref "$NEW_TAG" -f tag="$NEW_TAG"
+          echo "Dispatched Publish to PyPI at ref $NEW_TAG"
