@@ -156,7 +156,7 @@ def _print_cost_estimate(
     est_output_tokens = 1000  # typical synthesis output
     est_usage = TokenUsage(input_tokens=est_input_tokens, output_tokens=est_output_tokens)
     est = estimate_cost(est_usage, pricing)
-    parts = [f"Synthesis will cost ~{est.format_usd()}"]
+    parts = [f"Synthesis will cost ~{est.format_usd()} using {model}"]
     if panelist_cost is not None:
         parts.append(f"(panelist cost was {panelist_cost.format_usd()})")
     print(" ".join(parts), file=sys.stderr)

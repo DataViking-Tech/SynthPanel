@@ -156,7 +156,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--synthesis-model",
         default=None,
         metavar="MODEL",
-        help="Model to use for synthesis (default: sonnet). Overrides --model for the synthesis step only.",
+        help="Model to use for synthesis (default: matches --model). Overrides --model for the synthesis step only.",
     )
     panel_run_parser.add_argument(
         "--synthesis-prompt",
