@@ -559,6 +559,50 @@ class TestEnsembleRun:
         assert result.question_count == 2
         assert result.models == ["haiku"]
 
+    def test_cli_ensemble_output_per_persona_usage_cost(self):
+        """sp-hwe regression: CLI ensemble output must attach per-persona usage + cost.
+
+        Prior shape stripped results to ``{persona, responses}`` only, which
+        blocked ensemble workflows from answering "which model/persona burned
+        the most tokens?" without re-running. The fix routes results through
+        ``format_panelist_result`` so each row carries ``usage``, ``cost``,
+        ``error``, and ``model``.
+        """
+        from unittest.mock import patch as _patch
+
+        from synth_panel._runners import format_panelist_result
+        from synth_panel.ensemble import ensemble_run as _ensemble_run
+
+        personas = [{"name": "Alice"}, {"name": "Bob"}]
+        questions = [{"text": "Q1"}]
+        models = ["haiku", "sonnet"]
+        client = MagicMock()
+
+        with _patch("synth_panel.ensemble.run_panel_parallel") as mock_rpp:
+            mock_rpp.side_effect = lambda **kw: self._mock_run_parallel(**kw)
+            ens = _ensemble_run(personas, questions, models, client)
+
+        per_model_results = {
+            mr.model: [format_panelist_result(pr, mr.model) for pr in mr.panelist_results] for mr in ens.model_results
+        }
+
+        assert set(per_model_results) == {"haiku", "sonnet"}
+        for model_name, rows in per_model_results.items():
+            assert len(rows) == 2
+            for row in rows:
+                # Core fields every ensemble consumer depends on.
+                assert row["persona"] in {"Alice", "Bob"}
+                assert row["model"] == model_name
+                assert row["usage"] == {
+                    "input_tokens": 100,
+                    "output_tokens": 50,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                }
+                assert row["cost"].startswith("$")
+                assert row["cost"] != "$0.0000"
+                assert row["error"] is None
+
 
 # ---------------------------------------------------------------------------
 # Tests: build_ensemble_output (public JSON shape)

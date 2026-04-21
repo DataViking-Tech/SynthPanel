@@ -850,7 +850,14 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 )
             return 2
 
-        output = build_ensemble_output(ens_result)
+        # Per-persona usage/cost attribution (sp-hwe): pass the richer
+        # ``format_panelist_result`` formatter so each result row in
+        # ``per_model_results[*].results`` carries its own token counts
+        # + priced cost, letting consumers answer "which model/persona
+        # burned the most tokens?" without re-running the panel.
+        from synth_panel._runners import format_panelist_result as _fmt_panelist
+
+        output = build_ensemble_output(ens_result, panelist_formatter=_fmt_panelist)
         # sp-atvc: attach a metadata bundle whose cost.per_model covers
         # every ensemble model, not just the first in the spec.
         ens_per_model_meta = {mr.model: (mr.usage, mr.cost) for mr in ens_result.model_results}
