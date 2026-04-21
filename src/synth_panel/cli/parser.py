@@ -106,6 +106,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to a YAML file defining personas.",
     )
     panel_run_parser.add_argument(
+        "--personas-merge",
+        dest="personas_merge",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help=(
+            "Additional YAML file(s) whose personas are appended to --personas. "
+            "Repeatable. Files are merged in order; duplicate names later in the "
+            "list override earlier ones."
+        ),
+    )
+    panel_run_parser.add_argument(
         "--instrument",
         required=True,
         metavar="PATH",
