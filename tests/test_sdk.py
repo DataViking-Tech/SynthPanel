@@ -339,6 +339,62 @@ class TestGetPanelResult:
 
 
 # ---------------------------------------------------------------------------
+# sp-nn8k: PanelResult surfaces cost_is_estimated + warnings
+# ---------------------------------------------------------------------------
+
+
+class TestPanelResultCostFallback:
+    """The single-round SDK builder must flag DEFAULT_PRICING fallbacks."""
+
+    def _call(self, *, model, contributing_models=None):
+        from synth_panel.cost import CostEstimate, TokenUsage
+        from synth_panel.sdk import _build_panel_result_from_single_round
+
+        cost = CostEstimate()
+        return _build_panel_result_from_single_round(
+            result_id="rid-test",
+            model=model,
+            personas=[{"name": "A"}],
+            questions=[{"text": "q"}],
+            result_dicts=[],
+            panelist_usage=TokenUsage(),
+            panelist_cost=cost,
+            synthesis_dict=None,
+            metadata=None,
+            total_usage=TokenUsage(),
+            total_cost=cost,
+            contributing_models=contributing_models,
+        )
+
+    def test_priced_model_has_no_warning_and_flag_false(self):
+        panel = self._call(model="claude-sonnet-4-6")
+        assert panel.warnings == []
+        assert panel.cost_is_estimated is False
+
+    def test_unpriced_model_emits_warning_and_sets_flag(self):
+        panel = self._call(model="totally-unknown-model-x9")
+        assert panel.cost_is_estimated is True
+        assert len(panel.warnings) == 1
+        assert "totally-unknown-model-x9" in panel.warnings[0]
+        assert "DEFAULT_PRICING fallback" in panel.warnings[0]
+
+    def test_contributing_models_drives_detection(self):
+        """When contributing_models is passed it supersedes the single model check,
+        so mixed-model runs surface each offender."""
+        panel = self._call(
+            model="sonnet",
+            contributing_models=["sonnet", "exotic-7b", "haiku", "mystery-13b"],
+        )
+        assert panel.cost_is_estimated is True
+        joined = "\n".join(panel.warnings)
+        assert "exotic-7b" in joined
+        assert "mystery-13b" in joined
+        assert "sonnet" not in joined
+        assert "haiku" not in joined
+        assert len(panel.warnings) == 2
+
+
+# ---------------------------------------------------------------------------
 # Extension path
 # ---------------------------------------------------------------------------
 

@@ -64,6 +64,7 @@ from synth_panel.cost import (
     ZERO_USAGE,
     CostEstimate,
     aggregate_per_model,
+    build_cost_fallback_warnings,
     estimate_cost,
     lookup_pricing,
 )
@@ -476,6 +477,13 @@ async def _run_panel_async_instrument(
         panelist_formatter=lambda pr, m: _format_panelist_result(pr, m),
     )
 
+    # sp-nn8k: warn loudly when any contributing model was priced via
+    # DEFAULT_PRICING fallback instead of an explicit tier. Candidates are
+    # every model we actually priced above plus the synthesis model.
+    synth_model_name = getattr(mr.final_synthesis, "model", None) if mr.final_synthesis else None
+    cost_warnings = build_cost_fallback_warnings([*per_model_usage.keys(), synth_model_name])
+    merged_warnings = list(mr.warnings) + cost_warnings
+
     return {
         "result_id": result_id,
         "model": model,
@@ -484,7 +492,8 @@ async def _run_panel_async_instrument(
         "rounds": rounds_payload,
         "path": mr.path,
         "terminal_round": mr.terminal_round,
-        "warnings": mr.warnings,
+        "warnings": merged_warnings,
+        "cost_is_estimated": bool(cost_warnings),
         "synthesis": final_synth_dict,
         "total_cost": total_cost.format_usd(),
         "total_usage": mr.usage.to_dict(),
@@ -615,6 +624,11 @@ async def _run_panel_async(
         panelist_formatter=lambda pr, m: _format_panelist_result(pr, m),
     )
 
+    # sp-nn8k: surface DEFAULT_PRICING fallback loudly so estimated totals
+    # don't blend into billed ones silently.
+    synth_model_name = synthesis_dict.get("model") if synthesis_dict else None
+    cost_warnings = build_cost_fallback_warnings([*per_model_usage.keys(), synth_model_name])
+
     result: dict[str, Any] = {
         "result_id": result_id,
         "model": model,
@@ -632,7 +646,8 @@ async def _run_panel_async(
             }
         ],
         "path": [],
-        "warnings": [],
+        "warnings": list(cost_warnings),
+        "cost_is_estimated": bool(cost_warnings),
         "per_model_results": per_model_results,
         "cost_breakdown": cost_breakdown,
         "metadata": metadata,

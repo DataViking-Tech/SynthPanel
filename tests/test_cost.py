@@ -25,6 +25,8 @@ from synth_panel.cost import (
     TokenUsage,
     UsageTracker,
     aggregate_per_model,
+    build_cost_fallback_warnings,
+    collect_estimated_models,
     estimate_cost,
     format_summary,
     lookup_pricing,
@@ -149,6 +151,56 @@ class TestPricingLookup:
         cost = estimate_cost(usage, pricing)
         # 11144 * 0.15/M + 1655 * 0.60/M = 0.001672 + 0.000993 = 0.002665
         assert cost.total_cost == pytest.approx(0.002665, abs=1e-5)
+
+
+# --- sp-nn8k: cost fallback warnings -------------------------------------
+
+
+class TestCostFallbackWarnings:
+    """build_cost_fallback_warnings / collect_estimated_models."""
+
+    def test_no_models_returns_empty(self):
+        assert build_cost_fallback_warnings([]) == []
+        assert collect_estimated_models([]) == []
+
+    def test_skips_none_and_blank(self):
+        assert build_cost_fallback_warnings([None, "", "sonnet"]) == []
+
+    def test_priced_model_produces_no_warning(self):
+        assert build_cost_fallback_warnings(["claude-sonnet-4-6"]) == []
+
+    def test_unpriced_model_produces_one_warning(self):
+        warnings = build_cost_fallback_warnings(["mystery-model-v9"])
+        assert len(warnings) == 1
+        w = warnings[0]
+        assert "mystery-model-v9" in w
+        assert "DEFAULT_PRICING fallback" in w
+        assert "explicit pricing" in w
+
+    def test_deduplicates_same_model(self):
+        warnings = build_cost_fallback_warnings(["novel-x", "novel-x", "novel-x"])
+        assert len(warnings) == 1
+
+    def test_preserves_first_seen_order(self):
+        warnings = build_cost_fallback_warnings(["alpha-unknown", "beta-unknown"])
+        assert "'alpha-unknown'" in warnings[0]
+        assert "'beta-unknown'" in warnings[1]
+
+    def test_mixed_priced_and_estimated(self):
+        """Only the unpriced model(s) surface — priced models are silent."""
+        warnings = build_cost_fallback_warnings(["sonnet", "my-local-7b", "haiku", "exotic-13b"])
+        assert len(warnings) == 2
+        joined = "\n".join(warnings)
+        assert "my-local-7b" in joined
+        assert "exotic-13b" in joined
+        assert "sonnet" not in joined
+        assert "haiku" not in joined
+
+    def test_collect_estimated_models_matches_warnings(self):
+        """collect_estimated_models returns the same identifiers the warnings mention."""
+        models = ["sonnet", "novel-a", "haiku", "novel-b", "novel-a"]
+        estimated = collect_estimated_models(models)
+        assert estimated == ["novel-a", "novel-b"]
 
 
 # --- Provider-string pricing lookup --------------------------------------

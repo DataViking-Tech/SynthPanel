@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -217,6 +218,46 @@ def lookup_pricing(model: str | None = None) -> tuple[ModelPricing, bool]:
             if key in lower:
                 return pricing, False
     return DEFAULT_PRICING, True
+
+
+# sp-nn8k: template used when a model's cost was priced via ``DEFAULT_PRICING``
+# fallback. Surfaced into panel output ``warnings[]`` so downstream consumers
+# can tell an estimated $X.XX apart from a billed rate, and we also set a
+# top-level ``cost_is_estimated: True`` boolean for programmatic gating.
+_COST_FALLBACK_WARNING_TEMPLATE = (
+    "Cost for model {model!r} computed using DEFAULT_PRICING fallback — real "
+    "charges may differ. Consider adding an explicit pricing entry."
+)
+
+
+def collect_estimated_models(models: Iterable[str | None]) -> list[str]:
+    """Return the subset of *models* whose pricing falls back to DEFAULT_PRICING.
+
+    Preserves first-seen order and deduplicates. ``None``/empty entries are
+    skipped so callers can splat together ``panelist_model``,
+    ``synthesis_model``, and per-panelist model keys without pre-filtering.
+    """
+    seen: set[str] = set()
+    estimated: list[str] = []
+    for m in models:
+        if not m or m in seen:
+            continue
+        seen.add(m)
+        _, is_estimated = lookup_pricing(m)
+        if is_estimated:
+            estimated.append(m)
+    return estimated
+
+
+def build_cost_fallback_warnings(models: Iterable[str | None]) -> list[str]:
+    """Return one warning string per model that was priced via DEFAULT_PRICING.
+
+    Thin wrapper over :func:`collect_estimated_models` that formats each
+    offender into the canonical ``"Cost for model 'X' computed using
+    DEFAULT_PRICING fallback ..."`` sentence. Empty when every contributing
+    model has an explicit pricing tier.
+    """
+    return [_COST_FALLBACK_WARNING_TEMPLATE.format(model=m) for m in collect_estimated_models(models)]
 
 
 # Bucket prefixes observed in synthbench `config.provider` strings

@@ -43,6 +43,7 @@ from synth_panel.cost import (
     ZERO_USAGE,
     CostEstimate,
     aggregate_per_model,
+    build_cost_fallback_warnings,
     estimate_cost,
     lookup_pricing,
 )
@@ -239,7 +240,16 @@ class PanelResult(_DictLikeMixin):
             synthesis for v1/v2 and ``questions`` input).
         total_cost: Formatted USD total across panel + synthesis.
         total_usage: Aggregate token usage.
-        warnings: Parser + runtime warnings (empty in the happy path).
+        warnings: Parser + runtime warnings. Includes one
+            ``"Cost for model '<X>' computed using DEFAULT_PRICING
+            fallback..."`` entry per contributing model that had no
+            explicit pricing tier, so callers can spot estimated spend
+            without inspecting ``cost_is_estimated``.
+        cost_is_estimated: ``True`` when any contributing model (panelist
+            or synthesis) was priced via ``DEFAULT_PRICING`` fallback —
+            ``total_cost`` should be treated as an estimate, not a
+            billed amount. ``False`` when every model has an explicit
+            pricing entry.
         terminal_round: The last round whose synthesis fed final
             synthesis. ``None`` for v1 runs and when synthesis is off.
         results: Flat panelist results for the terminal round
@@ -259,6 +269,7 @@ class PanelResult(_DictLikeMixin):
     total_cost: str
     total_usage: dict[str, Any]
     warnings: list[str] = field(default_factory=list)
+    cost_is_estimated: bool = False
     terminal_round: str | None = None
     results: list[dict[str, Any]] = field(default_factory=list)
     metadata: dict[str, Any] | None = None
@@ -328,7 +339,13 @@ def _build_panel_result_from_single_round(
     metadata: dict[str, Any] | None,
     total_usage: CostTokenUsage,
     total_cost: Any,
+    contributing_models: list[str | None] | None = None,
 ) -> PanelResult:
+    # sp-nn8k: when any contributing model hits DEFAULT_PRICING fallback,
+    # emit a warning per offender and flip the top-level estimated flag.
+    # Callers can pass ``contributing_models`` to cover mixed-model runs;
+    # otherwise the single ``model`` is the only candidate.
+    cost_warnings = build_cost_fallback_warnings(contributing_models if contributing_models is not None else [model])
     return PanelResult(
         result_id=result_id,
         model=model,
@@ -345,7 +362,8 @@ def _build_panel_result_from_single_round(
         synthesis=synthesis_dict,
         total_cost=total_cost.format_usd(),
         total_usage=total_usage.to_dict(),
-        warnings=[],
+        warnings=list(cost_warnings),
+        cost_is_estimated=bool(cost_warnings),
         terminal_round=None,
         results=result_dicts,
         metadata=metadata,
@@ -386,6 +404,14 @@ def _build_panel_result_from_multi_round(
         if mr.final_synthesis is not None and hasattr(mr.final_synthesis, "to_dict")
         else None
     )
+
+    # sp-nn8k: append per-model cost-fallback warnings alongside the
+    # parser/runtime warnings carried on ``mr.warnings``. Every panelist
+    # model and the synthesis model (when present) is checked.
+    contributing = {getattr(pr, "model", None) or model for rr in mr.rounds for pr in rr.panelist_results}
+    synth_model = getattr(mr.final_synthesis, "model", None) if mr.final_synthesis else None
+    cost_warnings = build_cost_fallback_warnings([*sorted(contributing), synth_model])
+
     return PanelResult(
         result_id=result_id,
         model=model,
@@ -396,7 +422,8 @@ def _build_panel_result_from_multi_round(
         synthesis=final_synth_dict,
         total_cost=total_cost.format_usd(),
         total_usage=mr.usage.to_dict(),
-        warnings=mr.warnings,
+        warnings=list(mr.warnings) + list(cost_warnings),
+        cost_is_estimated=bool(cost_warnings),
         terminal_round=mr.terminal_round,
         results=flat_results,
         metadata=metadata,
@@ -866,6 +893,8 @@ def run_panel(
         variant_count=variant_count,
     )
 
+    synth_model_for_warning = synthesis_dict.get("model") if synthesis_dict else None
+    contributing_models = [*sorted(per_model_usage.keys()), synth_model_for_warning]
     panel = _build_panel_result_from_single_round(
         result_id=result_id,
         model=model,
@@ -878,6 +907,7 @@ def run_panel(
         metadata=metadata,
         total_usage=total_usage,
         total_cost=total_cost,
+        contributing_models=contributing_models,
     )
     if variant_data:
         panel.metadata = dict(panel.metadata or {})
@@ -1075,6 +1105,7 @@ def get_panel_result(result_id: str) -> PanelResult:
         total_cost=data.get("total_cost", ""),
         total_usage=data.get("total_usage") or {},
         warnings=data.get("warnings") or [],
+        cost_is_estimated=bool(data.get("cost_is_estimated", False)),
         terminal_round=data.get("terminal_round"),
         results=results,
         metadata=data.get("metadata"),
