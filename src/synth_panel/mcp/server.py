@@ -731,8 +731,37 @@ async def run_panel(
         questions: Flat list of question dicts (v1-equivalent). Each
             should have a ``text`` key. Ignored when ``instrument`` or
             ``instrument_pack`` is provided.
-        personas: Inline persona definitions. Each needs at minimum a
-            ``name`` key.
+        personas: Inline persona definitions. Each persona is a JSON
+            object with the following recognized fields (additional
+            fields are preserved and remain available to custom
+            prompt templates):
+
+            * ``name`` (str, **required**) — persona's display name.
+            * ``age`` (int, optional) — persona's age.
+            * ``occupation`` (str, optional) — job title or role.
+            * ``background`` (str, optional) — paragraph-sized bio
+              giving context (company, tenure, constraints, etc.).
+            * ``personality_traits`` (list[str], optional) — short
+              trait adjectives, e.g. ``["analytical", "skeptical"]``.
+
+            Example::
+
+                [
+                  {
+                    "name": "Sarah Chen",
+                    "age": 34,
+                    "occupation": "Product Manager",
+                    "background": "8 years in tech at a mid-size SaaS company; manages a team of 5.",
+                    "personality_traits": ["analytical", "pragmatic", "detail-oriented"]
+                  },
+                  {
+                    "name": "Marcus Johnson",
+                    "age": 52,
+                    "occupation": "Small Business Owner",
+                    "background": "Runs a family restaurant chain; values simplicity over features.",
+                    "personality_traits": ["practical", "skeptical of technology"]
+                  }
+                ]
         pack_id: ID of a saved persona pack. Merged with inline
             personas (inline first). At least one of ``personas`` or
             ``pack_id`` must be provided.
@@ -1009,7 +1038,30 @@ async def run_quick_poll(
         question: The question to ask all personas.
         personas: List of persona definitions. Optional — when omitted,
             a small built-in pack of diverse personas is used so the
-            tool works with zero configuration.
+            tool works with zero configuration. Each persona is a JSON
+            object with the following recognized fields (additional
+            fields are preserved and remain available to custom
+            prompt templates):
+
+            * ``name`` (str, **required**) — persona's display name.
+            * ``age`` (int, optional) — persona's age.
+            * ``occupation`` (str, optional) — job title or role.
+            * ``background`` (str, optional) — paragraph-sized bio
+              giving context (company, tenure, constraints, etc.).
+            * ``personality_traits`` (list[str], optional) — short
+              trait adjectives, e.g. ``["analytical", "skeptical"]``.
+
+            Example::
+
+                [
+                  {
+                    "name": "Alex Rivera",
+                    "age": 29,
+                    "occupation": "Software Engineer",
+                    "background": "Early-career developer at a mid-sized SaaS company.",
+                    "personality_traits": ["analytical", "curious", "pragmatic"]
+                  }
+                ]
         model: LLM model to use. Defaults to haiku. Ignored in sampling
             mode (the host agent picks its own model).
         response_schema: Optional JSON Schema for structured output. When
