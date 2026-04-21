@@ -438,6 +438,19 @@ async def _run_panel_async_instrument(
         question_count=total_question_count,
     )
 
+    # sp-0h9x: mirror the ensemble path's per-model rollup onto every
+    # non-ensemble panel result. The terminal round's panelist list is the
+    # canonical "one row per persona" view, so grouping those by model
+    # matches the flat ``results`` field that back-compat consumers read.
+    from synth_panel.ensemble import build_mixed_model_rollup
+
+    terminal_prs = mr.rounds[-1].panelist_results if mr.rounds else []
+    per_model_results, cost_breakdown = build_mixed_model_rollup(
+        terminal_prs,
+        default_model=model,
+        panelist_formatter=lambda pr, m: _format_panelist_result(pr, m),
+    )
+
     return {
         "result_id": result_id,
         "model": model,
@@ -453,6 +466,8 @@ async def _run_panel_async_instrument(
         # Back-compat: ``results`` mirrors the terminal round's flat panelist
         # list so v1/v2 callers see the same shape they did pre-0.5.0.
         "results": flat_results,
+        "per_model_results": per_model_results,
+        "cost_breakdown": cost_breakdown,
         "metadata": inst_metadata,
     }
 
@@ -549,6 +564,17 @@ async def _run_panel_async(
         variant_count=variant_count,
     )
 
+    # sp-0h9x: emit per_model_results + cost_breakdown so downstream
+    # consumers see the same rollup shape as the ensemble path, even on
+    # single-model and mixed-model (persona_models) panels.
+    from synth_panel.ensemble import build_mixed_model_rollup
+
+    per_model_results, cost_breakdown = build_mixed_model_rollup(
+        _panelist_results,
+        default_model=model,
+        panelist_formatter=lambda pr, m: _format_panelist_result(pr, m),
+    )
+
     result: dict[str, Any] = {
         "result_id": result_id,
         "model": model,
@@ -567,6 +593,8 @@ async def _run_panel_async(
         ],
         "path": [],
         "warnings": [],
+        "per_model_results": per_model_results,
+        "cost_breakdown": cost_breakdown,
         "metadata": metadata,
     }
 
@@ -721,6 +749,14 @@ async def run_panel(
     raw ``questions`` input, ``path`` has length 1 or N (linear) and
     ``warnings`` is empty in the typical case — the shape is uniform
     across versions so callers don't need to special-case.
+
+    Every non-ensemble run also includes ``per_model_results``
+    (``{model: {results, cost, usage}}``) and ``cost_breakdown``
+    (``{by_model, total}``) — the same shape the ``models=[...]``
+    ensemble path returns. Single-model panels produce a one-entry
+    dict; ``persona_models`` runs produce one entry per distinct
+    model. Consumers can read the rollup unconditionally instead of
+    iterating ``rounds[].results[]`` themselves.
 
     Args:
         questions: Flat list of question dicts (v1-equivalent). Each

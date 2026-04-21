@@ -21,7 +21,7 @@ from synth_panel.credentials import has_credential
 from synth_panel.instrument import Instrument, InstrumentError, parse_instrument
 from synth_panel.llm.client import LLMClient
 from synth_panel.metadata import PanelTimer, build_metadata
-from synth_panel.orchestrator import run_panel_parallel
+from synth_panel.orchestrator import PanelistResult, run_panel_parallel
 from synth_panel.persistence import Session
 from synth_panel.perturbation import generate_panel_variants
 from synth_panel.prompts import (
@@ -1023,6 +1023,34 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             # surfaces it — this is the critical fix for sp-2hg.
             print(banner, file=sys.stderr)
     else:
+        # sp-0h9x: always populate per_model_results + cost_breakdown, even
+        # for single-model panels. mayor's ensemble audits use persona_models
+        # (mixed-model mode) rather than the ``models=[...]`` ensemble path,
+        # so these fields were silently None in 0.9.5 despite sp-gl9 claiming
+        # to ship them. A single-entry rollup still eliminates the
+        # None-vs-dict branch for consumers.
+        from synth_panel.ensemble import build_mixed_model_rollup
+
+        def _cli_panelist_formatter(pr: PanelistResult, panel_model: str) -> dict[str, Any]:
+            pr_pricing, _ = lookup_pricing(pr.model or panel_model)
+            pr_cost = estimate_cost(pr.usage, pr_pricing)
+            out: dict[str, Any] = {
+                "persona": pr.persona_name,
+                "responses": pr.responses,
+                "usage": pr.usage.to_dict(),
+                "cost": pr_cost.format_usd(),
+                "error": pr.error,
+            }
+            if pr.model:
+                out["model"] = pr.model
+            return out
+
+        per_model_results, cost_breakdown = build_mixed_model_rollup(
+            panelist_results,
+            default_model=model,
+            panelist_formatter=_cli_panelist_formatter,
+        )
+
         extra: dict[str, Any] = _build_rounds_shape(
             instrument=instrument,
             results=results,
@@ -1035,6 +1063,8 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             persona_count=len(personas),
             question_count=len(questions),
             metadata=metadata,
+            per_model_results=per_model_results,
+            cost_breakdown=cost_breakdown,
         )
         extra["parameters"] = _build_params_metadata(args, temperature, top_p)
         # Surface failure stats + run validity in structured output so
@@ -1364,6 +1394,8 @@ def _build_rounds_shape(
     question_count: int,
     panelist_usage: TokenUsage | None = None,
     metadata: dict[str, Any] | None = None,
+    per_model_results: dict[str, Any] | None = None,
+    cost_breakdown: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the rounds-shaped panel output payload.
 
@@ -1372,6 +1404,11 @@ def _build_rounds_shape(
     runs use this same shape with one entry per executed round; that
     wiring lives in F3-A. Per-round ``synthesis`` is ``null`` for the
     single-round case — the final synthesis goes at the top level.
+
+    ``per_model_results`` and ``cost_breakdown``, when provided, surface
+    the sp-0h9x rollup shape alongside the primary ``model`` field — a
+    superset of the mixed-model artifact that mayor's ensemble audits
+    previously had to reconstruct by iterating ``rounds[].results[]``.
     """
     round_name = instrument.rounds[0].name if instrument.rounds else "default"
     result: dict[str, Any] = {
@@ -1392,6 +1429,8 @@ def _build_rounds_shape(
         "model": model,
         "persona_count": persona_count,
         "question_count": question_count,
+        "per_model_results": per_model_results,
+        "cost_breakdown": cost_breakdown,
     }
     if metadata is not None:
         result["metadata"] = metadata

@@ -600,6 +600,110 @@ class TestBuildEnsembleOutput:
 
 
 # ---------------------------------------------------------------------------
+# Tests: build_mixed_model_rollup (sp-0h9x)
+# ---------------------------------------------------------------------------
+
+
+class TestBuildMixedModelRollup:
+    """Non-ensemble panels should still emit per_model_results + cost_breakdown.
+
+    sp-0h9x: sp-gl9 only populated these fields in the ensemble path. Mixed-
+    model panels (via ``persona_models``) and even single-model panels must
+    get the same rollup shape so downstream consumers (dashboards, CI gates)
+    don't have to reconstruct it from ``rounds[].results[]``.
+    """
+
+    def _pr(self, name: str, model: str | None, inp: int = 100, out: int = 50) -> PanelistResult:
+        from synth_panel.cost import TokenUsage
+
+        return PanelistResult(
+            persona_name=name,
+            responses=[{"question": "Q1", "response": f"{name}-a", "error": False}],
+            usage=TokenUsage(input_tokens=inp, output_tokens=out),
+            model=model,
+        )
+
+    def test_single_model_one_entry(self):
+        from synth_panel.ensemble import build_mixed_model_rollup
+
+        prs = [self._pr("Alice", "haiku"), self._pr("Bob", "haiku")]
+        pmr, cb = build_mixed_model_rollup(prs, default_model="haiku")
+        assert list(pmr.keys()) == ["haiku"]
+        assert len(pmr["haiku"]["results"]) == 2
+        assert pmr["haiku"]["usage"]["input_tokens"] == 200
+        assert pmr["haiku"]["usage"]["output_tokens"] == 100
+        assert pmr["haiku"]["cost"].startswith("$")
+        assert set(cb.keys()) == {"by_model", "total"}
+        assert list(cb["by_model"].keys()) == ["haiku"]
+        assert cb["total"].startswith("$")
+
+    def test_mixed_model_groups_by_pr_model(self):
+        from synth_panel.ensemble import build_mixed_model_rollup
+
+        prs = [
+            self._pr("Alice", "haiku", inp=100, out=50),
+            self._pr("Bob", "sonnet", inp=200, out=80),
+            self._pr("Carol", "haiku", inp=50, out=20),
+        ]
+        pmr, cb = build_mixed_model_rollup(prs, default_model="haiku")
+        assert set(pmr.keys()) == {"haiku", "sonnet"}
+        # Haiku gets Alice + Carol aggregated
+        assert pmr["haiku"]["usage"]["input_tokens"] == 150
+        assert pmr["haiku"]["usage"]["output_tokens"] == 70
+        haiku_personas = [r["persona"] for r in pmr["haiku"]["results"]]
+        assert haiku_personas == ["Alice", "Carol"]
+        # Sonnet gets Bob only
+        assert pmr["sonnet"]["usage"]["input_tokens"] == 200
+        assert [r["persona"] for r in pmr["sonnet"]["results"]] == ["Bob"]
+        # Breakdown covers both models
+        assert set(cb["by_model"].keys()) == {"haiku", "sonnet"}
+
+    def test_untagged_pr_falls_back_to_default_model(self):
+        from synth_panel.ensemble import build_mixed_model_rollup
+
+        prs = [self._pr("Alice", None), self._pr("Bob", None)]
+        pmr, _cb = build_mixed_model_rollup(prs, default_model="haiku")
+        assert list(pmr.keys()) == ["haiku"]
+        assert len(pmr["haiku"]["results"]) == 2
+
+    def test_empty_results(self):
+        from synth_panel.ensemble import build_mixed_model_rollup
+
+        pmr, cb = build_mixed_model_rollup([], default_model="haiku")
+        assert pmr == {}
+        assert cb == {"by_model": {}, "total": "$0.0000"}
+
+    def test_custom_formatter(self):
+        from synth_panel.ensemble import build_mixed_model_rollup
+
+        def fmt(pr, model):
+            return {"n": pr.persona_name, "m": model}
+
+        prs = [self._pr("Alice", "haiku"), self._pr("Bob", "sonnet")]
+        pmr, _cb = build_mixed_model_rollup(prs, default_model="haiku", panelist_formatter=fmt)
+        assert pmr["haiku"]["results"] == [{"n": "Alice", "m": "haiku"}]
+        assert pmr["sonnet"]["results"] == [{"n": "Bob", "m": "sonnet"}]
+
+    def test_total_equals_sum_of_by_model(self):
+        """cost_breakdown.total must equal the sum of by_model values."""
+        from synth_panel.cost import CostEstimate, estimate_cost, lookup_pricing
+        from synth_panel.ensemble import build_mixed_model_rollup
+
+        prs = [
+            self._pr("Alice", "haiku", inp=100, out=50),
+            self._pr("Bob", "sonnet", inp=200, out=80),
+        ]
+        _pmr, cb = build_mixed_model_rollup(prs, default_model="haiku")
+
+        # Re-derive expected total from pricing to confirm it aggregates
+        expected = CostEstimate()
+        for pr in prs:
+            pricing, _ = lookup_pricing(pr.model)
+            expected = expected + estimate_cost(pr.usage, pricing)
+        assert cb["total"] == expected.format_usd()
+
+
+# ---------------------------------------------------------------------------
 # Tests: CLI parser --models ensemble format
 # ---------------------------------------------------------------------------
 
