@@ -6,8 +6,30 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [Unreleased]
 
+## [0.9.5] - 2026-04-21
+
 ### Added
+- (sp-6yi) `panel run` fails fast on unsubstituted `{placeholder}` variables in instrument or persona packs, with actionable error output listing the missing `--var` keys. Previously the run would proceed and emit garbled prompts.
+- (sp-anje) Landing-page-comprehension regression test locks in the sp-6yi fail-fast guard so future refactors can't silently re-allow unsubstituted placeholders into panel runs.
 - (sp-on4) `panel run --personas-merge PATH` (repeatable): layer extra persona files onto the base `--personas` pack without hand-editing YAML. Files merge in order; persona entries sharing a `name` with an earlier one replace it in place.
+- (sp-x8g) `panel run --dry-run` previews resolved personas, instrument rounds, model selection, and cost estimate without calling any LLM — useful for config validation in CI or pre-run sanity checks.
+- (sp-bjt4) Run-level `run_invalid` flag: when ≥50% of panelists report missing required input at the synthesizer stage, the panel result is marked invalid so downstream tooling can surface the failure instead of silently publishing a bad run.
+- (sp-8ap) Landing page: audience clarity section, concrete use cases, and example output to help first-time visitors evaluate the tool without digging into docs.
+- (sp-6rm) 1280×640 GitHub social preview card asset.
+
+### Fixed
+- (sp-ui40) Metadata: resolved `--var` keys and hashed values now fold into `config_hash`, so runs with identical instruments but different variable substitutions produce distinct hashes and don't collide in result stores.
+- (sp-mkpo) MCP: BYOK detection now routes through the credentials store rather than reading environment variables directly, so keys persisted via `synthpanel login` are visible to the MCP server.
+- (sp-gl9) Ensemble: `per_model_results` and `cost_breakdown` shapes now match the documented contract — clients relying on these fields will no longer see missing keys or type drift.
+- (sp-2xy) OpenRouter: request `usage.include` on chat completions and tolerate null `usage` payloads so we stop emitting $0 cost rows for completed turns.
+- (sp-bzb) CLI: `--synthesis-model` help text corrected, and the resolved synthesis model now surfaces in the pre-run cost estimate.
+- (sp-rn58) Site: drop `.html` from blog `og:url` and `<link rel="canonical">` to stop the 308 redirect that was breaking preview cards on some social platforms.
+- (sp-oxw) Site: sync landing page version badge and Schema.org JSON-LD `softwareVersion` to v0.9.4.
+- (sp-869) CI: use `tomli` as a fallback for Python 3.10 compatibility where `tomllib` isn't in stdlib.
+
+### Documentation
+- (sp-lb4b) README: bump Docker pin example from 0.9.1 to 0.9.4.
+- (sp-da6) MCP: document the persona object schema with concrete examples in both `run_panel` and `run_quick_poll` tool descriptions.
 
 ## [0.9.4] - 2026-04-20
 
