@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -851,6 +852,19 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     run_invalid = failure_stats["total_pairs"] > 0 and failure_stats["failure_rate"] > threshold
     strict_violation = strict and failure_stats["errored_pairs"] > 0
 
+    # sp-bjt4: detect the "polite refusal" failure mode — panelists returned
+    # clean responses but uniformly flagged the question as unanswerable
+    # because the source material never made it into the prompt. Without
+    # this check, ``run_invalid`` stays False and the failure is only
+    # narrated in the synthesis ``surprises`` field, so CI gates (which
+    # key on ``run_invalid``) miss it silently.
+    missing_input_stats = _detect_missing_input_refusals(panelist_results)
+    missing_input_invalid = (
+        missing_input_stats["considered"] > 0 and missing_input_stats["refusal_rate"] >= _MISSING_INPUT_THRESHOLD
+    )
+    if missing_input_invalid:
+        run_invalid = True
+
     # Compute panelist costs (needed before synthesis for cost estimate)
     pricing, is_estimated = lookup_pricing(model)
     panelist_cost_est = estimate_cost(panelist_usage, pricing)
@@ -913,7 +927,14 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         metadata["profile_hash"] = profile.config_hash()
 
     # Output results
-    banner = _build_invalid_banner(failure_stats, threshold, strict=strict, strict_violation=strict_violation)
+    banner = _build_invalid_banner(
+        failure_stats,
+        threshold,
+        strict=strict,
+        strict_violation=strict_violation,
+        missing_input_stats=missing_input_stats,
+        missing_input_invalid=missing_input_invalid,
+    )
 
     if fmt is OutputFormat.TEXT:
         if banner:
@@ -1019,7 +1040,20 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         # Surface failure stats + run validity in structured output so
         # downstream consumers (MCP, CI) can gate on it without parsing text.
         extra["failure_stats"] = failure_stats
+        extra["missing_input_stats"] = missing_input_stats
         extra["run_invalid"] = bool(run_invalid or strict_violation)
+        if missing_input_invalid:
+            # sp-bjt4: surface as a top-level warning so MCP / CI consumers
+            # see the condition even if they don't special-case
+            # missing_input_stats.
+            warnings_list = extra.setdefault("warnings", [])
+            if isinstance(warnings_list, list):
+                warnings_list.append(
+                    "missing_input_refusals: "
+                    f"{missing_input_stats['refusing']}/{missing_input_stats['considered']}"
+                    f" panelists reported missing or unavailable input"
+                    f" ({missing_input_stats['refusal_rate']:.0%})"
+                )
         # Include blend distributions when --blend is active
         if blend_result:
             extra["blend"] = {
@@ -1146,12 +1180,116 @@ def _analyze_failures(
     }
 
 
+# sp-bjt4: patterns that signal a panelist is refusing because the prompt
+# arrived with empty/malformed source material (e.g. a landing-page audit
+# rendered with a blank {page_html} section). These fire *after* a clean
+# panelist run, so they cannot be caught by _analyze_failures — the model
+# replied politely with "I don't see…" and no error flag was set. Kept as
+# ordered tuples of (pattern, description) to keep the list auditable.
+_MISSING_INPUT_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"\b(?:don't|do not|can't|cannot|can not|don't actually|do not actually)\s+(?:see|find|have)\s+"
+        r"(?:the|any|a|an)\s+(?:actual\s+)?"
+        r"(?:content|text|page|document|article|example|examples|material|information|"
+        r"details|data|image|screenshot|section|excerpt|passage|transcript|copy)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bno\s+(?:actual\s+)?"
+        r"(?:content|text|input|page|document|material|information|article|copy|examples?|excerpt|passage|transcript)\s+"
+        r"(?:was|has\s+been|is|to)\s+"
+        r"(?:provided|shared|given|included|attached|review|analyze|evaluate)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:haven't|have not|hasn't|has not|wasn't|was not)\s+(?:been\s+|actually\s+)?"
+        r"(?:shared|provided|given|included|attached|pasted)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bnothing\s+(?:here\s+)?to\s+"
+        r"(?:review|analyze|evaluate|assess|comment\s+on|respond\s+to|discuss|work\s+with|go\s+on)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:the\s+)?(?:content|text|page|document|material|copy|excerpt|passage)\s+"
+        r"(?:you|that|which)\s+"
+        r"(?:mentioned|referenced|described|referred\s+to|linked|pointed\s+to)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:missing|absent|empty|blank)\s+"
+        r"(?:content|input|text|page|document|material|information|body|section)",
+        re.IGNORECASE,
+    ),
+)
+
+# Threshold is a module constant rather than a CLI flag — the bead specifies
+# ≥50% as the heuristic and adding a flag would invite misuse (set to 100%
+# and the signal disappears). Tune here if real-world data demands it.
+_MISSING_INPUT_THRESHOLD: float = 0.5
+
+
+def _response_flags_missing_input(text: str) -> bool:
+    """Return True iff *text* matches any missing-input refusal pattern."""
+    if not text:
+        return False
+    return any(p.search(text) for p in _MISSING_INPUT_PATTERNS)
+
+
+def _detect_missing_input_refusals(
+    panelist_results: list[Any],
+) -> dict[str, Any]:
+    """Count panelists whose primary responses flag missing/unavailable input.
+
+    A panelist is counted as *refusing* if at least one primary (non-follow-up)
+    response matches a missing-input pattern. Wholesale-errored panelists are
+    excluded from the denominator — their failure is already captured by
+    ``_analyze_failures`` and double-counting would muddy the rate.
+
+    Returns a dict with ``considered`` (panelists included in denominator),
+    ``refusing`` (panelists with at least one flagged response),
+    ``refusal_rate`` (0-1), and ``refusing_personas`` (sorted names).
+    """
+    considered = 0
+    refusing = 0
+    refusing_personas: set[str] = set()
+
+    for pr in panelist_results:
+        if getattr(pr, "error", None):
+            continue
+        responses = getattr(pr, "responses", []) or []
+        if not responses:
+            continue
+        considered += 1
+        for resp in responses:
+            if not isinstance(resp, dict) or resp.get("follow_up"):
+                continue
+            answer = resp.get("response", "")
+            if isinstance(answer, dict):
+                answer = json.dumps(answer)
+            if _response_flags_missing_input(str(answer)):
+                refusing += 1
+                refusing_personas.add(getattr(pr, "persona_name", "unknown"))
+                break
+
+    rate = (refusing / considered) if considered > 0 else 0.0
+    return {
+        "considered": considered,
+        "refusing": refusing,
+        "refusal_rate": rate,
+        "refusing_personas": sorted(refusing_personas),
+    }
+
+
 def _build_invalid_banner(
     stats: dict[str, Any],
     threshold: float,
     *,
     strict: bool,
     strict_violation: bool,
+    missing_input_stats: dict[str, Any] | None = None,
+    missing_input_invalid: bool = False,
 ) -> str:
     """Render the fatal banner printed to stderr on an invalid run.
 
@@ -1162,21 +1300,31 @@ def _build_invalid_banner(
     """
     total = stats["total_pairs"]
     errored = stats["errored_pairs"]
-    if total == 0:
-        return ""
-    rate = stats["failure_rate"]
-    over_threshold = rate > threshold
-    if not (over_threshold or strict_violation):
+    rate = stats["failure_rate"] if total > 0 else 0.0
+    over_threshold = total > 0 and rate > threshold
+    if not (over_threshold or strict_violation or missing_input_invalid):
         return ""
 
     bar = "!" * 70
     lines = [bar]
-    if strict_violation and not over_threshold:
-        lines.append(f"PANEL RUN INVALID (--strict): {errored}/{total} panelist-question pairs errored.")
-    else:
+    if over_threshold:
         lines.append(
             f"PANEL RUN INVALID: {errored}/{total} panelist-question pairs"
             f" errored ({rate:.0%} > threshold {threshold:.0%})."
+        )
+    elif strict_violation:
+        lines.append(f"PANEL RUN INVALID (--strict): {errored}/{total} panelist-question pairs errored.")
+    elif missing_input_invalid and missing_input_stats:
+        considered = missing_input_stats["considered"]
+        refusing = missing_input_stats["refusing"]
+        mi_rate = missing_input_stats["refusal_rate"]
+        lines.append(
+            f"PANEL RUN INVALID: {refusing}/{considered} panelist(s) reported"
+            f" missing or unavailable input ({mi_rate:.0%} >= threshold"
+            f" {_MISSING_INPUT_THRESHOLD:.0%})."
+        )
+        lines.append(
+            "The prompt likely arrived with an empty or malformed section (e.g. an unrendered template fragment)."
         )
     lines.append("No synthesis was performed — the run produced no usable data.")
     if stats.get("failed_panelists"):
@@ -1187,8 +1335,18 @@ def _build_invalid_banner(
         if extra > 0:
             shown += f", +{extra} more"
         lines.append(f"  Affected personas: {shown}")
-    lines.append("Check provider status (e.g. rate-limit / 503), run with a different")
-    lines.append("--model, or re-run once the upstream provider is healthy.")
+    if missing_input_invalid and missing_input_stats and missing_input_stats.get("refusing_personas"):
+        shown = ", ".join(missing_input_stats["refusing_personas"][:4])
+        extra = len(missing_input_stats["refusing_personas"]) - 4
+        if extra > 0:
+            shown += f", +{extra} more"
+        lines.append(f"  Personas reporting missing input: {shown}")
+    if missing_input_invalid and not (over_threshold or strict_violation):
+        lines.append("Check that every --var / {placeholder} rendered with real content,")
+        lines.append("then re-run once the prompt is whole.")
+    else:
+        lines.append("Check provider status (e.g. rate-limit / 503), run with a different")
+        lines.append("--model, or re-run once the upstream provider is healthy.")
     lines.append(bar)
     return "\n".join(lines)
 

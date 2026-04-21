@@ -900,6 +900,234 @@ class TestPanelRun:
         mock_synth.assert_not_called()
 
 
+# --- sp-bjt4: missing-input refusal detection -----------------------------
+
+
+class TestMissingInputDetection:
+    """Polite refusals ("I don't see the content you mentioned") don't trip
+    _analyze_failures because the panelist returned a clean response. This
+    suite exercises the secondary heuristic that gates run_invalid on
+    ≥50% of panelists reporting missing/unavailable input."""
+
+    def test_detector_flags_above_threshold(self):
+        from synth_panel.cli.commands import _detect_missing_input_refusals
+        from synth_panel.orchestrator import PanelistResult
+
+        results = [
+            PanelistResult(
+                persona_name="Alice",
+                responses=[
+                    {"question": "Summarize the page", "response": "I don't see the page content you mentioned."},
+                ],
+                usage=ZERO_USAGE,
+            ),
+            PanelistResult(
+                persona_name="Bob",
+                responses=[
+                    {"question": "Summarize the page", "response": "No content was provided for me to analyze."},
+                ],
+                usage=ZERO_USAGE,
+            ),
+            PanelistResult(
+                persona_name="Carol",
+                responses=[
+                    {"question": "Summarize the page", "response": "The copy here reads clearly and I think it works."},
+                ],
+                usage=ZERO_USAGE,
+            ),
+        ]
+
+        stats = _detect_missing_input_refusals(results)
+        assert stats["considered"] == 3
+        assert stats["refusing"] == 2
+        assert stats["refusal_rate"] == pytest.approx(2 / 3)
+        assert stats["refusing_personas"] == ["Alice", "Bob"]
+
+    def test_detector_ignores_follow_ups(self):
+        """Primary-response refusals count; follow-ups piggyback and are skipped
+        so we don't double-count a single refusal."""
+        from synth_panel.cli.commands import _detect_missing_input_refusals
+        from synth_panel.orchestrator import PanelistResult
+
+        results = [
+            PanelistResult(
+                persona_name="Alice",
+                responses=[
+                    {"question": "Primary Q", "response": "Sounds great, I'd pay $10/mo."},
+                    {
+                        "question": "Follow-up",
+                        "response": "I haven't been provided with more details.",
+                        "follow_up": True,
+                    },
+                ],
+                usage=ZERO_USAGE,
+            ),
+        ]
+        stats = _detect_missing_input_refusals(results)
+        assert stats["considered"] == 1
+        assert stats["refusing"] == 0
+        assert stats["refusal_rate"] == 0.0
+
+    def test_detector_excludes_errored_panelists(self):
+        """A wholesale panelist failure is already flagged by _analyze_failures;
+        including it here would double-count and distort the rate."""
+        from synth_panel.cli.commands import _detect_missing_input_refusals
+        from synth_panel.orchestrator import PanelistResult
+
+        results = [
+            PanelistResult(
+                persona_name="Alice",
+                responses=[],
+                usage=ZERO_USAGE,
+                error="provider 503",
+            ),
+            PanelistResult(
+                persona_name="Bob",
+                responses=[
+                    {"question": "Q", "response": "I don't see the content you mentioned."},
+                ],
+                usage=ZERO_USAGE,
+            ),
+        ]
+        stats = _detect_missing_input_refusals(results)
+        assert stats["considered"] == 1
+        assert stats["refusing"] == 1
+        assert stats["refusal_rate"] == 1.0
+
+    def test_detector_returns_zero_rate_when_empty(self):
+        from synth_panel.cli.commands import _detect_missing_input_refusals
+
+        stats = _detect_missing_input_refusals([])
+        assert stats["considered"] == 0
+        assert stats["refusing"] == 0
+        assert stats["refusal_rate"] == 0.0
+        assert stats["refusing_personas"] == []
+
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_panel_run_sets_run_invalid_on_majority_missing_input(
+        self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path
+    ):
+        """End-to-end: three clean panelists, two refuse for missing input
+        → run_invalid=True, warning surfaced, synthesis skipped."""
+        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+
+        registry = WorkerRegistry()
+        mock_run.return_value = (
+            [
+                PanelistResult(
+                    persona_name="Alice",
+                    responses=[
+                        {"question": "Review the page", "response": "I don't see the page content you mentioned."},
+                    ],
+                    usage=ZERO_USAGE,
+                ),
+                PanelistResult(
+                    persona_name="Bob",
+                    responses=[
+                        {"question": "Review the page", "response": "No content was provided to analyze."},
+                    ],
+                    usage=ZERO_USAGE,
+                ),
+                PanelistResult(
+                    persona_name="Carol",
+                    responses=[
+                        {"question": "Review the page", "response": "It's a solid value prop overall."},
+                    ],
+                    usage=ZERO_USAGE,
+                ),
+            ],
+            registry,
+            {},
+        )
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n  - name: Bob\n  - name: Carol\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: Review the page\n")
+
+        code = main(
+            [
+                "--output-format",
+                "json",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+            ]
+        )
+        assert code == 2
+        data = json.loads(capsys.readouterr().out)
+        assert data["run_invalid"] is True
+        assert data["missing_input_stats"]["refusing"] == 2
+        assert data["missing_input_stats"]["considered"] == 3
+        assert data["missing_input_stats"]["refusal_rate"] == pytest.approx(2 / 3)
+        assert sorted(data["missing_input_stats"]["refusing_personas"]) == ["Alice", "Bob"]
+        # Top-level warning is what CI gates key on when they don't parse stats.
+        assert any("missing_input_refusals" in w for w in data["warnings"])
+        mock_synth.assert_not_called()
+
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_panel_run_stays_valid_below_threshold(self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path):
+        """One refusal out of three (~33%) is below the 50% threshold — the
+        run is still valid and synthesis proceeds."""
+        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+
+        registry = WorkerRegistry()
+        mock_run.return_value = (
+            [
+                PanelistResult(
+                    persona_name="Alice",
+                    responses=[{"question": "Q", "response": "I don't see the content you mentioned."}],
+                    usage=ZERO_USAGE,
+                ),
+                PanelistResult(
+                    persona_name="Bob",
+                    responses=[{"question": "Q", "response": "Reasonably priced."}],
+                    usage=ZERO_USAGE,
+                ),
+                PanelistResult(
+                    persona_name="Carol",
+                    responses=[{"question": "Q", "response": "Great value."}],
+                    usage=ZERO_USAGE,
+                ),
+            ],
+            registry,
+            {},
+        )
+        mock_synth.return_value = _mock_synthesis_result()
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n  - name: Bob\n  - name: Carol\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: Q\n")
+
+        code = main(
+            [
+                "--output-format",
+                "json",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+            ]
+        )
+        assert code == 0
+        data = json.loads(capsys.readouterr().out)
+        assert data["run_invalid"] is False
+        assert data["missing_input_stats"]["refusing"] == 1
+        assert data["missing_input_stats"]["considered"] == 3
+        assert not any("missing_input_refusals" in w for w in data.get("warnings", []))
+        mock_synth.assert_called_once()
+
+
 # --- sp-7vp: --save flag --------------------------------------------------
 
 
