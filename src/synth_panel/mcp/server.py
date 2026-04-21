@@ -34,7 +34,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
@@ -142,12 +141,15 @@ def _resolve_mcp_default_model() -> str:
     """Pick a cheap/fast default model based on available provider creds.
 
     Walks :data:`_MCP_DEFAULT_MODEL_PREFERENCE` and returns the first
-    alias whose env var is set. Falls back to :data:`MCP_DEFAULT_MODEL`
-    when nothing is set so the LLM client's missing-credentials error
-    is the one the user sees.
+    alias whose credential is available via env OR the on-disk store
+    written by ``synthpanel login``. Falls back to
+    :data:`MCP_DEFAULT_MODEL` when nothing is set so the LLM client's
+    missing-credentials error is the one the user sees.
     """
+    from synth_panel.credentials import has_credential
+
     for env_var, alias in _MCP_DEFAULT_MODEL_PREFERENCE:
-        if os.environ.get(env_var, "").strip():
+        if has_credential(env_var):
             return alias
     return MCP_DEFAULT_MODEL
 
