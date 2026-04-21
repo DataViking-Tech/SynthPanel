@@ -6,6 +6,15 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [Unreleased]
 
+## [0.9.7] - 2026-04-21
+
+### Fixed
+- (sp-j3vk) Cost: trust provider-reported cost over the local pricing table. When a provider returns `usage.cost` (OpenRouter) or equivalent in its response, that value is now recorded verbatim instead of being recomputed from token counts against our maintained rate table. This is the architectural root-cause fix that supersedes the sp-cxyb / sp-5ggf / sp-nn8k / sp-loil bandaids: local pricing drift can no longer inflate or deflate reported spend, and OpenAI-via-OpenRouter paths stop reporting 40× overages when our table is stale relative to the provider's billing.
+- (sp-nn8k) Cost: surface `DEFAULT_PRICING` fallback loudly in panel output. When a model is not found in the pricing table and we fall back to the default rate, the panel result now includes a `pricing_fallback` warning listing the affected model(s), so silent mispricing can no longer hide in `$0` or inflated-cost runs. Bandaid ahead of sp-j3vk.
+- (sp-27rz) Ensemble: guarantee every weighted model in `--models` gets at least 1 persona. Prior rounding could drop low-weight models entirely (weight < 1/n_personas produced 0 personas after floor), so the ensemble silently ran without models the user explicitly selected. Now ensures ≥1 persona per listed model, redistributing from higher-weight buckets.
+- (sp-5ggf) Cost: add pricing table entries for common OpenRouter-proxied models (gpt-4o-mini, qwen, deepseek, mistral variants) so they stop falling through to `DEFAULT_PRICING` and reporting wrong costs. Bandaid ahead of sp-j3vk.
+- (sp-cxyb) Cost: correct `SONNET_PRICING` to Claude Sonnet 4.5 rates ($3/M in, $15/M out, $0.30/M cached, $3.75/M cache-write) instead of the stale Opus-3 rates that were doubling reported Sonnet cost. Bandaid ahead of sp-j3vk.
+
 ## [0.9.6] - 2026-04-21
 
 ### Fixed
