@@ -231,6 +231,34 @@ def estimate_cost(
     )
 
 
+def aggregate_per_model(
+    panelist_results,  # Iterable[PanelistResult]; untyped to avoid circular import
+    default_model: str,
+) -> tuple[dict[str, TokenUsage], dict[str, CostEstimate]]:
+    """Bucket panelist usage/cost by each result's ``.model`` attribute.
+
+    Each panelist's ``.model`` (falling back to *default_model* when unset)
+    is used to look up that provider's pricing, so multi-model runs
+    (``--models haiku:0.5,gemini:0.5`` routing, ``ensemble_run``, or
+    ``--blend`` mode) get per-model cost that reflects the actual rate
+    the provider charged — not a uniform rate applied across all tokens.
+
+    Returns ``(per_model_usage, per_model_cost)``. Keys are the model
+    identifiers as recorded on panelist results (alias resolution happens
+    later in ``build_metadata`` when producing the public payload).
+    """
+    per_usage: dict[str, TokenUsage] = {}
+    for pr in panelist_results:
+        m = getattr(pr, "model", None) or default_model
+        per_usage[m] = per_usage.get(m, ZERO_USAGE) + pr.usage
+
+    per_cost: dict[str, CostEstimate] = {}
+    for m, usage in per_usage.items():
+        pricing, _ = lookup_pricing(m)
+        per_cost[m] = estimate_cost(usage, pricing)
+    return per_usage, per_cost
+
+
 def format_summary(
     label: str,
     usage: TokenUsage,

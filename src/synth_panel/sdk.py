@@ -41,6 +41,8 @@ from synth_panel._runners import (
 )
 from synth_panel.cost import (
     ZERO_USAGE,
+    CostEstimate,
+    aggregate_per_model,
     estimate_cost,
     lookup_pricing,
 )
@@ -525,7 +527,7 @@ def quick_poll(
     client = _get_client()
     timer = PanelTimer()
     (
-        _panelist_results,
+        panelist_results_full,
         result_dicts,
         panelist_usage,
         panelist_cost,
@@ -543,6 +545,15 @@ def quick_poll(
         top_p=top_p,
     )
 
+    # sp-atvc: re-price per actual model when panelists ran across
+    # providers so the PollResult surfaces real spend.
+    per_model_usage, per_model_cost = aggregate_per_model(panelist_results_full, model)
+    multi_model_run = len(per_model_usage) > 1
+    if multi_model_run:
+        panelist_cost = CostEstimate()
+        for _c in per_model_cost.values():
+            panelist_cost = panelist_cost + _c
+
     synthesis_usage_obj: CostTokenUsage | None = None
     synthesis_cost_obj = None
     if synthesis_dict and "usage" in synthesis_dict:
@@ -556,6 +567,9 @@ def quick_poll(
         total_cost = panelist_cost
 
     timer.stop()
+    panelist_per_model_meta = (
+        {_m: (per_model_usage[_m], per_model_cost[_m]) for _m in per_model_usage} if multi_model_run else None
+    )
     metadata = build_metadata(
         panelist_model=model,
         synthesis_model=synthesis_dict.get("model") if synthesis_dict else None,
@@ -568,6 +582,7 @@ def quick_poll(
         persona_count=len(merged),
         question_count=1,
         timer=timer,
+        panelist_per_model=panelist_per_model_meta,
     )
 
     result_id = save_panel_result(
@@ -699,12 +714,22 @@ def run_panel(
             synthesis_temperature=synthesis_temperature,
         )
         pricing, _ = lookup_pricing(model)
-        total_cost = estimate_cost(mr.usage, pricing)
         panelist_usage = ZERO_USAGE
         for rr in mr.rounds:
             for pr in rr.panelist_results:
                 panelist_usage = panelist_usage + pr.usage
-        panelist_cost_est = estimate_cost(panelist_usage, pricing)
+
+        # sp-atvc: accurate per-model cost across rounds when panelists
+        # ran on different providers (persona_models routing).
+        all_pr = [pr for rr in mr.rounds for pr in rr.panelist_results]
+        per_model_usage, per_model_cost = aggregate_per_model(all_pr, model)
+        multi_model_run = len(per_model_usage) > 1
+        if multi_model_run:
+            panelist_cost_est = CostEstimate()
+            for _c in per_model_cost.values():
+                panelist_cost_est = panelist_cost_est + _c
+        else:
+            panelist_cost_est = estimate_cost(panelist_usage, pricing)
 
         synthesis_usage_for_meta: CostTokenUsage | None = None
         synthesis_cost_for_meta = None
@@ -715,8 +740,13 @@ def run_panel(
             synthesis_cost_for_meta = estimate_cost(synthesis_usage_for_meta, synth_pricing)
         timer.stop()
 
+        total_cost = panelist_cost_est + (synthesis_cost_for_meta or CostEstimate())
+
         total_question_count = sum(
             len(next((r.questions for r in instrument_obj.rounds if r.name == rr.name), [])) for rr in mr.rounds
+        )
+        panelist_per_model_meta = (
+            {_m: (per_model_usage[_m], per_model_cost[_m]) for _m in per_model_usage} if multi_model_run else None
         )
         metadata = build_metadata(
             panelist_model=model,
@@ -730,6 +760,7 @@ def run_panel(
             persona_count=len(merged),
             question_count=total_question_count,
             timer=timer,
+            panelist_per_model=panelist_per_model_meta,
         )
 
         # Flat results for persistence — take the terminal round's panelist list.
@@ -762,7 +793,7 @@ def run_panel(
 
     timer = PanelTimer()
     (
-        _panelist_results,
+        panelist_results_full,
         result_dicts,
         panelist_usage,
         panelist_cost,
@@ -785,6 +816,14 @@ def run_panel(
         variants=variants,
     )
 
+    # sp-atvc: per-model accounting for multi-provider panelist routing.
+    per_model_usage, per_model_cost = aggregate_per_model(panelist_results_full, model)
+    multi_model_run = len(per_model_usage) > 1
+    if multi_model_run:
+        panelist_cost = CostEstimate()
+        for _c in per_model_cost.values():
+            panelist_cost = panelist_cost + _c
+
     synthesis_usage_obj: CostTokenUsage | None = None
     synthesis_cost_obj = None
     if synthesis_dict and "usage" in synthesis_dict:
@@ -798,6 +837,9 @@ def run_panel(
         total_cost = panelist_cost
 
     timer.stop()
+    panelist_per_model_meta = (
+        {_m: (per_model_usage[_m], per_model_cost[_m]) for _m in per_model_usage} if multi_model_run else None
+    )
     metadata = build_metadata(
         panelist_model=model,
         synthesis_model=synthesis_dict.get("model") if synthesis_dict else None,
@@ -810,6 +852,7 @@ def run_panel(
         persona_count=len(merged),
         question_count=len(normalised_questions),
         timer=timer,
+        panelist_per_model=panelist_per_model_meta,
     )
 
     variant_count = variant_data["variant_count"] if variant_data else 0

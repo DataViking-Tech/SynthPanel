@@ -16,6 +16,7 @@ from synth_panel.cost import (
     CostEstimate,
     TokenUsage,
     UsageTracker,
+    aggregate_per_model,
     estimate_cost,
     format_summary,
     lookup_pricing,
@@ -179,6 +180,87 @@ class TestEstimateCost:
         cost = estimate_cost(usage, HAIKU_PRICING)
         assert cost.cache_creation_cost == pytest.approx(1.25)
         assert cost.cache_read_cost == pytest.approx(0.10)
+
+
+# --- aggregate_per_model --------------------------------------------------
+
+
+class _FakePanelist:
+    """Minimal stand-in for PanelistResult — only model + usage matter."""
+
+    def __init__(self, model: str | None, usage: TokenUsage):
+        self.model = model
+        self.usage = usage
+
+
+class TestAggregatePerModel:
+    """sp-atvc: verify multi-model panelist usage gets bucketed correctly."""
+
+    def test_single_model_single_bucket(self):
+        prs = [
+            _FakePanelist("haiku", TokenUsage(input_tokens=100, output_tokens=50)),
+            _FakePanelist("haiku", TokenUsage(input_tokens=200, output_tokens=80)),
+        ]
+        per_usage, per_cost = aggregate_per_model(prs, "haiku")
+        assert set(per_usage.keys()) == {"haiku"}
+        assert per_usage["haiku"].input_tokens == 300
+        assert per_usage["haiku"].output_tokens == 130
+        assert per_cost["haiku"].total_cost > 0
+
+    def test_multi_model_separate_buckets(self):
+        """Panelists routed to different providers populate one bucket each."""
+        prs = [
+            _FakePanelist("haiku", TokenUsage(input_tokens=100, output_tokens=50)),
+            _FakePanelist("gemini-2.5-flash", TokenUsage(input_tokens=100, output_tokens=50)),
+            _FakePanelist("gpt-4o-mini", TokenUsage(input_tokens=100, output_tokens=50)),
+        ]
+        per_usage, _per_cost = aggregate_per_model(prs, "haiku")
+        assert set(per_usage.keys()) == {"haiku", "gemini-2.5-flash", "gpt-4o-mini"}
+        # Each bucket carries only its own tokens — NOT the summed total.
+        for m in per_usage:
+            assert per_usage[m].input_tokens == 100
+            assert per_usage[m].output_tokens == 50
+
+    def test_unset_model_falls_back_to_default(self):
+        prs = [
+            _FakePanelist(None, TokenUsage(input_tokens=10, output_tokens=5)),
+            _FakePanelist("haiku", TokenUsage(input_tokens=10, output_tokens=5)),
+        ]
+        per_usage, _ = aggregate_per_model(prs, "haiku")
+        # Both collapse into the default model bucket.
+        assert set(per_usage.keys()) == {"haiku"}
+        assert per_usage["haiku"].input_tokens == 20
+
+    def test_per_model_cost_uses_each_providers_pricing(self):
+        """Bug repro: aggregated cost must price each bucket separately.
+
+        Before sp-atvc the caller summed all usage then priced at the default
+        model's rate, which under-reported total cost when cheap models
+        (gemini-flash, gpt-mini) carried traffic routed away from a pricier
+        default.
+        """
+        # All three get 1M input tokens. With correct per-model pricing the
+        # total cost equals the sum of each provider's input-per-million rate.
+        big = TokenUsage(input_tokens=1_000_000)
+        prs = [
+            _FakePanelist("haiku", big),
+            _FakePanelist("gemini-2.5-flash", big),
+            _FakePanelist("gpt-4o-mini", big),
+        ]
+        _usage, per_cost = aggregate_per_model(prs, "haiku")
+        total_per_model = sum(c.total_cost for c in per_cost.values())
+        # Reference: the wrong way — price 3M tokens at haiku rate only.
+        wrong_single_rate = estimate_cost(TokenUsage(input_tokens=3_000_000), HAIKU_PRICING).total_cost
+        # The correct sum must differ from the single-rate estimate (the bug).
+        assert total_per_model != pytest.approx(wrong_single_rate)
+        # And each bucket must be individually non-zero.
+        for m in per_cost:
+            assert per_cost[m].total_cost > 0
+
+    def test_empty_iterable(self):
+        per_usage, per_cost = aggregate_per_model([], "haiku")
+        assert per_usage == {}
+        assert per_cost == {}
 
 
 # --- format_summary -------------------------------------------------------

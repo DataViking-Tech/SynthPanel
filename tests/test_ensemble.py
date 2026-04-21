@@ -545,7 +545,7 @@ class TestBuildEnsembleOutput:
         from synth_panel.ensemble import build_ensemble_output
 
         out = build_ensemble_output(self._fixture())
-        assert set(out.keys()) == {"per_model_results", "cost_breakdown", "models", "total_usage"}
+        assert set(out.keys()) == {"per_model_results", "cost_breakdown", "models", "total_usage", "metadata"}
 
     def test_per_model_results_has_results_cost_usage(self):
         from synth_panel.ensemble import build_ensemble_output
@@ -597,6 +597,35 @@ class TestBuildEnsembleOutput:
         # haiku: 100+50, sonnet: 200+80
         assert out["total_usage"]["input_tokens"] == 300
         assert out["total_usage"]["output_tokens"] == 130
+
+    def test_metadata_per_model_covers_all_ensemble_models(self):
+        """sp-atvc: metadata.cost.per_model must list every ensemble model.
+
+        Regression guard for the mayor audit where a 3-model ensemble
+        reported only the first model in metadata.cost.per_model, hiding
+        ~6x of the real spend.
+        """
+        from synth_panel.ensemble import build_ensemble_output
+
+        out = build_ensemble_output(self._fixture())
+        per_model = out["metadata"]["cost"]["per_model"]
+        # Both ensemble models must have their own bucket.
+        assert len(per_model) == 2
+        # Each entry carries tokens + cost_usd.
+        for entry in per_model.values():
+            assert "tokens" in entry
+            assert "cost_usd" in entry
+            assert entry["tokens"] > 0
+            assert entry["cost_usd"] > 0
+
+    def test_metadata_total_cost_matches_ensemble(self):
+        """metadata.cost.total_cost_usd must equal the summed per-model cost."""
+        from synth_panel.ensemble import build_ensemble_output
+
+        out = build_ensemble_output(self._fixture())
+        meta_cost = out["metadata"]["cost"]
+        summed = sum(e["cost_usd"] for e in meta_cost["per_model"].values())
+        assert summed == pytest.approx(meta_cost["total_cost_usd"])
 
 
 # ---------------------------------------------------------------------------
