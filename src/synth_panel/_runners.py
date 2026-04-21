@@ -30,6 +30,121 @@ from synth_panel.prompts import build_question_prompt, persona_system_prompt
 from synth_panel.stats import robustness_score
 from synth_panel.synthesis import synthesize_panel
 
+# sp-efip: max number of per-persona error samples to surface in the
+# diagnostic output when a run fails wholesale. Keeps CLI banners and
+# MCP error envelopes bounded while still naming real errors.
+_MAX_SAMPLE_ERRORS = 3
+
+
+class PanelTotalFailureError(RuntimeError):
+    """Every panelist failed — no usable Q/A data was produced.
+
+    Raised by ``run_panel_sync`` (and equivalents) when the orchestrator
+    returns results where every panelist either errored wholesale or
+    produced zero tokens with only errored responses. Callers should
+    surface the message verbatim so operators see the failing model(s)
+    and upstream provider error (e.g. "OpenRouter API error 400: …").
+    """
+
+    def __init__(self, message: str, *, diagnostic: dict[str, Any]) -> None:
+        super().__init__(message)
+        self.diagnostic = diagnostic
+
+
+def _first_error_message(pr: Any) -> str | None:
+    """Return a representative error string for *pr*, or None if clean."""
+    err = getattr(pr, "error", None)
+    if err:
+        return str(err)
+    for resp in getattr(pr, "responses", []) or []:
+        if isinstance(resp, dict) and resp.get("error"):
+            text = resp.get("response")
+            if isinstance(text, str) and text:
+                return text
+            return "unspecified per-question error"
+    return None
+
+
+def detect_total_failure(panelist_results: list[Any]) -> dict[str, Any] | None:
+    """Return a diagnostic dict when every panelist failed, else None.
+
+    Total failure means that *no* panelist produced a usable Q/A pair.
+    A panelist counts as failed when any of the following hold:
+
+    * ``pr.error`` is set (wholesale panelist exception), OR
+    * every response in ``pr.responses`` is flagged ``error: True``
+      (per-question exceptions caught inside ``_run_panelist``), OR
+    * the panelist produced zero tokens *and* recorded no primary
+      non-errored response (the 400-on-every-call scenario from
+      sp-efip, where tokens stayed at 0 because every request was
+      rejected upstream).
+
+    The returned dict carries the models exercised and a few sample
+    per-persona error strings so downstream banners / MCP errors can
+    name the upstream failure (e.g. the bad model name and HTTP 400
+    the bead explicitly calls out).
+    """
+    if not panelist_results:
+        return {
+            "panelists": 0,
+            "models": [],
+            "sample_errors": [],
+            "summary": "orchestrator returned no panelist results",
+        }
+
+    models: set[str] = set()
+    sample_errors: list[tuple[str, str]] = []
+    all_failed = True
+
+    for pr in panelist_results:
+        model = getattr(pr, "model", None)
+        if model:
+            models.add(str(model))
+
+        pr_error = getattr(pr, "error", None)
+        responses = getattr(pr, "responses", []) or []
+        primary = [r for r in responses if isinstance(r, dict) and not r.get("follow_up")]
+        has_clean_primary = any(isinstance(r, dict) and not r.get("error") and r.get("response") for r in primary)
+
+        # A panelist is considered usable iff it produced at least one
+        # non-errored primary response. The bead explicitly calls out
+        # the "tokens=0 AND error set" short-circuit, which is already
+        # subsumed by "no clean primary response" — zero-token panelists
+        # whose only responses are error=True rows all fall here.
+        panelist_failed = bool(pr_error) or not has_clean_primary
+        if not panelist_failed:
+            all_failed = False
+            continue
+
+        err_msg = _first_error_message(pr)
+        if err_msg and len(sample_errors) < _MAX_SAMPLE_ERRORS:
+            persona = getattr(pr, "persona_name", "unknown")
+            sample_errors.append((str(persona), err_msg))
+
+    if not all_failed:
+        return None
+
+    return {
+        "panelists": len(panelist_results),
+        "models": sorted(models),
+        "sample_errors": sample_errors,
+        "summary": (f"{len(panelist_results)} panelist(s) produced no usable Q/A pairs"),
+    }
+
+
+def format_total_failure_message(diagnostic: dict[str, Any]) -> str:
+    """Render a single-line message naming failing models + sample error."""
+    models = diagnostic.get("models") or []
+    sample_errors = diagnostic.get("sample_errors") or []
+    parts = [f"Panel run produced no usable results: {diagnostic.get('summary', 'every panelist failed')}"]
+    if models:
+        parts.append(f"models: {', '.join(models)}")
+    if sample_errors:
+        persona, err = sample_errors[0]
+        parts.append(f"first error ({persona}): {err}")
+    return ". ".join(parts)
+
+
 logger = logging.getLogger(__name__)
 
 # Caps mirrored from the MCP server — the SDK inherits the same guardrails.
@@ -274,6 +389,16 @@ def run_panel_sync(
         persona_models=persona_models,
         extract_schema=extract_schema,
     )
+
+    # sp-efip: fail loud when every panelist produced no usable data.
+    # Without this, MCP callers see a normally-shaped "panel complete"
+    # result even when every request 400'd upstream.
+    total_failure = detect_total_failure(panelist_results)
+    if total_failure is not None:
+        raise PanelTotalFailureError(
+            format_total_failure_message(total_failure),
+            diagnostic=total_failure,
+        )
 
     panelist_usage = ZERO_USAGE
     result_dicts: list[dict[str, Any]] = []
