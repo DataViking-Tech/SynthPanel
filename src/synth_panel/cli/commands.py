@@ -1672,6 +1672,60 @@ def _build_params_metadata(
     return params
 
 
+def handle_panel_inspect(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Inspect a saved panel result: metadata, per-model rollup, failures (sp-76gm).
+
+    No LLM calls. Loads a result by ID or path (same resolution as
+    ``panel synthesize``) and prints a compact summary. JSON/NDJSON
+    modes emit the full structured :class:`InspectReport` dict under
+    the ``extra`` key.
+    """
+    from synth_panel.analysis.inspect import build_inspect_report, format_inspect_text
+
+    result_ref = args.result
+    path = Path(result_ref)
+    if path.exists() and path.suffix == ".json":
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            msg = f"Error: not valid JSON: {result_ref}: {exc}"
+            if fmt is OutputFormat.TEXT:
+                print(msg, file=sys.stderr)
+            else:
+                emit(fmt, message=msg, extra={"error": "invalid_json"})
+            return 1
+        data.setdefault("id", path.stem)
+    else:
+        from synth_panel.mcp.data import get_panel_result
+
+        try:
+            data = get_panel_result(result_ref)
+        except FileNotFoundError:
+            msg = f"Error: panel result not found: {result_ref}"
+            if fmt is OutputFormat.TEXT:
+                print(msg, file=sys.stderr)
+            else:
+                emit(fmt, message=msg, extra={"error": "not_found"})
+            return 1
+
+    if not isinstance(data, dict):
+        msg = "Error: panel result is not a JSON object"
+        if fmt is OutputFormat.TEXT:
+            print(msg, file=sys.stderr)
+        else:
+            emit(fmt, message=msg, extra={"error": "invalid_shape"})
+        return 1
+
+    report = build_inspect_report(data)
+
+    if fmt is OutputFormat.TEXT:
+        print(format_inspect_text(report))
+    else:
+        emit(fmt, message="Panel inspect", extra={"inspect": report.to_dict()})
+
+    return 0
+
+
 def handle_panel_synthesize(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """Re-synthesize a saved panel result (sp-5on.5).
 
