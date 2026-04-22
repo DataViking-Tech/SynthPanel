@@ -214,6 +214,10 @@ class PollResult(_DictLikeMixin):
     total_usage: dict[str, Any]
     total_cost: str
     metadata: dict[str, Any] | None = None
+    # sp-avmm: synthesis failure surfaced at the top-level so consumers can
+    # gate on validity without walking into the nested synthesis dict.
+    run_invalid: bool = False
+    synthesis_error: dict[str, Any] | None = None
 
 
 @dataclass
@@ -267,6 +271,8 @@ class PanelResult(_DictLikeMixin):
     rounds: list[dict[str, Any]]
     path: list[dict[str, Any]]
     synthesis: dict[str, Any] | None
+    # sp-avmm: declared before trailing defaulted fields so they remain
+    # accessible on PanelResult without breaking existing kwargs callers.
     total_cost: str
     total_usage: dict[str, Any]
     warnings: list[str] = field(default_factory=list)
@@ -274,6 +280,9 @@ class PanelResult(_DictLikeMixin):
     terminal_round: str | None = None
     results: list[dict[str, Any]] = field(default_factory=list)
     metadata: dict[str, Any] | None = None
+    # sp-avmm: synthesis failure markers, mirroring PollResult.
+    run_invalid: bool = False
+    synthesis_error: dict[str, Any] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -347,6 +356,10 @@ def _build_panel_result_from_single_round(
     # Callers can pass ``contributing_models`` to cover mixed-model runs;
     # otherwise the single ``model`` is the only candidate.
     cost_warnings = build_cost_fallback_warnings(contributing_models if contributing_models is not None else [model])
+    # sp-avmm: carry synthesis failure markers onto the top-level result
+    # so MCP/CI consumers can branch on run validity without walking into
+    # the nested synthesis envelope.
+    synthesis_error = synthesis_dict.get("synthesis_error") if isinstance(synthesis_dict, dict) else None
     return PanelResult(
         result_id=result_id,
         model=model,
@@ -368,6 +381,8 @@ def _build_panel_result_from_single_round(
         terminal_round=None,
         results=result_dicts,
         metadata=metadata,
+        run_invalid=bool(synthesis_error),
+        synthesis_error=synthesis_error if isinstance(synthesis_error, dict) else None,
     )
 
 
@@ -586,6 +601,10 @@ def quick_poll(
 
     synthesis_usage_obj: CostTokenUsage | None = None
     synthesis_cost_obj = None
+    # sp-avmm: synthesis_dict is either a full synthesis payload (with
+    # "usage") or an error envelope (with "synthesis_error"). Guard the
+    # cost math so the SDK can still emit a PollResult on failure.
+    synthesis_error = synthesis_dict.get("synthesis_error") if isinstance(synthesis_dict, dict) else None
     if synthesis_dict and "usage" in synthesis_dict:
         synthesis_usage_obj = CostTokenUsage.from_dict(synthesis_dict["usage"])
         synthesis_pricing, _ = lookup_pricing(synthesis_dict.get("model"))
@@ -633,6 +652,8 @@ def quick_poll(
         total_usage=total_usage.to_dict(),
         total_cost=total_cost.format_usd(),
         metadata=metadata,
+        run_invalid=bool(synthesis_error),
+        synthesis_error=synthesis_error if isinstance(synthesis_error, dict) else None,
     )
 
 

@@ -16,7 +16,10 @@ from typing import Any
 import yaml
 
 from synth_panel._runners import (
+    build_synthesis_error_payload,
+    detect_synthesis_context_overflow,
     detect_total_failure,
+    format_synthesis_overflow_message,
     format_total_failure_message,
 )
 from synth_panel.cli.output import OutputFormat, emit
@@ -1103,6 +1106,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     if run_invalid or strict_violation:
         skip_synthesis = True  # don't synthesize garbage
     synthesis_result = None
+    synthesis_error_payload: dict[str, Any] | None = None
 
     if not skip_synthesis:
         synthesis_model = getattr(args, "synthesis_model", None)
@@ -1110,20 +1114,65 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         synthesis_temperature = getattr(args, "synthesis_temperature", None)
         # synthesis_temperature overrides panelist temperature for synthesis
         effective_synth_temp = synthesis_temperature if synthesis_temperature is not None else temperature
-        try:
-            synthesis_result = synthesize_panel(
-                client,
-                panelist_results,
-                questions,
-                model=synthesis_model,
-                panelist_model=model,
-                custom_prompt=custom_prompt,
-                panelist_cost=panelist_cost_est,
-                temperature=effective_synth_temp,
-                top_p=top_p,
+        # sp-avmm: pre-flight size check — refuse to make the API call when
+        # the estimated prompt exceeds the synthesis model's context window.
+        synth_model_for_check = synthesis_model or model
+        overflow = detect_synthesis_context_overflow(
+            panelist_results,
+            questions,
+            synthesis_model=synth_model_for_check,
+            custom_prompt=custom_prompt,
+        )
+        if overflow is not None:
+            actionable = format_synthesis_overflow_message(overflow)
+            print(
+                f"Error: synthesis pre-flight rejected: {actionable}",
+                file=sys.stderr,
             )
-        except Exception as exc:
-            logger.warning("synthesis failed: %s", exc)
+            synthesis_error_payload = build_synthesis_error_payload(
+                None,
+                error_type="synthesis_context_overflow",
+                message=actionable,
+                suggested_fix=(
+                    "Rerun with --synthesis-model gemini-2.5-flash-lite (1M context) "
+                    "or gemini-2.5-pro (1M context), or reduce panel size."
+                ),
+                diagnostic=overflow,
+            )
+            run_invalid = True
+        else:
+            try:
+                synthesis_result = synthesize_panel(
+                    client,
+                    panelist_results,
+                    questions,
+                    model=synthesis_model,
+                    panelist_model=model,
+                    custom_prompt=custom_prompt,
+                    panelist_cost=panelist_cost_est,
+                    temperature=effective_synth_temp,
+                    top_p=top_p,
+                )
+            except Exception as exc:
+                # sp-avmm: fail loud — previously this was a WARN log and the
+                # run exited 0 with synthesis=null. That silent-skip made
+                # downstream consumers believe the run succeeded.
+                from synth_panel._runners import _sanitize_api_error
+
+                sanitized = _sanitize_api_error(exc)
+                logger.error("synthesis failed: %s", sanitized)
+                print(f"Error: synthesis call failed: {sanitized}", file=sys.stderr)
+                synthesis_error_payload = build_synthesis_error_payload(
+                    exc,
+                    error_type="synthesis_api_error",
+                    message=f"Synthesis call failed: {sanitized}",
+                    suggested_fix=(
+                        "Check provider credentials and model availability;"
+                        " if context-related, rerun with a larger-context synthesis model"
+                        " (e.g. gemini-2.5-flash-lite or gemini-2.5-pro)."
+                    ),
+                )
+                run_invalid = True
 
     if synthesis_result:
         total_usage = panelist_usage + synthesis_result.usage
@@ -1330,6 +1379,10 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             # CI/MCP consumers can detect the "every panelist failed"
             # case without parsing banner text.
             extra["total_failure"] = total_failure
+        if synthesis_error_payload is not None:
+            # sp-avmm: top-level synthesis_error so JSON/NDJSON consumers
+            # see the failure without walking into the synthesis dict.
+            extra["synthesis_error"] = synthesis_error_payload
         if missing_input_invalid:
             # sp-bjt4: surface as a top-level warning so MCP / CI consumers
             # see the condition even if they don't special-case
@@ -2301,6 +2354,37 @@ def handle_panel_synthesize(args: argparse.Namespace, fmt: OutputFormat) -> int:
 
     panelist_model = data.get("model")
     client = LLMClient()
+    # sp-avmm: pre-flight size check for the re-synthesize path too, so a
+    # saved panel cannot silently overflow a smaller-context synthesis model
+    # picked via --synthesis-model on the rerun.
+    synth_model_for_check = getattr(args, "synthesis_model", None) or panelist_model
+    custom_prompt = getattr(args, "synthesis_prompt", None)
+    overflow = detect_synthesis_context_overflow(
+        panelist_results,
+        questions,
+        synthesis_model=synth_model_for_check,
+        custom_prompt=custom_prompt,
+    )
+    if overflow is not None:
+        actionable = format_synthesis_overflow_message(overflow)
+        payload = build_synthesis_error_payload(
+            None,
+            error_type="synthesis_context_overflow",
+            message=actionable,
+            suggested_fix=(
+                "Rerun with --synthesis-model gemini-2.5-flash-lite (1M context) "
+                "or gemini-2.5-pro (1M context), or reduce panel size."
+            ),
+            diagnostic=overflow,
+        )
+        print(f"Error: synthesis pre-flight rejected: {actionable}", file=sys.stderr)
+        if fmt is not OutputFormat.TEXT:
+            emit(
+                fmt,
+                message=actionable,
+                extra={"run_invalid": True, "synthesis_error": payload},
+            )
+        return 2
     try:
         synth = synthesize_panel(
             client,
@@ -2308,11 +2392,31 @@ def handle_panel_synthesize(args: argparse.Namespace, fmt: OutputFormat) -> int:
             questions,
             model=getattr(args, "synthesis_model", None),
             panelist_model=panelist_model,
-            custom_prompt=getattr(args, "synthesis_prompt", None),
+            custom_prompt=custom_prompt,
         )
     except Exception as exc:
-        print(f"Error: synthesis failed: {exc}", file=sys.stderr)
-        return 1
+        # sp-avmm: fail loud with a structured payload so MCP / CI consumers
+        # of `panel synthesize` see the same envelope as `panel run`.
+        from synth_panel._runners import _sanitize_api_error
+
+        sanitized = _sanitize_api_error(exc)
+        payload = build_synthesis_error_payload(
+            exc,
+            error_type="synthesis_api_error",
+            message=f"Synthesis call failed: {sanitized}",
+            suggested_fix=(
+                "Check provider credentials and model availability;"
+                " if context-related, rerun with a larger-context synthesis model."
+            ),
+        )
+        print(f"Error: synthesis failed: {sanitized}", file=sys.stderr)
+        if fmt is not OutputFormat.TEXT:
+            emit(
+                fmt,
+                message=f"Synthesis call failed: {sanitized}",
+                extra={"run_invalid": True, "synthesis_error": payload},
+            )
+        return 2
 
     synthesis_dict = synth.to_dict()
 
