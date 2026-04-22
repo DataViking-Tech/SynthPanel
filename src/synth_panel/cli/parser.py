@@ -345,7 +345,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Exits without calling any provider."
         ),
     )
-<<<<<<< HEAD
+    # sp-i2ub: scaled-orchestration knobs
     panel_run_parser.add_argument(
         "--max-concurrent",
         type=int,
@@ -368,7 +368,8 @@ def build_parser() -> argparse.ArgumentParser:
             "Cap requests-per-second across the panel via a token bucket. "
             "Smooths bursts on top of --max-concurrent. Accepts fractional "
             "values (e.g. 0.5 for one request every two seconds)."
-=======
+        ),
+    )
     # sp-yaru: convergence telemetry for large panels
     panel_run_parser.add_argument(
         "--convergence-check-every",
@@ -440,7 +441,6 @@ def build_parser() -> argparse.ArgumentParser:
             "pip install 'synthpanel[convergence]'. Format: "
             "'dataset:question_key' (e.g. 'gss:happiness') or just 'dataset' "
             "when the dataset has a single default question."
->>>>>>> 27d1fa6 (feat(convergence): live JSD telemetry + auto-stop for panel runs (sp-yaru))
         ),
     )
 

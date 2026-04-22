@@ -1102,11 +1102,8 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             temperature=temperature,
             top_p=top_p,
             persona_models=persona_models,
-<<<<<<< HEAD
             max_workers=max_concurrent,
-=======
             convergence_tracker=convergence_tracker,
->>>>>>> 27d1fa6 (feat(convergence): live JSD telemetry + auto-stop for panel runs (sp-yaru))
         )
 
     # Build output results and aggregate panelist usage
