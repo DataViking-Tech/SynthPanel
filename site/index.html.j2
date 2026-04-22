@@ -45,8 +45,8 @@
         "applicationCategory": "DeveloperApplication",
         "applicationSubCategory": "Research Tool",
         "operatingSystem": "Cross-platform",
-        "softwareVersion": "0.9.8",
-        "dateModified": "2026-04-22",
+        "softwareVersion": "{{ version }}",
+        "dateModified": "{{ release_date }}",
         "license": "https://opensource.org/licenses/MIT",
         "codeRepository": "https://github.com/DataViking-Tech/SynthPanel",
         "downloadUrl": "https://pypi.org/project/synthpanel/",
@@ -125,7 +125,7 @@
           class="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/5 px-3 py-1 text-xs font-medium text-emerald-300"
         >
           <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
-          v0.9.8 — public beta
+          v{{ version }} — public beta
         </p>
         <h1
           class="bg-gradient-to-br from-white to-slate-400 bg-clip-text font-mono text-5xl font-bold tracking-tight text-transparent sm:text-6xl"
@@ -475,7 +475,7 @@ synthpanel panel run \
       >
         <div class="flex flex-wrap items-center justify-between gap-3">
           <span>
-            MIT-licensed · v0.9.8 ·
+            MIT-licensed · v{{ version }} ·
             <a
               href="https://github.com/DataViking-Tech/SynthPanel"
               class="hover:text-slate-300"

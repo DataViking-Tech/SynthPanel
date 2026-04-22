@@ -1,41 +1,58 @@
-"""Guard against site/index.html version drift vs. pyproject.toml.
+"""Verify the site template renders the canonical version correctly.
 
-sp-lwy: the landing page hero badge, footer, and JSON-LD softwareVersion
-have silently drifted behind pyproject.toml across three separate releases.
-Fail CI whenever they disagree so the next bump can't ship stale.
+Replaces the sp-lwy drift guard. Drift between ``pyproject.toml`` / package
+metadata and ``site/index.html`` is now structurally impossible: both derive
+from ``src/synth_panel/__version__.py``. This test's job is ensuring the
+template actually renders and still surfaces the version in every place the
+landing page relies on it.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import re
 import sys
 from pathlib import Path
 
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def _pyproject_version() -> str:
-    data = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())
-    return data["project"]["version"]
+def _load_render_site():
+    spec = importlib.util.spec_from_file_location("render_site", REPO_ROOT / "scripts" / "render_site.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["render_site"] = module
+    spec.loader.exec_module(module)
+    return module
 
 
-def test_site_index_version_matches_pyproject() -> None:
-    version = _pyproject_version()
-    html = (REPO_ROOT / "site" / "index.html").read_text()
+def test_template_renders_with_current_version() -> None:
+    from synth_panel import __version__
 
-    hero = re.search(r"v(\d+\.\d+\.\d+)\s+—\s+public beta", html)
-    assert hero, "hero version badge not found in site/index.html"
-    assert hero.group(1) == version, f"hero badge shows v{hero.group(1)} but pyproject.toml is {version}"
+    rendered = _load_render_site().render()
 
-    footer = re.search(r"MIT-licensed · v(\d+\.\d+\.\d+) ·", html)
-    assert footer, "footer version not found in site/index.html"
-    assert footer.group(1) == version, f"footer shows v{footer.group(1)} but pyproject.toml is {version}"
+    assert f"v{__version__} — public beta" in rendered, "hero badge did not render with the current version"
+    assert f"MIT-licensed · v{__version__} ·" in rendered, "footer did not render with the current version"
 
-    jsonld = re.search(r'"softwareVersion":\s*"(\d+\.\d+\.\d+)"', html)
-    assert jsonld, "JSON-LD softwareVersion not found in site/index.html"
-    assert jsonld.group(1) == version, f"JSON-LD softwareVersion {jsonld.group(1)} but pyproject.toml is {version}"
+    jsonld = re.search(r'"softwareVersion":\s*"([^"]+)"', rendered)
+    assert jsonld, "JSON-LD softwareVersion missing from rendered site"
+    assert jsonld.group(1) == __version__, (
+        f"JSON-LD softwareVersion {jsonld.group(1)} != package __version__ {__version__}"
+    )
+
+    # No unrendered placeholders should leak into the output.
+    assert "{{" not in rendered and "}}" not in rendered, "unrendered template placeholders found in output"
+
+
+def test_committed_index_matches_template_render() -> None:
+    """Catch drift between site/index.html.j2 and the committed site/index.html.
+
+    If a contributor edits the template without re-running render_site.py, or
+    edits the rendered file directly, this test fails — keeping the committed
+    artifact honest even when Cloudflare Pages deploys it as-is.
+    """
+    rendered = _load_render_site().render()
+    committed = (REPO_ROOT / "site" / "index.html").read_text()
+    assert rendered == committed, (
+        "site/index.html is out of sync with site/index.html.j2. Run: python scripts/render_site.py"
+    )

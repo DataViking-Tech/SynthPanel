@@ -1,6 +1,6 @@
 [project]
 name = "synthpanel"
-version = "0.9.8"
+dynamic = ["version"]
 description = "Run synthetic focus groups using AI personas, with an MCP server for Claude Code / Cursor / Windsurf. CLI tool, Python library, any LLM."
 requires-python = ">=3.10"
 license = {text = "MIT"}
@@ -62,6 +62,9 @@ synthpanel = "synth_panel.main:main"
 [build-system]
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+version = {attr = "synth_panel.__version__.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
