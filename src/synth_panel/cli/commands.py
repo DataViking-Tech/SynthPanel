@@ -477,17 +477,26 @@ def _load_personas(path: str) -> list[dict[str, Any]]:
     raise ValueError(f"Invalid personas file: expected 'personas' key or a list, got {type(data).__name__}")
 
 
-def _merge_persona_lists(base: list[dict[str, Any]], merge_paths: list[str]) -> list[dict[str, Any]]:
-    """Append personas from each merge path onto *base*.
+def _merge_persona_lists_with_collisions(
+    base: list[dict[str, Any]],
+    merge_paths: list[str],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Append personas from each merge path onto *base*, recording name collisions.
 
     Files are loaded in order and their personas appended. If a later
     persona shares a ``name`` with an earlier one, the later entry
     replaces the earlier one in place (order of first occurrence is
-    preserved). Personas without a ``name`` are always appended — we
-    cannot safely dedupe them.
+    preserved) and the collision is recorded in the returned list.
+    Personas without a ``name`` are always appended — we cannot safely
+    dedupe them and so never flag them as collisions.
+
+    Returns ``(merged, collisions)`` where each collision is a dict
+    ``{"name": str, "source_path": str}`` identifying the dropped entry
+    and the merge file whose persona replaced it.
     """
     by_name: dict[str, int] = {}
     merged: list[dict[str, Any]] = []
+    collisions: list[dict[str, Any]] = []
     for p in base:
         name = p.get("name") if isinstance(p, dict) else None
         if isinstance(name, str) and name:
@@ -498,10 +507,20 @@ def _merge_persona_lists(base: list[dict[str, Any]], merge_paths: list[str]) -> 
             name = p.get("name") if isinstance(p, dict) else None
             if isinstance(name, str) and name and name in by_name:
                 merged[by_name[name]] = p
+                collisions.append({"name": name, "source_path": path})
             else:
                 if isinstance(name, str) and name:
                     by_name[name] = len(merged)
                 merged.append(p)
+    return merged, collisions
+
+
+def _merge_persona_lists(base: list[dict[str, Any]], merge_paths: list[str]) -> list[dict[str, Any]]:
+    """Thin wrapper over :func:`_merge_persona_lists_with_collisions` that
+    discards collision metadata. Retained for callers that only need the
+    merged list.
+    """
+    merged, _ = _merge_persona_lists_with_collisions(base, merge_paths)
     return merged
 
 
@@ -622,6 +641,8 @@ def _emit_dry_run_preview(
     system_prompt_fn,
     model: str,
     fmt: OutputFormat,
+    personas_merge_warnings: list[dict[str, Any]] | None = None,
+    personas_merge_used: bool = False,
 ) -> None:
     """Print the fully substituted panel inputs without any LLM call.
 
@@ -695,6 +716,10 @@ def _emit_dry_run_preview(
             for r in instrument.rounds
         ],
     }
+    # sp-g270: surface collision metadata so dashboards and MCP
+    # consumers see the dropped names without parsing stderr.
+    if personas_merge_used:
+        preview["personas_merge_warnings"] = personas_merge_warnings or []
     emit(fmt, message="Dry-run preview", extra=preview)
 
 
@@ -726,13 +751,68 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     # sp-on4: --personas-merge appends personas from additional files onto
     # the base --personas pack. When a persona name collides, the later
     # entry wins so callers can override pack defaults with a follow-on file.
+    #
+    # sp-g270: silent deduplication is dangerous at n>=50 with bundled
+    # packs — a 20-name collision can quietly shrink a declared panel by
+    # 20% with no visible signal. Every merge now records collisions,
+    # emits a stderr warning, and surfaces them in JSON output. The
+    # --personas-merge-on-collision flag lets users upgrade dedup to a
+    # hard error for scripts that require exact panel size.
     merge_paths = getattr(args, "personas_merge", None) or []
+    personas_merge_warnings: list[dict[str, Any]] = []
+    merge_used = bool(merge_paths)
+    on_collision = getattr(args, "personas_merge_on_collision", "dedup") or "dedup"
     if merge_paths:
         try:
-            personas = _merge_persona_lists(personas, merge_paths)
+            merged, collisions = _merge_persona_lists_with_collisions(personas, merge_paths)
         except (FileNotFoundError, ValueError) as exc:
             print(f"Error loading --personas-merge: {exc}", file=sys.stderr)
             return 1
+
+        if on_collision == "keep":
+            print(
+                "Error: --personas-merge-on-collision=keep is reserved and "
+                "not yet implemented. Use 'dedup' (default) or 'error'.",
+                file=sys.stderr,
+            )
+            return 1
+
+        if collisions:
+            post_count = len(merged)
+            pre_count = post_count + len(collisions)
+            names_joined = ", ".join(c["name"] for c in collisions)
+
+            if on_collision == "error":
+                print(
+                    f"Error: --personas-merge introduced {len(collisions)} "
+                    f"name collision(s) ({names_joined}); "
+                    f"--personas-merge-on-collision=error. Rename or drop "
+                    f"the duplicate personas before re-running.",
+                    file=sys.stderr,
+                )
+                return 1
+
+            # dedup (default): keep current silently-later-wins behavior,
+            # but make the drop loud.
+            print(
+                f"Warning: --personas-merge name collisions dropped "
+                f"{len(collisions)} persona(s): {names_joined}. "
+                f"Panel size is {post_count} (would be {pre_count} "
+                f"without dedup). Pass "
+                f"--personas-merge-on-collision=error to fail instead.",
+                file=sys.stderr,
+            )
+            personas_merge_warnings = [
+                {
+                    "type": "name_collision",
+                    "name": c["name"],
+                    "source_path": c["source_path"],
+                    "post_dedup_count": post_count,
+                    "pre_dedup_count": pre_count,
+                }
+                for c in collisions
+            ]
+        personas = merged
 
     try:
         instrument = _load_instrument(args.instrument)
@@ -898,6 +978,8 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             system_prompt_fn=system_prompt_fn,
             model=model,
             fmt=fmt,
+            personas_merge_warnings=personas_merge_warnings,
+            personas_merge_used=merge_used,
         )
         return 0
 
@@ -1555,6 +1637,13 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             warnings_list = extra.setdefault("warnings", [])
             if isinstance(warnings_list, list):
                 warnings_list.extend(assignment_warnings)
+        # sp-g270: surface --personas-merge name-collision drops so JSON
+        # consumers can assert panel size matches expectations. Always
+        # present (as []) when --personas-merge was used so downstream
+        # checks can rely on the key, but omitted when no merge happened
+        # to avoid noise in the common single-pack case.
+        if merge_used:
+            extra["personas_merge_warnings"] = personas_merge_warnings
         # sp-zdul: surface the deterministic persona→model assignment so
         # JSON consumers (dashboards, analyze pipelines) can record which
         # model answered which persona without re-deriving from the spec.

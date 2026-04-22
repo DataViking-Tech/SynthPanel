@@ -118,6 +118,19 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     panel_run_parser.add_argument(
+        "--personas-merge-on-collision",
+        dest="personas_merge_on_collision",
+        choices=["dedup", "error", "keep"],
+        default="dedup",
+        help=(
+            "How to handle --personas-merge name collisions. "
+            "'dedup' (default): the later file wins and a warning is "
+            "emitted naming every dropped persona plus the post-dedup "
+            "panel size. 'error': abort the run if any collision occurs. "
+            "'keep' is reserved and currently rejected — use dedup."
+        ),
+    )
+    panel_run_parser.add_argument(
         "--instrument",
         required=True,
         metavar="PATH",
