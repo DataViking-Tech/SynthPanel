@@ -558,11 +558,12 @@ def _partition_panelists_for_context(
     panelist's response already exceeds the limit — sub-chunking cannot help
     in that case and the caller must escalate the model or error.
     """
+    q_dict: dict[str, Any] = {"text": question} if isinstance(question, str) else question
     batches: list[list[Any]] = []
     current: list[Any] = []
     for pr in panelist_results:
         candidate = [*current, pr]
-        est = estimate_single_pass_tokens(candidate, [question], prompt=map_prompt)
+        est = estimate_single_pass_tokens(candidate, [q_dict], prompt=map_prompt)
         if est <= context_limit:
             current = candidate
             continue
@@ -604,14 +605,18 @@ def _sub_chunk_question_synthesis(
     when partitioning fails — i.e. when a single panelist's response
     cannot fit the context limit even alone.
     """
-    batches = _partition_panelists_for_context(filtered_panelists, question, map_prompt, context_limit)
+    # Normalize the question to a dict once so every downstream call sees a
+    # consistent shape (estimate_single_pass_tokens + synthesize_panel both
+    # expect list[dict[str, Any]]).
+    q_dict: dict[str, Any] = {"text": question} if isinstance(question, str) else question
+    batches = _partition_panelists_for_context(filtered_panelists, q_dict, map_prompt, context_limit)
     if batches is None:
-        q_text = _question_text(question)
+        q_text = _question_text(q_dict)
         # Estimate tokens for a single panelist so the diagnostic can report
         # what the sub-chunker saw as unsplittable.
         worst_est = 0
         for pr in filtered_panelists:
-            est = estimate_single_pass_tokens([pr], [question], prompt=map_prompt)
+            est = estimate_single_pass_tokens([pr], [q_dict], prompt=map_prompt)
             if est > worst_est:
                 worst_est = est
         diag: dict[str, Any] = {
@@ -639,7 +644,7 @@ def _sub_chunk_question_synthesis(
         res = synthesize_panel(
             client,
             batch,
-            [question],
+            [q_dict],
             model=model,
             panelist_model=panelist_model,
             custom_prompt=map_prompt,
@@ -651,11 +656,11 @@ def _sub_chunk_question_synthesis(
 
     # Inner reduce: wrap each batch summary as a synthetic panelist and run
     # the standard synthesis pipeline with a reduce-style prompt.
-    synthetic = _build_synthetic_reduce_panelists(batch_results, [question] * len(batch_results))
+    synthetic = _build_synthetic_reduce_panelists(batch_results, [q_dict] * len(batch_results))
     inner = synthesize_panel(
         client,
         synthetic,
-        [question],
+        [q_dict],
         model=model,
         panelist_model=panelist_model,
         custom_prompt=_INNER_REDUCE_PROMPT_TEMPLATE,
