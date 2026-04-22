@@ -23,6 +23,16 @@ from synth_panel._runners import (
     format_total_failure_message,
 )
 from synth_panel.cli.output import OutputFormat, emit
+from synth_panel.convergence import (
+    DEFAULT_CHECK_EVERY,
+    DEFAULT_EPSILON,
+    DEFAULT_M_CONSECUTIVE,
+    DEFAULT_MIN_N,
+    ConvergenceTracker,
+    SynthbenchUnavailableError,
+    identify_tracked_questions,
+    load_synthbench_baseline,
+)
 from synth_panel.cost import (
     ZERO_USAGE,
     CostEstimate,
@@ -995,6 +1005,65 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         emit(fmt, message="Ensemble complete", extra=output)
         return 0
 
+    # ── sp-yaru: convergence telemetry ───────────────────────────────────
+    # Build the tracker when any convergence flag opts in. We always
+    # respect --auto-stop / --convergence-baseline even if the user
+    # forgot --convergence-check-every, by falling back to the default
+    # cadence so those flags never silently no-op.
+    convergence_tracker: ConvergenceTracker | None = None
+    convergence_baseline_payload: dict[str, Any] | None = None
+    convergence_baseline_error: str | None = None
+    wants_convergence = any(
+        [
+            getattr(args, "convergence_check_every", None) is not None,
+            getattr(args, "auto_stop", False),
+            getattr(args, "convergence_log", None) is not None,
+            getattr(args, "convergence_baseline", None) is not None,
+            getattr(args, "convergence_eps", None) is not None,
+            getattr(args, "convergence_min_n", None) is not None,
+            getattr(args, "convergence_m", None) is not None,
+        ]
+    )
+    if wants_convergence:
+        tracked = identify_tracked_questions(questions)
+        if not tracked:
+            print(
+                "Warning: --convergence-* flags set but the instrument has no "
+                "bounded (Likert / yes-no / pick-one / enum) questions; "
+                "convergence tracking disabled.",
+                file=sys.stderr,
+            )
+        else:
+            # Resolve baseline before kicking off the run so a missing
+            # synthbench dep fails fast — we do not want to burn LLM
+            # spend on a run whose report we cannot assemble.
+            baseline_spec = getattr(args, "convergence_baseline", None)
+            if baseline_spec:
+                try:
+                    convergence_baseline_payload = load_synthbench_baseline(baseline_spec)
+                except SynthbenchUnavailableError as exc:
+                    print(f"Error: {exc}", file=sys.stderr)
+                    return 1
+                except (ValueError, RuntimeError) as exc:
+                    convergence_baseline_error = str(exc)
+                    print(
+                        f"Warning: could not load convergence baseline: {exc}",
+                        file=sys.stderr,
+                    )
+            convergence_tracker = ConvergenceTracker(
+                tracked,
+                check_every=getattr(args, "convergence_check_every", None) or DEFAULT_CHECK_EVERY,
+                epsilon=getattr(args, "convergence_eps", None) or DEFAULT_EPSILON,
+                min_n=(
+                    getattr(args, "convergence_min_n", None)
+                    if getattr(args, "convergence_min_n", None) is not None
+                    else DEFAULT_MIN_N
+                ),
+                m_consecutive=getattr(args, "convergence_m", None) or DEFAULT_M_CONSECUTIVE,
+                auto_stop=bool(getattr(args, "auto_stop", False)),
+                log_path=getattr(args, "convergence_log", None),
+            )
+
     # Run all panelists in parallel via the orchestrator
     blend_result = None  # populated only when --blend is active
     if blend_mode and model_spec:
@@ -1034,6 +1103,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             top_p=top_p,
             persona_models=persona_models,
             max_workers=max_concurrent,
+            convergence_tracker=convergence_tracker,
         )
 
     # Build output results and aggregate panelist usage
@@ -1370,6 +1440,30 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             # Repeat the banner at the bottom so a scrolled terminal still
             # surfaces it — this is the critical fix for sp-2hg.
             print(banner, file=sys.stderr)
+        # sp-yaru: even in TEXT mode, render a compact convergence summary
+        # so operators watching stdout can see "converged at n=473" without
+        # re-running with --output-format json.
+        if convergence_tracker is not None:
+            report = convergence_tracker.build_report(baseline=convergence_baseline_payload)
+            convergence_tracker.close()
+            print("\n" + "=" * 60)
+            print("CONVERGENCE")
+            print("=" * 60)
+            overall = report.get("overall_converged_at")
+            if overall is None:
+                print(f"  overall: not yet converged (final n={report['final_n']})")
+            else:
+                print(f"  overall converged_at: n={overall}")
+            if report.get("auto_stopped"):
+                print(f"  auto-stopped at n={report['final_n']}")
+            for qkey, qdata in report.get("per_question", {}).items():
+                ca = qdata.get("converged_at")
+                ca_str = f"n={ca}" if ca else "pending"
+                print(f"  {qkey}: converged_at={ca_str}, support={qdata.get('support_size', 0)}")
+            if convergence_baseline_payload:
+                hb_n = convergence_baseline_payload.get("converged_at")
+                if hb_n is not None:
+                    print(f"  human baseline: converged_at=n={hb_n}")
     else:
         # sp-efip: mirror the TEXT-mode behaviour and print the fatal
         # banner to stderr even when JSON/NDJSON is the primary output.
@@ -1466,6 +1560,15 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         # model answered which persona without re-deriving from the spec.
         if persona_models:
             extra["model_assignment"] = dict(persona_models)
+        # sp-yaru: surface convergence telemetry for large runs.
+        if convergence_tracker is not None:
+            convergence_report = convergence_tracker.build_report(
+                baseline=convergence_baseline_payload,
+            )
+            if convergence_baseline_error:
+                convergence_report["human_baseline_error"] = convergence_baseline_error
+            extra["convergence"] = convergence_report
+            convergence_tracker.close()
         # Include blend distributions when --blend is active
         if blend_result:
             extra["blend"] = {

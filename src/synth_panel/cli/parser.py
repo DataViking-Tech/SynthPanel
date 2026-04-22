@@ -345,6 +345,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Exits without calling any provider."
         ),
     )
+    # sp-i2ub: scaled-orchestration knobs
     panel_run_parser.add_argument(
         "--max-concurrent",
         type=int,
@@ -367,6 +368,79 @@ def build_parser() -> argparse.ArgumentParser:
             "Cap requests-per-second across the panel via a token bucket. "
             "Smooths bursts on top of --max-concurrent. Accepts fractional "
             "values (e.g. 0.5 for one request every two seconds)."
+        ),
+    )
+    # sp-yaru: convergence telemetry for large panels
+    panel_run_parser.add_argument(
+        "--convergence-check-every",
+        type=int,
+        default=None,
+        metavar="N",
+        dest="convergence_check_every",
+        help=(
+            "Compute a running Jensen-Shannon divergence every N completing "
+            "panelists for every bounded (Likert / yes-no / pick-one / enum) "
+            "question. Enables the post-run convergence report. Default: off; "
+            "setting this flag opts in. See docs/convergence.md."
+        ),
+    )
+    panel_run_parser.add_argument(
+        "--convergence-log",
+        default=None,
+        metavar="PATH",
+        dest="convergence_log",
+        help=(
+            "Write each convergence check as a JSON line to PATH instead of "
+            "stderr. Useful for streaming into dashboards during long runs."
+        ),
+    )
+    panel_run_parser.add_argument(
+        "--auto-stop",
+        action="store_true",
+        default=False,
+        dest="auto_stop",
+        help=(
+            "Halt the panel once every tracked question's rolling-average JSD "
+            "stays below --convergence-eps for --convergence-m consecutive "
+            "checks (and n >= --convergence-min-n). Default: off. Requires "
+            "--convergence-check-every."
+        ),
+    )
+    panel_run_parser.add_argument(
+        "--convergence-eps",
+        type=float,
+        default=None,
+        metavar="FLOAT",
+        dest="convergence_eps",
+        help="JSD threshold below which a question is treated as converged (default: 0.02).",
+    )
+    panel_run_parser.add_argument(
+        "--convergence-min-n",
+        type=int,
+        default=None,
+        metavar="N",
+        dest="convergence_min_n",
+        help="Minimum panelist count before --auto-stop is allowed to fire (default: 50).",
+    )
+    panel_run_parser.add_argument(
+        "--convergence-m",
+        type=int,
+        default=None,
+        metavar="N",
+        dest="convergence_m",
+        help="Consecutive checks below epsilon required to declare convergence (default: 3).",
+    )
+    panel_run_parser.add_argument(
+        "--convergence-baseline",
+        default=None,
+        metavar="DATASET:QUESTION",
+        dest="convergence_baseline",
+        help=(
+            "Load a human baseline convergence curve from synthbench and "
+            "include it in the report. Requires the optional dependency: "
+            "pip install 'synthpanel[convergence]'. Format: "
+            "'dataset:question_key' (e.g. 'gss:happiness') or just 'dataset' "
+            "when the dataset has a single default question."
         ),
     )
 
