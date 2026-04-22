@@ -662,7 +662,10 @@ async def _run_panel_async(
     # Compute total cost (panelist + synthesis)
     synthesis_usage_obj: CostTokenUsage | None = None
     synthesis_cost_obj = None
-    if synthesis_dict:
+    # sp-avmm: synthesis_dict may be an error envelope (no "usage" key) when
+    # the pre-flight check or the API call failed. Guard the cost arithmetic
+    # so we do not KeyError before we get a chance to surface the error.
+    if synthesis_dict and "usage" in synthesis_dict:
         synthesis_usage_obj = CostTokenUsage.from_dict(synthesis_dict["usage"])
         synthesis_pricing, _ = lookup_pricing(synthesis_dict.get("model"))
         synthesis_cost_obj = estimate_cost(synthesis_usage_obj, synthesis_pricing)
@@ -742,6 +745,14 @@ async def _run_panel_async(
         "cost_breakdown": cost_breakdown,
         "metadata": metadata,
     }
+
+    # sp-avmm: synthesis failure must surface loudly at the envelope
+    # top-level. Without this, MCP callers see synthesis: {synthesis_error:
+    # …} buried inside the result and cannot gate on run validity without
+    # inspecting the nested payload.
+    if synthesis_dict and isinstance(synthesis_dict.get("synthesis_error"), dict):
+        result["run_invalid"] = True
+        result["synthesis_error"] = synthesis_dict["synthesis_error"]
 
     if variant_data:
         result["robustness_scores"] = variant_data["robustness_scores"]

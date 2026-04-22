@@ -30,6 +30,8 @@ from synth_panel.prompts import build_question_prompt, persona_system_prompt
 from synth_panel.stats import robustness_score
 from synth_panel.synthesis import synthesize_panel
 
+logger = logging.getLogger(__name__)
+
 # sp-efip: max number of per-persona error samples to surface in the
 # diagnostic output when a run fails wholesale. Keeps CLI banners and
 # MCP error envelopes bounded while still naming real errors.
@@ -145,7 +147,292 @@ def format_total_failure_message(diagnostic: dict[str, Any]) -> str:
     return ". ".join(parts)
 
 
-logger = logging.getLogger(__name__)
+# sp-avmm: context-window table for synthesis pre-flight check.
+#
+# Keyed by the canonical model ID (after alias resolution) OR a prefix
+# match. Values are window sizes in tokens. When a model does not match,
+# the caller falls back to ``_DEFAULT_CONTEXT_WINDOW`` and emits a WARN
+# so operators know the limit they're running against is a guess.
+_CONTEXT_WINDOWS: dict[str, int] = {
+    # Anthropic
+    "claude-haiku-4-5": 200_000,
+    "claude-haiku-4": 200_000,
+    "claude-haiku-3-5": 200_000,
+    "claude-sonnet-4-6": 200_000,
+    "claude-sonnet-4": 200_000,
+    "claude-opus-4-6": 200_000,
+    "claude-opus-4": 200_000,
+    "claude-3-5-sonnet": 200_000,
+    "claude-3-5-haiku": 200_000,
+    "claude-3-opus": 200_000,
+    # Google
+    "gemini-2.5-pro": 1_000_000,
+    "gemini-2.5-flash": 1_000_000,
+    "gemini-2.5-flash-lite": 1_000_000,
+    "gemini-2.0": 1_000_000,
+    "gemini-1.5-pro": 2_000_000,
+    "gemini-1.5-flash": 1_000_000,
+    # Open-weights on OpenRouter / local
+    "qwen3": 131_072,
+    "qwen-3": 131_072,
+    "qwen2.5": 131_072,
+    "deepseek-v3": 128_000,
+    "deepseek-chat": 128_000,
+    # OpenAI (approximate — most recent families)
+    "gpt-4o": 128_000,
+    "gpt-4-turbo": 128_000,
+    "gpt-4.1": 1_000_000,
+    "o1": 200_000,
+    "o3": 200_000,
+    # xAI
+    "grok-3": 131_072,
+    "grok-2": 131_072,
+}
+
+# Conservative default for unknown models — 128k is the floor for most
+# modern production models. The pre-flight check emits a WARN when it
+# falls back to this, so operators can plumb in a real value.
+_DEFAULT_CONTEXT_WINDOW: int = 128_000
+
+# Headroom reserved below the declared window so the pre-flight check
+# errs on the side of caution. The bead suggests 8k; this leaves room
+# for the synthesis template, the tool-use schema scaffolding, and the
+# model's own output budget (``_MAX_TOKENS`` = 4k).
+_SYNTHESIS_HEADROOM_TOKENS: int = 8_000
+
+# Rough chars-per-token ratio for English text. Synthesis mirrors the
+# ratio already used by ``_print_cost_estimate`` in ``synthesis.py`` so
+# the two estimates stay in sync.
+_CHARS_PER_TOKEN: int = 4
+
+
+class SynthesisContextOverflowError(RuntimeError):
+    """Estimated synthesis prompt exceeds the synthesis model's context window.
+
+    Raised by :func:`detect_synthesis_context_overflow` (via caller check)
+    when the pre-flight estimate is too large. Carries the diagnostic
+    fields needed to build both the structured error payload and the
+    human-readable banner without re-computing.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        diagnostic: dict[str, Any],
+    ) -> None:
+        super().__init__(message)
+        self.diagnostic = diagnostic
+
+
+def _resolve_context_window(model: str | None) -> tuple[int, bool]:
+    """Return ``(window_tokens, is_default_fallback)`` for *model*.
+
+    Tries a direct match first, then a prefix match against known model
+    families. Returns ``(_DEFAULT_CONTEXT_WINDOW, True)`` when nothing
+    matches so callers can warn.
+    """
+    if not model:
+        return _DEFAULT_CONTEXT_WINDOW, True
+
+    # Lazy import — aliases are a CLI-layer concern but the MCP runner
+    # needs the same resolution so a pre-flight check against
+    # "haiku" doesn't falsely pick the default window.
+    try:
+        from synth_panel.llm.aliases import resolve_alias
+
+        resolved = resolve_alias(model)
+    except Exception:
+        resolved = model
+
+    candidates = (resolved, model)
+    for candidate in candidates:
+        if not candidate:
+            continue
+        lower = candidate.lower()
+        if lower in _CONTEXT_WINDOWS:
+            return _CONTEXT_WINDOWS[lower], False
+        # Strip any provider prefix ("openrouter/anthropic/claude-…")
+        trimmed = lower.split("/")[-1]
+        if trimmed in _CONTEXT_WINDOWS:
+            return _CONTEXT_WINDOWS[trimmed], False
+        for prefix, size in _CONTEXT_WINDOWS.items():
+            if trimmed.startswith(prefix) or lower.startswith(prefix):
+                return size, False
+    return _DEFAULT_CONTEXT_WINDOW, True
+
+
+def _estimate_synthesis_prompt_tokens(
+    panelist_results: list[Any],
+    questions: list[dict[str, Any]],
+    *,
+    custom_prompt: str | None = None,
+) -> int:
+    """Estimate the synthesis call's prompt token count.
+
+    Builds the same user content that ``synthesize_panel`` would assemble
+    (template + question list + every panelist's Q/A bodies) and applies
+    the ~4-chars-per-token heuristic already used elsewhere in the module.
+    Kept intentionally pessimistic: over-estimating the prompt is safer
+    than under-estimating because the API will reject the real call.
+    """
+    # Mirror synth.synthesis._format_panelist_data without importing it,
+    # to avoid a circular dependency at module load time.
+    chars = 0
+    if custom_prompt:
+        chars += len(custom_prompt)
+    else:
+        # Best-effort include of the default prompt template length.
+        try:
+            from synth_panel.prompts import SYNTHESIS_PROMPT
+
+            chars += len(SYNTHESIS_PROMPT)
+        except Exception:
+            chars += 2_000  # conservative guess for the template
+
+    for q in questions or []:
+        text = q.get("text") if isinstance(q, dict) else str(q)
+        chars += len(text or "")
+    for pr in panelist_results or []:
+        chars += len(getattr(pr, "persona_name", "") or "")
+        for resp in getattr(pr, "responses", []) or []:
+            q_text = resp.get("question", "") if isinstance(resp, dict) else ""
+            answer = resp.get("response", "") if isinstance(resp, dict) else ""
+            if isinstance(answer, dict):
+                # Panelist returned structured output — it gets serialized
+                # with json.dumps(..., indent=2) before landing in the prompt.
+                import json as _json
+
+                try:
+                    answer = _json.dumps(answer, indent=2)
+                except Exception:
+                    answer = str(answer)
+            chars += len(str(q_text)) + len(str(answer))
+
+    # Add fixed overhead for section headers ("## Questions Asked",
+    # "### <persona>", etc.) and the tool-use scaffolding the
+    # StructuredOutputEngine injects (~500 tokens).
+    overhead_chars = 2_000
+    return (chars + overhead_chars) // _CHARS_PER_TOKEN + 500
+
+
+def detect_synthesis_context_overflow(
+    panelist_results: list[Any],
+    questions: list[dict[str, Any]],
+    *,
+    synthesis_model: str | None,
+    custom_prompt: str | None = None,
+    headroom_tokens: int = _SYNTHESIS_HEADROOM_TOKENS,
+) -> dict[str, Any] | None:
+    """Return a diagnostic dict when the synthesis prompt will overflow.
+
+    Returns ``None`` when the estimated prompt fits inside the model's
+    context window (minus *headroom_tokens*). Returns a structured
+    diagnostic otherwise, with the fields needed to build both the
+    structured error payload (``synthesis_error``) and the actionable
+    human-readable message.
+
+    The diagnostic dict always carries:
+
+    * ``estimated_tokens`` — pessimistic pre-call token estimate.
+    * ``context_window`` — the model's documented context window.
+    * ``headroom_tokens`` — reserved below the window.
+    * ``effective_limit`` — ``context_window - headroom_tokens``.
+    * ``synthesis_model`` — the model we were about to call.
+    * ``is_default_window`` — True when we fell back to the default.
+    """
+    window, is_default = _resolve_context_window(synthesis_model)
+    if is_default:
+        logger.warning(
+            "Synthesis model %r not in the context-window table — falling back to %dk tokens. "
+            "Add it to _CONTEXT_WINDOWS for a tighter pre-flight check.",
+            synthesis_model,
+            window // 1000,
+        )
+
+    estimated = _estimate_synthesis_prompt_tokens(
+        panelist_results,
+        questions,
+        custom_prompt=custom_prompt,
+    )
+    effective_limit = max(0, window - headroom_tokens)
+    if estimated <= effective_limit:
+        return None
+    return {
+        "estimated_tokens": estimated,
+        "context_window": window,
+        "headroom_tokens": headroom_tokens,
+        "effective_limit": effective_limit,
+        "synthesis_model": synthesis_model,
+        "is_default_window": is_default,
+    }
+
+
+def format_synthesis_overflow_message(diagnostic: dict[str, Any]) -> str:
+    """Render the actionable pre-flight overflow message (sp-avmm).
+
+    The message names the estimated size, the model limit, and suggests
+    large-context alternatives and a rerun strategy. Sized to be usable
+    as both a CLI stderr line and a structured ``message`` field.
+    """
+    model = diagnostic.get("synthesis_model") or "synthesis model"
+    estimated = int(diagnostic.get("estimated_tokens", 0))
+    window = int(diagnostic.get("context_window", 0))
+    headroom = int(diagnostic.get("headroom_tokens", _SYNTHESIS_HEADROOM_TOKENS))
+
+    def _k(n: int) -> str:
+        if n >= 1_000_000 and n % 1_000_000 == 0:
+            return f"{n // 1_000_000}M"
+        return f"{n // 1000}k"
+
+    return (
+        f"synthesis input ~{_k(estimated)} tokens exceeds {model}'s {_k(window)}"
+        f" context (with {_k(headroom)} headroom). Try --synthesis-model"
+        f" gemini-flash-lite (1M ctx) or gemini-2.5-pro (1M ctx), or reduce"
+        f" panel size. Rerun with the same --personas + --instrument to"
+        f" produce identical panelist data; only the synthesis step will change."
+    )
+
+
+def _sanitize_api_error(exc: BaseException) -> str:
+    """Shrink a raised API exception into a single-line error string."""
+    text = str(exc).strip()
+    if not text:
+        text = exc.__class__.__name__
+    # Collapse newlines and cap length so the sanitized message stays
+    # banner-friendly in stderr and JSON envelopes.
+    text = " ".join(text.splitlines())
+    if len(text) > 1_000:
+        text = text[:997] + "..."
+    return text
+
+
+def build_synthesis_error_payload(
+    exc: BaseException | None,
+    *,
+    error_type: str,
+    message: str,
+    suggested_fix: str | None = None,
+    diagnostic: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build the structured ``synthesis_error`` dict surfaced to callers.
+
+    Mirrors the ``total_failure`` shape from sp-efip (structured, keyed
+    by category) so downstream consumers (MCP/CI/dashboards) can branch
+    on ``error_type`` without string-matching the human message.
+    """
+    payload: dict[str, Any] = {
+        "error_type": error_type,
+        "message": message,
+    }
+    if suggested_fix:
+        payload["suggested_fix"] = suggested_fix
+    if exc is not None:
+        payload["exception"] = _sanitize_api_error(exc)
+    if diagnostic:
+        payload["diagnostic"] = diagnostic
+    return payload
+
 
 # Caps mirrored from the MCP server — the SDK inherits the same guardrails.
 MAX_PERSONAS = 100
@@ -417,22 +704,59 @@ def run_panel_sync(
 
     base_results = [pr for pr in panelist_results if pr.persona_name not in variant_names]
     synthesis_dict: dict[str, Any] | None = None
+    # sp-avmm: synthesis failures surface as a ``synthesis_error`` key on
+    # ``synthesis_dict``. Callers (MCP server / SDK) detect this and lift
+    # it to ``run_invalid=True`` + top-level ``synthesis_error`` on the
+    # result envelope.
     if synthesis:
-        try:
-            synthesis_result = synthesize_panel(
-                client,
-                base_results,
-                questions,
-                model=synthesis_model,
-                panelist_model=model,
-                custom_prompt=synthesis_prompt,
-                panelist_cost=panelist_cost,
-                temperature=synthesis_temperature,
-            )
-            synthesis_dict = synthesis_result.to_dict()
-        except Exception:
-            logger.error("Synthesis failed (non-fatal)", exc_info=True)
-            synthesis_dict = {"synthesis_error": "Synthesis failed — see logs for details."}
+        synth_model_for_check = synthesis_model or model
+        overflow = detect_synthesis_context_overflow(
+            base_results,
+            questions,
+            synthesis_model=synth_model_for_check,
+            custom_prompt=synthesis_prompt,
+        )
+        if overflow is not None:
+            actionable = format_synthesis_overflow_message(overflow)
+            logger.error("Synthesis pre-flight rejected: %s", actionable)
+            synthesis_dict = {
+                "synthesis_error": build_synthesis_error_payload(
+                    None,
+                    error_type="synthesis_context_overflow",
+                    message=actionable,
+                    suggested_fix=(
+                        "Rerun with --synthesis-model gemini-2.5-flash-lite (1M context) "
+                        "or gemini-2.5-pro (1M context), or reduce panel size."
+                    ),
+                    diagnostic=overflow,
+                )
+            }
+        else:
+            try:
+                synthesis_result = synthesize_panel(
+                    client,
+                    base_results,
+                    questions,
+                    model=synthesis_model,
+                    panelist_model=model,
+                    custom_prompt=synthesis_prompt,
+                    panelist_cost=panelist_cost,
+                    temperature=synthesis_temperature,
+                )
+                synthesis_dict = synthesis_result.to_dict()
+            except Exception as exc:
+                logger.error("Synthesis failed: %s", exc, exc_info=True)
+                synthesis_dict = {
+                    "synthesis_error": build_synthesis_error_payload(
+                        exc,
+                        error_type="synthesis_api_error",
+                        message=f"Synthesis call failed: {_sanitize_api_error(exc)}",
+                        suggested_fix=(
+                            "Check provider credentials and model availability;"
+                            " if context-related, rerun with a larger-context synthesis model."
+                        ),
+                    )
+                }
 
     variant_data: dict[str, Any] | None = None
     if variants > 0 and variant_mapping:
