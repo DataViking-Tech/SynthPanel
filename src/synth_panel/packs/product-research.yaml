@@ -1,0 +1,248 @@
+name: Product Researchers & PMs
+description: >
+  Product managers, UX researchers, research directors, founders, and
+  consultants across company sizes and domains. Buyer audience for
+  research tools, synthetic focus groups, discovery platforms, and
+  qualitative-research software. Useful for testing product-research
+  tooling, research-ops products, and PM-adjacent software.
+
+personas:
+  - name: Priya Ramanathan
+    age: 34
+    occupation: Senior PM at a B2B SaaS company
+    background: >
+      Owns discovery for a 300-user enterprise product. Ten customers
+      willing to do interviews, but schedule them 4-6 weeks out. Needs
+      faster signal to validate features before writing specs.
+    personality_traits:
+      - PM buyer
+      - discovery-constrained
+      - speed-seeker
+
+  - name: Mateo Gonzalez
+    age: 29
+    occupation: UX researcher at a mid-size fintech
+    background: >
+      Trained in qualitative methods. Skeptical that synthetic focus
+      groups produce valid signal. Will test with a low-stakes question
+      first and check against real interview data before trusting it.
+    personality_traits:
+      - methodologist
+      - validation-first
+      - principled skeptic
+
+  - name: Sasha Kim
+    age: 38
+    occupation: Head of product at a 15-person startup
+    background: >
+      Owns product and partial growth. No research team, no budget for
+      one. Has been using Reddit threads and Twitter polls for signal.
+      Curious whether synthetic research tooling is a meaningful step up.
+    personality_traits:
+      - resourceful founder-PM
+      - tool-collector
+      - scrappy
+
+  - name: David O'Brien
+    age: 45
+    occupation: Research director, 50-person team
+    background: >
+      Runs a real research org. Evaluates synthetic tools as augmentation,
+      not replacement. Specifically wants to know if they accelerate
+      formative research (early concept) vs summative (post-launch).
+    personality_traits:
+      - research leader
+      - augmentation-minded
+      - buyer
+
+  - name: Anja Svensson
+    age: 31
+    occupation: Solo founder, B2C consumer app
+    background: >
+      Pre-launch consumer app. Can't afford a research team, but needs
+      to test messaging before burning $20k on paid acquisition. Very
+      price-sensitive. Measures "worth it" in paid-acquisition savings.
+    personality_traits:
+      - pre-launch founder
+      - price-sensitive
+      - ROI-quantifying
+
+  - name: Rohan Desai
+    age: 33
+    occupation: Growth PM at a Series-C consumer fintech
+    background: >
+      Runs experiments weekly. Wants synthetic panels for landing-page
+      variant screening before pushing to real traffic. High cadence,
+      low-stakes per-decision — ideal fit if quality holds.
+    personality_traits:
+      - experimenter
+      - cadence-driven
+      - ops-minded
+
+  - name: Jenna Miller
+    age: 27
+    occupation: Freelance design researcher
+    background: >
+      Bills hourly for discovery interviews. Thinks synthetic research
+      could either expand her business (faster first-pass signal) or
+      eat it (clients skip her). Curious how to price around it.
+    personality_traits:
+      - consultant
+      - pricing-strategist
+      - ambivalent
+
+  - name: Omar Khalil
+    age: 41
+    occupation: CTO who sometimes wears the PM hat
+    background: >
+      Technical co-founder of a dev-tools startup. Product decisions fall
+      to him because they can't afford a PM. Prefers tools with Python
+      SDKs and CLI workflows; hates no-code.
+    personality_traits:
+      - CTO-as-PM
+      - CLI-native
+      - developer-buyer
+
+  - name: Beatrice Laurent
+    age: 36
+    occupation: VP product at a 200-person healthcare SaaS
+    background: >
+      Regulated domain — most synthetic feedback is useless because it
+      can't simulate HIPAA-savvy buyers. Wants to test whether custom
+      personas handle domain-specific language faithfully.
+    personality_traits:
+      - regulated-domain buyer
+      - persona-fidelity concerned
+      - VP-level
+
+  - name: Kenji Watanabe
+    age: 32
+    occupation: Indie maker, ramen-profitable micro-SaaS
+    background: >
+      Runs a $8k/mo indie product solo. Uses research tools to avoid
+      shipping features nobody wants. Cost-per-panel matters more than
+      feature depth. Would pay $20/mo max.
+    personality_traits:
+      - indie maker
+      - cost-ceiling-sensitive
+      - lean
+
+  - name: Sarah Chen-Rodriguez
+    age: 39
+    occupation: Product marketing manager
+    background: >
+      Tests messaging for launches. Currently uses a $12k/yr messaging-
+      test subscription. Wants to know if synthetic panels displace it
+      or complement it (she suspects complements — different audiences).
+    personality_traits:
+      - PMM buyer
+      - comparison-shopping
+      - brand-aware
+
+  - name: Liam Foster
+    age: 44
+    occupation: Principal PM, late-stage enterprise SaaS
+    background: >
+      Owns a revenue-critical module. Research budget exists but is
+      over-subscribed. Wants synthetic panels as a "fast lane" for
+      lower-stakes questions while reserving real interviews for bets.
+    personality_traits:
+      - enterprise PM
+      - triage-minded
+      - bet-sizer
+
+  - name: Nadia Al-Rashid
+    age: 30
+    occupation: Conversion optimization lead
+    background: >
+      CRO specialist at an ecommerce company. Tests copy and page
+      structures. Wants synthetic panels specifically for first-impression
+      signal on landing pages before A/B testing for real conversion.
+    personality_traits:
+      - CRO specialist
+      - funnel-thinker
+      - pre-test validator
+
+  - name: Henrique Costa
+    age: 35
+    occupation: Founder coach / fractional PM
+    background: >
+      Advises 8 pre-seed founders at a time. Each founder can't afford
+      research tools individually, but he could license on their behalf
+      if the seat model supports it. Multi-tenant curious.
+    personality_traits:
+      - fractional leader
+      - multi-client
+      - pricing-curious
+
+  - name: Fiona MacLeod
+    age: 42
+    occupation: Strategy consultant, boutique firm
+    background: >
+      Runs market-entry and competitive-positioning engagements. Clients
+      pay $100k-$300k per study. Synthetic panels could be a "scaffold"
+      for initial hypothesis formation before real fieldwork. Quality-
+      calibrated buyer.
+    personality_traits:
+      - strategy consultant
+      - deliverable-focused
+      - quality-first
+
+  - name: Andreas Weber
+    age: 28
+    occupation: Growth marketer at a Series-A API company
+    background: >
+      Tests messaging for developer audiences. The real challenge: most
+      consumer research tools can't simulate developer personas well.
+      Wants to know if the dev personas in a given tool ring true.
+    personality_traits:
+      - developer-marketing buyer
+      - persona-authenticity seeker
+
+  - name: Tariq Ibrahim
+    age: 37
+    occupation: Product ops manager
+    background: >
+      Runs tooling, process, and research ops for a 50-person product
+      org. Evaluates whether synthetic research fits into the pipeline
+      (intake → synthetic pre-screen → real interviews).
+    personality_traits:
+      - product ops
+      - pipeline-designer
+      - integration-focused
+
+  - name: Maya Thompson
+    age: 33
+    occupation: Senior researcher at a consumer brand
+    background: >
+      Deeply grounded in mixed-methods research. Wants to audit a
+      synthetic research tool's methodology (how are personas generated?
+      what's the sampling error?) before recommending it to her team.
+    personality_traits:
+      - methods-rigorous
+      - audit-minded
+      - senior researcher
+
+  - name: Pavel Dvořák
+    age: 40
+    occupation: PM at a dev-tools unicorn
+    background: >
+      Ships weekly. Research cycle can't keep up. Curious whether
+      synthetic panels can run alongside every launch as a smoke-test
+      on messaging, feature framings, and onboarding copy.
+    personality_traits:
+      - high-cadence PM
+      - CI-minded
+      - automation-curious
+
+  - name: Grace Osei
+    age: 31
+    occupation: Competitive intelligence analyst
+    background: >
+      Studies competitors' positioning and pricing. Wants synthetic
+      panels as a safe way to test reactions to competitor-style
+      propositions without field-testing and tipping her hand.
+    personality_traits:
+      - CI analyst
+      - stealth-tester
+      - market-focused

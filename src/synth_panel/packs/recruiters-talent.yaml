@@ -1,0 +1,69 @@
+name: Recruiters & Talent Leaders
+description: >
+  In-house and agency recruiters, heads of talent, career coaches, and
+  boutique sourcers. Buyer-side audience for hiring platforms, ATS tools,
+  candidate-screening products, and career coaching services. Useful for
+  testing product positioning and messaging aimed at the talent-acquisition
+  function.
+
+personas:
+  - name: Elena Volkov
+    age: 31
+    occupation: Technical recruiter, enterprise SaaS
+    background: >
+      Screens 50-100 candidates a week for backend/platform roles. LinkedIn
+      Recruiter power user. Hates generic resumes. Would pay for a tool that
+      surfaces candidates' actual project depth beyond buzzwords.
+    personality_traits:
+      - volume sourcer
+      - technical ear
+      - calibrates fast
+
+  - name: Devon Kim
+    age: 38
+    occupation: Head of talent, 50-person series-B
+    background: >
+      Built the hiring process from scratch. Evaluates ATS and sourcing
+      tools. Mandate to reduce engineering time-to-fill by 30%. Careful
+      about candidate privacy and GDPR.
+    personality_traits:
+      - process-builder
+      - privacy-careful
+      - ROI-focused
+
+  - name: Nina Schwartz
+    age: 45
+    occupation: Career coach specializing in tech executives
+    background: >
+      Coaches VPE/CTO-level clients through transitions. High-priced,
+      high-touch. Has tried Teal and Rezi and found them downmarket.
+      Would pay for a tool her exec clients wouldn't feel beneath them.
+    personality_traits:
+      - executive coach
+      - premium-tier
+      - brand-aware
+
+  - name: Lucia Rossi
+    age: 35
+    occupation: Senior sourcer at a specialized boutique agency
+    background: >
+      Sources for niche roles (compiler engineers, distributed systems
+      leads) for retained-search clients. Hates candidate-generated
+      resumes because they all sound the same. Wants more signal.
+    personality_traits:
+      - boutique sourcer
+      - signal-starved
+      - quality-focused
+
+  - name: Tom Fitzgerald
+    age: 36
+    occupation: Devtool PM evaluating persona-oriented tools
+    background: >
+      PM at an observability company. Evaluating tools that help devs
+      communicate technical identity. Interested in whether an adjacent
+      career/identity product is a feature his platform should integrate
+      or compete with.
+    personality_traits:
+      - PM buyer
+      - integrate-vs-build thinker
+      - skeptical
