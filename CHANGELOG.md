@@ -6,6 +6,18 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [Unreleased]
 
+## [0.9.9] - 2026-04-22
+
+### Fixed
+- (sp-exu6) Synthesis: `--synthesis-strategy=auto` now routes to `map-reduce` when the estimated prompt would overflow the synthesis model's single-pass context window, instead of hard-failing on the pre-flight check. Mayor introduced the regression during the sp-avmm × sp-9rzu rebase in 0.9.8 — pre-flight ran *before* strategy-select, so `auto` was effectively `single-only with a hard limit`. Dogfooded n=100 ensemble audit surfaced the bug on all three panels.
+- (sp-9gcm) Cost: resolve aliases to their canonical OpenRouter-prefixed model IDs before keying into the pricing table. `--models haiku:0.25,deepseek-v3:0.25,gemini-flash-lite:0.25,qwen3-plus:0.25` previously missed sp-oshf's `deepseek-v3.2` and current `gemini-flash-lite` entries, so those models fell through to DEFAULT_PRICING and produced 40–93% divergence warnings in the n=100 audit. Top-level cost was already authoritative via sp-j3vk; this tightens the local-table sanity-check path.
+
+### Added
+- (sp-g270) `panel run --personas-merge` now warns (and optionally errors) when a merged pack contains persona names already present in bundled packs. Pre-run stderr line + new top-level `personas_merge_warnings` array in JSON output lists dropped names and post-dedup panel size. New `--personas-merge-on-collision={dedup,error}` flag controls behavior. Caught the n=100 silent 10% shrink that cost mayor 20 minutes of debugging.
+
+### Changed
+- (sp-ssrw) Version is now sourced from a single `src/synth_panel/__version__.py` and `pyproject.toml` reads it via `dynamic = ["version"]`. `site/index.html` renders from `site/index.html.j2` with `{{ version }}` substitution. Retires sp-lwy's drift-guard test as a render-correctness check; release-cut friction is now a one-line edit.
+
 ## [0.9.8] - 2026-04-22
 
 ### Fixed
