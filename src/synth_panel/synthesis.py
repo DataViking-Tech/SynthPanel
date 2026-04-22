@@ -311,6 +311,26 @@ _MAP_PROMPT_TEMPLATE = (
     "Cite panelist names when useful. Be specific and substantive."
 )
 
+# sp-4g6a: inner reduce used when a single question's responses overflow the
+# synthesis model's context and we partition the panelists into sub-batches.
+# Each batch's map-phase summary becomes the "panelist response" here, and
+# this reduce combines them into ONE question-level summary. The outer
+# cross-question reduce then consumes that summary as usual.
+_INNER_REDUCE_PROMPT_TEMPLATE = (
+    "You are combining partial summaries of panelist responses to ONE "
+    "specific question. An earlier pass split the panel into batches — "
+    "each batch was summarized separately. Your job is to merge those "
+    "batch summaries into a single coherent per-question synthesis, "
+    "preserving the usual rubric (summary / themes / agreements / "
+    "disagreements / surprises / recommendation) but scoped to this one "
+    "question.\n\n"
+    "Do not re-summarize each batch individually; combine them. When a "
+    "theme or tension recurs across batches, surface it. When batches "
+    "disagree, flag the disagreement. Leave recommendation empty if "
+    "nothing actionable emerges."
+)
+
+
 _REDUCE_PROMPT_TEMPLATE = (
     "You are producing the final cross-question synthesis of a focus group "
     "panel. Per-question summaries have already been produced by an earlier "
@@ -358,6 +378,11 @@ _CONTEXT_WINDOWS: dict[str, int] = {
 }
 _DEFAULT_CONTEXT_WINDOW = 128_000
 _CONTEXT_HEADROOM = 8_000
+
+# sp-4g6a: target for --synthesis-auto-escalate. Chosen because it is the
+# cheapest 1M-context model available through the default provider set.
+# Operators can still pick gemini-2.5-pro manually via --synthesis-model.
+_ESCALATION_MODEL = "gemini-2.5-flash-lite"
 
 
 class MapChunkOverflowError(RuntimeError):
@@ -519,6 +544,157 @@ def _build_synthetic_reduce_panelists(
     return synthetic
 
 
+def _partition_panelists_for_context(
+    panelist_results: list[Any],
+    question: dict[str, Any] | str,
+    map_prompt: str,
+    context_limit: int,
+) -> list[list[Any]] | None:
+    """Greedy partition of *panelist_results* into batches fitting *context_limit*.
+
+    Walks panelists in order and grows the current batch while its estimated
+    single-pass token count stays below the limit. Starts a new batch when
+    adding the next panelist would overflow. Returns ``None`` when a single
+    panelist's response already exceeds the limit — sub-chunking cannot help
+    in that case and the caller must escalate the model or error.
+    """
+    q_dict: dict[str, Any] = {"text": question} if isinstance(question, str) else question
+    batches: list[list[Any]] = []
+    current: list[Any] = []
+    for pr in panelist_results:
+        candidate = [*current, pr]
+        est = estimate_single_pass_tokens(candidate, [q_dict], prompt=map_prompt)
+        if est <= context_limit:
+            current = candidate
+            continue
+        if not current:
+            # A single panelist's response does not fit — sub-chunking is
+            # structurally unable to resolve this. Caller handles.
+            return None
+        batches.append(current)
+        current = [pr]
+    if current:
+        batches.append(current)
+    return batches
+
+
+def _sub_chunk_question_synthesis(
+    client: LLMClient,
+    filtered_panelists: list[Any],
+    question: dict[str, Any] | str,
+    map_prompt: str,
+    *,
+    model: str,
+    panelist_model: str | None,
+    context_limit: int,
+    temperature: float | None,
+    top_p: float | None,
+    question_index: int | None = None,
+) -> tuple[SynthesisResult, int]:
+    """Synthesize one overflowing question by partitioning panelists (sp-4g6a).
+
+    Splits the filtered panelists into batches that each fit within
+    *context_limit*, runs one :func:`synthesize_panel` per batch with the
+    supplied *map_prompt*, then performs an inner reduce that combines the
+    batch summaries into a single per-question :class:`SynthesisResult`.
+    The returned result's ``usage`` / ``cost`` / ``is_fallback`` aggregate
+    every underlying call (batch maps + inner reduce) so outer roll-ups
+    stay accurate.
+
+    Returns ``(result, batch_count)``. Raises :class:`MapChunkOverflowError`
+    when partitioning fails — i.e. when a single panelist's response
+    cannot fit the context limit even alone.
+    """
+    # Normalize the question to a dict once so every downstream call sees a
+    # consistent shape (estimate_single_pass_tokens + synthesize_panel both
+    # expect list[dict[str, Any]]).
+    q_dict: dict[str, Any] = {"text": question} if isinstance(question, str) else question
+    batches = _partition_panelists_for_context(filtered_panelists, q_dict, map_prompt, context_limit)
+    if batches is None:
+        q_text = _question_text(q_dict)
+        # Estimate tokens for a single panelist so the diagnostic can report
+        # what the sub-chunker saw as unsplittable.
+        worst_est = 0
+        for pr in filtered_panelists:
+            est = estimate_single_pass_tokens([pr], [q_dict], prompt=map_prompt)
+            if est > worst_est:
+                worst_est = est
+        diag: dict[str, Any] = {
+            "question_text": q_text,
+            "estimated_tokens": worst_est,
+            "effective_limit": context_limit,
+            "synthesis_model": model,
+            "reason": "single_panelist_overflow",
+        }
+        if question_index is not None:
+            diag["question_index"] = question_index
+        raise MapChunkOverflowError(
+            (
+                f"map-reduce sub-chunk failed for question '{q_text[:60]}': "
+                f"a single panelist's response (~{worst_est} tokens) exceeds "
+                f"the effective limit ({context_limit} tokens). Rerun with a "
+                "larger-context synthesis model (e.g. --synthesis-auto-escalate "
+                "or --synthesis-model gemini-2.5-flash-lite)."
+            ),
+            diagnostic=diag,
+        )
+
+    batch_results: list[SynthesisResult] = []
+    for batch in batches:
+        res = synthesize_panel(
+            client,
+            batch,
+            [q_dict],
+            model=model,
+            panelist_model=panelist_model,
+            custom_prompt=map_prompt,
+            panelist_cost=None,
+            temperature=temperature,
+            top_p=top_p,
+        )
+        batch_results.append(res)
+
+    # Inner reduce: wrap each batch summary as a synthetic panelist and run
+    # the standard synthesis pipeline with a reduce-style prompt.
+    synthetic = _build_synthetic_reduce_panelists(batch_results, [q_dict] * len(batch_results))
+    inner = synthesize_panel(
+        client,
+        synthetic,
+        [q_dict],
+        model=model,
+        panelist_model=panelist_model,
+        custom_prompt=_INNER_REDUCE_PROMPT_TEMPLATE,
+        panelist_cost=None,
+        temperature=temperature,
+        top_p=top_p,
+    )
+
+    # Aggregate usage / cost across every batch call + the inner reduce
+    # so the outer map_breakdown entry for this question reflects the
+    # full work done.
+    total_usage: TokenUsage = inner.usage
+    total_cost: CostEstimate = inner.cost
+    for br in batch_results:
+        total_usage = total_usage + br.usage
+        total_cost = total_cost + br.cost
+    any_fallback = inner.is_fallback or any(br.is_fallback for br in batch_results)
+
+    aggregated = SynthesisResult(
+        summary=inner.summary,
+        themes=inner.themes,
+        agreements=inner.agreements,
+        disagreements=inner.disagreements,
+        surprises=inner.surprises,
+        recommendation=inner.recommendation,
+        usage=total_usage,
+        cost=total_cost,
+        model=model,
+        is_fallback=any_fallback,
+        error=inner.error,
+    )
+    return aggregated, len(batches)
+
+
 def synthesize_panel_mapreduce(
     client: LLMClient,
     panelist_results: list[Any],
@@ -531,6 +707,7 @@ def synthesize_panel_mapreduce(
     top_p: float | None = None,
     personas: list[dict[str, Any]] | None = None,
     max_workers: int | None = None,
+    auto_escalate: bool = False,
 ) -> SynthesisResult:
     """Map-reduce synthesis for large panels (sp-kkzz).
 
@@ -553,6 +730,20 @@ def synthesize_panel_mapreduce(
     Custom map / reduce prompts are intentionally NOT accepted here —
     ``--synthesis-prompt`` forces ``strategy=single`` upstream. Adding
     map/reduce prompt overrides is tracked as future work.
+
+    Per-chunk overflow handling (sp-4g6a):
+
+    * By default, when a single question's responses exceed the model's
+      context window, the panelists for that question are partitioned
+      into sub-batches that each fit, every batch is summarized, and an
+      inner reduce combines the batch summaries into a single per-question
+      summary. This preserves single-model semantics and keeps the
+      overall pipeline shape identical.
+    * When ``auto_escalate=True`` and the resolved synthesis model has a
+      smaller context window than the escalation target, an overflowing
+      question's map call is instead retried on a larger-context model
+      (default: ``gemini-2.5-flash-lite``, 1M ctx) with a visible warning.
+      Sub-chunking still runs if the escalated window is also insufficient.
     """
     resolved_model = model or panelist_model or _DEFAULT_MODEL
     if not questions:
@@ -574,60 +765,114 @@ def synthesize_panel_mapreduce(
     # sp-exu6: per-map-call overflow pre-flight. Each map call only sees
     # responses for its own question, so the budget is much smaller than
     # the full-panel synthesis. Still, a single question with very long
-    # responses (or a large cluster-metadata block) could overflow — catch
-    # that here rather than letting the provider API reject it mid-fanout.
-    context_limit = resolve_context_window(resolved_model) - _CONTEXT_HEADROOM
+    # responses (or a large cluster-metadata block) could overflow.
+    #
+    # sp-4g6a: when it does, we no longer raise immediately. Build a
+    # per-question plan:
+    #
+    # * "direct"     → fits; run one map call on ``resolved_model``.
+    # * "escalate"   → does not fit ``resolved_model`` but fits a larger-
+    #                  context escalation target, and the caller opted in
+    #                  via ``auto_escalate=True``. Run one map call on the
+    #                  escalated model (with a visible warning).
+    # * "sub_chunk"  → doesn't fit (even after any escalation). Partition
+    #                  panelists into batches that each fit, and run an
+    #                  inner reduce to produce one per-question summary.
+    #
+    # The plan is resolved up front so we can surface escalation warnings
+    # in deterministic question order before any API calls fan out.
+    base_limit = resolve_context_window(resolved_model) - _CONTEXT_HEADROOM
+    escalated_limit = resolve_context_window(_ESCALATION_MODEL) - _CONTEXT_HEADROOM
+    escalation_available = auto_escalate and escalated_limit > base_limit
+
+    plans: list[dict[str, Any]] = []
     for idx in range(n):
         q = questions[idx]
         q_text = _question_text(q)
         filtered = [_filter_panelist_to_question(pr, q_text) for pr in panelist_results]
         est = estimate_single_pass_tokens(filtered, [q], prompt=map_prompt)
-        if est > context_limit:
-            raise MapChunkOverflowError(
-                (
-                    f"map-reduce per-chunk overflow: question {idx} "
-                    f"(~{est} tokens) exceeds {resolved_model}'s effective "
-                    f"limit ({context_limit} tokens). Rerun with a "
-                    "larger-context synthesis model (e.g. "
-                    "gemini-2.5-flash-lite, 1M ctx) or trim the panel."
-                ),
-                diagnostic={
-                    "question_index": idx,
-                    "question_text": q_text,
-                    "estimated_tokens": est,
-                    "effective_limit": context_limit,
-                    "synthesis_model": resolved_model,
-                },
+        if est <= base_limit:
+            plans.append({"mode": "direct", "model": resolved_model, "filtered": filtered, "est": est})
+            continue
+        if escalation_available and est <= escalated_limit:
+            print(
+                f"warning: auto-escalated synthesis from {resolved_model} "
+                f"to {_ESCALATION_MODEL} for question {idx} "
+                f"(~{est} tokens > {base_limit} effective limit).",
+                file=sys.stderr,
             )
+            plans.append(
+                {
+                    "mode": "escalate",
+                    "model": _ESCALATION_MODEL,
+                    "filtered": filtered,
+                    "est": est,
+                    "original_model": resolved_model,
+                }
+            )
+            continue
+        # Sub-chunk. Use the escalated model's limit when available so we
+        # can pack larger batches; otherwise stay on the resolved model.
+        sub_model = _ESCALATION_MODEL if escalation_available else resolved_model
+        sub_limit = escalated_limit if escalation_available else base_limit
+        plans.append(
+            {
+                "mode": "sub_chunk",
+                "model": sub_model,
+                "filtered": filtered,
+                "est": est,
+                "context_limit": sub_limit,
+            }
+        )
 
-    def _run_one_map(idx: int) -> tuple[int, SynthesisResult]:
+    def _run_one_map(idx: int) -> tuple[int, SynthesisResult, dict[str, Any]]:
+        plan = plans[idx]
         q = questions[idx]
-        q_text = _question_text(q)
-        filtered = [_filter_panelist_to_question(pr, q_text) for pr in panelist_results]
+        filtered = plan["filtered"]
+        meta: dict[str, Any] = {"mode": plan["mode"], "model": plan["model"]}
+        if plan["mode"] == "sub_chunk":
+            res, batch_count = _sub_chunk_question_synthesis(
+                client,
+                filtered,
+                q,
+                map_prompt,
+                model=plan["model"],
+                panelist_model=panelist_model,
+                context_limit=plan["context_limit"],
+                temperature=temperature,
+                top_p=top_p,
+                question_index=idx,
+            )
+            meta["batch_count"] = batch_count
+            return idx, res, meta
         res = synthesize_panel(
             client,
             filtered,
             [q],
-            model=resolved_model,
+            model=plan["model"],
             panelist_model=panelist_model,
             custom_prompt=map_prompt,
             panelist_cost=None,
             temperature=temperature,
             top_p=top_p,
         )
-        return idx, res
+        return idx, res, meta
 
     map_results: list[SynthesisResult | None] = [None] * n
+    map_meta: list[dict[str, Any] | None] = [None] * n
     with ThreadPoolExecutor(max_workers=workers) as executor:
         futures = [executor.submit(_run_one_map, i) for i in range(n)]
         for fut in as_completed(futures):
-            idx, res = fut.result()
+            idx, res, meta = fut.result()
             map_results[idx] = res
+            map_meta[idx] = meta
 
     # Narrow to non-None — ThreadPoolExecutor either fills every slot or
     # raises. Keep the assert so mypy/readers see the invariant.
     assert all(r is not None for r in map_results)
+    assert all(m is not None for m in map_meta)
     completed_maps: list[SynthesisResult] = [r for r in map_results if r is not None]
+    completed_meta: list[dict[str, Any]] = [m for m in map_meta if m is not None]
 
     # Reduce phase
     synthetic_panelists = _build_synthetic_reduce_panelists(completed_maps, questions)
@@ -647,17 +892,26 @@ def synthesize_panel_mapreduce(
     total_usage: TokenUsage = ZERO_USAGE
     total_cost: CostEstimate = CostEstimate()
     map_breakdown: list[dict[str, Any]] = []
-    for i, res in enumerate(completed_maps):
+    for i, (res, meta) in enumerate(zip(completed_maps, completed_meta)):
         total_usage = total_usage + res.usage
         total_cost = total_cost + res.cost
-        map_breakdown.append(
-            {
-                "question_index": i,
-                "tokens": res.usage.total_tokens,
-                "cost_usd": round(res.cost.total_cost, 6),
-                "is_fallback": res.is_fallback,
-            }
-        )
+        entry: dict[str, Any] = {
+            "question_index": i,
+            "tokens": res.usage.total_tokens,
+            "cost_usd": round(res.cost.total_cost, 6),
+            "is_fallback": res.is_fallback,
+        }
+        # sp-4g6a: surface per-question overflow handling in the breakdown
+        # so operators can tell at a glance which questions needed a
+        # different treatment and why.
+        if meta["mode"] == "sub_chunk":
+            entry["sub_chunked"] = True
+            entry["batch_count"] = meta.get("batch_count")
+            entry["model"] = meta["model"]
+        elif meta["mode"] == "escalate":
+            entry["escalated_model"] = meta["model"]
+            entry["model"] = meta["model"]
+        map_breakdown.append(entry)
     total_usage = total_usage + reduce_result.usage
     total_cost = total_cost + reduce_result.cost
     reduce_breakdown: dict[str, Any] = {

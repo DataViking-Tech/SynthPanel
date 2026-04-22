@@ -1345,6 +1345,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                         temperature=effective_synth_temp,
                         top_p=top_p,
                         personas=personas,
+                        auto_escalate=getattr(args, "synthesis_auto_escalate", False),
                     )
                 else:
                     synthesis_result = synthesize_panel(
