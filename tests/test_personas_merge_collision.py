@@ -46,15 +46,9 @@ def _mock_synthesis():
 
 def _write_fixtures(tmp_path, *, base_names, merge_names):
     base = tmp_path / "base.yaml"
-    base.write_text(
-        "personas:\n"
-        + "".join(f"  - name: {n}\n    age: 30\n" for n in base_names)
-    )
+    base.write_text("personas:\n" + "".join(f"  - name: {n}\n    age: 30\n" for n in base_names))
     merge = tmp_path / "merge.yaml"
-    merge.write_text(
-        "personas:\n"
-        + "".join(f"  - name: {n}\n    age: 40\n" for n in merge_names)
-    )
+    merge.write_text("personas:\n" + "".join(f"  - name: {n}\n    age: 40\n" for n in merge_names))
     survey = tmp_path / "survey.yaml"
     survey.write_text("instrument:\n  questions:\n    - text: Q?\n")
     return base, merge, survey
@@ -63,17 +57,13 @@ def _write_fixtures(tmp_path, *, base_names, merge_names):
 @patch("synth_panel.cli.commands.synthesize_panel")
 @patch("synth_panel.orchestrator.AgentRuntime")
 @patch("synth_panel.cli.commands.LLMClient")
-def test_collision_emits_warning_to_stderr(
-    mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path
-):
+def test_collision_emits_warning_to_stderr(mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path):
     mock_runtime = MagicMock()
     mock_runtime.run_turn.return_value = _mock_turn()
     mock_runtime_cls.return_value = mock_runtime
     mock_synth.return_value = _mock_synthesis()
 
-    base, merge, survey = _write_fixtures(
-        tmp_path, base_names=["Alice", "Bob"], merge_names=["Alice", "Carol"]
-    )
+    base, merge, survey = _write_fixtures(tmp_path, base_names=["Alice", "Bob"], merge_names=["Alice", "Carol"])
 
     code = main(
         [
@@ -99,17 +89,13 @@ def test_collision_emits_warning_to_stderr(
 @patch("synth_panel.cli.commands.synthesize_panel")
 @patch("synth_panel.orchestrator.AgentRuntime")
 @patch("synth_panel.cli.commands.LLMClient")
-def test_collision_appears_in_json_output(
-    mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path
-):
+def test_collision_appears_in_json_output(mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path):
     mock_runtime = MagicMock()
     mock_runtime.run_turn.return_value = _mock_turn()
     mock_runtime_cls.return_value = mock_runtime
     mock_synth.return_value = _mock_synthesis()
 
-    base, merge, survey = _write_fixtures(
-        tmp_path, base_names=["Alice", "Bob"], merge_names=["Alice", "Carol"]
-    )
+    base, merge, survey = _write_fixtures(tmp_path, base_names=["Alice", "Bob"], merge_names=["Alice", "Carol"])
 
     code = main(
         [
@@ -142,14 +128,10 @@ def test_collision_appears_in_json_output(
 @patch("synth_panel.cli.commands.synthesize_panel")
 @patch("synth_panel.orchestrator.AgentRuntime")
 @patch("synth_panel.cli.commands.LLMClient")
-def test_dry_run_surfaces_collision(
-    mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path
-):
+def test_dry_run_surfaces_collision(mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path):
     # Dry-run short-circuits before any LLM call fires; the mocks exist
     # only to guarantee we never accidentally hit the provider layer.
-    base, merge, survey = _write_fixtures(
-        tmp_path, base_names=["Alice"], merge_names=["Alice"]
-    )
+    base, merge, survey = _write_fixtures(tmp_path, base_names=["Alice"], merge_names=["Alice"])
 
     code = main(
         [
@@ -184,17 +166,13 @@ def test_dry_run_surfaces_collision(
 @patch("synth_panel.cli.commands.synthesize_panel")
 @patch("synth_panel.orchestrator.AgentRuntime")
 @patch("synth_panel.cli.commands.LLMClient")
-def test_no_collision_no_warning(
-    mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path
-):
+def test_no_collision_no_warning(mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path):
     mock_runtime = MagicMock()
     mock_runtime.run_turn.return_value = _mock_turn()
     mock_runtime_cls.return_value = mock_runtime
     mock_synth.return_value = _mock_synthesis()
 
-    base, merge, survey = _write_fixtures(
-        tmp_path, base_names=["Alice"], merge_names=["Bob"]
-    )
+    base, merge, survey = _write_fixtures(tmp_path, base_names=["Alice"], merge_names=["Bob"])
 
     code = main(
         [
@@ -225,12 +203,8 @@ def test_no_collision_no_warning(
 @patch("synth_panel.cli.commands.synthesize_panel")
 @patch("synth_panel.orchestrator.AgentRuntime")
 @patch("synth_panel.cli.commands.LLMClient")
-def test_on_collision_error_fails_run(
-    mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path
-):
-    base, merge, survey = _write_fixtures(
-        tmp_path, base_names=["Alice"], merge_names=["Alice"]
-    )
+def test_on_collision_error_fails_run(mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path):
+    base, merge, survey = _write_fixtures(tmp_path, base_names=["Alice"], merge_names=["Alice"])
 
     code = main(
         [
@@ -255,9 +229,7 @@ def test_on_collision_error_fails_run(
 
 
 def test_on_collision_keep_is_reserved(capsys, tmp_path):
-    base, merge, survey = _write_fixtures(
-        tmp_path, base_names=["Alice"], merge_names=["Alice"]
-    )
+    base, merge, survey = _write_fixtures(tmp_path, base_names=["Alice"], merge_names=["Alice"])
 
     code = main(
         [
@@ -282,9 +254,7 @@ def test_on_collision_keep_is_reserved(capsys, tmp_path):
 @patch("synth_panel.cli.commands.synthesize_panel")
 @patch("synth_panel.orchestrator.AgentRuntime")
 @patch("synth_panel.cli.commands.LLMClient")
-def test_default_policy_is_dedup_with_warning(
-    mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path
-):
+def test_default_policy_is_dedup_with_warning(mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path):
     """Default --personas-merge-on-collision is dedup (back-compat).
 
     The behavioral change in sp-g270 is the warning, not the merge
@@ -296,9 +266,7 @@ def test_default_policy_is_dedup_with_warning(
     mock_runtime_cls.return_value = mock_runtime
     mock_synth.return_value = _mock_synthesis()
 
-    base, merge, survey = _write_fixtures(
-        tmp_path, base_names=["Alice"], merge_names=["Alice"]
-    )
+    base, merge, survey = _write_fixtures(tmp_path, base_names=["Alice"], merge_names=["Alice"])
 
     code = main(
         [
