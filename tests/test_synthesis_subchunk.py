@@ -441,10 +441,7 @@ class TestLongQuestionPrefix:
         # brief whose content dwarfs the actual ask. Sized so 101
         # repetitions push the map body past haiku's 192k effective
         # limit with trivially short answers.
-        header = (
-            "On a scale of 0 to 10, how likely are you to recommend "
-            "SynthPanel to a peer? Context follows.\n\n"
-        )
+        header = "On a scale of 0 to 10, how likely are you to recommend SynthPanel to a peer? Context follows.\n\n"
         brief = (
             "SynthPanel is an open-source Python package and MCP server that "
             "orchestrates synthetic focus groups — panels of LLM-powered "
@@ -473,9 +470,7 @@ class TestLongQuestionPrefix:
         full_est = estimate_single_pass_tokens(panelists, [q], prompt=_MAP_PROMPT_TEMPLATE)
         assert full_est > 192_000, f"scenario must overflow haiku; got {full_est}"
 
-        batches = _partition_panelists_for_context(
-            panelists, q, _MAP_PROMPT_TEMPLATE, context_limit=192_000
-        )
+        batches = _partition_panelists_for_context(panelists, q, _MAP_PROMPT_TEMPLATE, context_limit=192_000)
         assert batches is not None, "sub-chunking must be able to split"
         assert len(batches) >= 2, f"expected multiple batches, got {len(batches)}"
         assert sum(len(b) for b in batches) == 100
@@ -483,9 +478,7 @@ class TestLongQuestionPrefix:
         # Every batch fits the limit once the prefix cost is counted.
         for b in batches:
             est_b = estimate_single_pass_tokens(b, [q], prompt=_MAP_PROMPT_TEMPLATE)
-            assert est_b <= 192_000, (
-                f"batch of {len(b)} still overflows: {est_b} > 192000"
-            )
+            assert est_b <= 192_000, f"batch of {len(b)} still overflows: {est_b} > 192000"
 
     def test_map_reduce_sub_chunks_long_prefix_on_haiku(self):
         """End-to-end: n=100 + long-brief Q on haiku succeeds via sub-chunking.
