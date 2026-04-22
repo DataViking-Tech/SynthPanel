@@ -12,6 +12,7 @@ extra — the SDK itself works on a plain ``pip install synthpanel``.
 
 from __future__ import annotations
 
+from synth_panel.__version__ import __version__
 from synth_panel.sdk import (
     PanelResult,
     PollResult,
@@ -25,14 +26,6 @@ from synth_panel.sdk import (
     run_panel,
     run_prompt,
 )
-
-try:
-    from importlib.metadata import version as _pkg_version
-
-    __version__ = _pkg_version("synthpanel")
-except Exception:
-    __version__ = "0.0.0-dev"
-
 
 __all__ = [
     "PanelResult",
