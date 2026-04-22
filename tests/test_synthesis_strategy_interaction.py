@@ -246,13 +246,15 @@ class TestMapReduceSkipsPanelLevelOverflow:
 
 class TestMapReducePerChunkOverflowCheck:
     def test_map_reduce_per_chunk_overflow_check_unit(self):
-        """sp-exu6 AC 3: per-map guard fires when a single question overflows.
+        """sp-exu6 AC 3 / sp-4g6a: per-map guard fires when a single
+        panelist's response overflows the synthesis model's context.
 
-        Constructs a 1-question panel whose filtered per-map chunk itself
-        exceeds haiku's 200k context. ``synthesize_panel_mapreduce`` must
-        raise ``MapChunkOverflowError`` before issuing any LLM call.
+        With sp-4g6a, map-reduce attempts sub-chunking before giving up,
+        so the overflow must be large enough that even a single panelist's
+        response cannot fit. Then the sub-chunker raises
+        ``MapChunkOverflowError`` with ``reason=single_panelist_overflow``.
         """
-        giant = "A" * 800_000
+        giant = "A" * 800_000  # ~200k tokens per panelist — exceeds haiku limit alone
         fat_panelists = [
             PanelistResult(
                 persona_name=f"Panelist{i}",
@@ -275,6 +277,7 @@ class TestMapReducePerChunkOverflowCheck:
         diag = excinfo.value.diagnostic
         assert diag["question_index"] == 0
         assert diag["estimated_tokens"] > diag["effective_limit"]
+        assert diag.get("reason") == "single_panelist_overflow"
         # Must short-circuit before any LLM call.
         client.send.assert_not_called()
 

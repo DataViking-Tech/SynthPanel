@@ -216,6 +216,19 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     panel_run_parser.add_argument(
+        "--synthesis-auto-escalate",
+        action="store_true",
+        default=False,
+        help=(
+            "sp-4g6a: when a single question's responses overflow the "
+            "synthesis model's context in --synthesis-strategy=map-reduce, "
+            "auto-retry that question's map call on a larger-context model "
+            "(gemini-2.5-flash-lite, 1M ctx) and emit a warning. Default "
+            "behaviour (off) partitions panelists into sub-batches and "
+            "performs an inner reduce, preserving single-model semantics."
+        ),
+    )
+    panel_run_parser.add_argument(
         "--temperature",
         type=float,
         default=None,
