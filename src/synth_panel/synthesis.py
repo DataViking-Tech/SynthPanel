@@ -360,6 +360,20 @@ _DEFAULT_CONTEXT_WINDOW = 128_000
 _CONTEXT_HEADROOM = 8_000
 
 
+class MapChunkOverflowError(RuntimeError):
+    """A single map-phase chunk would not fit in the synthesis model's context.
+
+    Raised from :func:`synthesize_panel_mapreduce` when any per-question
+    map call's pessimistic token estimate exceeds the resolved model's
+    context window (less headroom). Carries a diagnostic dict that names
+    the offending question so callers can report it.
+    """
+
+    def __init__(self, message: str, *, diagnostic: dict[str, Any]) -> None:
+        super().__init__(message)
+        self.diagnostic = diagnostic
+
+
 def resolve_context_window(model: str) -> int:
     """Return the context-window size (in tokens) for *model*.
 
@@ -556,6 +570,35 @@ def synthesize_panel_mapreduce(
 
     n = len(questions)
     workers = max_workers if max_workers is not None else min(max(n, 1), 8)
+
+    # sp-exu6: per-map-call overflow pre-flight. Each map call only sees
+    # responses for its own question, so the budget is much smaller than
+    # the full-panel synthesis. Still, a single question with very long
+    # responses (or a large cluster-metadata block) could overflow — catch
+    # that here rather than letting the provider API reject it mid-fanout.
+    context_limit = resolve_context_window(resolved_model) - _CONTEXT_HEADROOM
+    for idx in range(n):
+        q = questions[idx]
+        q_text = _question_text(q)
+        filtered = [_filter_panelist_to_question(pr, q_text) for pr in panelist_results]
+        est = estimate_single_pass_tokens(filtered, [q], prompt=map_prompt)
+        if est > context_limit:
+            raise MapChunkOverflowError(
+                (
+                    f"map-reduce per-chunk overflow: question {idx} "
+                    f"(~{est} tokens) exceeds {resolved_model}'s effective "
+                    f"limit ({context_limit} tokens). Rerun with a "
+                    "larger-context synthesis model (e.g. "
+                    "gemini-2.5-flash-lite, 1M ctx) or trim the panel."
+                ),
+                diagnostic={
+                    "question_index": idx,
+                    "question_text": q_text,
+                    "estimated_tokens": est,
+                    "effective_limit": context_limit,
+                    "synthesis_model": resolved_model,
+                },
+            )
 
     def _run_one_map(idx: int) -> tuple[int, SynthesisResult]:
         q = questions[idx]

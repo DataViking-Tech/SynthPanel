@@ -103,7 +103,11 @@ class TestCliNonEnsembleSynthesisFailure:
     @patch("synth_panel.cli.commands.LLMClient")
     def test_preflight_rejects_oversized_input(self, _mock_client, mock_run, mock_synth, capsys, tmp_path):
         """When the estimated prompt overflows the synthesis model's context,
-        the run must fail BEFORE synthesize_panel is called."""
+        the run must fail BEFORE synthesize_panel is called.
+
+        sp-exu6: must pass ``--synthesis-strategy=single`` explicitly.
+        Under ``auto`` (the new default behavior after sp-exu6), overflow
+        would instead route to map-reduce."""
         from synth_panel.orchestrator import PanelistResult, WorkerRegistry
 
         # Build one giant panelist response that comfortably overflows
@@ -132,6 +136,8 @@ class TestCliNonEnsembleSynthesisFailure:
                 _write_instrument(tmp_path / "survey.yaml"),
                 "--synthesis-model",
                 "haiku",
+                "--synthesis-strategy",
+                "single",
             ]
         )
         assert code == 2

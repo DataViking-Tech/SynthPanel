@@ -60,6 +60,7 @@ from synth_panel.runtime import AgentRuntime
 from synth_panel.synthesis import (
     STRATEGY_MAP_REDUCE,
     STRATEGY_SINGLE,
+    MapChunkOverflowError,
     select_strategy,
     synthesize_panel,
     synthesize_panel_mapreduce,
@@ -1210,17 +1211,27 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         # synthesis_temperature overrides panelist temperature for synthesis
         effective_synth_temp = synthesis_temperature if synthesis_temperature is not None else temperature
         effective_synth_model = synthesis_model or model
-        # sp-avmm: pre-flight size check — refuse to make the API call when
-        # the estimated prompt exceeds the synthesis model's context window.
-        # Still applies under map-reduce because each map-phase call also
-        # has to fit; select_strategy will additionally pick map-reduce when
-        # single-call overflow is the only way to fit.
-        overflow = detect_synthesis_context_overflow(
+        # sp-exu6: resolve the strategy FIRST. The single-pass overflow
+        # pre-flight only applies when the resolved strategy is ``single``
+        # — otherwise ``--synthesis-strategy=auto`` would reject large
+        # panels instead of routing them through map-reduce (sp-avmm ×
+        # sp-9rzu interaction). Map-reduce has its own per-map overflow
+        # guard inside ``synthesize_panel_mapreduce``.
+        resolved_strategy = select_strategy(
+            requested_strategy,
+            effective_synth_model,
             panelist_results,
             questions,
-            synthesis_model=effective_synth_model,
-            custom_prompt=custom_prompt,
+            prompt=custom_prompt,
         )
+        overflow = None
+        if resolved_strategy == STRATEGY_SINGLE:
+            overflow = detect_synthesis_context_overflow(
+                panelist_results,
+                questions,
+                synthesis_model=effective_synth_model,
+                custom_prompt=custom_prompt,
+            )
         if overflow is not None:
             actionable = format_synthesis_overflow_message(overflow)
             print(
@@ -1240,13 +1251,6 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             )
             run_invalid = True
         else:
-            resolved_strategy = select_strategy(
-                requested_strategy,
-                effective_synth_model,
-                panelist_results,
-                questions,
-                prompt=custom_prompt,
-            )
             try:
                 if resolved_strategy == STRATEGY_MAP_REDUCE:
                     synthesis_result = synthesize_panel_mapreduce(
@@ -1272,6 +1276,29 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                         temperature=effective_synth_temp,
                         top_p=top_p,
                     )
+            except MapChunkOverflowError as exc:
+                # sp-exu6: per-map chunk overflow — distinct from the
+                # single-pass pre-flight (sp-avmm) so consumers can tell
+                # "this one question is too big" apart from "the whole
+                # panel is too big".
+                logger.error("map-reduce per-chunk overflow: %s", exc)
+                print(
+                    f"Error: synthesis pre-flight rejected: {exc}",
+                    file=sys.stderr,
+                )
+                synthesis_error_payload = build_synthesis_error_payload(
+                    None,
+                    error_type="synthesis_map_chunk_overflow",
+                    message=str(exc),
+                    suggested_fix=(
+                        "A single question's responses exceed the synthesis "
+                        "model's context window. Rerun with --synthesis-model "
+                        "gemini-2.5-flash-lite (1M context) or gemini-2.5-pro "
+                        "(1M context), or reduce panel size."
+                    ),
+                    diagnostic=exc.diagnostic,
+                )
+                run_invalid = True
             except Exception as exc:
                 # sp-avmm: fail loud — previously this was a WARN log and the
                 # run exited 0 with synthesis=null. That silent-skip made
