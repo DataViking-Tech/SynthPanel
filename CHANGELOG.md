@@ -10,6 +10,7 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 - (sp-kvpx) Cost: route per-model and per-panelist cost through `resolve_cost` so `cost_breakdown.total`, `per_model_results[*].cost`, and per-panelist `cost` honor sp-j3vk's provider-reported precedence. Prior to this, `ensemble_run`, `build_mixed_model_rollup`, the sync MCP/SDK runner, and `format_panelist_result` all called `estimate_cost(usage, lookup_pricing(model))` directly, so every non-top-level cost in the ensemble payload stayed on the local pricing table. Observed divergence in the mayor round-5 audit: `total_cost=$0.27` (authoritative) vs `cost_breakdown.total=$0.71` on the same panel.
 
 ### Added
+- (sp-6wbm) Four new bundled persona packs raising total shipped personas from 24 → 84: `job-seekers` (15), `recruiters-talent` (5), `product-research` (20), `ai-eval-buyers` (20). Sourced from the mayor n=50 scale-up audit and generalized to strip product-specific references so they're reusable across any synthetic-research domain. Users can now run n≥50 panels by merging bundled packs with `--personas-merge` without hand-authoring.
 - (sp-ftr) Ship the advertised `/synthpanel-poll` slash command. `commands/synthpanel-poll.md` wraps the `run_quick_poll` MCP tool so installed plugin users get a one-shot poll command — sp-tcf claimed this was done but never actually added the file.
 
 ## [0.9.7] - 2026-04-21

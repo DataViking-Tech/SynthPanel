@@ -44,15 +44,65 @@ class TestPersonaPacks:
         """With no user packs, bundled packs are still listed."""
         packs = list_persona_packs()
         builtin = [p for p in packs if p.get("builtin")]
-        assert len(builtin) == 5
         names = {p["id"] for p in builtin}
+        # sp-6wbm added four scale-up packs (job-seekers, recruiters-talent,
+        # product-research, ai-eval-buyers) to lift the 24-persona ceiling
+        # imposed by the original five packs.
         assert names == {
             "developer",
             "enterprise-buyer",
             "general-consumer",
             "healthcare-patient",
             "startup-founder",
+            "job-seekers",
+            "recruiters-talent",
+            "product-research",
+            "ai-eval-buyers",
         }
+        assert len(builtin) == 9
+
+    def test_sp_6wbm_scaleup_packs_load(self):
+        """sp-6wbm: each new scale-up pack loads, has a non-empty
+        persona list with valid shape, and does not collide with any
+        existing bundled persona name."""
+        import collections
+
+        seen: dict[str, str] = {}
+        # Collect names from the original five to detect cross-pack dups.
+        for base in (
+            "developer",
+            "enterprise-buyer",
+            "general-consumer",
+            "healthcare-patient",
+            "startup-founder",
+        ):
+            for p in get_persona_pack(base)["personas"]:
+                n = p.get("name", "").strip()
+                if n:
+                    seen[n] = base
+
+        expected = {
+            "job-seekers": 15,
+            "recruiters-talent": 5,
+            "product-research": 20,
+            "ai-eval-buyers": 20,
+        }
+        for pack_id, min_count in expected.items():
+            pack = get_persona_pack(pack_id)
+            assert pack["id"] == pack_id
+            personas = pack["personas"]
+            assert len(personas) == min_count, f"{pack_id}: expected {min_count}, got {len(personas)}"
+            local = collections.Counter(p.get("name", "").strip() for p in personas)
+            for n, cnt in local.items():
+                assert cnt == 1, f"{pack_id}: duplicate name {n!r}"
+                assert n not in seen, f"{pack_id}: name {n!r} collides with bundled pack {seen[n]}"
+                seen[n] = pack_id
+            # Shape sanity: every persona has a non-empty name and at least one content field.
+            for p in personas:
+                assert p.get("name"), f"{pack_id}: persona missing name"
+                assert any(p.get(k) for k in ("background", "occupation", "personality_traits")), (
+                    f"{pack_id}: persona {p.get('name')!r} has no background/occupation/traits"
+                )
 
     def test_save_and_list(self):
         personas = [{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}]

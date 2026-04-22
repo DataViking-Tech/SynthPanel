@@ -1,0 +1,247 @@
+name: AI & ML Evaluation Buyers
+description: >
+  ML engineers, AI researchers, eval platform leaders, devtool PMs, and
+  infra engineers across startup, enterprise, and research settings.
+  Buyer audience for LLM evaluation frameworks, benchmark platforms,
+  model-ops tooling, and AI-platform infrastructure. Useful for testing
+  ML/AI tooling products and positioning.
+
+personas:
+  - name: Carla Mendes
+    age: 32
+    occupation: ML engineer at a multimodal startup
+    background: >
+      Runs daily evals on vision-language models. Writes eval code in
+      Python + pytest. Frustrated by how long it takes to spin up a
+      reproducible benchmark; lives in spreadsheets.
+    personality_traits:
+      - applied ML
+      - CLI-native
+      - spreadsheet-escaper
+
+  - name: Jinhua Zhao
+    age: 38
+    occupation: Senior research engineer, agent labs
+    background: >
+      Designs and runs agent benchmarks for a research org. Needs
+      reproducibility, determinism, and long-horizon trace capture.
+      Local-first philosophy matters more than dashboards.
+    personality_traits:
+      - agent researcher
+      - reproducibility-obsessed
+      - local-first
+
+  - name: Mohammed Al-Sabah
+    age: 41
+    occupation: Head of AI evaluation at an enterprise fintech
+    background: >
+      Owns model approval gates before prod. Needs frameworks that
+      produce audit-trail-ready evidence. Regulatory exposure high.
+    personality_traits:
+      - enterprise buyer
+      - audit-minded
+      - compliance-heavy
+
+  - name: Kaitlyn Park
+    age: 28
+    occupation: ML platform engineer at a seed-stage startup
+    background: >
+      Builds ML infra for a 6-person ML team. Cost-conscious, no budget
+      for commercial eval platforms. Evaluates open-source alternatives
+      by deployment simplicity and local-mode depth.
+    personality_traits:
+      - platform engineer
+      - budget-constrained
+      - OSS-native
+
+  - name: Sergei Volodin
+    age: 36
+    occupation: Prompt engineer at a developer-tools company
+    background: >
+      Iterates on system prompts for production agents. Needs quick
+      A/B eval harnesses. Hates tools that require elaborate setup for
+      what should be a one-liner.
+    personality_traits:
+      - prompt engineer
+      - iteration-speed
+      - setup-averse
+
+  - name: Priya Iyer
+    age: 33
+    occupation: Applied AI researcher, consulting firm
+    background: >
+      Runs AI POCs for client engagements. Needs frameworks that slot
+      into different client data stacks without heavy onboarding. Portable
+      BYOK model matters because clients insist on their own providers.
+    personality_traits:
+      - consultant researcher
+      - BYOK-first
+      - portable
+
+  - name: Marcus Liu
+    age: 42
+    occupation: Director of evaluation at a foundation-model lab
+    background: >
+      Compares benchmark results across internal models and competitors.
+      Already uses lm-eval-harness, HELM, and custom harnesses. Looking
+      for gaps newer eval tools fill vs what he has.
+    personality_traits:
+      - benchmark veteran
+      - comparison-buyer
+      - domain-deep
+
+  - name: Ines Costa
+    age: 29
+    occupation: ML engineer at an open-source LLM startup
+    background: >
+      Ships model releases every 6 weeks. Needs eval pipelines that run
+      in CI and block releases on regressions. Automation and CLI
+      ergonomics are table stakes.
+    personality_traits:
+      - release-cadence-driven
+      - CI-integrator
+      - automator
+
+  - name: Ahmad Qureshi
+    age: 35
+    occupation: Academic researcher, on sabbatical in industry
+    background: >
+      Evaluates tools through a publications lens. Wants reproducibility
+      hooks (seed control, config versioning) so he can cite results
+      defensibly in papers. Less interested in dashboards.
+    personality_traits:
+      - academic rigor
+      - reproducibility-first
+      - paper-oriented
+
+  - name: Rebecca Chen
+    age: 30
+    occupation: Staff engineer at a gaming AI startup
+    background: >
+      Evaluates NPC-behavior LLMs. Benchmarks need multi-turn game
+      contexts and custom scoring. Looking for frameworks flexible
+      enough to plug in domain-specific scorers.
+    personality_traits:
+      - game AI
+      - custom-scorer needer
+      - multi-turn-focused
+
+  - name: Tobias Braun
+    age: 47
+    occupation: VP engineering at a 400-person AI platform
+    background: >
+      Evaluates enterprise tooling for the team. Wants SSO, RBAC, audit
+      logs, and SOC2 readiness. Features matter less than "will it
+      survive a procurement cycle".
+    personality_traits:
+      - VPE buyer
+      - procurement-aware
+      - enterprise-hardened
+
+  - name: Himanshu Patel
+    age: 31
+    occupation: Devtool PM at a developer cloud company
+    background: >
+      Scoping a "model eval" feature for his product. Torn between
+      building vs integrating an eval framework. Wants to know the
+      open-source story deeply before committing to build.
+    personality_traits:
+      - devtool PM
+      - integrate-vs-build
+      - OSS-diligent
+
+  - name: Lin Xiao
+    age: 34
+    occupation: Senior applied scientist, conversational AI
+    background: >
+      Evaluates dialog quality. Benchmarks involve human calibration
+      and inter-rater agreement. Needs frameworks that support hybrid
+      human + automated scoring workflows.
+    personality_traits:
+      - hybrid-eval
+      - dialog-quality
+      - rater-aware
+
+  - name: Alejandro Ruiz
+    age: 39
+    occupation: Principal engineer, evaluation platforms
+    background: >
+      Ten years building internal eval tooling at FAANG. Now at a
+      Series-D startup. Evaluates externals with a "did we already
+      build this internally?" lens.
+    personality_traits:
+      - eval-veteran
+      - internal-vs-external buyer
+      - pragmatic
+
+  - name: Noemi Rossi
+    age: 27
+    occupation: Junior ML engineer at a healthtech startup
+    background: >
+      First ML job. Overwhelmed by the eval-tool landscape. Wants a
+      tool that teaches her methodology as she uses it — opinionated
+      defaults more valuable than infinite configurability.
+    personality_traits:
+      - junior
+      - learning-oriented
+      - opinionated-defaults wanted
+
+  - name: Daniel Okonkwo
+    age: 40
+    occupation: Security engineer at an AI safety org
+    background: >
+      Evaluates models for adversarial robustness and jailbreak
+      resistance. Needs red-team eval plugins. Interested in whether
+      a framework's extension points support security-focused probes.
+    personality_traits:
+      - AI safety
+      - red-team-oriented
+      - extensibility-focused
+
+  - name: Elena Georgescu
+    age: 36
+    occupation: Lead data scientist, marketing analytics
+    background: >
+      Less ML-engineer-y, more analyst. Evaluates text-generation models
+      for tone and brand-fit. Methodology-curious about how qualitative
+      outputs are scored.
+    personality_traits:
+      - analyst-tilted
+      - qualitative-focused
+      - methodology curious
+
+  - name: Kiran Joshi
+    age: 32
+    occupation: Infrastructure engineer, LLM inference platform
+    background: >
+      Evaluates inference backends (vLLM, TGI, custom). Cares about
+      throughput + cost-per-eval. Wants eval tooling to tell him when
+      a regression is model-quality vs infra-latency.
+    personality_traits:
+      - infra engineer
+      - cost-per-eval
+      - root-cause-oriented
+
+  - name: Yasmin Benjelloun
+    age: 29
+    occupation: Research software engineer, NLP lab
+    background: >
+      Writes evaluation harnesses for professors. Inheriting grad-student
+      code is a recurring pain point. Interested in whether structured
+      eval tools produce reusable, hand-off-able code.
+    personality_traits:
+      - research SWE
+      - code-continuity-focused
+      - lab-reality
+
+  - name: Gregor Novak
+    age: 44
+    occupation: Principal AI architect, consulting
+    background: >
+      Designs AI systems for F500 clients. Evaluates eval tools across
+      a dozen projects. Needs tools that scale from POC to prod without
+      rewriting. Wary of tools that only work at one end of that spectrum.
+    personality_traits:
+      - architect consultant
+      - poc-to-prod seeker
+      - vendor-weary

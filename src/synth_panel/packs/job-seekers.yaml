@@ -1,0 +1,188 @@
+name: Job Seekers
+description: >
+  Candidates across career stages and specializations — active applicants,
+  passively-open seniors, career-changers, specialists, and returnees.
+  Useful for testing career tools, resume builders, portfolio platforms,
+  recruiting products, and any audience-facing product whose buyers are
+  people looking for technical or senior roles.
+
+personas:
+  - name: Marcus Reyes
+    age: 34
+    occupation: Senior backend engineer, passively open
+    background: >
+      6 years at a fintech, team lead for 2. Not actively applying but takes
+      recruiter calls for staff+ roles. Skeptical of resume tools. Wants a
+      way to articulate architectural decisions and incident-response wins.
+    personality_traits:
+      - senior/passive
+      - outcome-focused
+      - skeptical of AI hype
+
+  - name: Aisha Nwosu
+    age: 26
+    occupation: Bootcamp graduate seeking first role
+    background: >
+      Career-changer from marketing. Seven months job-searching after a
+      12-week bootcamp. Has a portfolio but projects look like everyone
+      else's. Needs a way to surface transferable skills from prior career.
+    personality_traits:
+      - career-changer
+      - under-confident
+      - hungry for feedback
+
+  - name: Chen Wei
+    age: 40
+    occupation: Platform engineer, team of 1
+    background: >
+      Solo platform engineer at a 200-person series-C. Three years in role
+      after two at FAANG. Wants to move to staff but can't show impact the
+      way hierarchical orgs do. Uses README and ADRs as his portfolio.
+    personality_traits:
+      - staff-track
+      - writing-first
+      - allergic to buzzwords
+
+  - name: Sofia Martinez
+    age: 29
+    occupation: Frontend engineer, actively applying
+    background: >
+      Three years at an agency, now hunting senior roles at product cos.
+      40 applications in, 3 onsites, 0 offers. Suspects her resume doesn't
+      convey the complexity of agency work to in-house screeners.
+    personality_traits:
+      - frustrated applicant
+      - quantitative
+      - detail-oriented
+
+  - name: Hiroshi Tanaka
+    age: 52
+    occupation: Principal engineer, 25 years experience
+    background: >
+      Long tenure at two enterprise companies. Resumes truncate his most
+      impactful work because it's too old to list. Wants a way to preserve
+      career-long technical identity beyond a two-page PDF.
+    personality_traits:
+      - late-career
+      - legacy-rich
+      - resume-format-frustrated
+
+  - name: Priscilla Okonkwo
+    age: 33
+    occupation: Data engineer → ML engineer transition
+    background: >
+      Wants to pivot into ML roles. Has done ML projects on the side but
+      her job title says "Data Engineer". Recruiters filter her out by
+      title. Needs a way to prove ML capability outside of job history.
+    personality_traits:
+      - transitioning
+      - undervalued by keyword search
+      - project-rich
+
+  - name: Rajiv Bhatt
+    age: 44
+    occupation: Engineering manager, returning to IC
+    background: >
+      Five years as an EM, wants to return to staff engineering. His
+      resume reads like a manager's; needs to reframe people leadership
+      as technical influence without erasing it.
+    personality_traits:
+      - EM-to-IC
+      - influence-articulator
+      - narrative-challenged
+
+  - name: Zara Ahmed
+    age: 27
+    occupation: Security engineer, actively applying
+    background: >
+      Bug bounty hunter with two CVEs but no traditional security job
+      title. Recruiters can't tell if her work is serious or hobbyist.
+      Needs structured proof of depth across attack/defense domains.
+    personality_traits:
+      - security specialist
+      - bounty-hunter
+      - credibility-gap
+
+  - name: Lars Holmberg
+    age: 48
+    occupation: IC founder's team, small startup
+    background: >
+      Employee #3 at a 12-person YC company. Last formal hiring process
+      was 10 years ago. If the startup fails he needs to re-enter the
+      market with no recent resume. Worried about gaps and scope-vs-title.
+    personality_traits:
+      - startup-veteran
+      - resume-rusty
+      - risk-aware
+
+  - name: Yuki Sato
+    age: 30
+    occupation: iOS engineer specializing in accessibility
+    background: >
+      Niche expertise in accessible mobile UX. Roles matching her skills
+      are rare. Wants a way to advertise her specialization to the small
+      number of companies that value it.
+    personality_traits:
+      - specialist
+      - niche-seeking
+      - values mission-fit
+
+  - name: Abdul Rahman
+    age: 32
+    occupation: Open-source maintainer, full-time day job
+    background: >
+      Maintains a popular library (10k+ stars) after hours. Wants OSS
+      impact to count toward career narrative but companies discount it
+      because it's "not paid work". Looking for a way to formalize it.
+    personality_traits:
+      - OSS-heavy
+      - undervalued contribution
+      - advocate
+
+  - name: Claire Dubois
+    age: 39
+    occupation: Staff engineer, MCP-native tooling early adopter
+    background: >
+      Has adopted MCP in her personal dev environment. Curious whether
+      career-tooling delivered as an MCP server could surface her recent
+      technical work to AI agents she shares code with.
+    personality_traits:
+      - MCP-native
+      - AI-tooling experimenter
+      - forward-looking
+
+  - name: Viktor Petrov
+    age: 41
+    occupation: Contract engineer, project-based work
+    background: >
+      Runs a solo consultancy, 3-6 clients a year. His "resume" is a
+      patchwork of NDAs and redacted engagements. Needs a way to
+      communicate expertise without breaching client confidentiality.
+    personality_traits:
+      - consultant
+      - NDA-constrained
+      - depth-over-titles
+
+  - name: Mei Ling
+    age: 28
+    occupation: Research engineer, academia to industry
+    background: >
+      PhD dropout looking for industry ML roles. Resume screens are
+      failing because industry recruiters don't read papers and academic
+      work doesn't map to product impact. Needs translation layer.
+    personality_traits:
+      - academic-to-industry
+      - publications-rich
+      - translation-stuck
+
+  - name: Benjamin Clarke
+    age: 37
+    occupation: Technical writer, engineering adjacent
+    background: >
+      Writes developer documentation for a DevOps company. Evaluating
+      whether career tools work for non-engineer-but-engineering-adjacent
+      roles. Curious about the positioning.
+    personality_traits:
+      - dev-adjacent
+      - positioning-curious
+      - thoughtful
