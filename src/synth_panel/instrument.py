@@ -87,12 +87,77 @@ class InstrumentError(ValueError):
     """Raised when an instrument definition is invalid."""
 
 
-def _validate_questions(questions: list[dict[str, Any]], context: str) -> None:
-    """Validate extraction_schema on questions.
+_RESPONSE_SCHEMA_TYPES: frozenset[str] = frozenset({"text", "scale", "enum", "tagged_themes"})
 
-    String values are checked against the bundled schema registry.
-    Dict values are accepted as inline JSON Schemas without further
-    validation. Other types raise :class:`InstrumentError`.
+
+def _validate_response_schema(rs: Any, *, context: str, q_index: int) -> None:
+    """Validate a question-level ``response_schema`` entry.
+
+    Recognized shapes (sp-2hpi):
+
+    - ``{"type": "text", "max_tokens": N?}`` — free text (default)
+    - ``{"type": "scale", "min": M, "max": N}`` — numeric scale with integer bounds (min < max)
+    - ``{"type": "enum", "options": [...]}`` — categorical choice, non-empty list of strings
+    - ``{"type": "tagged_themes", "taxonomy": [...], "multi": bool?}`` — structured tags from a fixed taxonomy
+
+    Unknown shapes are rejected so instruments fail fast. A plain dict
+    without a recognized ``type`` (legacy use of ``response_schema`` as a
+    free JSON Schema) is accepted unchanged for backward compatibility.
+    """
+    if not isinstance(rs, dict):
+        raise InstrumentError(
+            f"{context} question[{q_index}]: response_schema must be a mapping, got {type(rs).__name__}"
+        )
+    t = rs.get("type")
+    if not isinstance(t, str) or t not in _RESPONSE_SCHEMA_TYPES:
+        # Legacy / inline JSON Schema — accept without semantic checks.
+        return
+
+    loc = f"{context} question[{q_index}] response_schema"
+    if t == "scale":
+        lo = rs.get("min")
+        hi = rs.get("max")
+        if not isinstance(lo, int) or isinstance(lo, bool):
+            raise InstrumentError(f"{loc}: 'min' must be an integer, got {type(lo).__name__}")
+        if not isinstance(hi, int) or isinstance(hi, bool):
+            raise InstrumentError(f"{loc}: 'max' must be an integer, got {type(hi).__name__}")
+        if lo >= hi:
+            raise InstrumentError(f"{loc}: 'min' ({lo}) must be strictly less than 'max' ({hi})")
+    elif t == "enum":
+        opts = rs.get("options")
+        if not isinstance(opts, list) or not opts:
+            raise InstrumentError(f"{loc}: 'options' must be a non-empty list of strings")
+        if not all(isinstance(o, str) and o for o in opts):
+            raise InstrumentError(f"{loc}: 'options' entries must be non-empty strings")
+        if len(set(opts)) != len(opts):
+            raise InstrumentError(f"{loc}: 'options' must be unique")
+    elif t == "tagged_themes":
+        taxonomy = rs.get("taxonomy")
+        if not isinstance(taxonomy, list) or not taxonomy:
+            raise InstrumentError(f"{loc}: 'taxonomy' must be a non-empty list of strings")
+        if not all(isinstance(tag, str) and tag for tag in taxonomy):
+            raise InstrumentError(f"{loc}: 'taxonomy' entries must be non-empty strings")
+        if len(set(taxonomy)) != len(taxonomy):
+            raise InstrumentError(f"{loc}: 'taxonomy' must be unique")
+        multi = rs.get("multi", False)
+        if not isinstance(multi, bool):
+            raise InstrumentError(f"{loc}: 'multi' must be a boolean, got {type(multi).__name__}")
+    elif t == "text":
+        mt = rs.get("max_tokens")
+        if mt is not None and (not isinstance(mt, int) or isinstance(mt, bool) or mt <= 0):
+            raise InstrumentError(f"{loc}: 'max_tokens' must be a positive integer when provided")
+
+
+def _validate_questions(questions: list[dict[str, Any]], context: str) -> None:
+    """Validate ``extraction_schema`` and ``response_schema`` on questions.
+
+    For ``extraction_schema``: string values are checked against the bundled
+    schema registry; dict values are accepted as inline JSON Schemas without
+    further validation. Other types raise :class:`InstrumentError`.
+
+    For ``response_schema``: dicts with a recognized ``type`` (text, scale,
+    enum, tagged_themes) are shape-checked; legacy inline JSON Schemas
+    (dicts without a recognized type) pass through untouched.
 
     Args:
         questions: List of question dicts to validate.
@@ -103,18 +168,20 @@ def _validate_questions(questions: list[dict[str, Any]], context: str) -> None:
         if not isinstance(q, dict):
             continue
         es = q.get("extraction_schema")
-        if es is None:
-            continue
-        if isinstance(es, str):
-            if not is_known_schema(es):
-                from synth_panel.structured.schemas import SchemaNotFoundError
+        if es is not None:
+            if isinstance(es, str):
+                if not is_known_schema(es):
+                    from synth_panel.structured.schemas import SchemaNotFoundError
 
-                raise InstrumentError(str(SchemaNotFoundError(es)))
-        elif not isinstance(es, dict):
-            raise InstrumentError(
-                f"{context} question[{i}]: extraction_schema must be a string (schema name) or mapping, "
-                f"got {type(es).__name__}"
-            )
+                    raise InstrumentError(str(SchemaNotFoundError(es)))
+            elif not isinstance(es, dict):
+                raise InstrumentError(
+                    f"{context} question[{i}]: extraction_schema must be a string (schema name) or mapping, "
+                    f"got {type(es).__name__}"
+                )
+        rs = q.get("response_schema")
+        if rs is not None:
+            _validate_response_schema(rs, context=context, q_index=i)
 
 
 def parse_instrument(data: dict[str, Any]) -> Instrument:
