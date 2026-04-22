@@ -11,7 +11,7 @@ from collections.abc import Iterator
 
 import httpx
 
-from synth_panel.llm.errors import LLMError, LLMErrorCategory, classify_http_status
+from synth_panel.llm.errors import LLMError, LLMErrorCategory, llm_error_from_response
 from synth_panel.llm.models import (
     CompletionRequest,
     CompletionResponse,
@@ -89,12 +89,7 @@ class OpenRouterProvider(LLMProvider):
             ) from exc
 
         if resp.status_code != 200:
-            cat = classify_http_status(resp.status_code)
-            raise LLMError(
-                f"OpenRouter API error {resp.status_code}: {resp.text[:500]}",
-                cat,
-                status_code=resp.status_code,
-            )
+            raise llm_error_from_response(resp, "OpenRouter")
 
         try:
             data = resp.json()
@@ -138,12 +133,7 @@ class OpenRouterProvider(LLMProvider):
             ) as resp:
                 if resp.status_code != 200:
                     resp.read()
-                    cat = classify_http_status(resp.status_code)
-                    raise LLMError(
-                        f"OpenRouter API error {resp.status_code}: {resp.text[:500]}",
-                        cat,
-                        status_code=resp.status_code,
-                    )
+                    raise llm_error_from_response(resp, "OpenRouter")
                 yield from parse_openai_sse_stream(resp.iter_lines())
         except httpx.HTTPError as exc:
             raise LLMError(

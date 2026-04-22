@@ -887,7 +887,12 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     request_id = _uuid.uuid4().hex[:12]
     logger.info("[%s] panel run: model=%s personas=%d questions=%d", request_id, model, len(personas), len(questions))
 
-    client = LLMClient()
+    max_concurrent = getattr(args, "max_concurrent", None)
+    rate_limit_rps = getattr(args, "rate_limit_rps", None)
+    client = LLMClient(
+        max_concurrent=max_concurrent,
+        rate_limit_rps=rate_limit_rps,
+    )
     timer = PanelTimer()
 
     # ── sp-5on.15: variant expansion ─────────────────────────────────
@@ -1019,6 +1024,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             temperature=temperature,
             top_p=top_p,
             persona_models=persona_models,
+            max_workers=max_concurrent,
         )
 
     # Build output results and aggregate panelist usage

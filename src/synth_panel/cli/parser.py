@@ -329,6 +329,30 @@ def build_parser() -> argparse.ArgumentParser:
             "Exits without calling any provider."
         ),
     )
+    panel_run_parser.add_argument(
+        "--max-concurrent",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Cap concurrent in-flight LLM requests across the panel. "
+            "Applies at the client layer, so it throttles all providers "
+            "on the same client. Defaults to unbounded (one worker per "
+            "panelist). Use this to keep provider rate limits happy on "
+            "large n runs."
+        ),
+    )
+    panel_run_parser.add_argument(
+        "--rate-limit-rps",
+        type=float,
+        default=None,
+        metavar="RPS",
+        help=(
+            "Cap requests-per-second across the panel via a token bucket. "
+            "Smooths bursts on top of --max-concurrent. Accepts fractional "
+            "values (e.g. 0.5 for one request every two seconds)."
+        ),
+    )
 
     # panel inspect (sp-76gm: stats + schema walker for a saved result)
     panel_inspect_parser = panel_subparsers.add_parser(
