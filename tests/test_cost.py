@@ -9,6 +9,7 @@ from synth_panel.cost import (
     DEEPSEEK_V3_2_EXP_PRICING,
     DEEPSEEK_V3_2_PRICING,
     DEEPSEEK_V3_2_SPECIALE_PRICING,
+    GEMINI_FLASH_LITE_PRICING,
     GEMINI_FLASH_PRICING,
     GEMINI_PRO_PRICING,
     GPT_4_1_MINI_PRICING,
@@ -144,12 +145,36 @@ class TestPricingLookup:
             ("openrouter/qwen/qwen3.6-plus", QWEN3_6_PLUS_PRICING),
             ("qwen3.6-plus", QWEN3_6_PLUS_PRICING),
             ("openrouter/qwen/qwen3-max", QWEN3_MAX_PRICING),
+            # sp-9gcm: bare ``deepseek-v3`` (OpenRouter's short route that
+            # resolves to v3.2) must hit the v3.2 entry, not DEFAULT_PRICING.
+            ("deepseek-v3", DEEPSEEK_V3_2_PRICING),
+            ("openrouter/deepseek/deepseek-v3", DEEPSEEK_V3_2_PRICING),
+            # sp-9gcm: ``gemini-flash-lite`` must win over the generic
+            # ``gemini`` substring (which used to overstate cost by ~41%).
+            ("gemini-flash-lite", GEMINI_FLASH_LITE_PRICING),
+            ("openrouter/google/gemini-2.5-flash-lite", GEMINI_FLASH_LITE_PRICING),
         ],
     )
     def test_openrouter_common_models(self, model, expected):
         p, est = lookup_pricing(model)
         assert p is expected
         assert est is False
+
+    def test_deepseek_v3_bare_not_default(self):
+        """sp-9gcm regression: ``deepseek-v3`` must not fall through to
+        DEFAULT_PRICING (SONNET rates), which would overstate cost ~15x."""
+        p, est = lookup_pricing("deepseek-v3")
+        assert p is DEEPSEEK_V3_2_PRICING
+        assert p is not SONNET_PRICING
+        assert est is False
+
+    def test_gemini_flash_lite_precedence_over_gemini(self):
+        """sp-9gcm regression: ``gemini-flash-lite`` must win over the bare
+        ``gemini`` key — order in _PRICING_TABLE matters, same pattern as
+        ``gpt-4o-mini`` vs ``gpt-4o``."""
+        p, _ = lookup_pricing("gemini-flash-lite")
+        assert p is GEMINI_FLASH_LITE_PRICING
+        assert p is not GEMINI_FLASH_PRICING
 
     def test_deepseek_v3_2_variant_precedence(self):
         """sp-oshf: ``-speciale`` and ``-exp`` suffixes must win over the bare

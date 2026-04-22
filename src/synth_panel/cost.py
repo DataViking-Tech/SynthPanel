@@ -129,6 +129,18 @@ GEMINI_FLASH_PRICING = ModelPricing(
     cache_read_cost_per_million=0.04,
 )
 
+# Gemini 2.5 Flash-Lite (OpenRouter: ``google/gemini-2.5-flash-lite``).
+# Published Google rates: $0.10/M input, $0.40/M output, $0.025/M cache read.
+# cache_creation approximated at input rate (Google bills cache writes close to
+# input rate). sp-9gcm: previously fell through the ``gemini`` substring to
+# GEMINI_FLASH_PRICING, overstating the local-table estimate by ~41%.
+GEMINI_FLASH_LITE_PRICING = ModelPricing(
+    input_cost_per_million=0.10,
+    output_cost_per_million=0.40,
+    cache_creation_cost_per_million=0.10,
+    cache_read_cost_per_million=0.025,
+)
+
 GEMINI_PRO_PRICING = ModelPricing(
     input_cost_per_million=1.25,
     output_cost_per_million=10.00,
@@ -270,6 +282,11 @@ _PRICING_TABLE: dict[str, ModelPricing] = {
     "sonnet": SONNET_PRICING,
     "opus": OPUS_PRICING,
     "gemini-2.5-pro": GEMINI_PRO_PRICING,
+    # sp-9gcm: ``flash-lite`` (distinctive substring) must precede the bare
+    # ``gemini`` key so Lite models don't inherit full-flash rates (~41%
+    # overstatement). Matches both bare ``gemini-flash-lite`` and the
+    # OpenRouter form ``gemini-2.5-flash-lite``.
+    "flash-lite": GEMINI_FLASH_LITE_PRICING,
     "gemini": GEMINI_FLASH_PRICING,
     "gpt-5-mini": GPT_5_MINI_PRICING,
     "gpt-4.1-mini": GPT_4_1_MINI_PRICING,
@@ -281,6 +298,11 @@ _PRICING_TABLE: dict[str, ModelPricing] = {
     "deepseek-v3.2-speciale": DEEPSEEK_V3_2_SPECIALE_PRICING,
     "deepseek-v3.2-exp": DEEPSEEK_V3_2_EXP_PRICING,
     "deepseek-v3.2": DEEPSEEK_V3_2_PRICING,
+    # ``deepseek-v3`` (sp-9gcm): OpenRouter's short route that resolves to the
+    # v3.2 family. Placed after v3.2-* keys so the specific variants still win
+    # when present; catches bare ``deepseek-v3`` and any future ``deepseek-v3.x``
+    # before they fall through to DEFAULT_PRICING.
+    "deepseek-v3": DEEPSEEK_V3_2_PRICING,
     "deepseek-chat": DEEPSEEK_CHAT_PRICING,
     # Qwen entries — ``qwen3.6-plus`` before ``qwen3-plus`` (the former
     # contains the latter only by coincidence, but keep specific-first
