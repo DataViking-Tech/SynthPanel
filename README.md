@@ -738,6 +738,27 @@ synthpanel panel run \
 
 The blended output includes per-model distributions and the weighted ensemble distribution, letting you inspect both individual model perspectives and the consensus view.
 
+## Running at Scale
+
+For panels of 500 to 10,000+ panelists, synthpanel can track response-distribution convergence live via Jensen-Shannon divergence and optionally auto-stop once every bounded (Likert / yes-no / pick-one / enum) question has stabilized. The post-run JSON gains a top-level `convergence` section showing the smallest `n` at which each question converged, so you can confidently run smaller next time.
+
+```bash
+synthpanel panel run \
+  --personas large-panel.yaml \
+  --instrument pricing-discovery \
+  --convergence-check-every 20 \
+  --auto-stop \
+  --output-format json > result.json
+
+jq '.convergence.overall_converged_at, .convergence.auto_stopped' result.json
+# 473
+# true
+```
+
+See [docs/convergence.md](docs/convergence.md) for methodology, tuning, and the
+optional `--convergence-baseline` flag that compares your run against a real-human
+baseline from [SynthBench](https://github.com/DataViking-Tech/synthbench) (install via `pip install 'synthpanel[convergence]'`).
+
 ## Versions
 
 | Version | Highlights |

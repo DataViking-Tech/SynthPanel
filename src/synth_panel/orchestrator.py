@@ -18,6 +18,7 @@ from enum import Enum
 from typing import Any
 
 from synth_panel.conditions import evaluate_condition, normalize_follow_up
+from synth_panel.convergence import ConvergenceTracker, extract_categorical_responses
 from synth_panel.cost import ZERO_USAGE, TokenUsage, UsageTracker
 from synth_panel.instrument import END_SENTINEL, Instrument, Round
 from synth_panel.llm.client import LLMClient
@@ -528,6 +529,7 @@ def run_panel_parallel(
     temperature: float | None = None,
     top_p: float | None = None,
     persona_models: dict[str, str] | None = None,
+    convergence_tracker: ConvergenceTracker | None = None,
 ) -> tuple[list[PanelistResult], WorkerRegistry, dict[str, Session]]:
     """Run all panelists in parallel and return ordered results.
 
@@ -552,6 +554,12 @@ def run_panel_parallel(
             an ``extraction`` key alongside the raw ``response``.
         persona_models: Optional mapping of persona name → model override.
             Resolution order: persona_models[name] > model (global default).
+        convergence_tracker: Optional :class:`ConvergenceTracker`. When
+            supplied, each completing panelist's categorical responses are
+            recorded; if the tracker signals auto-stop, pending futures are
+            cancelled and ``run_panel_parallel`` returns only the panelists
+            that had already finished. Errored panelists are still surfaced
+            — they never contribute to the running distributions.
 
     Returns:
         Tuple of (ordered results matching persona order, registry,
@@ -581,6 +589,15 @@ def run_panel_parallel(
     results: list[PanelistResult | None] = [None] * len(personas)
     out_sessions: dict[str, Session] = {}
     session_lock = threading.Lock()
+
+    # sp-yaru: build a per-run list of the bounded questions so the tracker
+    # and the orchestrator agree on indices. Done outside the executor
+    # so no worker pays the inspection cost.
+    tracked_questions: list[tuple[int, str, dict[str, Any]]] = []
+    if convergence_tracker is not None:
+        tracked_questions = [
+            (i, k, q) for i, k, q in _inspect_bounded_questions(questions) if k in set(convergence_tracker.tracked_keys)
+        ]
 
     with ThreadPoolExecutor(max_workers=effective_workers) as executor:
         future_to_index = {}
@@ -626,8 +643,37 @@ def run_panel_parallel(
                     model=model,
                 )
 
-    # All slots should be filled; cast away None
+            if convergence_tracker is not None and results[idx] is not None:
+                completed_result = results[idx]
+                assert completed_result is not None  # help mypy; checked above
+                if completed_result.error is None:
+                    categorical = extract_categorical_responses(completed_result, tracked_questions)
+                    try:
+                        should_stop = convergence_tracker.record(categorical)
+                    except Exception as track_exc:  # pragma: no cover - defensive
+                        logger.warning("convergence tracker record failed: %s", track_exc)
+                        should_stop = False
+                    if should_stop:
+                        logger.info(
+                            "auto-stop: convergence reached at n=%d; cancelling pending futures",
+                            convergence_tracker.overall_converged_at or 0,
+                        )
+                        for pending_future in future_to_index:
+                            if not pending_future.done():
+                                pending_future.cancel()
+                        break
+
+    # All slots should be filled (unless auto-stop cancelled some); drop Nones
     return [r for r in results if r is not None], registry, out_sessions
+
+
+def _inspect_bounded_questions(
+    questions: list[dict[str, Any]],
+) -> list[tuple[int, str, dict[str, Any]]]:
+    """Local wrapper so the orchestrator can share tracker tagging."""
+    from synth_panel.convergence import identify_tracked_questions
+
+    return identify_tracked_questions(questions)
 
 
 # ---------------------------------------------------------------------------
