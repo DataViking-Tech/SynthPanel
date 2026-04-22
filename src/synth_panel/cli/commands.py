@@ -47,7 +47,13 @@ from synth_panel.prompts import (
     persona_system_prompt_from_template,
 )
 from synth_panel.runtime import AgentRuntime
-from synth_panel.synthesis import synthesize_panel
+from synth_panel.synthesis import (
+    STRATEGY_MAP_REDUCE,
+    STRATEGY_SINGLE,
+    select_strategy,
+    synthesize_panel,
+    synthesize_panel_mapreduce,
+)
 from synth_panel.templates import find_unresolved_in_questions
 
 logger = logging.getLogger(__name__)
@@ -1118,15 +1124,31 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         synthesis_model = getattr(args, "synthesis_model", None)
         custom_prompt = getattr(args, "synthesis_prompt", None)
         synthesis_temperature = getattr(args, "synthesis_temperature", None)
+        requested_strategy = getattr(args, "synthesis_strategy", "auto") or "auto"
+        # sp-kkzz: --synthesis-prompt only applies to the single-pass call.
+        # Map/reduce prompts are not overridable (yet) — warn and force single.
+        if custom_prompt is not None and requested_strategy == STRATEGY_MAP_REDUCE:
+            print(
+                "warning: --synthesis-prompt is incompatible with "
+                "--synthesis-strategy=map-reduce; forcing strategy=single. "
+                "Future work: --synthesis-map-prompt / --synthesis-reduce-prompt.",
+                file=sys.stderr,
+            )
+            requested_strategy = STRATEGY_SINGLE
+        elif custom_prompt is not None and requested_strategy == "auto":
+            requested_strategy = STRATEGY_SINGLE
         # synthesis_temperature overrides panelist temperature for synthesis
         effective_synth_temp = synthesis_temperature if synthesis_temperature is not None else temperature
+        effective_synth_model = synthesis_model or model
         # sp-avmm: pre-flight size check — refuse to make the API call when
         # the estimated prompt exceeds the synthesis model's context window.
-        synth_model_for_check = synthesis_model or model
+        # Still applies under map-reduce because each map-phase call also
+        # has to fit; select_strategy will additionally pick map-reduce when
+        # single-call overflow is the only way to fit.
         overflow = detect_synthesis_context_overflow(
             panelist_results,
             questions,
-            synthesis_model=synth_model_for_check,
+            synthesis_model=effective_synth_model,
             custom_prompt=custom_prompt,
         )
         if overflow is not None:
@@ -1141,24 +1163,45 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 message=actionable,
                 suggested_fix=(
                     "Rerun with --synthesis-model gemini-2.5-flash-lite (1M context) "
-                    "or gemini-2.5-pro (1M context), or reduce panel size."
+                    "or gemini-2.5-pro (1M context), --synthesis-strategy=map-reduce, "
+                    "or reduce panel size."
                 ),
                 diagnostic=overflow,
             )
             run_invalid = True
         else:
+            resolved_strategy = select_strategy(
+                requested_strategy,
+                effective_synth_model,
+                panelist_results,
+                questions,
+                prompt=custom_prompt,
+            )
             try:
-                synthesis_result = synthesize_panel(
-                    client,
-                    panelist_results,
-                    questions,
-                    model=synthesis_model,
-                    panelist_model=model,
-                    custom_prompt=custom_prompt,
-                    panelist_cost=panelist_cost_est,
-                    temperature=effective_synth_temp,
-                    top_p=top_p,
-                )
+                if resolved_strategy == STRATEGY_MAP_REDUCE:
+                    synthesis_result = synthesize_panel_mapreduce(
+                        client,
+                        panelist_results,
+                        questions,
+                        model=synthesis_model,
+                        panelist_model=model,
+                        panelist_cost=panelist_cost_est,
+                        temperature=effective_synth_temp,
+                        top_p=top_p,
+                        personas=personas,
+                    )
+                else:
+                    synthesis_result = synthesize_panel(
+                        client,
+                        panelist_results,
+                        questions,
+                        model=synthesis_model,
+                        panelist_model=model,
+                        custom_prompt=custom_prompt,
+                        panelist_cost=panelist_cost_est,
+                        temperature=effective_synth_temp,
+                        top_p=top_p,
+                    )
             except Exception as exc:
                 # sp-avmm: fail loud — previously this was a WARN log and the
                 # run exited 0 with synthesis=null. That silent-skip made
@@ -1175,7 +1218,8 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                     suggested_fix=(
                         "Check provider credentials and model availability;"
                         " if context-related, rerun with a larger-context synthesis model"
-                        " (e.g. gemini-2.5-flash-lite or gemini-2.5-pro)."
+                        " (e.g. gemini-2.5-flash-lite or gemini-2.5-pro)"
+                        " or --synthesis-strategy=map-reduce."
                     ),
                 )
                 run_invalid = True
@@ -1211,6 +1255,18 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         template_vars=template_vars or None,
         panelist_per_model=panelist_per_model_meta,
     )
+
+    # sp-kkzz: when map-reduce ran, expose the per-call cost breakdown
+    # under metadata.cost.synthesis so downstream consumers can attribute
+    # spend to the map vs reduce phases without re-deriving it.
+    if synthesis_result is not None and synthesis_result.strategy == STRATEGY_MAP_REDUCE:
+        cost_section = metadata.setdefault("cost", {})
+        cost_section["synthesis"] = {
+            "strategy": STRATEGY_MAP_REDUCE,
+            "map_calls": synthesis_result.map_cost_breakdown or [],
+            "reduce_call": synthesis_result.reduce_cost_breakdown or {},
+            "total_cost_usd": round(synthesis_result.cost.total_cost, 6),
+        }
 
     # sp-prof: inject profile info into metadata for synthbench
     if profile is not None:

@@ -187,6 +187,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Custom synthesis prompt. Replaces the default synthesis prompt entirely.",
     )
     panel_run_parser.add_argument(
+        "--synthesis-strategy",
+        choices=["single", "map-reduce", "auto"],
+        default="auto",
+        help=(
+            "How to aggregate panelist responses into the final synthesis "
+            "(sp-kkzz). 'single' concatenates every response into one LLM "
+            "call (cheapest for small panels). 'map-reduce' runs one "
+            "summary call per question in parallel then one reduce call "
+            "across the summaries (required once responses overflow the "
+            "synthesis model's context window, typically n>=50). 'auto' "
+            "(default) picks based on a pre-flight token estimate — falls "
+            "back to 'single' whenever the estimate fits the synthesis "
+            "model's context. Custom --synthesis-prompt forces 'single'."
+        ),
+    )
+    panel_run_parser.add_argument(
         "--temperature",
         type=float,
         default=None,
