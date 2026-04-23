@@ -1,0 +1,123 @@
+{
+  "created_at": "2026-04-22T20:00:00Z",
+  "model": "claude-sonnet-4-6",
+  "persona_count": 3,
+  "question_count": 2,
+  "total_usage": {
+    "input_tokens": 900,
+    "output_tokens": 360,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0
+  },
+  "total_cost": "$0.0108",
+  "rounds": [
+    {
+      "name": "discovery",
+      "results": [
+        {
+          "persona": "Sarah Chen",
+          "model": "claude-sonnet-4-6",
+          "responses": [
+            {
+              "question": "What's working well?",
+              "response": "The async collaboration flow.",
+              "usage": {"input_tokens": 100, "output_tokens": 40}
+            },
+            {
+              "question": "What needs work?",
+              "response": "Mobile ergonomics.",
+              "usage": {"input_tokens": 100, "output_tokens": 40}
+            }
+          ]
+        },
+        {
+          "persona": "Marcus Reed",
+          "model": "claude-sonnet-4-6",
+          "responses": [
+            {
+              "question": "What's working well?",
+              "response": "Fast onboarding for new seats.",
+              "usage": {"input_tokens": 100, "output_tokens": 40}
+            },
+            {
+              "question": "What needs work?",
+              "response": "Search is noisy.",
+              "usage": {"input_tokens": 100, "output_tokens": 40}
+            }
+          ]
+        },
+        {
+          "persona": "Priya Patel",
+          "model": "claude-sonnet-4-6",
+          "responses": [
+            {
+              "question": "What's working well?",
+              "response": "Templates save hours a week.",
+              "usage": {"input_tokens": 100, "output_tokens": 40}
+            },
+            {
+              "question": "What needs work?",
+              "response": "Export formats are limited.",
+              "usage": {"input_tokens": 100, "output_tokens": 40}
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "synthesis": {
+    "ran": true,
+    "model": "claude-sonnet-4-6",
+    "strategy": "map-reduce",
+    "summary": "Panelists are positive about collaboration and templates; friction concentrates in mobile UX, search relevance, and export flexibility.",
+    "themes": ["mobile", "search", "export"],
+    "cost": "$0.0034",
+    "per_question_synthesis": {
+      "0": "Async collaboration and templates are the standout strengths; onboarding is rated highly.",
+      "1": "Three distinct pain points: mobile ergonomics, noisy search, and limited export formats."
+    },
+    "map_cost_breakdown": {
+      "input_tokens": 400,
+      "output_tokens": 160,
+      "cost_usd": 0.0024
+    },
+    "reduce_cost_breakdown": {
+      "input_tokens": 160,
+      "output_tokens": 80,
+      "cost_usd": 0.0010
+    }
+  },
+  "failure_stats": {
+    "total_pairs": 6,
+    "errored_pairs": 0,
+    "failure_rate": 0.0,
+    "failed_panelists": 0,
+    "errored_personas": []
+  },
+  "metadata": {
+    "config_hash": "ff00aa11bb22",
+    "version": {
+      "synthpanel": "0.5.0",
+      "python": "3.12.1"
+    },
+    "cost": {
+      "pricing_snapshot_date": "2026-01-15",
+      "per_model": {
+        "claude-sonnet-4-6": {
+          "input_tokens": 900,
+          "output_tokens": 360,
+          "cost_usd": 0.0108
+        }
+      }
+    },
+    "timing": {
+      "total_seconds": 22.1
+    },
+    "models": {
+      "panelist": ["claude-sonnet-4-6"],
+      "synthesis": "claude-sonnet-4-6"
+    }
+  },
+  "instrument_name": "workflow-retro",
+  "models": ["claude-sonnet-4-6"]
+}

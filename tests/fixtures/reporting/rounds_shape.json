@@ -1,0 +1,110 @@
+{
+  "created_at": "2026-04-22T19:00:00Z",
+  "model": "claude-sonnet-4-6",
+  "persona_count": 2,
+  "question_count": 2,
+  "total_usage": {
+    "input_tokens": 400,
+    "output_tokens": 160,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0
+  },
+  "total_cost": "$0.0048",
+  "rounds": [
+    {
+      "name": "discovery",
+      "results": [
+        {
+          "persona": "Sarah Chen",
+          "model": "claude-sonnet-4-6",
+          "responses": [
+            {
+              "question": "What's the most frustrating part?",
+              "response": "Pricing is opaque.",
+              "usage": {"input_tokens": 100, "output_tokens": 40}
+            }
+          ]
+        },
+        {
+          "persona": "Marcus Reed",
+          "model": "claude-sonnet-4-6",
+          "responses": [
+            {
+              "question": "What's the most frustrating part?",
+              "response": "Onboarding is slow.",
+              "usage": {"input_tokens": 100, "output_tokens": 40}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "probe_pricing",
+      "results": [
+        {
+          "persona": "Sarah Chen",
+          "model": "claude-sonnet-4-6",
+          "responses": [
+            {
+              "question": "What would feel fair to pay?",
+              "response": "Around $20/month per seat.",
+              "usage": {"input_tokens": 100, "output_tokens": 40}
+            }
+          ]
+        },
+        {
+          "persona": "Marcus Reed",
+          "model": "claude-sonnet-4-6",
+          "responses": [
+            {
+              "question": "What would feel fair to pay?",
+              "response": "Under $15/month.",
+              "usage": {"input_tokens": 100, "output_tokens": 40}
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "synthesis": {
+    "ran": true,
+    "model": "claude-sonnet-4-6",
+    "strategy": "single",
+    "summary": "Panelists agree that pricing opacity is the key blocker; fair-price band clusters around $15-20/month per seat.",
+    "themes": ["pricing", "onboarding"],
+    "cost": "$0.0010"
+  },
+  "failure_stats": {
+    "total_pairs": 4,
+    "errored_pairs": 0,
+    "failure_rate": 0.0,
+    "failed_panelists": 0,
+    "errored_personas": []
+  },
+  "metadata": {
+    "config_hash": "abc123def456",
+    "version": {
+      "synthpanel": "0.5.0",
+      "python": "3.12.1"
+    },
+    "cost": {
+      "pricing_snapshot_date": "2026-01-15",
+      "per_model": {
+        "claude-sonnet-4-6": {
+          "input_tokens": 400,
+          "output_tokens": 160,
+          "cost_usd": 0.0048
+        }
+      }
+    },
+    "timing": {
+      "total_seconds": 12.4
+    },
+    "models": {
+      "panelist": ["claude-sonnet-4-6"],
+      "synthesis": "claude-sonnet-4-6"
+    }
+  },
+  "instrument_name": "pricing-discovery",
+  "models": ["claude-sonnet-4-6"]
+}
