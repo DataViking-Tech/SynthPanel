@@ -6,16 +6,36 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-04-23
+
+Minor bump shipping three completed QRSPI epics — `sp-viz-layer` (post-hoc
+Markdown reporting), `sp-inline-calibration` (inline calibration against
+published human baselines), and `sp-pack-registry` (decentralized HACS-style
+persona-pack registry) — plus supporting work merged since v0.9.9.
+
 ### Added
 - (sp-viz-layer) `synthpanel report RESULT` — post-hoc Markdown renderer for saved panel results. Accepts a result ID or a path to a result JSON; writes to stdout by default or to a file via `-o PATH`. Every report opens with a mandatory synthetic-panel banner and closes with a matching footer so the output can't be mistaken for human-respondent data. Scope is Markdown v1 (provenance, per-model rollup, persona summary, synthesis, failure stats); `--format` accepts only `markdown` and is reserved as a forward-compat slot for HTML in v2. A `synthpanel[report]` optional-deps extra exists and installs cleanly but is currently empty — forward fence for v2 HTML deps. Ships via T1–T5: scaffold (sp-x8fl), loader (sp-kwhl), renderer (sp-u88v), CLI wiring (sp-awfz), docs (sp-z3uy). Full spec at `specs/sp-viz-layer/`.
 - (sp-5r88 / sp-a6jc / sp-ttwy / sp-bldz) Inline SynthBench calibration via `panel run --calibrate-against DATASET:QUESTION`. Force-enables convergence tracking against a published human baseline (v1 allowlist: `gss`, `ntia`), auto-derives a `pick_one` extractor schema from the baseline when option count ≤ 5 (override with `--extract-schema`), and attaches a `calibration` sub-object to every tracked question in the output. The sub-object carries `jsd`, `baseline_spec`, `extractor`, `auto_derived`, and — on disjoint supports — `alignment_error`. Requires `pip install 'synthpanel[convergence]'`. Cadence is NOT implicit — pair with `--convergence-check-every` to control sampling.
+- (sp-udsv) `gh:` URL resolver — parses `gh:owner/repo[@ref][/path]` into raw-content URLs with tight allowlist validation. Foundation piece for the pack registry (pack import from GitHub).
+- (sp-7we4) Decentralized registry module at `synth_panel.registry` with HTTP fetch + on-disk cache layers. 24h TTL, offline fallback when the remote is unreachable, and deterministic cache keys so cold/warm runs produce identical lookups.
+- (sp-w9a5) `synthpanel pack import gh:<user>/<repo>[@ref][/path]` — import persona packs directly from GitHub via the `gh:` resolver. `--unverified` affordance required for packs outside the curated registry; collision UX surfaces existing local packs and offers `--force` to overwrite.
+- (sp-vzhl) `synthpanel pack search <term>` substring search over cached registry entries, and `synthpanel pack list --registry` to enumerate available packs from the registry (falls back to last good cache offline).
 - (sp-lk3w) Optional `version:` field on persona packs. MCP surfaces a non-fatal shadow warning when a user-installed pack shadows a bundled pack with an older version string, so silently-stale packs can't sit on top of a newer bundled definition.
-- (sp-udsv) `gh:` URL resolver — parses `gh:owner/repo[@ref][/path]` into raw-content URLs with tight allowlist validation. Foundation piece for `sp-pack-registry` (pack import from GitHub).
+
+### Changed
+- (sp-bldz) Convergence: inline calibration now attaches a `per_question[key].calibration` sub-object as the shipped wire format (`jsd`, `baseline_spec`, `extractor`, `auto_derived`, and — on disjoint supports — `alignment_error`). A flat `per_question[key].human_jsd` scalar was considered during D-gate and rejected; any downstream consumer that wrote speculative code against `.human_jsd` should migrate to `.calibration.jsd`.
+- (sp-ttwy) `pick_one` extractor schema is auto-derived from the baseline when the baseline option count is ≤ 5; hard-fails otherwise so callers are forced to pass an explicit `--extract-schema`.
 
 ### Documentation
-- (sp-z3uy) README: document `synthpanel report` usage in the quick-start section with stdout / `-o FILE` examples, banner call-out, and a note that the `[report]` extra is currently empty but installs cleanly.
-- (sp-z3uy) synthpanel.dev landing page: add `synthpanel report` to the quick-start code snippet with a synthetic-panel banner call-out.
-- (sp-7npy) Convergence: document the shipped inline-calibration wire format as `per_question[key].calibration` (a sub-object with `jsd`, `baseline_spec`, `extractor`, `auto_derived`, and — on disjoint supports — `alignment_error`). A flat `per_question[key].human_jsd` scalar was considered during D-gate of sp-inline-calibration and rejected in favor of the sub-object shape; this field was never shipped, so no code removal is needed. Any downstream consumer that wrote speculative code against `.human_jsd` should migrate to `.calibration.jsd`. `sp-pack-registry` fingerprints depend on the sub-object shape.
+- (sp-z3uy) README + synthpanel.dev: document `synthpanel report` usage in the quick-start section with stdout / `-o FILE` examples, synthetic-panel banner call-out, and a note that the `[report]` extra is currently empty but installs cleanly.
+- (sp-0g9r / sp-7npy) Convergence docs: document `--calibrate-against` and the shipped `per_question[key].calibration` sub-object wire format. Any downstream consumer that wrote speculative code against `.human_jsd` should migrate to `.calibration.jsd`.
+- (sp-ezcq) New `docs/registry.md` reference covering `pack import gh:...`, `pack search`, `pack list --registry`, the 24h cache, and the contribution flow for community packs.
+- (sp-o1y0) Landing page: "Who this isn't for" positioning block surfacing non-enterprise scope.
+- (#251) Full doc audit and refresh for the v0.9.9 feature set across README, CHANGELOG, and site.
+
+### Tests
+- (sp-m1mz) Acceptance: live-registry smoke test covering cache miss → fetch → cache hit paths end-to-end.
+- (sp-idqa) Acceptance: end-to-end calibration against live GSS HAPPY baseline validating the full `--calibrate-against` path.
 
 ## [0.9.9] - 2026-04-22
 
