@@ -1,0 +1,30 @@
+{
+  "_comment": "sp-bldz golden fixture — pins per_question[key].calibration wire format. Field names, casing, and nesting are committed; downstream sp-pack-registry consumes this shape. Additive-only changes per structure.md §6 and plan.md R3.",
+  "per_question": {
+    "happy": {
+      "final_n": 10,
+      "converged_at": null,
+      "curve": [],
+      "support_size": 3,
+      "calibration": {
+        "jsd": 0.008454,
+        "baseline_spec": "gss:HAPPY",
+        "extractor": "pick_one:auto-derived",
+        "auto_derived": true
+      }
+    },
+    "color": {
+      "final_n": 10,
+      "converged_at": null,
+      "curve": [],
+      "support_size": 2,
+      "calibration": {
+        "jsd": 1.0,
+        "baseline_spec": "gss:HAPPY",
+        "extractor": "pick_one:auto-derived",
+        "auto_derived": true,
+        "alignment_error": "['blue', 'red'] vs ['Not too happy', 'Pretty happy', 'Very happy']"
+      }
+    }
+  }
+}
