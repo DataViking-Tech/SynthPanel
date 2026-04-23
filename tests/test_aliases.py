@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import textwrap
 
 import pytest
@@ -78,10 +79,12 @@ def test_env_var_adds_new_alias(monkeypatch):
     assert resolve_alias("opus").startswith("claude-opus")
 
 
-def test_env_var_invalid_json_ignored(monkeypatch):
+def test_env_var_invalid_json_ignored(monkeypatch, caplog):
     monkeypatch.setenv("SYNTHPANEL_MODEL_ALIASES", "not json{")
-    # falls back to hardcoded
-    assert resolve_alias("sonnet").startswith("claude-sonnet")
+    with caplog.at_level(logging.WARNING, logger="synth_panel.llm.aliases"):
+        # falls back to hardcoded
+        assert resolve_alias("sonnet").startswith("claude-sonnet")
+    assert any("SYNTHPANEL_MODEL_ALIASES" in rec.getMessage() and "JSON" in rec.getMessage() for rec in caplog.records)
 
 
 def test_env_var_non_dict_ignored(monkeypatch):
@@ -122,11 +125,15 @@ def test_file_missing_is_fine(monkeypatch, tmp_path):
     assert resolve_alias("sonnet").startswith("claude-sonnet")
 
 
-def test_file_invalid_yaml_ignored(monkeypatch, tmp_path):
+def test_file_invalid_yaml_ignored(monkeypatch, tmp_path, caplog):
     aliases_file = tmp_path / "aliases.yaml"
     aliases_file.write_text(": : : not valid yaml [")
     monkeypatch.setattr("synth_panel.llm.aliases._ALIASES_FILE", aliases_file)
-    assert resolve_alias("sonnet").startswith("claude-sonnet")
+    with caplog.at_level(logging.WARNING, logger="synth_panel.llm.aliases"):
+        assert resolve_alias("sonnet").startswith("claude-sonnet")
+    assert any(
+        str(aliases_file) in rec.getMessage() and "failed to parse" in rec.getMessage() for rec in caplog.records
+    )
 
 
 def test_file_flat_format(monkeypatch, tmp_path):
