@@ -31,6 +31,7 @@ from synth_panel.convergence import (
     DEFAULT_MIN_N,
     ConvergenceTracker,
     SynthbenchUnavailableError,
+    derive_pick_one_schema_from_baseline,
     identify_tracked_questions,
     load_synthbench_baseline,
 )
@@ -90,6 +91,26 @@ _DEFAULT_MODEL_PREFERENCE: list[tuple[str, str]] = [
 # (OpinionsQA, PewTech, GlobalOpinionQA, WVS, ...) require post-hoc
 # calibration. Override with SYNTHBENCH_ALLOW_GATED=1 (internal only).
 _INLINE_CALIBRATION_ALLOWED: frozenset[str] = frozenset({"gss", "ntia"})
+
+
+def _looks_numeric_key(value: Any) -> bool:
+    """True when *value* is numeric or a string that coerces to one.
+
+    Mirrors ``convergence._looks_numeric`` so we can classify a
+    baseline's option-string set as Likert-looking for the §7 error
+    message without importing a private symbol.
+    """
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, (int, float)):
+        return True
+    if isinstance(value, str):
+        try:
+            float(value)
+        except ValueError:
+            return False
+        return True
+    return False
 
 
 def _resolve_default_model() -> tuple[str, str | None]:
@@ -1137,6 +1158,9 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     convergence_tracker: ConvergenceTracker | None = None
     convergence_baseline_payload: dict[str, Any] | None = None
     convergence_baseline_error: str | None = None
+    # sp-ttwy: calibration provenance threaded into build_report (T4 consumes)
+    extractor_label: str | None = None
+    auto_derived: bool = False
     wants_convergence = any(
         [
             getattr(args, "convergence_check_every", None) is not None,
@@ -1162,7 +1186,13 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             # Resolve baseline before kicking off the run so a missing
             # synthbench dep fails fast — we do not want to burn LLM
             # spend on a run whose report we cannot assemble.
-            baseline_spec = getattr(args, "convergence_baseline", None)
+            # sp-ttwy: --calibrate-against also sources the baseline here;
+            # the conflict check above guarantees both flags (when set
+            # together) reference the same DATASET:QUESTION, so this is
+            # still a single fetch — acceptance requires "Baseline fetched
+            # exactly once even when both convergence + calibrate flags
+            # present".
+            baseline_spec = getattr(args, "convergence_baseline", None) or calibrate_against_spec
             if baseline_spec:
                 try:
                     convergence_baseline_payload = load_synthbench_baseline(baseline_spec)
@@ -1175,6 +1205,62 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                         f"Warning: could not load convergence baseline: {exc}",
                         file=sys.stderr,
                     )
+            # sp-ttwy: auto-derive a pick_one extraction schema from the
+            # baseline's small-enum distribution, or classify a
+            # user-supplied schema for provenance. Happens BEFORE any
+            # panelist call (R2 regression risk: a late failure after 20
+            # panelists were prompted would burn real LLM spend).
+            if calibrate_against_spec is not None:
+                if extract_schema is not None:
+                    # User supplied --extract-schema: skip derivation,
+                    # label for provenance. Likert is detected by the
+                    # schema's `rating` property (matches LIKERT_SCHEMA).
+                    schema_props = extract_schema.get("properties") or {}
+                    if "rating" in schema_props:
+                        extractor_label = "likert:manual"
+                    else:
+                        extractor_label = "pick_one:manual"
+                elif convergence_baseline_payload is not None:
+                    derived_schema = derive_pick_one_schema_from_baseline(convergence_baseline_payload)
+                    if derived_schema is not None:
+                        extract_schema = derived_schema
+                        extractor_label = "pick_one:auto-derived"
+                        auto_derived = True
+                        # Stderr log in sp-yaru style (S-gate OQ2: stderr,
+                        # NOT stdout, NOT nested in the report — provenance
+                        # lives in calibration.auto_derived + .extractor).
+                        enum_options = derived_schema["properties"]["choice"]["enum"]
+                        print(
+                            f"[convergence] auto-derived pick_one schema from "
+                            f"{calibrate_against_spec} → {len(enum_options)} options: "
+                            f"{enum_options}",
+                            file=sys.stderr,
+                        )
+                    else:
+                        # Hard-fail per structure.md §7: distinguish the
+                        # two failure modes so the user knows whether to
+                        # pick a smaller question or supply a Likert
+                        # schema explicitly.
+                        distribution = convergence_baseline_payload.get("human_distribution") or {}
+                        keys = list(distribution.keys())
+                        is_likert = bool(keys) and any(_looks_numeric_key(k) for k in keys)
+                        if is_likert:
+                            print(
+                                "Error: --calibrate-against cannot auto-derive "
+                                "for Likert/ranking baselines. Supply "
+                                "--extract-schema likert (or custom).",
+                                file=sys.stderr,
+                            )
+                        else:
+                            n_options = len(keys)
+                            print(
+                                f"Error: --calibrate-against needs "
+                                f"--extract-schema: baseline has {n_options} "
+                                f"options (max 5 for auto-derive). Supply a "
+                                f"schema or pick a smaller-support question.",
+                                file=sys.stderr,
+                            )
+                        return 1
             convergence_tracker = ConvergenceTracker(
                 tracked,
                 check_every=getattr(args, "convergence_check_every", None) or DEFAULT_CHECK_EVERY,
@@ -1596,7 +1682,12 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         # so operators watching stdout can see "converged at n=473" without
         # re-running with --output-format json.
         if convergence_tracker is not None:
-            report = convergence_tracker.build_report(baseline=convergence_baseline_payload)
+            report = convergence_tracker.build_report(
+                baseline=convergence_baseline_payload,
+                calibration_spec=calibrate_against_spec,
+                extractor_label=extractor_label,
+                auto_derived=auto_derived,
+            )
             convergence_tracker.close()
             print("\n" + "=" * 60)
             print("CONVERGENCE")
@@ -1723,6 +1814,9 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         if convergence_tracker is not None:
             convergence_report = convergence_tracker.build_report(
                 baseline=convergence_baseline_payload,
+                calibration_spec=calibrate_against_spec,
+                extractor_label=extractor_label,
+                auto_derived=auto_derived,
             )
             if convergence_baseline_error:
                 convergence_report["human_baseline_error"] = convergence_baseline_error
