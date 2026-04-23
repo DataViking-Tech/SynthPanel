@@ -129,11 +129,16 @@ def _bundled_instrument_packs() -> dict[str, dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
-def list_persona_packs() -> list[dict[str, Any]]:
+def list_persona_packs(*, warn_on_shadow: bool = False) -> list[dict[str, Any]]:
     """Return metadata for all persona packs (bundled + user-saved).
 
     Bundled packs are listed first. If a user-saved pack has the same ID as
     a bundled pack, the user-saved version takes precedence.
+
+    ``warn_on_shadow``: when True, emit a ``UserWarning`` for every bundled
+    pack hidden by a user-saved pack of the same id. This is the
+    registry-import path; local callers leave it False to preserve the
+    historical silent-shadow behavior.
     """
     seen: set[str] = set()
     packs: list[dict[str, Any]] = []
@@ -161,6 +166,14 @@ def list_persona_packs() -> list[dict[str, Any]]:
     bundled = []
     for pack_id, data in sorted(_bundled_packs().items()):
         if pack_id in seen:
+            if warn_on_shadow:
+                import warnings
+
+                warnings.warn(
+                    f"Bundled persona pack {pack_id!r} is shadowed by a user-saved pack",
+                    UserWarning,
+                    stacklevel=2,
+                )
             continue
         personas = data.get("personas", [])
         bundled.append(
@@ -176,7 +189,12 @@ def list_persona_packs() -> list[dict[str, Any]]:
 
 
 def get_persona_pack(pack_id: str) -> dict[str, Any]:
-    """Load a persona pack by ID. User-saved packs override bundled ones."""
+    """Load a persona pack by ID. User-saved packs override bundled ones.
+
+    Pack-level manifest fields are normalized via
+    :func:`validate_pack_manifest` — in particular ``version`` defaults to
+    ``"1"`` when absent.
+    """
     _validate_pack_id(pack_id)
     # Check user-saved packs first
     p = _packs_dir() / f"{pack_id}.yaml"
@@ -184,13 +202,14 @@ def get_persona_pack(pack_id: str) -> dict[str, Any]:
         data = yaml.safe_load(p.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
             raise ValueError(f"Invalid persona pack format in {pack_id}")
+        data = validate_pack_manifest(data)
         data["id"] = pack_id
         return data
 
     # Fall back to bundled packs
     bundled = _bundled_packs()
     if pack_id in bundled:
-        data = bundled[pack_id]
+        data = validate_pack_manifest(bundled[pack_id])
         data["id"] = pack_id
         return data
 
@@ -199,6 +218,27 @@ def get_persona_pack(pack_id: str) -> dict[str, Any]:
 
 class PackValidationError(ValueError):
     """Raised when a persona pack fails schema validation."""
+
+
+def validate_pack_manifest(data: dict[str, Any]) -> dict[str, Any]:
+    """Validate pack-level manifest fields and apply defaults.
+
+    Currently enforces one rule: the optional ``version`` field must be a
+    string. When absent, it defaults to ``"1"``. Other manifest fields
+    (``name``, ``description``, ``author``) are passed through unchanged.
+
+    Returns a shallow copy of *data* with defaults applied. Raises
+    :class:`PackValidationError` for type violations.
+    """
+    if not isinstance(data, dict):
+        raise PackValidationError("pack manifest must be a mapping")
+    out = dict(data)
+    version = out.get("version")
+    if version is None:
+        out["version"] = "1"
+    elif not isinstance(version, str):
+        raise PackValidationError(f"pack version must be a string, got {type(version).__name__}")
+    return out
 
 
 def validate_persona_pack(personas: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -245,19 +285,36 @@ def save_persona_pack(
     name: str,
     personas: list[dict[str, Any]],
     pack_id: str | None = None,
+    version: str | None = None,
 ) -> dict[str, Any]:
     """Save a persona pack and return its metadata.
 
     Validates personas before saving. Raises :class:`PackValidationError`
     on invalid data.
+
+    When ``version`` is provided it must be a string and is written to the
+    on-disk manifest. When omitted, no ``version:`` field is written — the
+    pack loads as ``"1"`` via :func:`get_persona_pack`'s default.
     """
     personas = validate_persona_pack(personas)
     pid = pack_id or f"pack-{uuid.uuid4().hex[:8]}"
     _validate_pack_id(pid)
     p = _packs_dir() / f"{pid}.yaml"
-    data = {"name": name, "personas": personas}
+    data: dict[str, Any] = {"name": name}
+    if version is not None:
+        validated = validate_pack_manifest({"version": version})
+        data["version"] = validated["version"]
+    data["personas"] = personas
     p.write_text(yaml.dump(data, default_flow_style=False), encoding="utf-8")
-    return {"id": pid, "name": name, "persona_count": len(personas), "path": str(p)}
+    meta: dict[str, Any] = {
+        "id": pid,
+        "name": name,
+        "persona_count": len(personas),
+        "path": str(p),
+    }
+    if version is not None:
+        meta["version"] = data["version"]
+    return meta
 
 
 # ---------------------------------------------------------------------------
