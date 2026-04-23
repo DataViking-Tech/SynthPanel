@@ -6,6 +6,9 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [Unreleased]
 
+### Documentation
+- (sp-7npy) Convergence: document the shipped inline-calibration wire format as `per_question[key].calibration` (a sub-object with `jsd`, `baseline_spec`, `extractor`, `auto_derived`, and — on disjoint supports — `alignment_error`). A flat `per_question[key].human_jsd` scalar was considered during D-gate of sp-inline-calibration and rejected in favor of the sub-object shape; this field was never shipped, so no code removal is needed. Any downstream consumer that wrote speculative code against `.human_jsd` should migrate to `.calibration.jsd`. `sp-pack-registry` fingerprints depend on the sub-object shape.
+
 ## [0.9.9] - 2026-04-22
 
 ### Fixed
