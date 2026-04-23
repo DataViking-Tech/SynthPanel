@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import re
 import sys
 from pathlib import Path
@@ -82,6 +83,13 @@ _DEFAULT_MODEL_PREFERENCE: list[tuple[str, str]] = [
     ("XAI_API_KEY", "grok-3"),
     ("OPENROUTER_API_KEY", "openrouter/auto"),
 ]
+
+# sp-inline-calibration (sp-a6jc): redistribution-tier allowlist for
+# --calibrate-against. Only datasets that may be republished inline as
+# part of a synthpanel run output are allowed; gated datasets
+# (OpinionsQA, PewTech, GlobalOpinionQA, WVS, ...) require post-hoc
+# calibration. Override with SYNTHBENCH_ALLOW_GATED=1 (internal only).
+_INLINE_CALIBRATION_ALLOWED: frozenset[str] = frozenset({"gss", "ntia"})
 
 
 def _resolve_default_model() -> tuple[str, str | None]:
@@ -1088,11 +1096,44 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         emit(fmt, message="Ensemble complete", extra=output)
         return 0
 
+    # ── sp-inline-calibration (sp-a6jc): --calibrate-against validation ──
+    # Validate the spec, gate against the redistribution-tier allowlist,
+    # and reconcile against --convergence-baseline BEFORE any LLM spend
+    # so a malformed or gated request never burns a panelist call.
+    calibrate_against_spec = getattr(args, "calibrate_against", None)
+    if calibrate_against_spec is not None:
+        dataset, sep, question = calibrate_against_spec.partition(":")
+        if not sep or not dataset or not question:
+            print(
+                "Error: --calibrate-against requires DATASET:QUESTION (colon-separated, both non-empty).",
+                file=sys.stderr,
+            )
+            return 2
+        if dataset not in _INLINE_CALIBRATION_ALLOWED and os.environ.get("SYNTHBENCH_ALLOW_GATED") != "1":
+            allowed = ", ".join(sorted(_INLINE_CALIBRATION_ALLOWED))
+            print(
+                f"Error: --calibrate-against only supports inline-publishable "
+                f"datasets ({allowed}). For gated datasets use post-hoc "
+                f"calibration.",
+                file=sys.stderr,
+            )
+            return 1
+        existing_baseline = getattr(args, "convergence_baseline", None)
+        if existing_baseline and existing_baseline != calibrate_against_spec:
+            print(
+                "Error: --calibrate-against and --convergence-baseline must reference the same DATASET:QUESTION.",
+                file=sys.stderr,
+            )
+            return 2
+
     # ── sp-yaru: convergence telemetry ───────────────────────────────────
     # Build the tracker when any convergence flag opts in. We always
     # respect --auto-stop / --convergence-baseline even if the user
     # forgot --convergence-check-every, by falling back to the default
-    # cadence so those flags never silently no-op.
+    # cadence so those flags never silently no-op. --calibrate-against
+    # also force-enables tracking (sp-a6jc); cadence is NOT implicit, so
+    # users must still pair it with --convergence-check-every per S-gate
+    # OQ3 to avoid surprise cost on small n.
     convergence_tracker: ConvergenceTracker | None = None
     convergence_baseline_payload: dict[str, Any] | None = None
     convergence_baseline_error: str | None = None
@@ -1105,6 +1146,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             getattr(args, "convergence_eps", None) is not None,
             getattr(args, "convergence_min_n", None) is not None,
             getattr(args, "convergence_m", None) is not None,
+            calibrate_against_spec is not None,
         ]
     )
     if wants_convergence:
