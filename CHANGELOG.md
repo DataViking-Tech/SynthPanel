@@ -6,6 +6,13 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [Unreleased]
 
+### Added
+- (sp-viz-layer) `synthpanel report RESULT` — post-hoc Markdown renderer for saved panel results. Accepts a result ID or a path to a result JSON; writes to stdout by default or to a file via `-o PATH`. Every report opens with a mandatory synthetic-panel banner and closes with a matching footer so the output can't be mistaken for human-respondent data. Scope is Markdown v1 (provenance, per-model rollup, persona summary, synthesis, failure stats); `--format` accepts only `markdown` and is reserved as a forward-compat slot for HTML in v2. A `synthpanel[report]` optional-deps extra exists and installs cleanly but is currently empty — forward fence for v2 HTML deps. Ships via T1–T5: scaffold (sp-x8fl), loader (sp-kwhl), renderer (sp-u88v), CLI wiring (sp-awfz), docs (sp-z3uy). Full spec at `specs/sp-viz-layer/`.
+
+### Documentation
+- (sp-z3uy) README: document `synthpanel report` usage in the quick-start section with stdout / `-o FILE` examples, banner call-out, and a note that the `[report]` extra is currently empty but installs cleanly.
+- (sp-z3uy) synthpanel.dev landing page: add `synthpanel report` to the quick-start code snippet with a synthetic-panel banner call-out.
+
 ## [0.9.9] - 2026-04-22
 
 ### Fixed
