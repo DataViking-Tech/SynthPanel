@@ -469,6 +469,23 @@ def build_parser() -> argparse.ArgumentParser:
             "when the dataset has a single default question."
         ),
     )
+    panel_run_parser.add_argument(
+        "--calibrate-against",
+        default=None,
+        metavar="DATASET:QUESTION",
+        dest="calibrate_against",
+        help=(
+            "Inline calibration against a published human baseline. v1 "
+            "supports GSS only (e.g. 'gss:HAPPY'); the redistribution-tier "
+            "allowlist is {gss, ntia}. Force-enables convergence tracking, "
+            "but cadence is NOT implicit — pair explicitly with "
+            "--convergence-check-every to control sampling. Auto-derives a "
+            "pick-one extractor schema from the baseline when option count "
+            "<= 5; otherwise pass --extract-schema. Requires the optional "
+            "dependency: pip install 'synthpanel[convergence]'. Format: "
+            "'dataset:question_key' (colon-separated, both non-empty)."
+        ),
+    )
 
     # panel inspect (sp-76gm: stats + schema walker for a saved result)
     panel_inspect_parser = panel_subparsers.add_parser(
