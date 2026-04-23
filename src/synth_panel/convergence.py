@@ -97,6 +97,20 @@ def jensen_shannon_divergence(p: dict[str, float], q: dict[str, float]) -> float
     return max(0.0, min(1.0, jsd))
 
 
+def compute_calibration_jsd(
+    model_dist: dict[str, float],
+    human_dist: dict[str, float],
+) -> float:
+    """Inline-calibration JSD between a synthpanel and a SynthBench distribution.
+
+    Thin readability wrapper around :func:`jensen_shannon_divergence` so the
+    ``build_report()`` calibration block reads in domain terms (sp-bldz).
+    Synthbench ships its own JSD implementation; we deliberately do not
+    import it — see ``specs/sp-inline-calibration/structure.md`` §5.
+    """
+    return jensen_shannon_divergence(model_dist, human_dist)
+
+
 # ---------------------------------------------------------------------------
 # Question inspection
 # ---------------------------------------------------------------------------
@@ -425,26 +439,51 @@ class ConvergenceTracker:
         ``human_baseline``; the caller owns the lookup against SynthBench
         so this module stays free of optional-dep imports.
 
-        sp-ttwy (T3) threads ``calibration_spec``, ``extractor_label``, and
-        ``auto_derived`` through so T4 can attach a
-        ``per_question[key].calibration`` sub-object with JSD + provenance.
-        They are accepted here as a forward-compatibility seam; T4 owns
-        the actual attachment logic.
+        When ``calibration_spec`` is supplied AND ``baseline`` carries a
+        ``human_distribution`` mapping, sp-bldz (T4) attaches a
+        ``per_question[key]['calibration']`` sub-object with JSD computed
+        against the local :func:`jensen_shannon_divergence` (deliberately
+        not synthbench's copy — see ``specs/sp-inline-calibration/structure.md``
+        §5). When supplied without a baseline distribution, the kwargs are
+        accepted but no calibration data is attached.
         """
-        # sp-ttwy: placeholder accept — forward-compatible seam for T4 (JSD
-        # wiring + per_question[key].calibration attachment). Silently
-        # ignored today; T4 lights it up without changing the call sites.
-        _ = (calibration_spec, extractor_label, auto_derived)
         with self._lock:
+            human_dist: dict[str, float] | None = None
+            if calibration_spec is not None and isinstance(baseline, dict):
+                candidate = baseline.get("human_distribution")
+                if isinstance(candidate, dict) and candidate:
+                    human_dist = {str(k): float(v) for k, v in candidate.items()}
+
             per_question: dict[str, Any] = {}
             for key, state in self._states.items():
                 curve = _downsample_curve(state.per_n_jsd, DEFAULT_CURVE_POINTS)
-                per_question[key] = {
+                entry: dict[str, Any] = {
                     "final_n": self._n,
                     "converged_at": state.converged_at,
                     "curve": [{"n": n, "jsd": round(jsd, 6)} for n, jsd in curve],
                     "support_size": len(state.cumulative),
                 }
+                if human_dist is not None:
+                    model_dist = {k: float(v) for k, v in state.cumulative.items()}
+                    jsd = compute_calibration_jsd(model_dist, human_dist)
+                    calibration: dict[str, Any] = {
+                        "jsd": round(jsd, 6),
+                        "baseline_spec": calibration_spec,
+                        "extractor": extractor_label,
+                        "auto_derived": auto_derived,
+                    }
+                    # S-gate OQ1: verbatim option-string match. Disjoint
+                    # supports surface as alignment_error so downstream can
+                    # distinguish "extractor and baseline disagree on the
+                    # category vocabulary" from "real distributional
+                    # divergence". This is a wire-format field per P-gate.
+                    model_keys = set(model_dist)
+                    baseline_keys = set(human_dist)
+                    if model_keys and baseline_keys and not (model_keys & baseline_keys):
+                        calibration["jsd"] = 1.0
+                        calibration["alignment_error"] = f"{sorted(model_keys)} vs {sorted(baseline_keys)}"
+                    entry["calibration"] = calibration
+                per_question[key] = entry
             overall = self._overall_converged_at_locked()
             report: dict[str, Any] = {
                 "final_n": self._n,

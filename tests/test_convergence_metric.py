@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -18,6 +19,7 @@ from synth_panel.convergence import (
     DEFAULT_EPSILON,
     ConvergenceTracker,
     SynthbenchUnavailableError,
+    compute_calibration_jsd,
     derive_pick_one_schema_from_baseline,
     extract_categorical_responses,
     identify_tracked_questions,
@@ -309,3 +311,195 @@ def test_derive_pick_one_schema_from_baseline_returns_none_for_numeric_keys(dist
 )
 def test_derive_pick_one_schema_from_baseline_returns_none_when_unfit(baseline):
     assert derive_pick_one_schema_from_baseline(baseline) is None
+
+
+# ---------------------------------------------------------------------------
+# sp-bldz: build_report calibration sub-object
+# ---------------------------------------------------------------------------
+
+
+def _record_happy_distribution(
+    tracker: ConvergenceTracker,
+    counts: dict[str, int],
+    *,
+    extra_keys: dict[str, str] | None = None,
+) -> None:
+    """Feed a tracker a known cumulative distribution for the ``happy`` key."""
+    for category, count in counts.items():
+        for _ in range(count):
+            payload = {"happy": category}
+            if extra_keys:
+                payload.update(extra_keys)
+            tracker.record(payload)
+
+
+def test_build_report_attaches_calibration_subobject_with_provenance():
+    questions = [_pick_one_question("happy")]
+    tracked = identify_tracked_questions(questions)
+    # check_every kept above n so the curve stays empty and the assertion
+    # focuses on calibration shape, not rolling-jsd plumbing.
+    tracker = ConvergenceTracker(tracked, check_every=100, min_n=0, m_consecutive=2)
+    _record_happy_distribution(tracker, {"Very happy": 6, "Pretty happy": 3, "Not too happy": 1})
+    baseline = {
+        "dataset": "gss",
+        "question_key": "HAPPY",
+        "human_distribution": {
+            "Very happy": 0.5,
+            "Pretty happy": 0.4,
+            "Not too happy": 0.1,
+        },
+    }
+
+    report = tracker.build_report(
+        baseline=baseline,
+        calibration_spec="gss:HAPPY",
+        extractor_label="pick_one:auto-derived",
+        auto_derived=True,
+    )
+
+    calib = report["per_question"]["happy"]["calibration"]
+    assert set(calib.keys()) == {"jsd", "baseline_spec", "extractor", "auto_derived"}
+    assert 0.0 <= calib["jsd"] <= 1.0
+    assert calib["jsd"] == 0.008454  # rounded to 6 dp per wire format
+    assert calib["baseline_spec"] == "gss:HAPPY"
+    assert calib["extractor"] == "pick_one:auto-derived"
+    assert calib["auto_derived"] is True
+    # human_baseline still spliced in verbatim.
+    assert report["human_baseline"] is baseline
+
+
+def test_build_report_calibration_exact_match_yields_zero_jsd():
+    questions = [_pick_one_question("happy")]
+    tracked = identify_tracked_questions(questions)
+    tracker = ConvergenceTracker(tracked, check_every=100, min_n=0, m_consecutive=2)
+    _record_happy_distribution(tracker, {"Very happy": 5, "Pretty happy": 3, "Not too happy": 2})
+    baseline = {
+        "human_distribution": {
+            "Very happy": 0.5,
+            "Pretty happy": 0.3,
+            "Not too happy": 0.2,
+        }
+    }
+
+    report = tracker.build_report(
+        baseline=baseline,
+        calibration_spec="gss:HAPPY",
+        extractor_label="pick_one:auto-derived",
+        auto_derived=True,
+    )
+
+    assert report["per_question"]["happy"]["calibration"]["jsd"] == 0.0
+    assert "alignment_error" not in report["per_question"]["happy"]["calibration"]
+
+
+def test_build_report_calibration_disjoint_supports_emit_alignment_error():
+    questions = [_pick_one_question("color")]
+    tracked = identify_tracked_questions(questions)
+    tracker = ConvergenceTracker(tracked, check_every=100, min_n=0, m_consecutive=2)
+    for _ in range(5):
+        tracker.record({"color": "red"})
+    for _ in range(5):
+        tracker.record({"color": "blue"})
+
+    baseline = {
+        "human_distribution": {
+            "Very happy": 0.5,
+            "Pretty happy": 0.3,
+            "Not too happy": 0.2,
+        }
+    }
+    report = tracker.build_report(
+        baseline=baseline,
+        calibration_spec="gss:HAPPY",
+        extractor_label="pick_one:auto-derived",
+        auto_derived=True,
+    )
+
+    calib = report["per_question"]["color"]["calibration"]
+    assert calib["jsd"] == 1.0
+    # Wire-format field per P-gate — sorted on both sides for determinism.
+    assert calib["alignment_error"] == ("['blue', 'red'] vs ['Not too happy', 'Pretty happy', 'Very happy']")
+
+
+def test_build_report_omits_calibration_when_spec_none():
+    """Backward compatibility: omitting calibration_spec must not mutate the
+    pre-change ``per_question[key]`` shape (structure.md §9, plan acceptance)."""
+    questions = [_pick_one_question("happy")]
+    tracked = identify_tracked_questions(questions)
+    tracker = ConvergenceTracker(tracked, check_every=100, min_n=0, m_consecutive=2)
+    _record_happy_distribution(tracker, {"Very happy": 5, "Pretty happy": 5})
+
+    report_default = tracker.build_report()
+    report_with_baseline_only = tracker.build_report(
+        baseline={"human_distribution": {"Very happy": 0.5, "Pretty happy": 0.5}}
+    )
+
+    for report in (report_default, report_with_baseline_only):
+        entry = report["per_question"]["happy"]
+        assert set(entry.keys()) == {"final_n", "converged_at", "curve", "support_size"}
+        assert "calibration" not in entry
+
+
+def test_build_report_omits_calibration_when_baseline_lacks_distribution():
+    """``calibration_spec`` set but baseline carries no ``human_distribution``
+    → calibration is silently absent (the loader is the only thing that can
+    tell us the dataset shipped no distribution; we don't fabricate one)."""
+    questions = [_pick_one_question("happy")]
+    tracked = identify_tracked_questions(questions)
+    tracker = ConvergenceTracker(tracked, check_every=100, min_n=0, m_consecutive=2)
+    _record_happy_distribution(tracker, {"Very happy": 3})
+
+    report = tracker.build_report(
+        baseline={"dataset": "gss", "question_key": "HAPPY"},
+        calibration_spec="gss:HAPPY",
+        extractor_label="pick_one:auto-derived",
+        auto_derived=True,
+    )
+    assert "calibration" not in report["per_question"]["happy"]
+
+
+def test_build_report_calibration_matches_golden_fixture():
+    """Pin the wire format. sp-pack-registry will fingerprint this shape;
+    breaking changes here ripple downstream (structure.md §6, plan R3)."""
+    fixture_path = Path(__file__).parent / "fixtures" / "convergence" / "calibration_report.json"
+    expected = json.loads(fixture_path.read_text(encoding="utf-8"))["per_question"]
+
+    questions = [_pick_one_question("happy"), _pick_one_question("color")]
+    tracked = identify_tracked_questions(questions)
+    tracker = ConvergenceTracker(tracked, check_every=100, min_n=0, m_consecutive=2)
+    # 6 VH+red, 3 PH+blue, 1 NTH+red — drives "happy" support 3 & "color" support 2.
+    sequence = (
+        [{"happy": "Very happy", "color": "red"}] * 6
+        + [{"happy": "Pretty happy", "color": "blue"}] * 3
+        + [{"happy": "Not too happy", "color": "red"}] * 1
+    )
+    for record in sequence:
+        tracker.record(record)
+
+    baseline = {
+        "human_distribution": {
+            "Very happy": 0.5,
+            "Pretty happy": 0.4,
+            "Not too happy": 0.1,
+        }
+    }
+    report = tracker.build_report(
+        baseline=baseline,
+        calibration_spec="gss:HAPPY",
+        extractor_label="pick_one:auto-derived",
+        auto_derived=True,
+    )
+
+    assert report["per_question"] == expected
+
+
+def test_compute_calibration_jsd_wraps_local_implementation():
+    """The wrapper must agree with the underlying JSD bit-for-bit so the
+    structure.md §5 'do not import synthbench' decision stays observable."""
+    p = {"a": 3.0, "b": 1.0}
+    q = {"a": 0.5, "b": 0.5}
+    assert compute_calibration_jsd(p, q) == jensen_shannon_divergence(p, q)
+    # Disjoint supports hit the JSD upper bound.
+    assert compute_calibration_jsd({"a": 1.0}, {"b": 1.0}) == pytest.approx(1.0)
+    # Empty model distribution → 0.0 (no panelist signal yet).
+    assert compute_calibration_jsd({}, {"a": 1.0}) == 0.0
