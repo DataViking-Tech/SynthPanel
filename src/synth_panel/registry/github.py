@@ -88,10 +88,7 @@ def parse_gh_source(source: str) -> GitHubSource:
 
     parts = user_repo.split("/")
     if len(parts) != 2 or not all(parts):
-        raise ValueError(
-            f"invalid user/repo in gh: source {source!r} "
-            "(expected gh:user/repo[@ref][:path])"
-        )
+        raise ValueError(f"invalid user/repo in gh: source {source!r} (expected gh:user/repo[@ref][:path])")
     user, repo = parts
 
     if not ref:
@@ -154,38 +151,26 @@ def _resolve_github(
             return default_url
         if resp.status_code == 404:
             return _fallback_root_yaml(parsed, client)
-        raise ValueError(
-            f"unexpected HTTP {resp.status_code} probing {default_url} "
-            "(expected 200 or 404)"
-        )
+        raise ValueError(f"unexpected HTTP {resp.status_code} probing {default_url} (expected 200 or 404)")
     finally:
         if owns_client:
             client.close()
 
 
 def _fallback_root_yaml(parsed: GitHubSource, client: httpx.Client) -> str:
-    api_url = (
-        f"{GITHUB_API_BASE}/repos/{parsed.user}/{parsed.repo}/contents/"
-        f"?ref={parsed.ref}"
-    )
+    api_url = f"{GITHUB_API_BASE}/repos/{parsed.user}/{parsed.repo}/contents/?ref={parsed.ref}"
     resp = client.get(api_url)
     if resp.status_code == 404:
-        raise ValueError(
-            f"repo or ref not found: {parsed.user}/{parsed.repo}@{parsed.ref}"
-        )
+        raise ValueError(f"repo or ref not found: {parsed.user}/{parsed.repo}@{parsed.ref}")
     if resp.status_code != 200:
-        raise ValueError(
-            f"cannot list repo contents (HTTP {resp.status_code}): {api_url}"
-        )
+        raise ValueError(f"cannot list repo contents (HTTP {resp.status_code}): {api_url}")
 
     try:
         items = resp.json()
     except ValueError as exc:
         raise ValueError(f"malformed JSON from {api_url}: {exc}") from exc
     if not isinstance(items, list):
-        raise ValueError(
-            f"expected a list of repo contents from {api_url}, got {type(items).__name__}"
-        )
+        raise ValueError(f"expected a list of repo contents from {api_url}, got {type(items).__name__}")
 
     yamls = [
         item["name"]
@@ -215,17 +200,11 @@ _BLOB_RE = re.compile(r"^https://github\.com/([^/]+)/([^/]+)/blob/(.+)$")
 def _rewrite_blob_url(url: str) -> str:
     match = _BLOB_RE.match(url)
     if not match:
-        raise ValueError(
-            f"unsupported github.com URL {url!r} "
-            "(expected https://github.com/user/repo/blob/ref/path)"
-        )
+        raise ValueError(f"unsupported github.com URL {url!r} (expected https://github.com/user/repo/blob/ref/path)")
     user, repo, tail = match.group(1), match.group(2), match.group(3)
     ref, _, path = tail.partition("/")
     if not ref or not path:
-        raise ValueError(
-            f"malformed github.com/blob/ URL {url!r} "
-            "(expected .../blob/<ref>/<path>)"
-        )
+        raise ValueError(f"malformed github.com/blob/ URL {url!r} (expected .../blob/<ref>/<path>)")
     return _raw_url(user, repo, ref, path)
 
 
