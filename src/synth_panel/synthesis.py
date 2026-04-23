@@ -278,6 +278,30 @@ def synthesize_panel(
         )
 
     data = result.data
+    required_keys = _SYNTHESIS_SCHEMA["required"]
+    missing = [k for k in required_keys if k not in data]
+    if missing:
+        error_msg = f"synthesizer returned partial schema: missing keys {missing}"
+        logger.warning(
+            "%s (model=%s, present_keys=%s)",
+            error_msg,
+            resolved_model,
+            sorted(data.keys()),
+        )
+        return SynthesisResult(
+            summary=data.get("summary", "") or "Synthesis failed — see error field.",
+            themes=data.get("themes", []) if isinstance(data.get("themes"), list) else [],
+            agreements=data.get("agreements", []) if isinstance(data.get("agreements"), list) else [],
+            disagreements=data.get("disagreements", []) if isinstance(data.get("disagreements"), list) else [],
+            surprises=data.get("surprises", []) if isinstance(data.get("surprises"), list) else [],
+            recommendation=data.get("recommendation", ""),
+            usage=usage,
+            cost=cost,
+            model=resolved_model,
+            is_fallback=True,
+            error=error_msg,
+        )
+
     return SynthesisResult(
         summary=data.get("summary", ""),
         themes=data.get("themes", []),

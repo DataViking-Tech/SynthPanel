@@ -184,6 +184,57 @@ class TestSynthesizePanel:
         assert result.summary == "Synthesis failed — see error field."
         assert result.themes == []
 
+    def test_fallback_on_empty_structured_payload(self):
+        """sp-qvqx: tool call succeeds but returns {} — must not silently
+        emit is_fallback=False with empty fields."""
+        mock_client = MagicMock()
+        mock_client.send.return_value = _make_synthesis_response({})
+
+        result = synthesize_panel(mock_client, _PANELIST_RESULTS, _QUESTIONS)
+
+        assert result.is_fallback, "empty payload must mark fallback=True"
+        assert result.error is not None
+        assert "missing keys" in result.error
+        # All six required keys are missing; the error should list them.
+        for key in ("summary", "themes", "agreements", "disagreements", "surprises", "recommendation"):
+            assert key in result.error
+
+    def test_fallback_on_partial_structured_payload(self):
+        """sp-qvqx: a payload missing even one required key must fail loud."""
+        partial = {
+            "summary": "Some summary",
+            "themes": ["a", "b"],
+            "agreements": [],
+            "disagreements": [],
+            # surprises missing
+            "recommendation": "Do X",
+        }
+        mock_client = MagicMock()
+        mock_client.send.return_value = _make_synthesis_response(partial)
+
+        result = synthesize_panel(mock_client, _PANELIST_RESULTS, _QUESTIONS)
+
+        assert result.is_fallback
+        assert result.error is not None
+        assert "surprises" in result.error
+        # Other present fields should round-trip so the operator can see
+        # what *was* returned when diagnosing.
+        assert result.summary == "Some summary"
+        assert result.themes == ["a", "b"]
+        assert result.surprises == []
+
+    def test_fallback_partial_payload_logs_warning(self, caplog):
+        """sp-qvqx: partial payload must emit a logger.warning."""
+        import logging
+
+        mock_client = MagicMock()
+        mock_client.send.return_value = _make_synthesis_response({"summary": "x"})
+
+        with caplog.at_level(logging.WARNING, logger="synth_panel.synthesis"):
+            synthesize_panel(mock_client, _PANELIST_RESULTS, _QUESTIONS)
+
+        assert any("missing keys" in rec.message for rec in caplog.records)
+
     def test_prompt_version_in_result(self):
         """synthesis_prompt_version is included in the result."""
         mock_client = MagicMock()
