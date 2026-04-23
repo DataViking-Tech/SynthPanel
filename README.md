@@ -484,6 +484,24 @@ synthpanel panel run \
   --instrument pricing-discovery
 ```
 
+### Community packs
+
+You can import persona packs straight from GitHub:
+
+```bash
+# Listed in the synthpanel registry — import by gh: URI
+synthpanel pack import gh:dataviking-tech/example-pack
+
+# Not yet in the registry — opt in explicitly
+synthpanel pack import gh:alice/my-pack --unverified
+```
+
+The registry itself is an open, PR-based index at
+[`DataViking-Tech/synthpanel-registry`](https://github.com/DataViking-Tech/synthpanel-registry).
+See [docs/registry.md](docs/registry.md) for the full reference — supported URL
+forms, cache + offline behavior, collision rules, and the flow for publishing
+your own pack.
+
 ## Defining Instruments
 
 ```yaml
