@@ -57,3 +57,6 @@ docs/internal/
 .env
 .env.local
 *.key
+
+# Gas Town (added by gt)
+CLAUDE.md
