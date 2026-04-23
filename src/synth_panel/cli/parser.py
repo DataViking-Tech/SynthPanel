@@ -537,23 +537,40 @@ def build_parser() -> argparse.ArgumentParser:
     # pack import
     pack_import_parser = pack_subparsers.add_parser(
         "import",
-        help="Import a persona pack from a YAML file.",
+        help="Import a persona pack from a YAML file or GitHub source.",
     )
     pack_import_parser.add_argument(
-        "file",
-        metavar="FILE",
-        help="Path to a YAML persona pack file.",
+        "source",
+        metavar="SOURCE",
+        help=(
+            "Local YAML path, gh:user/repo[@ref][:path] URI, or https URL "
+            "(raw.githubusercontent.com or github.com/.../blob/...)."
+        ),
     )
     pack_import_parser.add_argument(
         "--name",
         default=None,
-        help="Name for the pack (default: derived from file or pack content).",
+        help="Name for the pack (default: derived from source or pack content).",
     )
     pack_import_parser.add_argument(
         "--id",
         default=None,
         dest="pack_id",
         help="Custom pack ID (default: auto-generated).",
+    )
+    pack_import_parser.add_argument(
+        "--unverified",
+        action="store_true",
+        help=(
+            "Allow importing a remote pack that is not listed in the "
+            "synthpanel registry. Prints a one-time warning block with "
+            "source URL, sha256 checksum, and imported id."
+        ),
+    )
+    pack_import_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite an existing user-saved pack with the same id.",
     )
 
     # pack export
