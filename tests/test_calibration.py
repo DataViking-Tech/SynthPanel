@@ -8,11 +8,22 @@ contract is that every failure mode short-circuits BEFORE any LLM spend
 
 JSD computation, schema auto-derivation, and report attachment land in
 later tickets (T3, T4); they are intentionally not exercised here.
+
+T7 (sp-idqa) adds an ``@pytest.mark.acceptance`` end-to-end test that
+runs a real 20-panelist panel against the live GSS HAPPY baseline. It
+is skipped by default (CI opt-in via ``pytest -m acceptance``) and
+requires both ``ANTHROPIC_API_KEY`` and a locally provisioned GSS
+aggregate (see ``synthbench.datasets.gss`` for setup instructions).
 """
 
 from __future__ import annotations
 
 import contextlib
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -554,3 +565,222 @@ class TestAutoDeriveWiring:
         # And the derivation still fired (proof that the single fetched
         # payload was reused, not bypassed).
         assert "auto-derived pick_one schema" in capsys.readouterr().err
+
+
+# ── T7: end-to-end acceptance against the live GSS HAPPY baseline ─────
+
+# GSS HAPPY is the v1 demo wedge (design.md D-gate #2). The baseline
+# is expected to carry exactly these three option strings verbatim;
+# any divergence in casing or coding surfaces as an alignment error —
+# that is the S-gate OQ1 contract working as designed.
+_GSS_HAPPY_EXPECTED_OPTIONS = frozenset({"Very happy", "Pretty happy", "Not too happy"})
+
+
+def _gss_happy_baseline_or_skip() -> dict:
+    """Fetch the GSS HAPPY baseline or ``pytest.skip`` with a setup hint.
+
+    The synthbench GSS adapter requires a locally provisioned aggregate
+    CSV (see ``synthbench.datasets.gss._raise_setup_instructions``). On
+    a fresh checkout the data is not present, so this test is skipped
+    rather than failing — it is opt-in CI, not a core regression gate.
+    """
+    try:
+        import synthbench  # type: ignore[import-not-found]
+    except ImportError:
+        pytest.skip("synthbench not installed; install synthpanel[convergence]")
+    try:
+        baseline = synthbench.load_convergence_baseline(dataset="gss", question_key="HAPPY")
+    except Exception as exc:  # DatasetDownloadError, BaselineUnavailable, ...
+        pytest.skip(f"GSS HAPPY baseline unavailable (live fetch failed): {exc}")
+    if not isinstance(baseline, dict) or not isinstance(baseline.get("human_distribution"), dict):
+        pytest.skip(f"GSS HAPPY baseline has unexpected shape: {type(baseline).__name__}")
+    return baseline
+
+
+def _generate_personas_yaml(n: int) -> str:
+    """Produce a minimal but diverse ``n``-persona YAML document.
+
+    The personas do not need to be psychologically rich for this test —
+    we only need enough variation that the panel produces a non-trivial
+    distribution over the three happiness options.
+    """
+    archetypes = [
+        ("content professional", 34, "Software engineer at a stable mid-size firm", ["reflective", "steady"]),
+        ("burnt-out manager", 45, "Middle manager juggling too many priorities", ["stressed", "cynical"]),
+        ("optimistic retiree", 68, "Recently retired teacher with strong community ties", ["cheerful", "grateful"]),
+        ("struggling parent", 38, "Single parent of two, works two jobs", ["tired", "protective"]),
+        ("enthusiastic student", 21, "Undergrad discovering their passion", ["curious", "energetic"]),
+        ("lonely widow", 72, "Lost spouse last year, lives alone", ["withdrawn", "reminiscent"]),
+        ("thriving entrepreneur", 41, "Running a profitable small business", ["driven", "confident"]),
+        ("anxious job-seeker", 29, "Six months out of work", ["worried", "searching"]),
+        ("stable teacher", 52, "Elementary teacher, loves their work", ["patient", "warm"]),
+        ("restless artist", 36, "Freelance illustrator chasing bigger clients", ["creative", "moody"]),
+    ]
+    lines = ["personas:"]
+    for i in range(n):
+        label, age, bg, traits = archetypes[i % len(archetypes)]
+        lines.append(f"  - name: Panelist {i + 1} ({label})")
+        lines.append(f"    age: {age}")
+        lines.append(f"    occupation: {label}")
+        lines.append(f"    background: {bg}")
+        lines.append("    personality_traits:")
+        for t in traits:
+            lines.append(f"      - {t}")
+    return "\n".join(lines) + "\n"
+
+
+# The instrument is "general-survey style" (broad opinion questions on
+# work/tech/daily life) but includes one GSS-aligned happiness question
+# with a bounded response_schema whose option strings match the GSS
+# HAPPY baseline verbatim. This is required because the bundled
+# ``general-survey`` pack has no bounded questions, and
+# ``identify_tracked_questions`` (pre-derivation) would otherwise return
+# empty and disable convergence tracking — see design.md:79-90 and
+# docs/convergence.md's worked-example caveat.
+_INSTRUMENT_YAML = """\
+instrument:
+  questions:
+    - text: >
+        Taken all together, how would you say things are these days — would
+        you say that you are very happy, pretty happy, or not too happy?
+      response_schema:
+        type: pick_one
+        options:
+          - Very happy
+          - Pretty happy
+          - Not too happy
+    - text: >
+        How do you feel about the pace of change in the world around you?
+      response_schema:
+        type: text
+"""
+
+
+@pytest.mark.acceptance
+def test_general_survey_gss_happy_end_to_end(tmp_path: Path) -> None:
+    """End-to-end: 20-panelist run against live GSS HAPPY (T7 of sp-0ku0).
+
+    Proves the full pipeline — ``--calibrate-against`` validation,
+    baseline fetch, auto-derived pick_one schema, structured extraction,
+    convergence tracking, and ``per_question[key].calibration`` wire
+    format — works against real data with a real LLM.
+
+    Skipped when ``ANTHROPIC_API_KEY`` is absent or the local GSS
+    aggregate is not provisioned.
+    """
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        pytest.skip("ANTHROPIC_API_KEY not set")
+
+    # Fail fast if the baseline is unreachable rather than burning 20
+    # panelist calls before we discover it.
+    baseline = _gss_happy_baseline_or_skip()
+    baseline_keys = set(baseline["human_distribution"].keys())
+
+    personas_path = tmp_path / "personas.yaml"
+    instrument_path = tmp_path / "instrument.yaml"
+    personas_path.write_text(_generate_personas_yaml(20))
+    instrument_path.write_text(_INSTRUMENT_YAML)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "synth_panel",
+            "panel",
+            "run",
+            "--personas",
+            str(personas_path),
+            "--instrument",
+            str(instrument_path),
+            "--model",
+            "haiku",
+            "--calibrate-against",
+            "gss:HAPPY",
+            "--convergence-check-every",
+            "10",
+            "--output-format",
+            "json",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=600,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+    )
+
+    # (a) exit 0
+    assert result.returncode == 0, (
+        f"Panel run failed (rc={result.returncode})\nstderr: {result.stderr[-2000:]}\nstdout: {result.stdout[-500:]}"
+    )
+
+    # Auto-derive log line must have fired — pick_one:auto-derived is
+    # only emitted when the baseline yielded a derived schema.
+    assert "auto-derived pick_one schema" in result.stderr, (
+        f"Expected auto-derive stderr log, got:\n{result.stderr[-2000:]}"
+    )
+
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        pytest.fail(f"Stdout was not valid JSON ({exc}):\n{result.stdout[:2000]}")
+
+    convergence = payload.get("convergence")
+    assert isinstance(convergence, dict), f"Expected convergence dict in output, got: {type(convergence).__name__}"
+
+    per_question = convergence.get("per_question") or {}
+    assert per_question, (
+        "convergence.per_question is empty — the happiness question was not tracked. "
+        f"tracked_questions={convergence.get('tracked_questions')!r}"
+    )
+
+    # Locate the tracked question that carries the calibration sub-object.
+    # There is exactly one bounded question in the instrument, so we
+    # take the single entry rather than guessing at the key format.
+    calibration_entries = {k: v for k, v in per_question.items() if isinstance(v, dict) and "calibration" in v}
+    assert calibration_entries, (
+        f"No tracked question carries a calibration sub-object. per_question keys: {list(per_question.keys())!r}"
+    )
+    _happy_key, entry = next(iter(calibration_entries.items()))
+    calibration = entry["calibration"]
+
+    # (e) If alignment_error is present, fail LOUD with the exact diff.
+    # This is the S-gate OQ1 contract: verbatim match is the spec; any
+    # mismatch between the extractor's category vocabulary and the
+    # baseline's option strings must surface immediately so the test
+    # catches GSS format drift rather than papering over it.
+    if "alignment_error" in calibration:
+        pytest.fail(
+            "GSS HAPPY extractor/baseline option-string alignment broke "
+            "(S-gate OQ1 contract): calibration.alignment_error = "
+            f"{calibration['alignment_error']!r}. Expected baseline keys "
+            f"{sorted(_GSS_HAPPY_EXPECTED_OPTIONS)!r}; synthbench returned "
+            f"{sorted(baseline_keys)!r}. This test is working as designed — "
+            "fix the option-string alignment or update the expected set."
+        )
+
+    # (b) jsd exists and is a float in [0, 1]
+    jsd = calibration.get("jsd")
+    assert isinstance(jsd, (int, float)), f"calibration.jsd must be numeric, got {type(jsd).__name__}: {jsd!r}"
+    assert 0.0 <= float(jsd) <= 1.0, f"calibration.jsd out of [0, 1]: {jsd!r}"
+
+    # (c) extractor provenance
+    assert calibration.get("extractor") == "pick_one:auto-derived", (
+        f"Expected extractor='pick_one:auto-derived', got {calibration.get('extractor')!r}"
+    )
+
+    # (d) auto_derived flag
+    assert calibration.get("auto_derived") is True, (
+        f"Expected auto_derived=True, got {calibration.get('auto_derived')!r}"
+    )
+
+    # Provenance cross-check: baseline_spec round-trips verbatim.
+    assert calibration.get("baseline_spec") == "gss:HAPPY", (
+        f"Expected baseline_spec='gss:HAPPY', got {calibration.get('baseline_spec')!r}"
+    )
+
+    # Soft confirmation of the fixture expectation recorded in the bead:
+    # if GSS ever ships different option strings, the alignment_error
+    # branch above would have already fired — this is belt-and-braces.
+    assert baseline_keys == _GSS_HAPPY_EXPECTED_OPTIONS, (
+        f"GSS HAPPY baseline keys drifted: expected {sorted(_GSS_HAPPY_EXPECTED_OPTIONS)!r}, "
+        f"got {sorted(baseline_keys)!r}. Update _GSS_HAPPY_EXPECTED_OPTIONS if intentional."
+    )
