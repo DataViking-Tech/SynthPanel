@@ -2932,6 +2932,65 @@ def handle_analyze(args: argparse.Namespace, fmt: OutputFormat) -> int:
     return 0
 
 
+def handle_report(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Render a saved panel result as a Markdown report (sp-viz-layer T4).
+
+    Resolves the RESULT (ID or ``.json`` path), walks it through
+    :func:`build_inspect_report`, and emits Markdown via
+    :func:`render_markdown`. Destination is stdout by default; ``--output
+    PATH`` writes to disk (``-`` explicitly means stdout).
+
+    Error parity with :func:`handle_panel_inspect`: a :exc:`ReportLoadError`
+    prints to stderr in TEXT mode and is ``emit``-ted as a JSON/NDJSON
+    error payload otherwise, returning exit code 1.
+
+    S-gate OQ3: in JSON/NDJSON modes with ``--output FILE``, the handler is
+    silent — the file IS the output, no status line on stdout. TEXT mode
+    emits a stderr status line when writing to a file so humans see
+    confirmation without polluting stdout.
+    """
+    from synth_panel.analysis.inspect import build_inspect_report
+    from synth_panel.reporting import ReportLoadError, load_panel_json, render_markdown
+
+    result_ref = args.result
+
+    try:
+        data = load_panel_json(result_ref)
+    except ReportLoadError as err:
+        msg = f"Error: {err}"
+        if fmt is OutputFormat.TEXT:
+            print(msg, file=sys.stderr)
+        else:
+            emit(fmt, message=msg, extra={"error": err.code})
+        return 1
+
+    resolved_path: Path | None = None
+    candidate = Path(result_ref)
+    if result_ref.endswith(".json") and candidate.exists():
+        resolved_path = candidate
+
+    report = build_inspect_report(data)
+    md = render_markdown(
+        report,
+        data,
+        source_path=str(resolved_path) if resolved_path is not None else None,
+    )
+
+    output_arg = getattr(args, "output", None)
+    if output_arg is None or output_arg == "-":
+        sys.stdout.write(md)
+        return 0
+
+    out_path = Path(output_arg)
+    out_path.write_text(md, encoding="utf-8")
+
+    if fmt is OutputFormat.TEXT:
+        print(f"Report written: {out_path} ({len(md)} bytes)", file=sys.stderr)
+    # JSON/NDJSON: silent per S-gate OQ3 — the file is the output.
+
+    return 0
+
+
 def _format_path(path: list[dict[str, Any]]) -> str:
     """Render an executed branching path as a single human line.
 

@@ -693,6 +693,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output format (default: text).",
     )
 
+    # report (sp-viz-layer T4): render a saved panel result as Markdown.
+    report_parser = subparsers.add_parser(
+        "report",
+        help="Render a saved panel result as a shareable Markdown report.",
+    )
+    report_parser.add_argument(
+        "result",
+        metavar="RESULT",
+        help="Panel result ID or path to a result JSON file.",
+    )
+    report_parser.add_argument(
+        "--output",
+        "-o",
+        default=None,
+        metavar="PATH",
+        help="Write to PATH instead of stdout ('-' = stdout, default).",
+    )
+    report_parser.add_argument(
+        "--format",
+        default="markdown",
+        choices=["markdown"],
+        help="Report format (default: markdown). HTML reserved for v2.",
+    )
+
     # mcp-serve
     subparsers.add_parser(
         "mcp-serve",

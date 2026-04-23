@@ -26,6 +26,7 @@ from synth_panel.cli.commands import (
     handle_panel_run,
     handle_panel_synthesize,
     handle_prompt,
+    handle_report,
     handle_whoami,
 )
 from synth_panel.cli.output import OutputFormat
@@ -91,6 +92,8 @@ def main(argv: list[str] | None = None) -> int:
             return 1
     elif args.command == "analyze":
         return handle_analyze(args, output_format)
+    elif args.command == "report":
+        return handle_report(args, output_format)
     elif args.command == "mcp-serve":
         return handle_mcp_serve(args, output_format)
     elif args.command == "login":
