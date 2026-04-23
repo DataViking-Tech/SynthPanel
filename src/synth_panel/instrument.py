@@ -41,6 +41,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from synth_panel.conditions import ConditionError, validate_condition_string
 from synth_panel.structured.schemas import is_known_schema
 
 END_SENTINEL = "__end__"
@@ -182,6 +183,25 @@ def _validate_questions(questions: list[dict[str, Any]], context: str) -> None:
         rs = q.get("response_schema")
         if rs is not None:
             _validate_response_schema(rs, context=context, q_index=i)
+
+        follow_ups = q.get("follow_ups")
+        if isinstance(follow_ups, list):
+            for j, fu in enumerate(follow_ups):
+                # Plain-string follow-ups default to "always" at eval time and
+                # need no validation. Only dict-form follow-ups can carry an
+                # explicit condition that might be a typo (sp-t5ok).
+                if not isinstance(fu, dict):
+                    continue
+                cond = fu.get("condition")
+                if cond is None:
+                    continue
+                try:
+                    validate_condition_string(
+                        cond,
+                        context=f"{context} question[{i}] follow_ups[{j}]",
+                    )
+                except ConditionError as e:
+                    raise InstrumentError(str(e)) from e
 
 
 def parse_instrument(data: dict[str, Any]) -> Instrument:

@@ -5,8 +5,27 @@ from __future__ import annotations
 import threading
 from unittest.mock import MagicMock
 
-from synth_panel.conditions import evaluate_condition, normalize_follow_up
+import pytest
+
+import synth_panel.conditions as conditions_module
+from synth_panel.conditions import (
+    ConditionError,
+    evaluate_condition,
+    normalize_follow_up,
+    validate_condition_string,
+)
 from synth_panel.llm.models import CompletionResponse, TextBlock, TokenUsage
+
+
+@pytest.fixture(autouse=True)
+def _reset_condition_warn_state():
+    """Reset the module-level warn dedup tables between tests."""
+    conditions_module._warned_unknown_types.clear()
+    conditions_module._warned_missing_client = False
+    yield
+    conditions_module._warned_unknown_types.clear()
+    conditions_module._warned_missing_client = False
+
 
 # ---------------------------------------------------------------------------
 # evaluate_condition — "always"
@@ -77,6 +96,23 @@ class TestUnknownCondition:
 
     def test_unknown_without_arg(self):
         assert evaluate_condition("future_check", "text") is True
+
+    def test_unknown_emits_warning_once(self, caplog):
+        """Typos log a warning on first occurrence so instrument authors notice."""
+        with caplog.at_level("WARNING", logger="synth_panel.conditions"):
+            evaluate_condition("response_contians: yes", "I said yes")
+            evaluate_condition("response_contians: yes", "and again")
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert len(warnings) == 1
+        assert "response_contians" in warnings[0].getMessage()
+        assert "typo" in warnings[0].getMessage().lower()
+
+    def test_distinct_unknowns_warn_separately(self, caplog):
+        with caplog.at_level("WARNING", logger="synth_panel.conditions"):
+            evaluate_condition("typo_one", "text")
+            evaluate_condition("typo_two", "text")
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert len(warnings) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -167,6 +203,15 @@ class TestResponseSentiment:
     def test_no_client_defaults_to_true(self):
         """Graceful degradation: no client means condition passes."""
         assert evaluate_condition("response_sentiment: negative", "text") is True
+
+    def test_no_client_warns_once(self, caplog):
+        """Missing client is a loud failure mode — first occurrence warns (sp-t5ok)."""
+        with caplog.at_level("WARNING", logger="synth_panel.conditions"):
+            evaluate_condition("response_sentiment: positive", "a")
+            evaluate_condition("response_sentiment: negative", "b")
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert len(warnings) == 1
+        assert "without an LLM client" in warnings[0].getMessage()
 
     def test_cache_hit_avoids_llm_call(self):
         client = _mock_client("positive")
@@ -312,3 +357,48 @@ class TestNormalizeFollowUp:
         inp = {"text": "Q?"}
         normalize_follow_up(inp)
         assert "condition" not in inp
+
+
+# ---------------------------------------------------------------------------
+# validate_condition_string (parse-time check, sp-t5ok)
+# ---------------------------------------------------------------------------
+
+
+class TestValidateConditionString:
+    @pytest.mark.parametrize(
+        "condition",
+        [
+            "always",
+            "never",
+            "response_contains: yes",
+            "response_contains:",
+            "response_sentiment: positive",
+            "ALWAYS",
+            "  response_contains: anything  ",
+        ],
+    )
+    def test_known_conditions_pass(self, condition):
+        # Should not raise.
+        validate_condition_string(condition)
+
+    @pytest.mark.parametrize(
+        "condition",
+        [
+            "response_contians: yes",  # classic typo from sp-t5ok
+            "sentiment: positive",  # missing response_ prefix
+            "future_check",
+            "",
+            "   ",
+        ],
+    )
+    def test_unknown_or_empty_raises(self, condition):
+        with pytest.raises(ConditionError):
+            validate_condition_string(condition)
+
+    def test_non_string_raises(self):
+        with pytest.raises(ConditionError, match="must be a string"):
+            validate_condition_string(42)
+
+    def test_error_message_includes_context(self):
+        with pytest.raises(ConditionError, match="round 'probe'"):
+            validate_condition_string("response_contians: x", context="round 'probe'")

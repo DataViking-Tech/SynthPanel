@@ -226,6 +226,73 @@ class TestValidation:
 
 
 # ---------------------------------------------------------------------------
+# Follow-up condition validation (sp-t5ok)
+# ---------------------------------------------------------------------------
+
+
+class TestFollowUpConditionValidation:
+    def test_unknown_condition_in_v1_raises(self):
+        data = {
+            "version": 1,
+            "questions": [
+                {
+                    "text": "Q?",
+                    "follow_ups": [
+                        {"text": "Why?", "condition": "response_contians: yes"},
+                    ],
+                }
+            ],
+        }
+        with pytest.raises(InstrumentError, match="response_contians"):
+            parse_instrument(data)
+
+    def test_known_condition_in_v1_passes(self):
+        data = {
+            "version": 1,
+            "questions": [
+                {
+                    "text": "Q?",
+                    "follow_ups": [
+                        {"text": "Why?", "condition": "response_contains: yes"},
+                        {"text": "And?", "condition": "always"},
+                        "Plain string follow-up",
+                    ],
+                }
+            ],
+        }
+        inst = parse_instrument(data)
+        assert len(inst.rounds[0].questions) == 1
+
+    def test_unknown_condition_in_round_raises_with_context(self):
+        data = {
+            "version": 2,
+            "rounds": [
+                {
+                    "name": "probe",
+                    "questions": [
+                        {
+                            "text": "Q?",
+                            "follow_ups": [{"text": "Why?", "condition": "typo_here"}],
+                        }
+                    ],
+                }
+            ],
+        }
+        with pytest.raises(InstrumentError, match="round 'probe'"):
+            parse_instrument(data)
+
+    def test_no_condition_field_is_fine(self):
+        """A follow-up dict without a condition key is valid (defaults to always)."""
+        data = {
+            "version": 1,
+            "questions": [
+                {"text": "Q?", "follow_ups": [{"text": "Elaborate?"}]},
+            ],
+        }
+        parse_instrument(data)
+
+
+# ---------------------------------------------------------------------------
 # Dataclass behavior
 # ---------------------------------------------------------------------------
 
