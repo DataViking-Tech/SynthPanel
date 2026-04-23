@@ -463,6 +463,16 @@ class ConvergenceTracker:
                     "curve": [{"n": n, "jsd": round(jsd, 6)} for n, jsd in curve],
                     "support_size": len(state.cumulative),
                 }
+                # Wire format (sp-7npy): inline calibration is attached as
+                # ``per_question[key].calibration`` — a sub-object with
+                # ``jsd``, ``baseline_spec``, ``extractor``, ``auto_derived``,
+                # and (on disjoint supports) ``alignment_error``. A flat
+                # ``per_question[key].human_jsd`` scalar was considered during
+                # D-gate and rejected in favor of this sub-object; it was
+                # never shipped. Downstream consumers that wrote speculative
+                # code against ``.human_jsd`` should migrate to
+                # ``.calibration.jsd``. sp-pack-registry fingerprints depend
+                # on the sub-object shape.
                 if human_dist is not None:
                     model_dist = {k: float(v) for k, v in state.cumulative.items()}
                     jsd = compute_calibration_jsd(model_dist, human_dist)
