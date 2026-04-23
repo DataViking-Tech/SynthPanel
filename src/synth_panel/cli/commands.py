@@ -2248,11 +2248,26 @@ def handle_pack_list(args: argparse.Namespace, fmt: OutputFormat) -> int:
 
 
 def handle_pack_import(args: argparse.Namespace, fmt: OutputFormat) -> int:
-    """Import a persona pack from a YAML file."""
+    """Import a persona pack from a local file or remote source.
+
+    Routes on ``args.source``:
+
+    - ``gh:user/repo[@ref][:path]`` / ``https://…`` → remote fetch path with
+      registry consultation, collision checks, and ``--unverified`` gating.
+    - Anything else → local file path (existing behavior, unchanged).
+    """
+    source = args.source
+    if source.startswith("gh:") or source.startswith("http://") or source.startswith("https://"):
+        return _handle_pack_import_remote(args, fmt, source)
+    return _handle_pack_import_local(args, fmt, source)
+
+
+def _handle_pack_import_local(args: argparse.Namespace, fmt: OutputFormat, source: str) -> int:
+    """Local-path branch of ``pack import`` (unchanged behavior)."""
     from synth_panel.mcp.data import PackValidationError, save_persona_pack
 
     try:
-        personas = _load_personas(args.file)
+        personas = _load_personas(source)
     except (FileNotFoundError, ValueError) as exc:
         print(f"Error loading file: {exc}", file=sys.stderr)
         return 1
@@ -2260,17 +2275,226 @@ def handle_pack_import(args: argparse.Namespace, fmt: OutputFormat) -> int:
     # Determine pack name: explicit flag > YAML 'name' key > filename stem
     pack_name = args.name
     if not pack_name:
-        data = _load_yaml(args.file)
+        data = _load_yaml(source)
         if isinstance(data, dict):
             pack_name = data.get("name")
     if not pack_name:
-        pack_name = Path(args.file).stem
+        pack_name = Path(source).stem
 
     try:
         result = save_persona_pack(pack_name, personas, pack_id=args.pack_id)
     except PackValidationError as exc:
         print(f"Validation error: {exc}", file=sys.stderr)
         return 1
+
+    if fmt is OutputFormat.TEXT:
+        print(f"Imported pack '{result['name']}' ({result['persona_count']} personas) as {result['id']}")
+    else:
+        emit(fmt, message="Pack imported", extra=result)
+
+    return 0
+
+
+def _slugify_pack_id(value: str) -> str:
+    """Best-effort slug: lowercase, non-alphanumeric → ``-``, trim ``-``s."""
+    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return slug or "pack"
+
+
+def _default_pack_id_from_source(source: str) -> str:
+    """Derive a fallback pack id from a ``gh:``/``https://…`` source."""
+    from synth_panel.registry import parse_gh_source
+
+    if source.startswith("gh:"):
+        try:
+            parsed = parse_gh_source(source)
+        except ValueError:
+            return _slugify_pack_id(source[3:] or "pack")
+        return _slugify_pack_id(parsed.repo)
+
+    # https URL: use the path stem, falling back to the host.
+    from urllib.parse import urlparse
+
+    parts = urlparse(source)
+    tail = Path(parts.path).stem or parts.netloc or "pack"
+    return _slugify_pack_id(tail)
+
+
+def _source_in_registry(source: str) -> bool:
+    """Return True when *source* is listed in the cached registry.
+
+    Only ``gh:`` sources can be matched against the registry — http(s)
+    URLs have no repo/ref to key on, so they are always treated as
+    unregistered (forcing the ``--unverified`` path).
+    """
+    from synth_panel.registry import fetch_registry, parse_gh_source
+
+    if not source.startswith("gh:"):
+        return False
+    try:
+        parsed = parse_gh_source(source)
+    except ValueError:
+        return False
+
+    repo_slug = f"{parsed.user}/{parsed.repo}"
+    try:
+        registry = fetch_registry()
+    except Exception:
+        return False
+
+    for entry in registry.get("packs", []) or []:
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("repo") != repo_slug:
+            continue
+        entry_ref = entry.get("ref") or "main"
+        if entry_ref == parsed.ref:
+            return True
+    return False
+
+
+def _handle_pack_import_remote(
+    args: argparse.Namespace,
+    fmt: OutputFormat,
+    source: str,
+) -> int:
+    """Remote-source branch of ``pack import`` (``gh:`` / ``https://…``)."""
+    import hashlib
+
+    import httpx
+
+    from synth_panel.mcp.data import (
+        PackValidationError,
+        _bundled_packs,
+        _packs_dir,
+        save_persona_pack,
+        validate_persona_pack,
+    )
+    from synth_panel.registry import resolve_source
+
+    # 1. Resolve to a raw URL.
+    try:
+        url = resolve_source(source)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    # 2. Fetch the YAML body.
+    try:
+        with httpx.Client(timeout=10.0, follow_redirects=True) as client:
+            resp = client.get(url)
+    except httpx.HTTPError as exc:
+        print(f"Error fetching {url}: {exc}", file=sys.stderr)
+        return 1
+
+    if resp.status_code == 404:
+        print(
+            f"Error: pack not found at {url} (HTTP 404).\n  Repo may be private; GITHUB_TOKEN support planned.",
+            file=sys.stderr,
+        )
+        return 1
+    if resp.status_code != 200:
+        print(f"Error: HTTP {resp.status_code} fetching {url}", file=sys.stderr)
+        return 1
+
+    content = resp.text
+
+    # 3. Parse YAML.
+    try:
+        data = yaml.safe_load(content)
+    except yaml.YAMLError as exc:
+        print(f"Error: invalid YAML at {url}: {exc}", file=sys.stderr)
+        return 1
+    if not isinstance(data, dict):
+        print(
+            f"Error: pack YAML at {url} must be a mapping, got {type(data).__name__}",
+            file=sys.stderr,
+        )
+        return 1
+
+    # 4. Validate personas (same bar as local import).
+    personas = data.get("personas")
+    if personas is None and isinstance(data, list):
+        personas = data
+    try:
+        personas = validate_persona_pack(personas if personas is not None else [])
+    except PackValidationError as exc:
+        print(f"Validation error: {exc}", file=sys.stderr)
+        return 1
+
+    # 5. Determine target pack_id: explicit flag > YAML 'id' > derived.
+    if args.pack_id:
+        pack_id = args.pack_id
+    elif isinstance(data.get("id"), str) and data["id"].strip():
+        pack_id = data["id"]
+    else:
+        pack_id = _default_pack_id_from_source(source)
+
+    # 6. Collision checks.
+    if pack_id in _bundled_packs():
+        print(
+            f"Error: pack id '{pack_id}' collides with a bundled pack.\n"
+            f"  Re-run with --id <new-id> to import under a different name.",
+            file=sys.stderr,
+        )
+        return 1
+
+    saved_path = _packs_dir() / f"{pack_id}.yaml"
+    if saved_path.exists() and not args.force:
+        print(
+            f"Error: pack id '{pack_id}' already exists as a user-saved pack.\n"
+            f"  Re-run with --force to overwrite, or --id <new-id> for a new copy.",
+            file=sys.stderr,
+        )
+        return 1
+
+    # 7. Registry consultation.
+    is_registered = _source_in_registry(source)
+    if not is_registered and not args.unverified:
+        print(
+            f"Error: pack '{source}' is not in the synthpanel registry.\n  Rerun with --unverified to import anyway.",
+            file=sys.stderr,
+        )
+        return 1
+    if is_registered and args.unverified:
+        print(
+            f"Note: '{source}' is already in the synthpanel registry; --unverified flag unnecessary.",
+            file=sys.stderr,
+        )
+
+    # 8. Resolve pack name (explicit flag > YAML 'name' > pack_id).
+    pack_name = args.name
+    if not pack_name:
+        yaml_name = data.get("name")
+        if isinstance(yaml_name, str) and yaml_name.strip():
+            pack_name = yaml_name
+    if not pack_name:
+        pack_name = pack_id
+
+    # 9. Save.
+    version = data.get("version") if isinstance(data.get("version"), str) else None
+    try:
+        result = save_persona_pack(
+            pack_name,
+            personas,
+            pack_id=pack_id,
+            version=version,
+        )
+    except (PackValidationError, ValueError) as exc:
+        print(f"Validation error: {exc}", file=sys.stderr)
+        return 1
+
+    # 10. Section-4 warning block for unverified imports.
+    if not is_registered and args.unverified:
+        checksum = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        print(
+            f"! Pack '{source}' is not in the synthpanel registry.\n"
+            f"  Source:      {url}\n"
+            f"  Checksum:    sha256:{checksum}\n"
+            f"  Imported as: {pack_id}\n"
+            f"  Use 'pack search' to browse registered packs.",
+            file=sys.stderr,
+        )
 
     if fmt is OutputFormat.TEXT:
         print(f"Imported pack '{result['name']}' ({result['persona_count']} personas) as {result['id']}")

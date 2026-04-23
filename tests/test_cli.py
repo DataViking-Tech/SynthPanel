@@ -2409,7 +2409,15 @@ class TestPackCommands:
 
         args = parser.parse_args(["pack", "import", "file.yaml"])
         assert args.pack_command == "import"
-        assert args.file == "file.yaml"
+        assert args.source == "file.yaml"
+        assert args.unverified is False
+        assert args.force is False
+
+        args = parser.parse_args(["pack", "import", "gh:user/repo@v1:packs/p.yaml", "--unverified", "--force"])
+        assert args.pack_command == "import"
+        assert args.source == "gh:user/repo@v1:packs/p.yaml"
+        assert args.unverified is True
+        assert args.force is True
 
         args = parser.parse_args(["pack", "export", "my-pack"])
         assert args.pack_command == "export"
