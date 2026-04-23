@@ -21,6 +21,7 @@ from synth_panel.cli.commands import (
     handle_pack_generate,
     handle_pack_import,
     handle_pack_list,
+    handle_pack_search,
     handle_pack_show,
     handle_panel_inspect,
     handle_panel_run,
@@ -74,6 +75,8 @@ def main(argv: list[str] | None = None) -> int:
             return handle_pack_show(args, output_format)
         elif sub == "generate":
             return handle_pack_generate(args, output_format)
+        elif sub == "search":
+            return handle_pack_search(args, output_format)
         else:
             parser.parse_args(["pack", "--help"])
             return 1
