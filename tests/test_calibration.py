@@ -164,12 +164,14 @@ class TestRedistributionGate:
         assert "ntia" in err
         mock_runtime.run_turn.assert_not_called()
 
+    @patch("synth_panel.cli.commands.load_synthbench_baseline")
     @patch("synth_panel.orchestrator.AgentRuntime")
     @patch("synth_panel.cli.commands.LLMClient")
     def test_gated_override_env_lets_through(
         self,
         mock_client_cls,
         mock_runtime_cls,
+        mock_loader,
         capsys,
         panel_files,
         monkeypatch,
@@ -177,6 +179,15 @@ class TestRedistributionGate:
         """SYNTHBENCH_ALLOW_GATED=1 (internal escape hatch) bypasses the
         allowlist and allows execution to proceed past the validation block."""
         monkeypatch.setenv("SYNTHBENCH_ALLOW_GATED", "1")
+        # sp-ttwy: now that --calibrate-against sources the baseline fetch
+        # here (single-fetch reuse), mock the loader so the gate-bypass
+        # test doesn't try to hit a real WVS baseline that synthbench may
+        # not ship.
+        mock_loader.return_value = {
+            "dataset": "wvs",
+            "question_key": "FOO",
+            "human_distribution": {"A": 0.5, "B": 0.5},
+        }
         personas, instrument = panel_files
         mock_runtime = MagicMock()
         mock_runtime.run_turn.return_value = MagicMock(text="answer", usage=None, tool_calls=[])
@@ -305,3 +316,241 @@ class TestAutoEnableConvergence:
         # And the warning that fires when no bounded questions are found
         # confirms wants_convergence was True.
         assert "convergence tracking disabled" in capsys.readouterr().err
+
+
+# ── T3: auto-derive wiring + single-fetch reuse + hard-fail paths ─────
+
+
+class TestAutoDeriveWiring:
+    """sp-ttwy (T3): schema auto-derivation at run time from the
+    SynthBench baseline, single-fetch reuse with ``--convergence-baseline``,
+    provenance labels, and the two hard-fail modes from structure.md §7.
+    """
+
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.load_synthbench_baseline")
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_small_enum_baseline_auto_derives_schema(
+        self,
+        mock_client_cls,
+        mock_runtime_cls,
+        mock_loader,
+        mock_parallel,
+        capsys,
+        panel_files,
+    ):
+        """Small-enum baseline + no ``--extract-schema`` → derives a
+        pick_one schema, injects it into the extractor pipeline, and
+        emits the sp-yaru-style stderr log line."""
+        personas, instrument = panel_files
+        mock_loader.return_value = {
+            "dataset": "gss",
+            "question_key": "HAPPY",
+            "human_distribution": {
+                "Very happy": 0.3,
+                "Pretty happy": 0.5,
+                "Not too happy": 0.2,
+            },
+        }
+        mock_parallel.return_value = ([], {}, {})
+        mock_runtime = MagicMock()
+        mock_runtime_cls.return_value = mock_runtime
+
+        with contextlib.suppress(Exception):
+            main(_panel_run_args(personas, instrument, "--calibrate-against", "gss:HAPPY"))
+
+        err = capsys.readouterr().err
+        # Stderr log line in sp-yaru style.
+        assert "[convergence] auto-derived pick_one schema" in err
+        assert "gss:HAPPY" in err
+        assert "3 options" in err
+        # Schema was injected into the extractor path.
+        assert mock_parallel.called, "run_panel_parallel was never invoked"
+        injected = mock_parallel.call_args.kwargs.get("extract_schema")
+        assert injected is not None
+        assert injected["properties"]["choice"]["enum"] == [
+            "Not too happy",
+            "Pretty happy",
+            "Very happy",
+        ]
+
+    @patch("synth_panel.cli.commands.load_synthbench_baseline")
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_likert_baseline_without_schema_hard_fails(
+        self,
+        mock_client_cls,
+        mock_runtime_cls,
+        mock_loader,
+        capsys,
+        panel_files,
+    ):
+        """Numeric-keyed (Likert-looking) baseline + no ``--extract-schema``
+        → exit 1 with the Likert-specific error message per §7."""
+        personas, instrument = panel_files
+        mock_loader.return_value = {
+            "dataset": "gss",
+            "question_key": "LIKERT_Q",
+            "human_distribution": {"1": 0.2, "2": 0.3, "3": 0.5},
+        }
+        mock_runtime = MagicMock()
+        mock_runtime_cls.return_value = mock_runtime
+
+        code = main(_panel_run_args(personas, instrument, "--calibrate-against", "gss:LIKERT_Q"))
+
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "cannot auto-derive for Likert" in err
+        # Panelist loop never reached — R2 regression guard.
+        mock_runtime.run_turn.assert_not_called()
+
+    @patch("synth_panel.cli.commands.load_synthbench_baseline")
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_wide_enum_baseline_without_schema_hard_fails(
+        self,
+        mock_client_cls,
+        mock_runtime_cls,
+        mock_loader,
+        capsys,
+        panel_files,
+    ):
+        """>5-option baseline + no ``--extract-schema`` → exit 1 with the
+        "max 5 for auto-derive" message per §7."""
+        personas, instrument = panel_files
+        mock_loader.return_value = {
+            "dataset": "gss",
+            "question_key": "BIG",
+            "human_distribution": {
+                "A": 0.1,
+                "B": 0.1,
+                "C": 0.1,
+                "D": 0.1,
+                "E": 0.1,
+                "F": 0.5,
+            },
+        }
+        mock_runtime = MagicMock()
+        mock_runtime_cls.return_value = mock_runtime
+
+        code = main(_panel_run_args(personas, instrument, "--calibrate-against", "gss:BIG"))
+
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "max 5 for auto-derive" in err
+        assert "6 options" in err
+        mock_runtime.run_turn.assert_not_called()
+
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.load_synthbench_baseline")
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_user_supplied_extract_schema_bypasses_derivation(
+        self,
+        mock_client_cls,
+        mock_runtime_cls,
+        mock_loader,
+        mock_parallel,
+        capsys,
+        tmp_path,
+        panel_files,
+    ):
+        """User-supplied ``--extract-schema`` skips auto-derivation even
+        when the baseline would otherwise trigger the >5-option hard-fail.
+        The auto-derive log line must NOT fire; the user schema flows
+        through verbatim."""
+        personas, instrument = panel_files
+        mock_loader.return_value = {
+            "dataset": "gss",
+            "question_key": "BIG",
+            "human_distribution": {
+                "A": 0.1,
+                "B": 0.1,
+                "C": 0.1,
+                "D": 0.1,
+                "E": 0.1,
+                "F": 0.5,
+            },
+        }
+        mock_parallel.return_value = ([], {}, {})
+        mock_runtime = MagicMock()
+        mock_runtime_cls.return_value = mock_runtime
+
+        # Minimal user-supplied pick_one schema on disk.
+        import json as _json
+
+        user_schema = {
+            "type": "object",
+            "properties": {
+                "choice": {"type": "string", "enum": ["A", "B", "C", "D", "E", "F"]},
+            },
+            "required": ["choice"],
+        }
+        schema_path = tmp_path / "user_schema.json"
+        schema_path.write_text(_json.dumps(user_schema))
+
+        with contextlib.suppress(Exception):
+            main(
+                _panel_run_args(
+                    personas,
+                    instrument,
+                    "--calibrate-against",
+                    "gss:BIG",
+                    "--extract-schema",
+                    str(schema_path),
+                )
+            )
+
+        err = capsys.readouterr().err
+        assert "auto-derived pick_one schema" not in err
+        assert "max 5 for auto-derive" not in err
+        injected = mock_parallel.call_args.kwargs.get("extract_schema")
+        assert injected == user_schema
+
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.load_synthbench_baseline")
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_single_baseline_fetch_when_both_flags_present(
+        self,
+        mock_client_cls,
+        mock_runtime_cls,
+        mock_loader,
+        mock_parallel,
+        capsys,
+        panel_files,
+    ):
+        """Acceptance: ``Baseline fetched exactly once even when both
+        convergence + calibrate flags present``. Also proves the payload
+        is reused for auto-derivation (no second round-trip)."""
+        personas, instrument = panel_files
+        mock_loader.return_value = {
+            "dataset": "gss",
+            "question_key": "HAPPY",
+            "human_distribution": {
+                "Very happy": 0.3,
+                "Pretty happy": 0.5,
+                "Not too happy": 0.2,
+            },
+        }
+        mock_parallel.return_value = ([], {}, {})
+        mock_runtime = MagicMock()
+        mock_runtime_cls.return_value = mock_runtime
+
+        with contextlib.suppress(Exception):
+            main(
+                _panel_run_args(
+                    personas,
+                    instrument,
+                    "--calibrate-against",
+                    "gss:HAPPY",
+                    "--convergence-baseline",
+                    "gss:HAPPY",
+                )
+            )
+
+        mock_loader.assert_called_once_with("gss:HAPPY")
+        # And the derivation still fired (proof that the single fetched
+        # payload was reused, not bypassed).
+        assert "auto-derived pick_one schema" in capsys.readouterr().err

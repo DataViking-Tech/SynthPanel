@@ -415,13 +415,26 @@ class ConvergenceTracker:
         self,
         *,
         baseline: dict[str, Any] | None = None,
+        calibration_spec: str | None = None,
+        extractor_label: str | None = None,
+        auto_derived: bool = False,
     ) -> dict[str, Any]:
         """Assemble the post-run ``convergence`` section.
 
         ``baseline`` — when provided — is spliced in verbatim under
         ``human_baseline``; the caller owns the lookup against SynthBench
         so this module stays free of optional-dep imports.
+
+        sp-ttwy (T3) threads ``calibration_spec``, ``extractor_label``, and
+        ``auto_derived`` through so T4 can attach a
+        ``per_question[key].calibration`` sub-object with JSD + provenance.
+        They are accepted here as a forward-compatibility seam; T4 owns
+        the actual attachment logic.
         """
+        # sp-ttwy: placeholder accept — forward-compatible seam for T4 (JSD
+        # wiring + per_question[key].calibration attachment). Silently
+        # ignored today; T4 lights it up without changing the call sites.
+        _ = (calibration_spec, extractor_label, auto_derived)
         with self._lock:
             per_question: dict[str, Any] = {}
             for key, state in self._states.items():
