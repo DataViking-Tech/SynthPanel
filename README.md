@@ -133,7 +133,7 @@ arguments to override. Provider keys are read from environment variables
 (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`/`GEMINI_API_KEY`,
 `XAI_API_KEY`) — pass whichever your model requires.
 
-Pin to a specific version (`:0.9.4`) in production rather than `:latest`.
+Pin to a specific version (`:0.9.9`) in production rather than `:latest`.
 
 ## Use as a Python Library
 
@@ -763,6 +763,13 @@ baseline from [SynthBench](https://github.com/DataViking-Tech/synthbench) (insta
 
 | Version | Highlights |
 |---------|-----------|
+| 0.9.9 | `--synthesis-strategy=auto` now routes to map-reduce on context overflow instead of hard-failing; OpenRouter alias resolution tightened for sub-1¢ local-table sanity checks; `--personas-merge` warns (or errors via `--personas-merge-on-collision`) on name collisions with bundled packs; version single-sourced from `src/synth_panel/__version__.py` with templated site render |
+| 0.9.8 | Fail-loud synthesis (context-overflow pre-flight + structured `synthesis_error`), per-question map-reduce synthesis (`--synthesis-strategy=single\|map-reduce\|auto`), response-schema validation with deterministic distributions for bounded question types, rate-limit-aware client (`--max-concurrent`, `--rate-limit-rps`), live convergence telemetry + `--auto-stop`, 4 new bundled persona packs (`job-seekers`, `recruiters-talent`, `product-research`, `ai-eval-buyers`) raising shipped personas 24 → 84, `/synthpanel-poll` slash command |
+| 0.9.7 | Provider-reported cost is authoritative — when a provider returns `usage.cost` (e.g. OpenRouter), that value is recorded verbatim instead of being recomputed from a local pricing table; `pricing_fallback` warning surfaced when a model falls through to `DEFAULT_PRICING`; ensemble rounding no longer silently drops low-weight models |
+| 0.9.5 | Fail-fast on unsubstituted `{placeholder}` variables in instruments/personas, `--personas-merge PATH` for layered persona packs, `--dry-run` pre-run preview, `run_invalid` flag on degenerate runs, MCP BYOK detection routes through the credentials store |
+| 0.9.4 | `synthpanel login` / `logout` / `whoami` credential-store CLI; MCP recognises `OPENROUTER_API_KEY` as BYOK and picks a sensible default; Docker images on GHCR + Docker Hub multi-arch; MCP sampling fallback for `run_prompt` and `run_quick_poll` |
+| 0.9.0 | First release post-public-flip. Repo renamed to `SynthPanel` (PyPI name `synthpanel` unchanged) |
+| 0.8.0 | `lookup_pricing_by_provider` public helper for synthbench-format provider strings; multi-question CLI cost shape symmetry (`total_cost` / `panelist_cost` / `total_usage` / `panelist_usage`) |
 | 0.7.0 | Multi-model ensemble blending (`--blend`), OpenRouter provider support, temperature/top_p controls, prompt template customization |
 | 0.6.0 | `--models` weighted model spec, `--temperature`/`--top_p` flags, persona prompt templates, pack generation, domain templates, MCP improvements |
 | 0.5.0 | v3 branching instruments, router predicates, 5 bundled instrument packs, `instruments` subcommand (list/show/install/graph), MCP `*_instrument_pack` tools, rounds-shaped panel output, `extend_panel` ad-hoc round tool |

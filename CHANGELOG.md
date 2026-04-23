@@ -2,9 +2,14 @@
 
 All notable changes to synthpanel are documented here.
 
-For auto-generated release notes, see [GitHub Releases](https://github.com/DataViking-Tech/synth-panel/releases).
+For auto-generated release notes, see [GitHub Releases](https://github.com/DataViking-Tech/SynthPanel/releases).
 
 ## [Unreleased]
+
+### Added
+- (sp-5r88 / sp-a6jc / sp-ttwy / sp-bldz) Inline SynthBench calibration via `panel run --calibrate-against DATASET:QUESTION`. Force-enables convergence tracking against a published human baseline (v1 allowlist: `gss`, `ntia`), auto-derives a `pick_one` extractor schema from the baseline when option count ≤ 5 (override with `--extract-schema`), and attaches a `calibration` sub-object to every tracked question in the output. The sub-object carries `jsd`, `baseline_spec`, `extractor`, `auto_derived`, and — on disjoint supports — `alignment_error`. Requires `pip install 'synthpanel[convergence]'`. Cadence is NOT implicit — pair with `--convergence-check-every` to control sampling.
+- (sp-lk3w) Optional `version:` field on persona packs. MCP surfaces a non-fatal shadow warning when a user-installed pack shadows a bundled pack with an older version string, so silently-stale packs can't sit on top of a newer bundled definition.
+- (sp-udsv) `gh:` URL resolver — parses `gh:owner/repo[@ref][/path]` into raw-content URLs with tight allowlist validation. Foundation piece for `sp-pack-registry` (pack import from GitHub).
 
 ### Documentation
 - (sp-7npy) Convergence: document the shipped inline-calibration wire format as `per_question[key].calibration` (a sub-object with `jsd`, `baseline_spec`, `extractor`, `auto_derived`, and — on disjoint supports — `alignment_error`). A flat `per_question[key].human_jsd` scalar was considered during D-gate of sp-inline-calibration and rejected in favor of the sub-object shape; this field was never shipped, so no code removal is needed. Any downstream consumer that wrote speculative code against `.human_jsd` should migrate to `.calibration.jsd`. `sp-pack-registry` fingerprints depend on the sub-object shape.
@@ -233,12 +238,20 @@ Patch release in the 0.7.x series. See the [README Versions table](README.md#ver
 - Rounds-shaped panel output with `path`, `terminal_round`, and `warnings` fields
 - `extend_panel` MCP tool for ad-hoc follow-up rounds
 
-[Unreleased]: https://github.com/DataViking-Tech/synth-panel/compare/v0.8.0...HEAD
-[0.8.0]: https://github.com/DataViking-Tech/synth-panel/compare/v0.7.4...v0.8.0
-[0.7.4]: https://github.com/DataViking-Tech/synth-panel/compare/v0.7.0...v0.7.4
-[0.7.0]: https://github.com/DataViking-Tech/synth-panel/compare/v0.6.0...v0.7.0
-[0.6.0]: https://github.com/DataViking-Tech/synth-panel/compare/v0.5.0...v0.6.0
-[0.5.0]: https://github.com/DataViking-Tech/synth-panel/compare/v0.4.0...v0.5.0
-[0.4.1]: https://github.com/DataViking-Tech/synth-panel/compare/v0.4.0...v0.4.1
-[0.4.0]: https://github.com/DataViking-Tech/synth-panel/releases/tag/v0.4.0
-[0.3.0]: https://github.com/DataViking-Tech/synth-panel/releases/tag/v0.3.0
+[Unreleased]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.9.9...HEAD
+[0.9.9]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.9.8...v0.9.9
+[0.9.8]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.9.7...v0.9.8
+[0.9.7]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.9.6...v0.9.7
+[0.9.6]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.9.5...v0.9.6
+[0.9.5]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.9.4...v0.9.5
+[0.9.4]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.9.2...v0.9.4
+[0.9.2]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.9.0...v0.9.2
+[0.9.0]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.7.4...v0.8.0
+[0.7.4]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.7.0...v0.7.4
+[0.7.0]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.4.0...v0.5.0
+[0.4.1]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/DataViking-Tech/SynthPanel/releases/tag/v0.4.0
+[0.3.0]: https://github.com/DataViking-Tech/SynthPanel/releases/tag/v0.3.0
