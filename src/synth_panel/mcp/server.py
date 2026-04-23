@@ -45,6 +45,7 @@ from synth_panel._runners import (
     MAX_QUESTIONS,
     PANELIST_TIMEOUT,
     PanelTotalFailureError,
+    build_synthesis_error_payload,
     detect_total_failure,
 )
 from synth_panel._runners import (
@@ -1742,7 +1743,7 @@ async def extend_panel(
     if ctx is not None:
         await ctx.report_progress(0, len(personas))
 
-    def _go() -> tuple[list[PanelistResult], Any]:
+    def _go() -> tuple[list[PanelistResult], Any, dict[str, Any] | None]:
         client = _get_shared_client()
         results, _registry, _sessions = run_panel_parallel(
             client=client,
@@ -1754,6 +1755,7 @@ async def extend_panel(
             sessions=sessions,
         )
         synth = None
+        synth_error: dict[str, Any] | None = None
         if synthesis:
             try:
                 synth = synthesize_panel(
@@ -1764,12 +1766,25 @@ async def extend_panel(
                     panelist_model=model,
                     custom_prompt=synthesis_prompt,
                 )
-            except Exception:
+            except Exception as exc:
+                # sp-0ozi: surface the failure in the tool response envelope so
+                # MCP callers can distinguish "synthesis threw" from "synthesis
+                # skipped" or "synthesis produced empty output". Stays
+                # non-fatal — panelist results are still returned.
                 logger.error("extend_panel synthesis failed (non-fatal)", exc_info=True)
                 synth = None
-        return results, synth
+                synth_error = build_synthesis_error_payload(
+                    exc,
+                    error_type="synthesis_api_error",
+                    message=f"Synthesis call failed: {exc.__class__.__name__}: {exc}",
+                    suggested_fix=(
+                        "Check provider credentials and model availability;"
+                        " retry extend_panel once the underlying issue is resolved."
+                    ),
+                )
+        return results, synth, synth_error
 
-    panelist_results, synth = await asyncio.wait_for(
+    panelist_results, synth, synthesis_error = await asyncio.wait_for(
         asyncio.to_thread(_go),
         timeout=PANELIST_TIMEOUT * len(personas),
     )
@@ -1781,15 +1796,15 @@ async def extend_panel(
 
     # Append the ad-hoc round to the existing result and persist.
     rounds = existing.get("rounds") or []
-    rounds = [
-        *list(rounds),
-        {
-            "name": f"extension-{len(rounds) + 1}",
-            "results": new_round_results,
-            "synthesis": synth.to_dict() if synth is not None and hasattr(synth, "to_dict") else None,
-            "extension": True,
-        },
-    ]
+    new_round: dict[str, Any] = {
+        "name": f"extension-{len(rounds) + 1}",
+        "results": new_round_results,
+        "synthesis": synth.to_dict() if synth is not None and hasattr(synth, "to_dict") else None,
+        "extension": True,
+    }
+    if synthesis_error is not None:
+        new_round["synthesis_error"] = synthesis_error
+    rounds = [*list(rounds), new_round]
     path = list(existing.get("path") or [])
     path.append(
         {
@@ -1806,16 +1821,18 @@ async def extend_panel(
     updated["question_count"] = int(existing.get("question_count", 0)) + len(questions)
     update_panel_result(result_id, updated)
 
-    return json.dumps(
-        {
-            "result_id": result_id,
-            "appended_round": rounds[-1]["name"],
-            "results": new_round_results,
-            "synthesis": rounds[-1]["synthesis"],
-            "path": path,
-        },
-        indent=2,
-    )
+    response: dict[str, Any] = {
+        "result_id": result_id,
+        "appended_round": rounds[-1]["name"],
+        "results": new_round_results,
+        "synthesis": rounds[-1]["synthesis"],
+        "path": path,
+    }
+    if synthesis_error is not None:
+        # sp-0ozi: top-level synthesis_error so MCP clients can gate on
+        # envelope shape without inspecting the appended round.
+        response["synthesis_error"] = synthesis_error
+    return json.dumps(response, indent=2)
 
 
 @mcp.tool()
