@@ -22,6 +22,7 @@ without mocking the LLM stack.
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import math
@@ -30,6 +31,8 @@ import threading
 from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
+
+from synth_panel.structured.schemas import PICK_ONE_SCHEMA
 
 logger = logging.getLogger(__name__)
 
@@ -605,3 +608,58 @@ def load_synthbench_baseline(spec: str) -> dict[str, Any]:
     if question_key is not None:
         result.setdefault("question_key", question_key)
     return result
+
+
+def _looks_numeric(value: Any) -> bool:
+    """True when *value* is an int/float or a string that coerces to one.
+
+    Booleans are excluded — Python treats them as ints, but ``True``/``False``
+    are semantically enum-like for our purposes.
+    """
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, (int, float)):
+        return True
+    if isinstance(value, str):
+        try:
+            float(value)
+        except ValueError:
+            return False
+        return True
+    return False
+
+
+def derive_pick_one_schema_from_baseline(
+    baseline_payload: dict[str, Any],
+    *,
+    max_options: int = 5,
+) -> dict[str, Any] | None:
+    """Derive a pick_one extraction schema from a SynthBench baseline.
+
+    Reads ``baseline_payload['human_distribution']`` and, when its keys look
+    like a small enumerated option set, returns a deep-copied
+    :data:`PICK_ONE_SCHEMA` with ``properties.choice.enum`` pinned to the
+    sorted baseline keys (verbatim — no normalization, per S-gate OQ1).
+
+    Returns ``None`` when the distribution is missing or empty, when it has
+    more than ``max_options`` keys, or when any key is numeric-coercible
+    (a Likert-style scale rather than a free enum). The caller is expected
+    to fall back to the author-declared schema in those cases.
+
+    Pure: no I/O, no LLM calls.
+    """
+    if not isinstance(baseline_payload, dict):
+        return None
+    distribution = baseline_payload.get("human_distribution")
+    if not isinstance(distribution, dict) or not distribution:
+        return None
+
+    keys = list(distribution.keys())
+    if len(keys) > max_options:
+        return None
+    if any(_looks_numeric(k) for k in keys):
+        return None
+
+    schema = copy.deepcopy(PICK_ONE_SCHEMA)
+    schema["properties"]["choice"]["enum"] = sorted(keys)
+    return schema

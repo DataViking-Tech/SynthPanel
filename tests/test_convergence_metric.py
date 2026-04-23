@@ -18,11 +18,13 @@ from synth_panel.convergence import (
     DEFAULT_EPSILON,
     ConvergenceTracker,
     SynthbenchUnavailableError,
+    derive_pick_one_schema_from_baseline,
     extract_categorical_responses,
     identify_tracked_questions,
     jensen_shannon_divergence,
     load_synthbench_baseline,
 )
+from synth_panel.structured.schemas import PICK_ONE_SCHEMA
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -260,3 +262,50 @@ def test_extract_categorical_skips_errored_responses():
         error=None,
     )
     assert extract_categorical_responses(pr, tracked) == {}
+
+
+# ---------------------------------------------------------------------------
+# sp-5r88: derive_pick_one_schema_from_baseline
+# ---------------------------------------------------------------------------
+
+
+def test_derive_pick_one_schema_from_baseline_enum_keys_returns_sorted_enum_schema():
+    baseline = {
+        "human_distribution": {"chocolate": 0.5, "vanilla": 0.3, "strawberry": 0.2},
+    }
+    schema = derive_pick_one_schema_from_baseline(baseline)
+    assert schema is not None
+    # Deep copy — caller mutations must not leak back into the bundled schema.
+    assert schema is not PICK_ONE_SCHEMA
+    assert "enum" not in PICK_ONE_SCHEMA["properties"]["choice"]
+    assert schema["properties"]["choice"]["enum"] == ["chocolate", "strawberry", "vanilla"]
+    # Other properties of the bundled pick_one schema survive the derivation.
+    assert schema["required"] == ["choice"]
+    assert schema["properties"]["choice"]["type"] == "string"
+
+
+@pytest.mark.parametrize(
+    "distribution",
+    [
+        {"1": 0.1, "2": 0.2, "3": 0.3, "4": 0.3, "5": 0.1},  # Likert strings
+        {1: 0.1, 2: 0.2, 3: 0.3, 4: 0.3, 5: 0.1},  # Likert ints
+        {"3.5": 0.5, "4.5": 0.5},  # numeric-coercible floats
+        {"red": 0.4, "2": 0.6},  # mixed: one numeric key poisons the lot
+    ],
+)
+def test_derive_pick_one_schema_from_baseline_returns_none_for_numeric_keys(distribution):
+    assert derive_pick_one_schema_from_baseline({"human_distribution": distribution}) is None
+
+
+@pytest.mark.parametrize(
+    "baseline",
+    [
+        {},  # no human_distribution at all
+        {"human_distribution": None},
+        {"human_distribution": {}},
+        # Six enum keys — exceeds default max_options=5.
+        {"human_distribution": {c: 1 / 6 for c in ["a", "b", "c", "d", "e", "f"]}},
+    ],
+)
+def test_derive_pick_one_schema_from_baseline_returns_none_when_unfit(baseline):
+    assert derive_pick_one_schema_from_baseline(baseline) is None
