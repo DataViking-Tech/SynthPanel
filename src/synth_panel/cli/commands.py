@@ -2230,7 +2230,15 @@ def _build_rounds_shape(
 
 
 def handle_pack_list(args: argparse.Namespace, fmt: OutputFormat) -> int:
-    """List all saved persona packs."""
+    """List persona packs.
+
+    Default: local installed packs. With ``--registry``: packs from the
+    cached synthpanel registry (id, name, ref, version columns). On empty
+    cache + fetch fail, prints an advisory line and exits 0.
+    """
+    if getattr(args, "registry", False):
+        return _handle_pack_list_registry(fmt)
+
     from synth_panel.mcp.data import list_persona_packs
 
     packs = list_persona_packs()
@@ -2243,6 +2251,104 @@ def handle_pack_list(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 print(f"  {p['id']}  {p['name']}  ({p['persona_count']} personas)")
     else:
         emit(fmt, message="Persona packs", extra={"packs": packs})
+
+    return 0
+
+
+def _handle_pack_list_registry(fmt: OutputFormat) -> int:
+    """Registry branch of ``pack list``."""
+    from synth_panel.registry import cache_path, fetch_registry
+
+    had_cache = cache_path().exists()
+    registry = fetch_registry()
+    raw_packs = registry.get("packs") or []
+    entries = [e for e in raw_packs if isinstance(e, dict) and e.get("id")]
+
+    if not entries and not had_cache and not cache_path().exists():
+        # Empty cache + fetch fail (load_registry returned EMPTY_REGISTRY
+        # without persisting a cache). Advisory, exit 0.
+        if fmt is OutputFormat.TEXT:
+            print("registry unavailable, try again later")
+        else:
+            emit(fmt, message="registry unavailable, try again later", extra={"packs": []})
+        return 0
+
+    rows = sorted(
+        (
+            {
+                "id": str(e.get("id", "")),
+                "name": str(e.get("name", "")),
+                "ref": str(e.get("ref") or "main"),
+                "version": str(e.get("version") or ""),
+            }
+            for e in entries
+        ),
+        key=lambda r: r["id"],
+    )
+
+    if fmt is OutputFormat.TEXT:
+        if not rows:
+            print("No packs in registry.")
+        else:
+            for r in rows:
+                print(f"  {r['id']}  {r['name']}  ({r['ref']})  {r['version']}".rstrip())
+    else:
+        emit(fmt, message="Registry packs", extra={"packs": rows})
+
+    return 0
+
+
+def handle_pack_search(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Search registry packs by substring across id, name, description, tags."""
+    from synth_panel.registry import cache_path, fetch_registry
+
+    term = (args.term or "").lower()
+
+    had_cache = cache_path().exists()
+    registry = fetch_registry()
+    raw_packs = registry.get("packs") or []
+    entries = [e for e in raw_packs if isinstance(e, dict) and e.get("id")]
+
+    if not entries and not had_cache and not cache_path().exists():
+        if fmt is OutputFormat.TEXT:
+            print("registry unavailable, try again later")
+        else:
+            emit(fmt, message="registry unavailable, try again later", extra={"matches": []})
+        return 0
+
+    matches: list[dict[str, Any]] = []
+    for e in entries:
+        haystack_parts = [
+            str(e.get("id", "")),
+            str(e.get("name", "")),
+            str(e.get("description", "")),
+        ]
+        tags = e.get("tags") or ()
+        if isinstance(tags, (list, tuple)):
+            haystack_parts.extend(str(t) for t in tags)
+        haystack = " ".join(haystack_parts).lower()
+        if term in haystack:
+            matches.append(
+                {
+                    "id": str(e.get("id", "")),
+                    "name": str(e.get("name", "")),
+                    "ref": str(e.get("ref") or "main"),
+                    "version": str(e.get("version") or ""),
+                    "description": str(e.get("description", "")),
+                }
+            )
+
+    matches.sort(key=lambda r: r["id"])
+
+    if fmt is OutputFormat.TEXT:
+        if not matches:
+            print(f"No packs match '{args.term}'.")
+        else:
+            for r in matches:
+                desc = f"  {r['description']}" if r["description"] else ""
+                print(f"  {r['id']}  {r['name']}  ({r['ref']})  {r['version']}{desc}".rstrip())
+    else:
+        emit(fmt, message="Registry search", extra={"term": args.term, "matches": matches})
 
     return 0
 

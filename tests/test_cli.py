@@ -2191,6 +2191,215 @@ class TestPackCommands:
         out = capsys.readouterr().out
         assert "my-team" in out
 
+    def _seed_registry_cache(self, entries: list[dict[str, object]]) -> None:
+        """Write a fresh registry cache so fetch_registry() reads it and
+        does not hit the network. The fixture sets SYNTH_PANEL_DATA_DIR
+        to tmp_path, so the cache lives under the per-test temp dir."""
+        from synth_panel.registry import registry_url, write_cache
+
+        write_cache(
+            {"schema_version": 1, "packs": entries},
+            source_url=registry_url(),
+            etag='"test-etag"',
+        )
+
+    def test_pack_list_registry_prints_columns(self, capsys):
+        self._seed_registry_cache(
+            [
+                {
+                    "id": "zeta-pack",
+                    "kind": "persona",
+                    "name": "Zeta",
+                    "description": "Last letter persona",
+                    "repo": "a/b",
+                    "path": "synthpanel-pack.yaml",
+                    "ref": "main",
+                    "version": "1",
+                    "tags": ["greek"],
+                    "author": {"github": "a"},
+                },
+                {
+                    "id": "alpha-pack",
+                    "kind": "persona",
+                    "name": "Alpha",
+                    "description": "First letter persona",
+                    "repo": "c/d",
+                    "path": "synthpanel-pack.yaml",
+                    "ref": "v2",
+                    "version": "3",
+                    "tags": ["greek"],
+                    "author": {"github": "c"},
+                },
+            ]
+        )
+        code = main(["pack", "list", "--registry"])
+        assert code == 0
+        out = capsys.readouterr().out
+        # Stable-sorted by id: alpha before zeta.
+        assert out.index("alpha-pack") < out.index("zeta-pack")
+        assert "Alpha" in out and "Zeta" in out
+        assert "v2" in out
+        assert "3" in out  # version column
+
+    def test_pack_list_registry_json(self, capsys):
+        self._seed_registry_cache(
+            [
+                {
+                    "id": "one",
+                    "kind": "persona",
+                    "name": "One",
+                    "description": "",
+                    "repo": "a/b",
+                    "path": "synthpanel-pack.yaml",
+                    "ref": "main",
+                    "version": "1",
+                    "tags": [],
+                    "author": {},
+                }
+            ]
+        )
+        code = main(["--output-format", "json", "pack", "list", "--registry"])
+        assert code == 0
+        data = json.loads(capsys.readouterr().out)
+        assert data["packs"][0] == {
+            "id": "one",
+            "name": "One",
+            "ref": "main",
+            "version": "1",
+        }
+
+    def test_pack_list_registry_empty_cache_fetch_fail_is_advisory(self, capsys, monkeypatch):
+        """Empty cache + fetch fail → advisory message, exit 0."""
+        # No cache file written; make fetch_registry return empty registry
+        # (matching the load_registry empty-on-fail contract).
+        monkeypatch.setattr(
+            "synth_panel.registry.fetch_registry",
+            lambda **kw: {"schema_version": 1, "packs": []},
+        )
+        code = main(["pack", "list", "--registry"])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "registry unavailable" in out
+        assert "try again later" in out
+
+    def test_pack_search_matches_across_fields(self, capsys):
+        self._seed_registry_cache(
+            [
+                {
+                    "id": "pricing-probe",
+                    "kind": "persona",
+                    "name": "Pricing Probe",
+                    "description": "Nothing special",
+                    "repo": "a/b",
+                    "path": "synthpanel-pack.yaml",
+                    "ref": "main",
+                    "version": "1",
+                    "tags": [],
+                    "author": {},
+                },
+                {
+                    "id": "dev-pack",
+                    "kind": "persona",
+                    "name": "Developers",
+                    "description": "Engineers who love PRICING discussions",
+                    "repo": "c/d",
+                    "path": "synthpanel-pack.yaml",
+                    "ref": "main",
+                    "version": "1",
+                    "tags": ["software"],
+                    "author": {},
+                },
+                {
+                    "id": "unrelated",
+                    "kind": "persona",
+                    "name": "Unrelated",
+                    "description": "Nothing matching",
+                    "repo": "e/f",
+                    "path": "synthpanel-pack.yaml",
+                    "ref": "main",
+                    "version": "1",
+                    "tags": [],
+                    "author": {},
+                },
+                {
+                    "id": "by-tag",
+                    "kind": "persona",
+                    "name": "Tagged",
+                    "description": "No literal match in description",
+                    "repo": "g/h",
+                    "path": "synthpanel-pack.yaml",
+                    "ref": "main",
+                    "version": "1",
+                    "tags": ["pricing"],
+                    "author": {},
+                },
+            ]
+        )
+        # Case-insensitive substring — matches id, name, description, tags.
+        code = main(["pack", "search", "pricing"])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "pricing-probe" in out  # id match
+        assert "dev-pack" in out  # description match (uppercase PRICING)
+        assert "by-tag" in out  # tag match
+        assert "unrelated" not in out
+
+    def test_pack_search_no_matches(self, capsys):
+        self._seed_registry_cache(
+            [
+                {
+                    "id": "only",
+                    "kind": "persona",
+                    "name": "Only",
+                    "description": "solo",
+                    "repo": "a/b",
+                    "path": "synthpanel-pack.yaml",
+                    "ref": "main",
+                    "version": "1",
+                    "tags": [],
+                    "author": {},
+                }
+            ]
+        )
+        code = main(["pack", "search", "nonexistent-xyz"])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "No packs match" in out
+
+    def test_pack_search_empty_cache_fetch_fail_is_advisory(self, capsys, monkeypatch):
+        monkeypatch.setattr(
+            "synth_panel.registry.fetch_registry",
+            lambda **kw: {"schema_version": 1, "packs": []},
+        )
+        code = main(["pack", "search", "anything"])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "registry unavailable" in out
+
+    def test_pack_search_json(self, capsys):
+        self._seed_registry_cache(
+            [
+                {
+                    "id": "match-one",
+                    "kind": "persona",
+                    "name": "Match",
+                    "description": "",
+                    "repo": "a/b",
+                    "path": "synthpanel-pack.yaml",
+                    "ref": "main",
+                    "version": "1",
+                    "tags": [],
+                    "author": {},
+                }
+            ]
+        )
+        code = main(["--output-format", "json", "pack", "search", "match"])
+        assert code == 0
+        data = json.loads(capsys.readouterr().out)
+        assert data["term"] == "match"
+        assert len(data["matches"]) == 1
+        assert data["matches"][0]["id"] == "match-one"
+
     def test_pack_generate_success(self, capsys, monkeypatch):
         """pack generate calls LLM and saves a valid persona pack."""
         from unittest.mock import MagicMock
