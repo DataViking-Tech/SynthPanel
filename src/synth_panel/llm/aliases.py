@@ -9,11 +9,14 @@ Resolution order (highest priority wins):
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 # Short alias → canonical model identifier (tier 3: hardcoded fallback).
 _HARDCODED_ALIASES: dict[str, str] = {
@@ -51,7 +54,12 @@ def _load_file_aliases() -> dict[str, str]:
         return {}
     try:
         raw: Any = yaml.safe_load(_ALIASES_FILE.read_text())
-    except (OSError, yaml.YAMLError):
+    except (OSError, yaml.YAMLError) as exc:
+        logger.warning(
+            "aliases file at %s failed to parse: %s — ignoring",
+            _ALIASES_FILE,
+            exc,
+        )
         return {}
     if not isinstance(raw, dict):
         return {}
@@ -68,7 +76,12 @@ def _load_env_aliases() -> dict[str, str]:
         return {}
     try:
         parsed: Any = json.loads(raw)
-    except (json.JSONDecodeError, ValueError):
+    except (json.JSONDecodeError, ValueError) as exc:
+        logger.warning(
+            "%s env var failed to parse as JSON: %s — ignoring",
+            _ENV_VAR,
+            exc,
+        )
         return {}
     if not isinstance(parsed, dict):
         return {}
