@@ -1008,3 +1008,68 @@ class TestWeightedModelSpecRejection:
         data = json.loads(result[0][0].text)
         assert "error" in data
         assert "haiku:0.5" in data["error"]
+
+
+# ---------------------------------------------------------------------------
+# extend_panel synthesis-failure loudness (sp-0ozi)
+# ---------------------------------------------------------------------------
+
+
+class TestExtendPanelSynthesisLoudness:
+    """sp-0ozi: synthesis exceptions must surface a structured
+    ``synthesis_error`` in the MCP response envelope, not silently null
+    ``synth``. The failure stays non-fatal — panelist results are still
+    returned."""
+
+    @pytest.mark.asyncio
+    async def test_synthesis_exception_populates_synthesis_error(self, monkeypatch):
+        from synth_panel.cost import TokenUsage
+        from synth_panel.mcp import server as _server
+        from synth_panel.orchestrator import PanelistResult
+
+        fake_existing = {"rounds": [], "path": [], "question_count": 0}
+        fake_sessions = {"Alice": object()}
+        fake_panelist = PanelistResult(
+            persona_name="Alice",
+            responses=[{"question": "q?", "answer": "a"}],
+            usage=TokenUsage(),
+            model="haiku",
+        )
+
+        class BoomSynth(Exception):
+            pass
+
+        def _raise(*args, **kwargs):
+            raise BoomSynth("upstream 500")
+
+        with (
+            patch("synth_panel.mcp.server._data_get_panel_result", return_value=fake_existing),
+            patch("synth_panel.mcp.server.load_panel_sessions", return_value=fake_sessions),
+            patch(
+                "synth_panel.mcp.server.run_panel_parallel",
+                return_value=([fake_panelist], {}, fake_sessions),
+            ),
+            patch("synth_panel.mcp.server.synthesize_panel", side_effect=_raise),
+            patch("synth_panel.mcp.server.update_panel_result"),
+            patch("synth_panel.mcp.server._get_shared_client", return_value=object()),
+        ):
+            # Call the tool function directly (ctx=None). mcp.call_tool
+            # injects a request-scoped Context that fails outside a request.
+            raw = await _server.extend_panel(
+                result_id="r-test",
+                questions=[{"text": "follow-up?"}],
+                model="haiku",
+                synthesis=True,
+                ctx=None,
+            )
+
+        data = json.loads(raw)
+        # Panelist results still come through — non-fatal semantic preserved.
+        assert data.get("results"), "panelist results must still be returned"
+        # synth field is null because synthesis threw.
+        assert data.get("synthesis") is None
+        # Top-level structured synthesis_error is the new contract.
+        err = data.get("synthesis_error")
+        assert isinstance(err, dict), "synthesis_error must be a dict on the envelope"
+        assert err.get("error_type") == "synthesis_api_error"
+        assert "upstream 500" in err.get("message", "")
