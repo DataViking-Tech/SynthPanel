@@ -16,8 +16,19 @@ from synth_panel.llm.aliases import (
 
 
 @pytest.fixture(autouse=True)
-def _clean_alias_cache():
-    """Reset the cached alias map before and after every test."""
+def _clean_alias_cache(monkeypatch, tmp_path_factory):
+    """Isolate alias resolution from the developer's real config.
+
+    Without this, tier-3 (hardcoded) tests pick up the user's
+    ~/.synthpanel/aliases.yaml or SYNTHPANEL_MODEL_ALIASES env var and
+    silently fail (see sp-rmtj). Tests that exercise the file/env tiers
+    monkeypatch these on top of the isolated baseline.
+    """
+    monkeypatch.delenv("SYNTHPANEL_MODEL_ALIASES", raising=False)
+    monkeypatch.setattr(
+        "synth_panel.llm.aliases._ALIASES_FILE",
+        tmp_path_factory.mktemp("alias-iso") / "nope.yaml",
+    )
     _reset_cache()
     yield
     _reset_cache()
