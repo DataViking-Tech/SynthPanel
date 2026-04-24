@@ -38,6 +38,7 @@ from synth_panel.convergence import (
 from synth_panel.cost import (
     ZERO_USAGE,
     CostEstimate,
+    CostGate,
     TokenUsage,
     aggregate_per_model,
     build_cost_fallback_warnings,
@@ -1050,6 +1051,21 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             file=sys.stderr,
         )
 
+    # sp-utnk: optional mid-run cost gate. Declared before mode branching
+    # so downstream reporting code can inspect gate state regardless of
+    # which runner path executed. Only the parallel single-model path
+    # wires it into the orchestrator — ensemble/blend runs ignore it
+    # because their cost-accounting structure is richer and needs a
+    # separate design.
+    cost_gate: CostGate | None = None
+    max_cost_usd = getattr(args, "max_cost", None)
+    if max_cost_usd is not None and max_cost_usd <= 0:
+        print(
+            f"Error: --max-cost must be > 0, got {max_cost_usd}.",
+            file=sys.stderr,
+        )
+        return 1
+
     # ── Ensemble mode: run with each model, compare across models ────────
     if ensemble_mode:
         from synth_panel.ensemble import build_ensemble_output, ensemble_run
@@ -1301,6 +1317,9 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         # Flatten all panelist results across models for output + synthesis
         panelist_results = [pr for mr in ensemble.model_results for pr in mr.panelist_results]
     else:
+        if max_cost_usd is not None:
+            cost_gate = CostGate(max_cost_usd=max_cost_usd, total_panelists=len(personas))
+
         panelist_results, _registry, _sessions = run_panel_parallel(
             client=client,
             personas=personas,
@@ -1315,6 +1334,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             persona_models=persona_models,
             max_workers=max_concurrent,
             convergence_tracker=convergence_tracker,
+            cost_gate=cost_gate,
         )
 
     # Build output results and aggregate panelist usage
@@ -1382,6 +1402,18 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     )
     if missing_input_invalid:
         run_invalid = True
+
+    # sp-utnk: mid-run cost gate tripped. The orchestrator has already
+    # cancelled pending futures, so ``panelist_results`` is a valid
+    # prefix. Mark the run invalid and carry the gate snapshot so
+    # consumers (CI, MCP) can key on ``cost_exceeded`` without parsing
+    # banner text.
+    cost_gate_halted = cost_gate is not None and cost_gate.should_halt()
+    if cost_gate_halted:
+        run_invalid = True
+        # Skip synthesis on a halted partial — synthesizing a
+        # deliberately-truncated panel would burn more budget without
+        # delivering a trustworthy result.
 
     # Compute panelist costs (needed before synthesis for cost estimate).
     # For multi-model runs, sum the per-model costs so the total reflects
@@ -1591,6 +1623,19 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         missing_input_invalid=missing_input_invalid,
         total_failure=total_failure,
     )
+    # sp-utnk: if the cost gate tripped, the failure-stats banner may not
+    # render (no errored pairs, no refusals). Synthesize a dedicated line
+    # so TEXT-mode operators and stderr-grepping CI both see the halt.
+    if cost_gate_halted and cost_gate is not None:
+        snap = cost_gate.snapshot()
+        cost_banner = (
+            "⚠️  PANEL RUN HALTED: cost ceiling exceeded — "
+            f"projected ${snap['projected_total_usd']:.4f} > "
+            f"max ${snap['max_cost_usd']:.4f} after "
+            f"{snap['completed']}/{snap['total_panelists']} panelists "
+            f"(running ${snap['running_cost_usd']:.4f})"
+        )
+        banner = f"{banner}\n{cost_banner}" if banner else cost_banner
 
     if fmt is OutputFormat.TEXT:
         if banner:
@@ -1773,6 +1818,12 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         extra["failure_stats"] = failure_stats
         extra["missing_input_stats"] = missing_input_stats
         extra["run_invalid"] = bool(run_invalid or strict_violation)
+        # sp-utnk: surface cost-gate outcome for CI/MCP consumers.
+        if cost_gate_halted and cost_gate is not None:
+            extra["cost_exceeded"] = True
+            extra["halted_at_panelist"] = cost_gate.completed
+            extra["cost_gate"] = cost_gate.snapshot()
+            extra["abort_reason"] = "cost_exceeded"
         if total_failure is not None:
             # sp-efip: carry the structured total-failure diagnostic so
             # CI/MCP consumers can detect the "every panelist failed"

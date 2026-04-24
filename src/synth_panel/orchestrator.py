@@ -19,7 +19,7 @@ from typing import Any
 
 from synth_panel.conditions import evaluate_condition, normalize_follow_up
 from synth_panel.convergence import ConvergenceTracker, extract_categorical_responses
-from synth_panel.cost import ZERO_USAGE, TokenUsage, UsageTracker
+from synth_panel.cost import ZERO_USAGE, CostGate, TokenUsage, UsageTracker, resolve_cost
 from synth_panel.instrument import END_SENTINEL, Instrument, Round
 from synth_panel.llm.client import LLMClient
 from synth_panel.llm.models import InputMessage, TextBlock
@@ -543,6 +543,7 @@ def run_panel_parallel(
     top_p: float | None = None,
     persona_models: dict[str, str] | None = None,
     convergence_tracker: ConvergenceTracker | None = None,
+    cost_gate: CostGate | None = None,
 ) -> tuple[list[PanelistResult], WorkerRegistry, dict[str, Session]]:
     """Run all panelists in parallel and return ordered results.
 
@@ -573,6 +574,12 @@ def run_panel_parallel(
             cancelled and ``run_panel_parallel`` returns only the panelists
             that had already finished. Errored panelists are still surfaced
             — they never contribute to the running distributions.
+        cost_gate: Optional :class:`CostGate`. Each completing panelist's
+            priced cost is recorded against the gate; if the projected run
+            total exceeds the gate's ceiling, pending futures are cancelled
+            and only finished panelists are returned. The caller is expected
+            to inspect ``cost_gate.should_halt()`` on return and surface a
+            partial, ``run_invalid`` result.
 
     Returns:
         Tuple of (ordered results matching persona order, registry,
@@ -675,6 +682,28 @@ def run_panel_parallel(
                             if not pending_future.done():
                                 pending_future.cancel()
                         break
+
+            # sp-utnk: cost-gate check. Price the completed panelist using
+            # its per-panelist model (falls back to the run-level default)
+            # and record against the gate. If the projected run total
+            # exceeds the gate, cancel pending futures and return what we
+            # have — the caller synthesizes a partial, run_invalid result.
+            if cost_gate is not None and results[idx] is not None:
+                completed_result = results[idx]
+                assert completed_result is not None
+                pr_model = completed_result.model or model
+                priced = resolve_cost(completed_result.usage, pr_model)
+                halted = cost_gate.record(priced.total_cost)
+                if halted:
+                    logger.info(
+                        "cost gate tripped after %d/%d panelists; cancelling pending futures",
+                        cost_gate.completed,
+                        len(personas),
+                    )
+                    for pending_future in future_to_index:
+                        if not pending_future.done():
+                            pending_future.cancel()
+                    break
 
     # All slots should be filled (unless auto-stop cancelled some); drop Nones
     return [r for r in results if r is not None], registry, out_sessions
