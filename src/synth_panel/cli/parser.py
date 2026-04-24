@@ -562,6 +562,33 @@ def build_parser() -> argparse.ArgumentParser:
             "'dataset:question_key' (colon-separated, both non-empty)."
         ),
     )
+    # sp-ezz: opt-in submission of calibrated runs to SynthBench. Only
+    # meaningful with --calibrate-against (parse-time hard-fail otherwise);
+    # requires SYNTHBENCH_API_KEY in env. See docs/synthbench-integration.md.
+    panel_run_parser.add_argument(
+        "--submit-to-synthbench",
+        action="store_true",
+        default=False,
+        dest="submit_to_synthbench",
+        help=(
+            "After the panel run, upload the per-question calibration JSD "
+            "and distributions to SynthBench's public leaderboard. Requires "
+            "--calibrate-against and SYNTHBENCH_API_KEY (mint at "
+            "synthbench.org/account). First use prompts for consent and "
+            "records it at ~/.synthpanel/synthbench-consent.json. "
+            "See docs/synthbench-integration.md for the privacy model."
+        ),
+    )
+    panel_run_parser.add_argument(
+        "--yes",
+        action="store_true",
+        default=False,
+        dest="yes",
+        help=(
+            "Bypass the SynthBench consent prompt for non-interactive use. "
+            "Equivalent to recording consent ahead of time; intended for CI."
+        ),
+    )
 
     # panel inspect (sp-76gm: stats + schema walker for a saved result)
     panel_inspect_parser = panel_subparsers.add_parser(

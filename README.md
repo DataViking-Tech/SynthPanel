@@ -836,6 +836,32 @@ See [docs/convergence.md](docs/convergence.md) for methodology, tuning, and the
 optional `--convergence-baseline` flag that compares your run against a real-human
 baseline from [SynthBench](https://github.com/DataViking-Tech/synthbench) (install via `pip install 'synthpanel[convergence]'`).
 
+### Submitting calibrated runs to SynthBench
+
+A calibrated panel run (one made with `--calibrate-against DATASET:QUESTION`)
+produces a per-question JSD against a known human distribution — the same
+score the [SynthBench leaderboard](https://synthbench.org) tracks. Add
+`--submit-to-synthbench` to upload the result automatically when the run
+completes:
+
+```bash
+export SYNTHBENCH_API_KEY=sk_synthbench_...    # mint at synthbench.org/account
+synthpanel panel run \
+  --personas examples/personas.yaml \
+  --instrument happiness-probe \
+  --calibrate-against gss:HAPPY \
+  --convergence-check-every 20 \
+  --submit-to-synthbench
+```
+
+First use shows a one-screen privacy notice (recorded at
+`~/.synthpanel/synthbench-consent.json` so subsequent runs don't re-prompt;
+pass `--yes` for CI). Submission failures are warned-but-non-fatal so a
+slow SynthBench cannot fail your panel run. See
+[docs/synthbench-integration.md](docs/synthbench-integration.md) for the
+full privacy model, what does and does not get uploaded, and the failure
+modes.
+
 ## Versions
 
 | Version | Highlights |
