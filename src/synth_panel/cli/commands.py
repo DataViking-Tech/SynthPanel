@@ -1253,6 +1253,32 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             )
             return 2
 
+    # ── sp-ezz: --submit-to-synthbench parse-time validation ─────────────
+    # Hard-fail BEFORE any LLM spend if the flag is misused. Only
+    # calibrated runs produce the SynthBench-shaped per-question JSD that
+    # is the leaderboard's currency, so a bare submission would never be
+    # accepted by the server anyway. Missing-API-key surfaces here too so
+    # the user does not discover it after a 20-panelist run completes.
+    submit_to_synthbench = bool(getattr(args, "submit_to_synthbench", False))
+    if submit_to_synthbench:
+        if calibrate_against_spec is None:
+            print(
+                "Error: --submit-to-synthbench requires --calibrate-against. "
+                "Only calibrated runs produce a SynthBench-shaped score; bare "
+                "panel runs cannot be submitted to the leaderboard.",
+                file=sys.stderr,
+            )
+            return 2
+        from synth_panel.synthbench_submit import ACCOUNT_URL, API_KEY_ENV
+
+        if not os.environ.get(API_KEY_ENV):
+            print(
+                f"Error: --submit-to-synthbench requires {API_KEY_ENV} in the "
+                f"environment. Mint a key at {ACCOUNT_URL}.",
+                file=sys.stderr,
+            )
+            return 2
+
     # ── sp-yaru: convergence telemetry ───────────────────────────────────
     # Build the tracker when any convergence flag opts in. We always
     # respect --auto-stop / --convergence-baseline even if the user
@@ -1877,6 +1903,26 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         )
         banner = f"{banner}\n{cost_banner}" if banner else cost_banner
 
+    # ── sp-ezz: pre-build the convergence report + snapshot raw model
+    # distributions BEFORE the text/json branch split, so a single block
+    # at the bottom of the function can submit to SynthBench regardless
+    # of output mode. Snapshotting before close() is required because
+    # the tracker's internal state is the source of truth for
+    # ``model_distribution`` in the SynthBench payload.
+    convergence_report: dict[str, Any] | None = None
+    convergence_model_distributions: dict[str, dict[str, float]] = {}
+    if convergence_tracker is not None:
+        convergence_report = convergence_tracker.build_report(
+            baseline=convergence_baseline_payload,
+            calibration_spec=calibrate_against_spec,
+            extractor_label=extractor_label,
+            auto_derived=auto_derived,
+        )
+        convergence_model_distributions = convergence_tracker.cumulative_distributions()
+        if convergence_baseline_error:
+            convergence_report["human_baseline_error"] = convergence_baseline_error
+        convergence_tracker.close()
+
     if fmt is OutputFormat.TEXT:
         if banner:
             print(banner, file=sys.stderr)
@@ -1966,14 +2012,8 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         # sp-yaru: even in TEXT mode, render a compact convergence summary
         # so operators watching stdout can see "converged at n=473" without
         # re-running with --output-format json.
-        if convergence_tracker is not None:
-            report = convergence_tracker.build_report(
-                baseline=convergence_baseline_payload,
-                calibration_spec=calibrate_against_spec,
-                extractor_label=extractor_label,
-                auto_derived=auto_derived,
-            )
-            convergence_tracker.close()
+        if convergence_report is not None:
+            report = convergence_report
             print("\n" + "=" * 60)
             print("CONVERGENCE")
             print("=" * 60)
@@ -2121,18 +2161,11 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         # model answered which persona without re-deriving from the spec.
         if persona_models:
             extra["model_assignment"] = dict(persona_models)
-        # sp-yaru: surface convergence telemetry for large runs.
-        if convergence_tracker is not None:
-            convergence_report = convergence_tracker.build_report(
-                baseline=convergence_baseline_payload,
-                calibration_spec=calibrate_against_spec,
-                extractor_label=extractor_label,
-                auto_derived=auto_derived,
-            )
-            if convergence_baseline_error:
-                convergence_report["human_baseline_error"] = convergence_baseline_error
+        # sp-yaru: surface convergence telemetry for large runs. Report
+        # is built once above the text/json branch split (sp-ezz) so the
+        # SynthBench submission block can reuse it.
+        if convergence_report is not None:
             extra["convergence"] = convergence_report
-            convergence_tracker.close()
         # Include blend distributions when --blend is active
         if blend_result:
             extra["blend"] = {
@@ -2152,6 +2185,52 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         if run_invalid or strict_violation:
             extra["message"] = banner.replace("\n", " ").strip() if banner else "PANEL RUN INVALID"
         emit(fmt, message=extra.get("message", "Panel complete"), extra=extra)
+
+    # ── sp-ezz: opt-in SynthBench submission ─────────────────────────
+    # Runs only when --submit-to-synthbench is set (parse-time validation
+    # already guarantees --calibrate-against and SYNTHBENCH_API_KEY are
+    # present). Submission failures are warned-but-non-fatal so a slow or
+    # rejecting SynthBench cannot turn a successful panel run into a
+    # failed CLI exit. Skipped entirely on invalid runs (the submitter
+    # also re-checks ``run_invalid`` in ``is_submittable``).
+    if submit_to_synthbench and not (run_invalid or strict_violation):
+        from synth_panel.synthbench_submit import submit_panel_result
+
+        # Build a minimal panel_extra view; the submitter only consults
+        # ``convergence`` and ``run_invalid``, so we do not need the full
+        # JSON-mode ``extra`` dict (which is not built in TEXT mode).
+        submit_extra: dict[str, Any] = {
+            "convergence": convergence_report,
+            "run_invalid": False,
+        }
+        instrument_name_for_submit: str | None = None
+        instrument_arg = getattr(args, "instrument", None)
+        if instrument_arg:
+            inst_path = Path(instrument_arg)
+            instrument_name_for_submit = inst_path.stem if inst_path.exists() else instrument_arg
+        persona_pack_name = getattr(args, "personas", None)
+        if persona_pack_name:
+            personas_path = Path(persona_pack_name)
+            if personas_path.exists():
+                persona_pack_name = personas_path.stem
+        sb_result = submit_panel_result(
+            panel_extra=submit_extra,
+            calibration_spec=calibrate_against_spec,
+            baseline_payload=convergence_baseline_payload,
+            model_distributions=convergence_model_distributions,
+            panelist_model=model,
+            instrument_name=instrument_name_for_submit,
+            persona_pack_name=persona_pack_name,
+            skip_consent=bool(getattr(args, "yes", False)),
+        )
+        if sb_result.accepted:
+            link = sb_result.leaderboard_url or "(no leaderboard URL returned)"
+            print(f"Submitted to SynthBench: {link}", file=sys.stderr)
+        else:
+            print(
+                f"Warning: SynthBench submission not accepted ({sb_result.status}): {sb_result.error}",
+                file=sys.stderr,
+            )
 
     # ── sp-7vp: auto-save results with --save ─────────────────────────
     if getattr(args, "save", False):

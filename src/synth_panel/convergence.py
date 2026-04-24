@@ -387,6 +387,24 @@ class ConvergenceTracker:
         with self._lock:
             return self._overall_converged_at_locked()
 
+    def cumulative_distributions(self) -> dict[str, dict[str, float]]:
+        """Snapshot of per-question cumulative distributions, normalized to sum 1.0.
+
+        Returned for keys with at least one observation. Used by sp-ezz
+        (synthbench submission) to assemble a per-question payload without
+        coupling to the tracker's internal ``_states`` map. Empty buckets
+        are omitted so a caller iterating the dict knows every entry has
+        non-zero mass.
+        """
+        with self._lock:
+            out: dict[str, dict[str, float]] = {}
+            for key, state in self._states.items():
+                total = sum(state.cumulative.values())
+                if total <= 0:
+                    continue
+                out[key] = {k: v / total for k, v in state.cumulative.items()}
+            return out
+
     def record(self, categorical: dict[str, str]) -> bool:
         """Add one panelist's categorical responses.
 
