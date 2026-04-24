@@ -32,6 +32,34 @@ from synth_panel.structured.output import StructuredOutputConfig, StructuredOutp
 logger = logging.getLogger(__name__)
 
 
+class RunAbortedError(Exception):
+    """Raised by :func:`run_panel_parallel` when the run aborts mid-flight (sp-56pb).
+
+    Carries the partial panelist results (the prefix 0..k that completed
+    before the abort) plus the registry and session dicts, so the caller
+    can still surface a valid partial JSON with ``run_invalid: true`` and
+    a specific ``abort_reason`` instead of losing the work entirely.
+
+    Currently the only trigger is ``KeyboardInterrupt`` (SIGINT). The cost
+    gate and convergence auto-stop paths do not raise — they return
+    normally with ``results`` truncated to the completed prefix because
+    the caller needs to inspect gate/tracker state to classify the halt.
+    """
+
+    def __init__(
+        self,
+        reason: str,
+        results: list[PanelistResult],
+        registry: WorkerRegistry,
+        sessions: dict[str, Session],
+    ) -> None:
+        super().__init__(f"panel run aborted: {reason}")
+        self.reason = reason
+        self.results = results
+        self.registry = registry
+        self.sessions = sessions
+
+
 def _convert_llm_usage(llm_usage: LLMTokenUsage) -> TokenUsage:
     """Convert LLM-layer TokenUsage to cost-layer TokenUsage."""
     return TokenUsage(
@@ -626,6 +654,7 @@ def run_panel_parallel(
             (i, k, q) for i, k, q in _inspect_bounded_questions(questions) if k in set(convergence_tracker.tracked_keys)
         ]
 
+    sigint_aborted = False
     with ThreadPoolExecutor(max_workers=effective_workers) as executor:
         future_to_index = {}
         for idx, (persona, worker_id) in enumerate(zip(personas, worker_ids)):
@@ -653,81 +682,104 @@ def run_panel_parallel(
             )
             future_to_index[future] = idx
 
-        for future in as_completed(future_to_index):
-            idx = future_to_index[future]
-            try:
-                result, sess = future.result()
-                results[idx] = result
-                with session_lock:
-                    out_sessions[result.persona_name] = sess
-            except Exception as exc:
-                name = personas[idx].get("name", "Anonymous")
-                results[idx] = PanelistResult(
-                    persona_name=name,
-                    responses=[],
-                    usage=ZERO_USAGE,
-                    error=str(exc),
-                    model=model,
-                )
-
-            # sp-hsk3: invoke the checkpoint callback for every resolved
-            # panelist, success or failure. Errored panelists still count
-            # as "done" for resume purposes — otherwise a persistent
-            # upstream outage would stall the cadence forever.
-            if on_panelist_complete is not None and results[idx] is not None:
+        try:
+            for future in as_completed(future_to_index):
+                idx = future_to_index[future]
                 try:
-                    on_panelist_complete(results[idx])  # type: ignore[arg-type]
-                except Exception as cb_exc:  # pragma: no cover - defensive
-                    logger.warning(
-                        "on_panelist_complete callback failed: %s: %s",
-                        type(cb_exc).__name__,
-                        cb_exc,
+                    result, sess = future.result()
+                    results[idx] = result
+                    with session_lock:
+                        out_sessions[result.persona_name] = sess
+                except Exception as exc:
+                    name = personas[idx].get("name", "Anonymous")
+                    results[idx] = PanelistResult(
+                        persona_name=name,
+                        responses=[],
+                        usage=ZERO_USAGE,
+                        error=str(exc),
+                        model=model,
                     )
 
-            if convergence_tracker is not None and results[idx] is not None:
-                completed_result = results[idx]
-                assert completed_result is not None  # help mypy; checked above
-                if completed_result.error is None:
-                    categorical = extract_categorical_responses(completed_result, tracked_questions)
+                # sp-hsk3: invoke the checkpoint callback for every resolved
+                # panelist, success or failure. Errored panelists still count
+                # as "done" for resume purposes — otherwise a persistent
+                # upstream outage would stall the cadence forever.
+                if on_panelist_complete is not None and results[idx] is not None:
                     try:
-                        should_stop = convergence_tracker.record(categorical)
-                    except Exception as track_exc:  # pragma: no cover - defensive
-                        logger.warning("convergence tracker record failed: %s", track_exc)
-                        should_stop = False
-                    if should_stop:
+                        on_panelist_complete(results[idx])  # type: ignore[arg-type]
+                    except Exception as cb_exc:  # pragma: no cover - defensive
+                        logger.warning(
+                            "on_panelist_complete callback failed: %s: %s",
+                            type(cb_exc).__name__,
+                            cb_exc,
+                        )
+
+                if convergence_tracker is not None and results[idx] is not None:
+                    completed_result = results[idx]
+                    assert completed_result is not None  # help mypy; checked above
+                    if completed_result.error is None:
+                        categorical = extract_categorical_responses(completed_result, tracked_questions)
+                        try:
+                            should_stop = convergence_tracker.record(categorical)
+                        except Exception as track_exc:  # pragma: no cover - defensive
+                            logger.warning("convergence tracker record failed: %s", track_exc)
+                            should_stop = False
+                        if should_stop:
+                            logger.info(
+                                "auto-stop: convergence reached at n=%d; cancelling pending futures",
+                                convergence_tracker.overall_converged_at or 0,
+                            )
+                            for pending_future in future_to_index:
+                                if not pending_future.done():
+                                    pending_future.cancel()
+                            break
+
+                # sp-utnk: cost-gate check. Price the completed panelist using
+                # its per-panelist model (falls back to the run-level default)
+                # and record against the gate. If the projected run total
+                # exceeds the gate, cancel pending futures and return what we
+                # have — the caller synthesizes a partial, run_invalid result.
+                if cost_gate is not None and results[idx] is not None:
+                    completed_result = results[idx]
+                    assert completed_result is not None
+                    pr_model = completed_result.model or model
+                    priced = resolve_cost(completed_result.usage, pr_model)
+                    halted = cost_gate.record(priced.total_cost)
+                    if halted:
                         logger.info(
-                            "auto-stop: convergence reached at n=%d; cancelling pending futures",
-                            convergence_tracker.overall_converged_at or 0,
+                            "cost gate tripped after %d/%d panelists; cancelling pending futures",
+                            cost_gate.completed,
+                            len(personas),
                         )
                         for pending_future in future_to_index:
                             if not pending_future.done():
                                 pending_future.cancel()
                         break
-
-            # sp-utnk: cost-gate check. Price the completed panelist using
-            # its per-panelist model (falls back to the run-level default)
-            # and record against the gate. If the projected run total
-            # exceeds the gate, cancel pending futures and return what we
-            # have — the caller synthesizes a partial, run_invalid result.
-            if cost_gate is not None and results[idx] is not None:
-                completed_result = results[idx]
-                assert completed_result is not None
-                pr_model = completed_result.model or model
-                priced = resolve_cost(completed_result.usage, pr_model)
-                halted = cost_gate.record(priced.total_cost)
-                if halted:
-                    logger.info(
-                        "cost gate tripped after %d/%d panelists; cancelling pending futures",
-                        cost_gate.completed,
-                        len(personas),
-                    )
-                    for pending_future in future_to_index:
-                        if not pending_future.done():
-                            pending_future.cancel()
-                    break
+        except KeyboardInterrupt:
+            # sp-56pb: surface partial results instead of losing them. SIGINT
+            # is one of the four abort paths that must produce a valid,
+            # partial JSON result. We cancel pending futures so the executor
+            # does not block on work the user has already given up on, then
+            # raise RunAbortedError so the caller can classify the halt and
+            # emit the standard partial-JSON envelope.
+            logger.warning(
+                "panel run interrupted by SIGINT after %d panelist(s)", sum(1 for r in results if r is not None)
+            )
+            sigint_aborted = True
+            for pending_future in future_to_index:
+                if not pending_future.done():
+                    pending_future.cancel()
 
     # All slots should be filled (unless auto-stop cancelled some); drop Nones
-    return [r for r in results if r is not None], registry, out_sessions
+    final_results = [r for r in results if r is not None]
+    if sigint_aborted:
+        raise RunAbortedError(
+            reason="sigint",
+            results=final_results,
+            registry=registry,
+            sessions=out_sessions,
+        )
+    return final_results, registry, out_sessions
 
 
 def _inspect_bounded_questions(

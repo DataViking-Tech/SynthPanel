@@ -62,7 +62,7 @@ from synth_panel.credentials import has_credential
 from synth_panel.instrument import Instrument, InstrumentError, parse_instrument
 from synth_panel.llm.client import LLMClient
 from synth_panel.metadata import PanelTimer, build_metadata
-from synth_panel.orchestrator import PanelistResult, run_panel_parallel
+from synth_panel.orchestrator import PanelistResult, RunAbortedError, run_panel_parallel
 from synth_panel.persistence import Session
 from synth_panel.perturbation import generate_panel_variants
 from synth_panel.prompts import (
@@ -1472,6 +1472,10 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         )
         checkpoint_writer.install_signal_handlers()
 
+    # sp-56pb: initialized pre-branch so the aggregator block after the
+    # blend vs. standard if/else can reference it unconditionally.
+    sigint_halted = False
+
     if blend_mode and model_spec:
         # ── Blend mode: run full panel once per model, then blend ────
         from synth_panel.ensemble import blend_distributions, ensemble_run
@@ -1527,6 +1531,20 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 convergence_tracker=convergence_tracker,
                 on_panelist_complete=_on_complete if checkpoint_writer else None,
                 cost_gate=cost_gate,
+            )
+        except RunAbortedError as abort_exc:
+            # sp-56pb: SIGINT path. Surface whatever panelists finished
+            # before the signal landed as a valid partial JSON envelope;
+            # exit non-zero so automation detects the abort without parsing
+            # banner text.
+            sigint_halted = abort_exc.reason == "sigint"
+            panelist_results = abort_exc.results
+            _registry = abort_exc.registry
+            _sessions = abort_exc.sessions
+            print(
+                "panel run interrupted (SIGINT); emitting partial result for "
+                f"{len(panelist_results)}/{len(active_personas)} panelist(s)",
+                file=sys.stderr,
             )
         finally:
             if checkpoint_writer is not None:
@@ -1624,6 +1642,14 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     if cost_gate_halted:
         run_invalid = True
 
+    # sp-56pb: SIGINT aborts the run-panel loop. Whatever panelists
+    # already landed are preserved as the partial prefix — mark the run
+    # invalid so consumers don't mistake the truncated output for a
+    # successful run, and skip synthesis for the same reason we skip it
+    # on a cost-halt (truncated panel ≠ trustworthy synthesis input).
+    if sigint_halted:
+        run_invalid = True
+
     # Compute panelist costs (needed before synthesis for cost estimate).
     # For multi-model runs, sum the per-model costs so the total reflects
     # each provider's real rate; single-model runs keep the legacy path.
@@ -1639,6 +1665,11 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     skip_synthesis = getattr(args, "no_synthesis", False)
     if run_invalid or strict_violation:
         skip_synthesis = True  # don't synthesize garbage
+    if sigint_halted:
+        # sp-56pb: SIGINT halts the panel loop; synthesizing over a
+        # user-interrupted partial wastes spend and produces a result
+        # the operator never asked for.
+        skip_synthesis = True
     synthesis_result = None
     synthesis_error_payload: dict[str, Any] | None = None
 
@@ -2038,6 +2069,26 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             # CI/MCP consumers can detect the "every panelist failed"
             # case without parsing banner text.
             extra["total_failure"] = total_failure
+            # sp-56pb: specific abort_reason so downstream tooling can
+            # distinguish total-failure from other invalid runs without
+            # parsing diagnostic text. When every sampled error points at
+            # the LLM client's rate-limit budget running out, classify
+            # the abort as rate-limit-exhausted so operators know to
+            # raise --rate-limit-rps or --max-retries instead of chasing
+            # a model issue. Cost-exceeded takes precedence (it got in
+            # first above) because a halted prefix is a more specific
+            # explanation than "every panelist failed".
+            if "abort_reason" not in extra:
+                extra["abort_reason"] = _classify_total_failure_abort_reason(total_failure)
+        # sp-56pb: SIGINT is a first-class abort path. Surface a
+        # top-level ``abort_reason`` so MCP/CI consumers can key on it
+        # without scraping stderr. If a prior clause (cost gate, total
+        # failure) already claimed abort_reason we leave that value
+        # alone — those are the *cause* of the halt; SIGINT arrived on
+        # top of it.
+        if sigint_halted and "abort_reason" not in extra:
+            extra["abort_reason"] = "sigint"
+            extra["halted_at_panelist"] = len(panelist_results)
         if synthesis_error_payload is not None:
             # sp-avmm: top-level synthesis_error so JSON/NDJSON consumers
             # see the failure without walking into the synthesis dict.
@@ -2141,6 +2192,45 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     if run_invalid:
         return 2
     return 0
+
+
+# sp-56pb: substrings that mark a panelist failure as rooted in rate-limit
+# exhaustion. The LLM client raises ``LLMError`` with category
+# ``RETRIES_EXHAUSTED`` after the rate-limit retry budget is spent; the
+# stringified form leaks "retries exhausted" and/or "rate limit" into
+# the panelist error message. Matching on substrings keeps us resilient
+# to future wording changes as long as one of these tokens survives.
+_RATE_LIMIT_ABORT_MARKERS = (
+    "retries_exhausted",
+    "retries exhausted",
+    "rate_limit",
+    "rate limit",
+    "429",
+)
+
+
+def _classify_total_failure_abort_reason(diagnostic: dict[str, Any]) -> str:
+    """Map a total-failure diagnostic to a specific ``abort_reason`` tag.
+
+    Returns ``"rate_limit_exhausted"`` when every sampled panelist error
+    name-checks a rate-limit marker, otherwise ``"total_failure"``. The
+    caller surfaces this at the top level of the JSON output so consumers
+    can treat "the whole panel rate-limited out" distinctly from other
+    total failures without having to parse the diagnostic envelope.
+    """
+    sample_errors = diagnostic.get("sample_errors") or []
+    if not sample_errors:
+        return "total_failure"
+    for entry in sample_errors:
+        # ``sample_errors`` is a list of (persona, error_message) tuples
+        # on construction, but JSON round-trip turns them into lists.
+        if isinstance(entry, (tuple, list)) and len(entry) >= 2:
+            msg = str(entry[1]).lower()
+        else:
+            msg = str(entry).lower()
+        if not any(marker in msg for marker in _RATE_LIMIT_ABORT_MARKERS):
+            return "total_failure"
+    return "rate_limit_exhausted"
 
 
 def _analyze_failures(
