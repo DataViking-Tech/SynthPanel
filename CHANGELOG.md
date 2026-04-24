@@ -6,6 +6,32 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-04-24
+
+Minor bump shipping the `sp-i2ub` scaled-orchestration epic (panelist-level
+checkpointing, mid-run cost gate, valid-partial-JSON abort discipline), a
+6-bug loudness sweep that converts silent failures into loud ones, and two
+CI hygiene fixes.
+
+### Added
+- (sp-hsk3) Panelist-level checkpointing with `--resume <run-id>`: persists run state every K=25 panelists (override via `--checkpoint-dir PATH`, default `~/.synthpanel/checkpoints/<run-id>/`). Auto-checkpoint on SIGINT/SIGTERM. `--resume` picks up without reprocessing completed panelists.
+- (sp-4hhk, replaces sp-utnk) `--max-cost <USD>` mid-run projected-total cost gate. Projected = `running_cost / current_n * total_n`; halt gracefully when projected exceeds threshold. Halt produces valid partial JSON with `run_invalid: true`, `cost_exceeded: true`, `halted_at_panelist`.
+- (sp-56pb) Valid partial JSON on every abort path: rate-exhaustion, SIGINT, `--max-cost` gate, and individual panelist failure all produce parseable JSON for completed panelists `0..k` with `run_invalid: true` and a specific `abort_reason`. Exit code is non-zero (2) on abort.
+
+### Changed (loudness)
+- (sp-s1is) Alias config parse failures (YAML/JSON) now log warnings instead of silently returning an empty dict.
+- (sp-qvqx) Synthesis with a partial structured payload now fails loudly instead of yielding empty fields.
+- (sp-0ozi) MCP `extend_panel` surfaces synthesis exceptions in the tool response payload (was `synth: null`).
+- (sp-t5ok) Condition evaluator warns loudly on unknown condition types and missing sentiment client (was silent default-True).
+- (sp-319x) Orchestrator records follow-up exceptions in the response payload (was silently dropped).
+
+### Fixed
+- (sp-rmtj) `test_aliases` fixture isolated from the developer's `~/.synthpanel/aliases.yaml` (was flaky on machines with non-default aliases).
+
+### CI
+- (sp-42i) Auto-tag workflow now fails loudly on release PRs without a semver label, defaulting to `semver:patch` when the title starts with `chore(release):`.
+- (sp-kdya) `pip-audit` ignores CVE-2026-3219 in pip 26.0.1 (no patched pip released yet; remove ignore once fix lands).
+
 ## [0.10.0] - 2026-04-23
 
 Minor bump shipping three completed QRSPI epics — `sp-viz-layer` (post-hoc
@@ -261,7 +287,9 @@ Patch release in the 0.7.x series. See the [README Versions table](README.md#ver
 - Rounds-shaped panel output with `path`, `terminal_round`, and `warnings` fields
 - `extend_panel` MCP tool for ad-hoc follow-up rounds
 
-[Unreleased]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.9.9...HEAD
+[Unreleased]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.10.0...v0.11.0
+[0.10.0]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.9.9...v0.10.0
 [0.9.9]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.9.8...v0.9.9
 [0.9.8]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.9.7...v0.9.8
 [0.9.7]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.9.6...v0.9.7
