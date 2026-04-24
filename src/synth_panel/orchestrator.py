@@ -543,6 +543,7 @@ def run_panel_parallel(
     top_p: float | None = None,
     persona_models: dict[str, str] | None = None,
     convergence_tracker: ConvergenceTracker | None = None,
+    on_panelist_complete: Callable[[PanelistResult], None] | None = None,
 ) -> tuple[list[PanelistResult], WorkerRegistry, dict[str, Session]]:
     """Run all panelists in parallel and return ordered results.
 
@@ -573,6 +574,12 @@ def run_panel_parallel(
             cancelled and ``run_panel_parallel`` returns only the panelists
             that had already finished. Errored panelists are still surfaced
             — they never contribute to the running distributions.
+        on_panelist_complete: Optional callback invoked once per panelist the
+            moment their future resolves (sp-hsk3). Used by
+            :mod:`synth_panel.checkpoint` to snapshot progress every K
+            completions so a crashed or SIGINT'd run can resume. Exceptions
+            raised by the callback are logged and suppressed — a broken
+            checkpoint writer must never kill a live run.
 
     Returns:
         Tuple of (ordered results matching persona order, registry,
@@ -655,6 +662,20 @@ def run_panel_parallel(
                     error=str(exc),
                     model=model,
                 )
+
+            # sp-hsk3: invoke the checkpoint callback for every resolved
+            # panelist, success or failure. Errored panelists still count
+            # as "done" for resume purposes — otherwise a persistent
+            # upstream outage would stall the cadence forever.
+            if on_panelist_complete is not None and results[idx] is not None:
+                try:
+                    on_panelist_complete(results[idx])  # type: ignore[arg-type]
+                except Exception as cb_exc:  # pragma: no cover - defensive
+                    logger.warning(
+                        "on_panelist_complete callback failed: %s: %s",
+                        type(cb_exc).__name__,
+                        cb_exc,
+                    )
 
             if convergence_tracker is not None and results[idx] is not None:
                 completed_result = results[idx]

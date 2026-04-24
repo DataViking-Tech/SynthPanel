@@ -23,6 +23,18 @@ from synth_panel._runners import (
     format_synthesis_overflow_message,
     format_total_failure_message,
 )
+from synth_panel.checkpoint import (
+    DEFAULT_CHECKPOINT_EVERY,
+    CheckpointDriftError,
+    CheckpointError,
+    CheckpointNotFoundError,
+    CheckpointWriter,
+    checkpoint_dir_for,
+    default_checkpoint_root,
+    ensure_config_matches,
+    load_checkpoint,
+    new_run_id,
+)
 from synth_panel.cli.output import OutputFormat, emit
 from synth_panel.convergence import (
     DEFAULT_CHECK_EVERY,
@@ -753,6 +765,84 @@ def _emit_dry_run_preview(
     emit(fmt, message="Dry-run preview", extra=preview)
 
 
+# ── sp-hsk3: checkpoint helpers ──────────────────────────────────────
+# These bridge :mod:`synth_panel.checkpoint` (which speaks JSON dicts,
+# no domain types) with the orchestrator's :class:`PanelistResult`.
+# Kept here rather than in ``checkpoint.py`` so that module stays free
+# of CLI / cost concerns and is reusable from the MCP surface later.
+
+
+def _panelist_result_to_ckpt_dict(pr: PanelistResult, fallback_model: str) -> dict[str, Any]:
+    """Serialize a :class:`PanelistResult` in the same shape the CLI emits."""
+    pr_model = pr.model or fallback_model
+    pricing, _is_estimated = lookup_pricing(pr_model)
+    cost = estimate_cost(pr.usage, pricing)
+    record: dict[str, Any] = {
+        "persona": pr.persona_name,
+        "responses": pr.responses,
+        "usage": pr.usage.to_dict(),
+        "cost": cost.format_usd(),
+        "error": pr.error,
+    }
+    if pr.model:
+        record["model"] = pr.model
+    return record
+
+
+def _panelist_result_from_dict(record: dict[str, Any]) -> PanelistResult:
+    """Reconstitute a :class:`PanelistResult` from a checkpoint record."""
+    usage_dict = record.get("usage") or {}
+    usage = TokenUsage.from_dict(usage_dict) if usage_dict else ZERO_USAGE
+    return PanelistResult(
+        persona_name=record.get("persona", "Anonymous"),
+        responses=list(record.get("responses") or []),
+        usage=usage,
+        error=record.get("error"),
+        model=record.get("model"),
+    )
+
+
+def _merge_usage_dicts(current: dict[str, Any], increment: dict[str, Any]) -> dict[str, Any]:
+    """Add two ``TokenUsage.to_dict()`` payloads without dropping provider cost."""
+    from synth_panel.checkpoint import _merge_usage
+
+    return _merge_usage(current, increment)
+
+
+def _build_run_config_fingerprint(
+    *,
+    personas: list[dict[str, Any]],
+    questions: list[dict[str, Any]],
+    model: str,
+    persona_models: dict[str, str] | None,
+    temperature: float | None,
+    top_p: float | None,
+    response_schema: dict[str, Any] | None,
+    extract_schema: dict[str, Any] | None,
+    template_vars: dict[str, str] | None,
+) -> dict[str, Any]:
+    """Build a stable-key config dict whose hash detects resume drift.
+
+    Only the fields that would materially alter panelist responses are
+    included. Things like --checkpoint-every or stdout formatting are
+    deliberately excluded so a user can change them mid-resume.
+    """
+    question_texts = [(q.get("text") if isinstance(q, dict) else str(q)) for q in questions]
+    return {
+        "persona_names": [p.get("name", "Anonymous") for p in personas],
+        "persona_count": len(personas),
+        "question_texts": question_texts,
+        "question_count": len(questions),
+        "model": model,
+        "persona_models": dict(persona_models) if persona_models else None,
+        "temperature": temperature,
+        "top_p": top_p,
+        "response_schema": response_schema,
+        "extract_schema": extract_schema,
+        "template_vars": dict(template_vars) if template_vars else None,
+    }
+
+
 def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """Run a panel: load personas + instrument, run panelists in parallel."""
     # ── sp-prof: profile loading ──────────────────────────────────────
@@ -1277,6 +1367,95 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
 
     # Run all panelists in parallel via the orchestrator
     blend_result = None  # populated only when --blend is active
+
+    # ── sp-hsk3: checkpoint + resume wiring ────────────────────────────
+    # We snapshot progress every K completed panelists so a crashed or
+    # SIGINT'd run can resume via `synthpanel panel run --resume <id>`.
+    # Only wired into the standard (non-ensemble, non-blend) path: those
+    # paths have their own multi-run structure and would need their own
+    # checkpoint strategy. If the user combined them with --resume or
+    # --checkpoint-dir we fail loud earlier rather than silently ignoring
+    # the flags.
+    checkpoint_root = getattr(args, "checkpoint_dir", None)
+    resume_id = getattr(args, "resume", None)
+    checkpoint_every = getattr(args, "checkpoint_every", None) or DEFAULT_CHECKPOINT_EVERY
+    wants_checkpoint = bool(checkpoint_root) or bool(resume_id)
+    if wants_checkpoint and (blend_mode or ensemble_mode or getattr(args, "variants", None)):
+        print(
+            "Error: --checkpoint-dir and --resume are not supported with "
+            "--blend, --models ensemble runs, or --variants; rerun without "
+            "those flags.",
+            file=sys.stderr,
+        )
+        return 1
+
+    checkpoint_writer: CheckpointWriter | None = None
+    preloaded_results: list[PanelistResult] = []
+    resumed_config_note: str | None = None
+    active_personas = personas  # may be filtered below on resume
+    if wants_checkpoint:
+        root_path = Path(checkpoint_root) if checkpoint_root else default_checkpoint_root()
+        run_config_dict = _build_run_config_fingerprint(
+            personas=personas,
+            questions=questions,
+            model=model,
+            persona_models=persona_models,
+            temperature=temperature,
+            top_p=top_p,
+            response_schema=response_schema,
+            extract_schema=extract_schema,
+            template_vars=template_vars,
+        )
+        if resume_id:
+            try:
+                ckpt = load_checkpoint(resume_id, root_path)
+            except CheckpointNotFoundError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+            except CheckpointError as exc:
+                print(f"Error: checkpoint load failed: {exc}", file=sys.stderr)
+                return 1
+            try:
+                ensure_config_matches(ckpt, run_config_dict)
+            except CheckpointDriftError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+            # Reconstitute completed panelists as PanelistResult so the
+            # downstream output pipeline (cost/metadata/synthesis) sees
+            # a single unified list across the original + resumed slices.
+            preloaded_results = [_panelist_result_from_dict(r) for r in ckpt.completed]
+            skip = {pr.persona_name for pr in preloaded_results}
+            active_personas = [p for p in personas if p.get("name", "Anonymous") not in skip]
+            resumed_config_note = (
+                f"resumed run {resume_id}: {len(preloaded_results)} panelists "
+                f"already complete, {len(active_personas)} remaining"
+            )
+            print(resumed_config_note, file=sys.stderr)
+            run_id = resume_id
+            directory = checkpoint_dir_for(run_id, root_path)
+        else:
+            run_id = new_run_id()
+            directory = checkpoint_dir_for(run_id, root_path)
+            print(
+                f"Checkpointing enabled: run_id={run_id} dir={directory} every={checkpoint_every}",
+                file=sys.stderr,
+            )
+
+        preloaded_usage_dict = ZERO_USAGE.to_dict()
+        for pr in preloaded_results:
+            preloaded_usage_dict = _merge_usage_dicts(preloaded_usage_dict, pr.usage.to_dict())
+
+        checkpoint_writer = CheckpointWriter(
+            run_id=run_id,
+            directory=directory,
+            config=run_config_dict,
+            all_personas=[p.get("name", "Anonymous") for p in personas],
+            every=checkpoint_every,
+            preloaded_completed=[_panelist_result_to_ckpt_dict(pr, model) for pr in preloaded_results],
+            preloaded_usage=preloaded_usage_dict,
+        )
+        checkpoint_writer.install_signal_handlers()
+
     if blend_mode and model_spec:
         # ── Blend mode: run full panel once per model, then blend ────
         from synth_panel.ensemble import blend_distributions, ensemble_run
@@ -1301,21 +1480,48 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         # Flatten all panelist results across models for output + synthesis
         panelist_results = [pr for mr in ensemble.model_results for pr in mr.panelist_results]
     else:
-        panelist_results, _registry, _sessions = run_panel_parallel(
-            client=client,
-            personas=personas,
-            questions=questions,
-            model=model,
-            system_prompt_fn=system_prompt_fn,
-            question_prompt_fn=build_question_prompt,
-            response_schema=response_schema,
-            extract_schema=extract_schema,
-            temperature=temperature,
-            top_p=top_p,
-            persona_models=persona_models,
-            max_workers=max_concurrent,
-            convergence_tracker=convergence_tracker,
-        )
+
+        def _on_complete(pr: PanelistResult) -> None:
+            if checkpoint_writer is None:
+                return
+            record = _panelist_result_to_ckpt_dict(pr, model)
+            checkpoint_writer.record_completed(record, pr.usage.to_dict())
+
+        try:
+            panelist_results, _registry, _sessions = run_panel_parallel(
+                client=client,
+                personas=active_personas,
+                questions=questions,
+                model=model,
+                system_prompt_fn=system_prompt_fn,
+                question_prompt_fn=build_question_prompt,
+                response_schema=response_schema,
+                extract_schema=extract_schema,
+                temperature=temperature,
+                top_p=top_p,
+                persona_models=persona_models,
+                max_workers=max_concurrent,
+                convergence_tracker=convergence_tracker,
+                on_panelist_complete=_on_complete if checkpoint_writer else None,
+            )
+        finally:
+            if checkpoint_writer is not None:
+                try:
+                    checkpoint_writer.flush(force=True)
+                finally:
+                    checkpoint_writer.remove_signal_handlers()
+
+        # sp-hsk3: merge preloaded (resumed) results with fresh ones, in
+        # the original persona order. Preloaded results are guaranteed to
+        # be disjoint from `panelist_results` because we filtered their
+        # names out of `active_personas`.
+        if preloaded_results:
+            by_name: dict[str, PanelistResult] = {pr.persona_name: pr for pr in preloaded_results}
+            for pr in panelist_results:
+                by_name[pr.persona_name] = pr
+            panelist_results = [
+                by_name[p.get("name", "Anonymous")] for p in personas if p.get("name", "Anonymous") in by_name
+            ]
 
     # Build output results and aggregate panelist usage
     results: list[dict[str, Any]] = []
