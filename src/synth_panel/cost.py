@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
@@ -711,3 +712,119 @@ class BudgetGate:
     @property
     def remaining(self) -> int:
         return max(0, self.max_tokens - self._tracker.cumulative_usage.total_tokens)
+
+
+# ---------------------------------------------------------------------------
+# sp-utnk: Mid-run cost gate (projected-total ceiling)
+# ---------------------------------------------------------------------------
+
+
+class CostGate:
+    """Projected-total USD cost ceiling for a panel run.
+
+    Records each panelist's completed cost as the panel progresses, then
+    extrapolates the remaining spend linearly:
+
+        projected_total = running_cost / completed * total_panelists
+
+    When ``projected_total`` exceeds ``max_cost_usd``, :meth:`should_halt`
+    returns ``True`` and callers should stop dispatching further panelists
+    and surface a partial, ``run_invalid`` result.
+
+    Thread-safe: all mutations and reads are guarded by an internal lock
+    so the orchestrator can call :meth:`record` from completion callbacks
+    in any worker thread.
+
+    The first panelist's completion is always allowed — a single-sample
+    projection ``cost * total_panelists`` is noisy and the projection only
+    has meaning once at least one panelist has finished. Once halted, the
+    gate stays halted (idempotent) so late-arriving completions do not
+    flip it back off.
+    """
+
+    def __init__(self, max_cost_usd: float, total_panelists: int) -> None:
+        if max_cost_usd <= 0:
+            raise ValueError(f"max_cost_usd must be > 0, got {max_cost_usd!r}")
+        if total_panelists <= 0:
+            raise ValueError(f"total_panelists must be > 0, got {total_panelists!r}")
+        self.max_cost_usd = float(max_cost_usd)
+        self.total_panelists = int(total_panelists)
+        self._lock = threading.Lock()
+        self._running_cost: float = 0.0
+        self._completed: int = 0
+        self._halted: bool = False
+        self._halted_projection: float | None = None
+
+    def record(self, panelist_cost_usd: float) -> bool:
+        """Record one panelist's final cost; return True if the gate is now halted.
+
+        ``panelist_cost_usd`` should already include synthesis overhead
+        attributable to that panelist *if* the caller is tracking it that
+        way; otherwise pass just the panelist's LLM turn costs. Negative
+        values are treated as 0.
+        """
+        cost = max(0.0, float(panelist_cost_usd))
+        with self._lock:
+            self._running_cost += cost
+            self._completed += 1
+            projected = self._projected_total_locked()
+            if projected > self.max_cost_usd and not self._halted:
+                self._halted = True
+                self._halted_projection = projected
+                logger.warning(
+                    "cost gate tripped: projected $%.4f > max $%.4f after %d/%d panelists (running $%.4f)",
+                    projected,
+                    self.max_cost_usd,
+                    self._completed,
+                    self.total_panelists,
+                    self._running_cost,
+                )
+            return self._halted
+
+    def should_halt(self) -> bool:
+        with self._lock:
+            return self._halted
+
+    @property
+    def running_cost(self) -> float:
+        with self._lock:
+            return self._running_cost
+
+    @property
+    def completed(self) -> int:
+        with self._lock:
+            return self._completed
+
+    @property
+    def halted_projection(self) -> float | None:
+        """The projected total at the moment the gate halted, or None."""
+        with self._lock:
+            return self._halted_projection
+
+    def projected_total(self) -> float:
+        """Linear extrapolation of running cost to all panelists.
+
+        Returns 0.0 before any panelist completes.
+        """
+        with self._lock:
+            return self._projected_total_locked()
+
+    def _projected_total_locked(self) -> float:
+        if self._completed == 0:
+            return 0.0
+        return self._running_cost / self._completed * self.total_panelists
+
+    def snapshot(self) -> dict[str, float | int | bool | None]:
+        """Machine-readable status for structured output."""
+        with self._lock:
+            return {
+                "max_cost_usd": self.max_cost_usd,
+                "running_cost_usd": round(self._running_cost, 6),
+                "completed": self._completed,
+                "total_panelists": self.total_panelists,
+                "projected_total_usd": round(self._projected_total_locked(), 6),
+                "halted": self._halted,
+                "halted_projection_usd": (
+                    round(self._halted_projection, 6) if self._halted_projection is not None else None
+                ),
+            }
