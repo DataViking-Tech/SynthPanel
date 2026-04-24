@@ -425,6 +425,42 @@ class TestRunPanelParallel:
         assert results[0].responses[0]["question"] == "Main Q"
         assert results[0].responses[1].get("follow_up") is True
 
+    def test_follow_up_exception_recorded_loudly(self):
+        """sp-319x: follow-up turn exceptions must appear as error records, not be silently dropped."""
+        call_count = 0
+        lock = threading.Lock()
+
+        def side_effect(request):
+            nonlocal call_count
+            with lock:
+                call_count += 1
+                current = call_count
+            if current == 1:
+                return _make_text_response("Main answer")
+            raise ConnectionError("follow-up API down")
+
+        client = MagicMock()
+        client.send = MagicMock(side_effect=side_effect)
+
+        personas = [{"name": "Alice"}]
+        questions = [{"text": "Main Q", "follow_ups": ["Tell me more"]}]
+
+        results, _registry, _sessions = run_panel_parallel(
+            client=client,
+            personas=personas,
+            questions=questions,
+            model="sonnet",
+            system_prompt_fn=_simple_system_prompt,
+            question_prompt_fn=_simple_question_prompt,
+        )
+
+        resp = results[0].responses
+        assert len(resp) == 2, "follow-up must appear as an error record, not vanish"
+        assert resp[1].get("follow_up") is True
+        assert resp[1].get("error") is True
+        assert resp[1]["question"] == "Tell me more"
+        assert "follow-up API down" in resp[1]["response"]
+
     def test_usage_accumulated_per_panelist(self):
         usage = LLMTokenUsage(input_tokens=100, output_tokens=50)
         responses = [_make_text_response(usage=usage) for _ in range(2)]

@@ -460,8 +460,21 @@ def _run_panelist(
                         }
                     )
                     tracker.record_turn(fu_summary.usage)
-                except Exception:
-                    continue
+                except Exception as exc:
+                    logger.warning(
+                        "panelist %s follow-up failed: %s: %s",
+                        name,
+                        type(exc).__name__,
+                        exc,
+                    )
+                    responses.append(
+                        {
+                            "question": fu["text"],
+                            "response": f"[error: {exc}]",
+                            "error": True,
+                            "follow_up": True,
+                        }
+                    )
 
         # Transition: running → finished
         registry.set_result(worker_id, {"responses": responses}, tracker.cumulative_usage)
