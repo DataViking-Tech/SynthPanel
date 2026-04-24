@@ -396,6 +396,46 @@ def build_parser() -> argparse.ArgumentParser:
             "values (e.g. 0.5 for one request every two seconds)."
         ),
     )
+    # sp-hsk3: panelist-level checkpointing + resume
+    panel_run_parser.add_argument(
+        "--checkpoint-dir",
+        default=None,
+        metavar="PATH",
+        dest="checkpoint_dir",
+        help=(
+            "Directory under which to persist per-run checkpoints. Each run "
+            "gets its own subdirectory (<PATH>/<run-id>/state.json). "
+            "Defaults to $SYNTHPANEL_CHECKPOINT_ROOT or "
+            "~/.synthpanel/checkpoints. Setting this flag opts into "
+            "checkpointing; omit it to run without on-disk snapshots."
+        ),
+    )
+    panel_run_parser.add_argument(
+        "--checkpoint-every",
+        type=int,
+        default=None,
+        metavar="N",
+        dest="checkpoint_every",
+        help=(
+            "Flush a checkpoint every N completed panelists (default: 25). "
+            "Lower values mean more frequent disk writes; higher values "
+            "risk losing more progress on abrupt termination. Only takes "
+            "effect with --checkpoint-dir or --resume."
+        ),
+    )
+    panel_run_parser.add_argument(
+        "--resume",
+        default=None,
+        metavar="RUN_ID",
+        dest="resume",
+        help=(
+            "Resume a previously-checkpointed run by id. Skips panelists "
+            "that already completed, replays the rest, and merges results "
+            "into one final output. Refuses to start if the current config "
+            "does not match the checkpointed config — rerun without "
+            "--resume or restore the original config to continue."
+        ),
+    )
     # sp-yaru: convergence telemetry for large panels
     panel_run_parser.add_argument(
         "--convergence-check-every",
