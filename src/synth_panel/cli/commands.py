@@ -141,6 +141,47 @@ def _resolve_default_model() -> tuple[str, str | None]:
     return "sonnet", None
 
 
+def _apply_best_model_for(args: argparse.Namespace, spec: str) -> str | None:
+    """Resolve a SynthBench recommendation and stamp it onto ``args.model``.
+
+    Returns the picked model on success, or ``None`` when the
+    leaderboard is unavailable / yields no candidate (the caller falls
+    back to whatever ``--model`` / default was already in effect).
+    Emits the recommendation line to stderr so users can cancel and
+    override.
+    """
+    from synth_panel import synthbench
+
+    try:
+        rec = synthbench.recommend(spec)
+    except ValueError as exc:
+        print(f"Error: --best-model-for: {exc}", file=sys.stderr)
+        return None
+    if rec is None:
+        print(
+            f"synthbench: no recommendation for '{spec}' — "
+            f"leaderboard unavailable or no matching entries; "
+            f"continuing with existing model selection.",
+            file=sys.stderr,
+        )
+        return None
+
+    print(rec.format_line(), file=sys.stderr)
+    if rec.low_confidence:
+        print(
+            f"synthbench: warning — recommendation has run_count={rec.run_count} "
+            f"(< {synthbench.MIN_RUN_COUNT}); results may be noisy.",
+            file=sys.stderr,
+        )
+    if rec.is_ensemble or rec.framework == "product":
+        print(
+            f"synthbench: note — top entry is a product/ensemble config; using underlying base model '{rec.model}'.",
+            file=sys.stderr,
+        )
+    args.model = rec.model
+    return rec.model
+
+
 def _resolve_model(args: argparse.Namespace) -> str:
     """Return the model alias from CLI args.
 
@@ -858,6 +899,25 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     if has_model and has_models:
         print("Error: --model and --models are mutually exclusive.", file=sys.stderr)
         return 1
+
+    # sp-zq3: --best-model-for consults the SynthBench leaderboard and
+    # overrides --model. Must be applied before _resolve_model() so the
+    # rest of the pipeline sees the recommended model as if the user had
+    # typed --model themselves.
+    best_for = getattr(args, "best_model_for", None)
+    if best_for:
+        if has_models:
+            print(
+                "Error: --best-model-for and --models are mutually exclusive.",
+                file=sys.stderr,
+            )
+            return 1
+        picked = _apply_best_model_for(args, best_for)
+        if picked is None:
+            # Fall through with whatever --model (or default) was already set.
+            # _apply_best_model_for has already printed a user-visible
+            # "synthbench unavailable" line to stderr.
+            pass
 
     if not has_models:
         _announce_default_model(args)

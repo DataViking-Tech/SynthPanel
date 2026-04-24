@@ -525,6 +525,26 @@ def build_parser() -> argparse.ArgumentParser:
             "when the dataset has a single default question."
         ),
     )
+    # sp-zq3: SynthBench best-model picker
+    panel_run_parser.add_argument(
+        "--best-model-for",
+        default=None,
+        metavar="TOPIC[:DATASET]",
+        dest="best_model_for",
+        help=(
+            "Consult the SynthBench leaderboard (synthbench.org) and use "
+            "the top-ranked model for the given topic. Format: 'TOPIC' "
+            "(ranked by topic score against the default dataset "
+            "'globalopinionqa') or 'TOPIC:DATASET' (topic within a specific "
+            "dataset). Pass ':DATASET' with empty topic to rank by SPS "
+            "across a dataset instead. A recommendation line is printed to "
+            "stderr before the run. Overrides --model when present; "
+            "mutually exclusive with --models. Respects "
+            "SYNTHPANEL_SYNTHBENCH_OFFLINE / _REFRESH / _URL env vars. The "
+            "leaderboard is cached for 24h at "
+            "~/.synthpanel/synthbench-cache.json."
+        ),
+    )
     panel_run_parser.add_argument(
         "--calibrate-against",
         default=None,

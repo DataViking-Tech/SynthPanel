@@ -692,6 +692,21 @@ Env var entries override file entries, which override hardcoded defaults.
 Aliases from all tiers are merged, so you only need to specify the ones you
 want to add or change.
 
+### SynthBench-driven model picker
+
+`--best-model-for` consults the [SynthBench](https://synthbench.org)
+leaderboard and uses the top-ranked model for a topic or dataset:
+
+```bash
+synthpanel panel run --personas p.yaml --instrument s.yaml \
+    --best-model-for "Economy & Work"
+```
+
+The leaderboard is cached for 24 hours at
+`~/.synthpanel/synthbench-cache.json`. See
+[docs/recommended-models.md](docs/recommended-models.md) for the full
+rules, offline behaviour, and a use-case → top-model table.
+
 ## Architecture
 
 synthpanel is a research harness, not an LLM wrapper. It orchestrates the research workflow:
