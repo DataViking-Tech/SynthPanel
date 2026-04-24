@@ -65,7 +65,10 @@ jobs:
         run: pip install -e ".[dev,mcp]"
 
       - name: pip-audit
-        run: pip-audit
+        # CVE-2026-3219 affects pip 26.0.1 (the runner default) with no patched
+        # release yet. Ignore until a fixed pip ships, then drop this flag.
+        # Tracking: https://nvd.nist.gov/vuln/detail/CVE-2026-3219
+        run: pip-audit --ignore-vuln CVE-2026-3219
 
   test:
     runs-on: ubuntu-latest
