@@ -1269,11 +1269,11 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 file=sys.stderr,
             )
             return 2
-        from synth_panel.synthbench_submit import ACCOUNT_URL, API_KEY_ENV
+        from synth_panel.synthbench_submit import ACCOUNT_URL, API_KEY_ENV_NAME
 
-        if not os.environ.get(API_KEY_ENV):
+        if not os.environ.get(API_KEY_ENV_NAME):
             print(
-                f"Error: --submit-to-synthbench requires {API_KEY_ENV} in the "
+                f"Error: --submit-to-synthbench requires {API_KEY_ENV_NAME} in the "
                 f"environment. Mint a key at {ACCOUNT_URL}.",
                 file=sys.stderr,
             )

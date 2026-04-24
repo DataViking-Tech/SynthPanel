@@ -39,7 +39,7 @@ from synth_panel.__version__ import __version__
 
 DEFAULT_API_URL = "https://api.synthbench.org"
 API_URL_ENV = "SYNTHBENCH_API_URL"
-API_KEY_ENV = "SYNTHBENCH_API_KEY"
+API_KEY_ENV_NAME = "SYNTHBENCH_API_KEY"
 ACCOUNT_URL = "https://synthbench.org/account"
 SUBMIT_TIMEOUT = 30.0
 
@@ -401,12 +401,12 @@ def submit_panel_result(
     if not ok:
         return SubmissionResult(accepted=False, status="not_submittable", error=reason)
 
-    key = api_key or os.environ.get(API_KEY_ENV)
+    key = api_key or os.environ.get(API_KEY_ENV_NAME)
     if not key:
         return SubmissionResult(
             accepted=False,
             status="missing_api_key",
-            error=f"{API_KEY_ENV} not set; mint a key at {ACCOUNT_URL}",
+            error=f"{API_KEY_ENV_NAME} not set; mint a key at {ACCOUNT_URL}",
         )
 
     if not skip_consent and not consent_recorded():

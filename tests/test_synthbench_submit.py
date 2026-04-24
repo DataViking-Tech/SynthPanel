@@ -29,7 +29,7 @@ import httpx
 import pytest
 
 from synth_panel.synthbench_submit import (
-    API_KEY_ENV,
+    API_KEY_ENV_NAME,
     CONSENT_VERSION,
     build_submission_payload,
     consent_recorded,
@@ -331,7 +331,7 @@ def test_submit_handles_non_json_response():
 def test_submit_panel_result_missing_api_key_short_circuits(
     calibrated_extra, baseline_payload, model_distributions, monkeypatch, isolated_consent
 ):
-    monkeypatch.delenv(API_KEY_ENV, raising=False)
+    monkeypatch.delenv(API_KEY_ENV_NAME, raising=False)
     result = submit_panel_result(
         panel_extra=calibrated_extra,
         calibration_spec="gss:HAPPY",
@@ -345,7 +345,7 @@ def test_submit_panel_result_missing_api_key_short_circuits(
 def test_submit_panel_result_not_submittable_skips_network(
     baseline_payload, model_distributions, monkeypatch, isolated_consent
 ):
-    monkeypatch.setenv(API_KEY_ENV, "sk-test")
+    monkeypatch.setenv(API_KEY_ENV_NAME, "sk-test")
     extra = {"run_invalid": True}
     result = submit_panel_result(
         panel_extra=extra,
@@ -360,7 +360,7 @@ def test_submit_panel_result_not_submittable_skips_network(
 def test_submit_panel_result_skip_consent_bypasses_prompt(
     calibrated_extra, baseline_payload, model_distributions, monkeypatch, isolated_consent
 ):
-    monkeypatch.setenv(API_KEY_ENV, "sk-test")
+    monkeypatch.setenv(API_KEY_ENV_NAME, "sk-test")
     posted = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -384,7 +384,7 @@ def test_submit_panel_result_skip_consent_bypasses_prompt(
 
 
 def test_submit_panel_result_empty_payload_skips_post(calibrated_extra, monkeypatch, isolated_consent):
-    monkeypatch.setenv(API_KEY_ENV, "sk-test")
+    monkeypatch.setenv(API_KEY_ENV_NAME, "sk-test")
     # Distributions empty → payload has zero per_question entries → skip POST.
 
     def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover
