@@ -133,7 +133,7 @@ arguments to override. Provider keys are read from environment variables
 (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`/`GEMINI_API_KEY`,
 `XAI_API_KEY`) — pass whichever your model requires.
 
-Pin to a specific version (`:0.10.0`) in production rather than `:latest`.
+Pin to a specific version (`:0.11.0`) in production rather than `:latest`.
 
 ## Use as a Python Library
 
@@ -825,6 +825,7 @@ baseline from [SynthBench](https://github.com/DataViking-Tech/synthbench) (insta
 
 | Version | Highlights |
 |---------|-----------|
+| 0.11.0 | `sp-i2ub` scaled-orchestration epic: panelist-level checkpointing with `--resume <run-id>` and auto-checkpoint on SIGINT/SIGTERM (every K=25 panelists), `--max-cost <USD>` mid-run projected-total cost gate that halts gracefully with valid partial JSON, and valid-partial-JSON discipline on every abort path (rate-exhaustion, SIGINT, cost-gate, panelist failure) with `run_invalid: true` + specific `abort_reason` and exit code 2; 6-bug loudness sweep turning silent failures loud across alias parse, synthesis partial payload, MCP `extend_panel`, condition evaluator, orchestrator follow-up exceptions, and the `test_aliases` fixture; auto-tag now fails loudly on unlabeled release PRs; `pip-audit` ignores CVE-2026-3219 in pip 26.0.1 |
 | 0.10.0 | `synthpanel report` post-hoc Markdown renderer for saved panel results (behind `[report]` extra); inline SynthBench calibration via `panel run --calibrate-against DATASET:QUESTION` with auto-derived `pick_one` schema and `per_question[key].calibration` sub-object wire format; decentralized pack registry — `pack import gh:<user>/<repo>` with `--unverified`, `pack search`, `pack list --registry`, 24h cache + offline fallback; optional `version:` field on persona packs with opt-in shadow warning |
 | 0.9.9 | `--synthesis-strategy=auto` now routes to map-reduce on context overflow instead of hard-failing; OpenRouter alias resolution tightened for sub-1¢ local-table sanity checks; `--personas-merge` warns (or errors via `--personas-merge-on-collision`) on name collisions with bundled packs; version single-sourced from `src/synth_panel/__version__.py` with templated site render |
 | 0.9.8 | Fail-loud synthesis (context-overflow pre-flight + structured `synthesis_error`), per-question map-reduce synthesis (`--synthesis-strategy=single\|map-reduce\|auto`), response-schema validation with deterministic distributions for bounded question types, rate-limit-aware client (`--max-concurrent`, `--rate-limit-rps`), live convergence telemetry + `--auto-stop`, 4 new bundled persona packs (`job-seekers`, `recruiters-talent`, `product-research`, `ai-eval-buyers`) raising shipped personas 24 → 84, `/synthpanel-poll` slash command |
