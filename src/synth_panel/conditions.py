@@ -24,6 +24,11 @@ log = logging.getLogger(__name__)
 # A no-op context manager used when no lock is supplied.
 _noop_lock = contextlib.nullcontext()
 
+
+class ConditionError(ValueError):
+    """Raised when a follow-up condition string is malformed or unknown."""
+
+
 # ---------------------------------------------------------------------------
 # Evaluator registry
 # ---------------------------------------------------------------------------
@@ -39,6 +44,16 @@ EVALUATORS: dict[str, Callable[[str, str], bool]] = {
     "never": lambda _kw, _resp: False,
     "response_contains": _eval_contains,
 }
+
+# All condition type tokens that parse successfully. ``response_sentiment`` is
+# handled outside the EVALUATORS registry because it needs an LLM client.
+KNOWN_CONDITION_TYPES: frozenset[str] = frozenset({*EVALUATORS.keys(), "response_sentiment"})
+
+# Dedup tables so we warn loudly once per distinct problem rather than once
+# per evaluation (which would spam logs at panel scale). Entries persist for
+# the lifetime of the process.
+_warned_unknown_types: set[str] = set()
+_warned_missing_client: bool = False
 
 _SENTIMENT_PROMPT = (
     "Classify the sentiment of the following text as exactly one of: "
@@ -164,17 +179,67 @@ def evaluate_condition(
     # Handle response_sentiment separately (needs LLM client)
     if ctype == "response_sentiment":
         if client is None:
-            # Graceful degradation: no client → default to True
-            log.debug("response_sentiment: no client, defaulting to True")
+            # Graceful degradation: no client → default to True. Warn once so
+            # operators notice the silent always-fire, which is the opposite
+            # of the author's intent in adding a condition at all (sp-t5ok).
+            global _warned_missing_client
+            if not _warned_missing_client:
+                log.warning(
+                    "response_sentiment condition evaluated without an LLM client; "
+                    "defaulting to True (fires follow-up). Pass client= to evaluate_condition "
+                    "or configure an API key so gated follow-ups actually gate."
+                )
+                _warned_missing_client = True
+            else:
+                log.debug("response_sentiment: no client, defaulting to True")
             return True
         return _eval_sentiment(arg, response_text, client, sentiment_cache, sentiment_cache_lock)
 
     evaluator = EVALUATORS.get(ctype)
     if evaluator is None:
-        # Unknown condition type -- default to always (forward-compat)
+        # Unknown condition type → default to True for forward-compat, but
+        # warn once per distinct type. The likely cause is an instrument YAML
+        # typo (e.g. ``response_contians``) that would otherwise silently
+        # promote a gated follow-up to always-fire (sp-t5ok).
+        if ctype not in _warned_unknown_types:
+            log.warning(
+                "Unknown condition type %r; defaulting to True (fires follow-up). "
+                "Check your instrument YAML for a typo — known types: %s.",
+                ctype,
+                ", ".join(sorted(KNOWN_CONDITION_TYPES)),
+            )
+            _warned_unknown_types.add(ctype)
         return True
 
     return evaluator(arg, response_text)
+
+
+def validate_condition_string(condition: Any, *, context: str = "") -> None:
+    """Raise :class:`ConditionError` if *condition* does not parse to a known type.
+
+    Intended for parse-time validation (e.g. :mod:`synth_panel.instrument`) so
+    typos like ``response_contians: foo`` fail fast at load time instead of
+    silently defaulting to always-fire during a panel run (sp-t5ok).
+
+    ``always`` is permitted with or without an argument; the other parametric
+    types (``response_contains``, ``response_sentiment``) are permitted with
+    or without an argument here — empty-argument semantics are the evaluator's
+    responsibility.
+    """
+    prefix = f"{context}: " if context else ""
+    if not isinstance(condition, str):
+        raise ConditionError(f"{prefix}condition must be a string, got {type(condition).__name__}")
+
+    stripped = condition.strip()
+    if not stripped:
+        raise ConditionError(f"{prefix}condition must be a non-empty string")
+
+    ctype = stripped.partition(":")[0].strip().lower() if ":" in stripped else stripped.lower()
+    if ctype not in KNOWN_CONDITION_TYPES:
+        raise ConditionError(
+            f"{prefix}unknown condition type {ctype!r} in {condition!r}. "
+            f"Known types: {', '.join(sorted(KNOWN_CONDITION_TYPES))}."
+        )
 
 
 def normalize_follow_up(follow_up: str | dict) -> dict:
