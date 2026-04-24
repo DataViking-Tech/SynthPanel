@@ -436,6 +436,22 @@ def build_parser() -> argparse.ArgumentParser:
             "--resume or restore the original config to continue."
         ),
     )
+    # sp-utnk: mid-run cost gate (projected-total ceiling)
+    panel_run_parser.add_argument(
+        "--max-cost",
+        type=float,
+        default=None,
+        metavar="USD",
+        dest="max_cost",
+        help=(
+            "Hard ceiling on total panel spend, in USD. After each "
+            "panelist completes, running_cost / completed_n * total_n is "
+            "compared against this ceiling; if the projected total "
+            "exceeds it, the run halts gracefully and produces a valid "
+            "partial JSON result with run_invalid: true and "
+            "cost_exceeded: true. Exit code 2. Default: off."
+        ),
+    )
     # sp-yaru: convergence telemetry for large panels
     panel_run_parser.add_argument(
         "--convergence-check-every",
