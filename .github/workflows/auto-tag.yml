@@ -31,6 +31,7 @@ jobs:
         id: check
         env:
           LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           SEMVER_LABELS=$(echo "$LABELS" | jq -r '.[] | select(startswith("semver:"))' | grep -v '^semver:skip$' || true)
           SKIP=$(echo "$LABELS" | jq -r '.[] | select(. == "semver:skip")' || true)
@@ -44,6 +45,15 @@ jobs:
           COUNT=$(echo "$SEMVER_LABELS" | grep -c . || true)
 
           if [ "$COUNT" -eq 0 ]; then
+            # Release PRs (titled `chore(release): ...` or `release: ...`) MUST
+            # carry an explicit semver label. v0.9.2 (PR #163) merged without
+            # one, auto-tag silently skipped, PyPI publish never fired, and the
+            # release had to be cut by hand (sp-42i). Fail loudly for release
+            # PRs so the omission surfaces as a red check instead of vanishing.
+            if printf '%s' "$PR_TITLE" | grep -Eq '^(chore\(release\)|release):'; then
+              echo "::error::Release PR '$PR_TITLE' has no semver label. Add semver:patch, semver:minor, semver:major, or semver:skip and re-run this workflow."
+              exit 1
+            fi
             echo "No semver label found — skipping release"
             echo "skipped=true" >> "$GITHUB_OUTPUT"
             exit 0

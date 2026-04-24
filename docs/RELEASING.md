@@ -7,6 +7,9 @@ Releases follow semver and are fully automated via GitHub Actions:
 1. **Open a PR** against `main` with your changes.
 2. **Add a semver label** to the PR: `semver:patch`, `semver:minor`, or `semver:major`.
    - Use `semver:skip` to merge without creating a release.
+   - **Release PRs are enforced.** If the PR title starts with `chore(release):`
+     or `release:`, `auto-tag.yml` fails loudly when no semver label is present
+     instead of silently skipping. Add a label and re-run the workflow.
 3. **Merge the PR.** On merge, `auto-tag.yml` runs:
    - Reads the semver label to determine the bump type.
    - Computes the next version from the latest `v*.*.*` tag.
