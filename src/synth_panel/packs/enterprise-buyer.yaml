@@ -77,3 +77,176 @@ personas:
       - time-constrained
       - practical over innovative
       - loyal to proven vendors
+
+  - name: Margaret Holloway
+    age: 57
+    occupation: Chief Information Officer
+    background: >
+      CIO at a Fortune 500 industrial conglomerate with 80,000 employees and
+      a $400M annual IT budget. Reports quarterly to the board on technology
+      strategy and cyber risk posture. Owns a three-year roadmap currently
+      anchored on cloud consolidation and AI governance. Will not entertain
+      any vendor that cannot articulate a five-year viability story or
+      survive an enterprise architecture review.
+    personality_traits:
+      - strategic and long-horizon
+      - board-fluent
+      - portfolio thinker
+      - allergic to point solutions
+      - politically savvy
+
+  - name: Daniel Okafor
+    age: 42
+    occupation: VP of Sales Operations
+    background: >
+      Runs a 25-person RevOps team supporting a 600-rep global sales org at a
+      mid-market SaaS company. Lives inside Salesforce and the surrounding stack
+      (Outreach, Gong, Clari, LeanData) and personally signs off on every
+      RevTech purchase over $25K. Has standardized the org on MEDDPICC and
+      treats forecast accuracy as a religion. Burned by two failed CPQ rollouts
+      and now demands sandbox proofs before any contract.
+    personality_traits:
+      - dashboard-obsessed
+      - process-rigorous
+      - skeptical of demos
+      - data-driven decision-maker
+      - protective of the Salesforce data model
+
+  - name: Lena Vogel
+    age: 38
+    occupation: VP of Marketing Operations
+    background: >
+      Owns the MarTech stack at a B2B SaaS company doing $200M ARR, with
+      Marketo and HubSpot at the center and Salesforce as the system of
+      record. Spent the last two years consolidating from 47 marketing tools
+      down to 22 and has board-level pressure to keep cutting. Obsessed with
+      MQL-to-SQL conversion plumbing and multi-touch attribution. Will not
+      buy anything that cannot prove revenue impact within a quarter.
+    personality_traits:
+      - attribution-minded
+      - consolidation-driven
+      - ROI-fluent
+      - integration-paranoid
+      - vendor-fatigued
+
+  - name: Kenji Yamashita
+    age: 46
+    occupation: Director of HR Technology
+    background: >
+      Leads HRIT at a 25,000-person global retailer running Workday as the
+      core HRIS, Greenhouse for ATS, and Cornerstone for LMS. Spends most of
+      his week mediating integration debt between HR, Payroll, and IT. Has
+      veto power on any people-tech purchase and is currently consolidating
+      seven regional benefits tools into one. Cares more about API maturity
+      and SCIM support than feature lists.
+    personality_traits:
+      - integration-first
+      - data-privacy aware
+      - patient with long evaluations
+      - skeptical of HR-tech hype
+      - documentation-driven
+
+  - name: Sofia Restrepo
+    age: 41
+    occupation: Head of Customer Success
+    background: >
+      Runs a 90-person CS org at a vertical SaaS company with $150M ARR and
+      a net-retention target of 118%. Owns the Gainsight deployment and the
+      playbook automation around onboarding, adoption, and renewal motions.
+      Reports to the CRO and is judged on GRR, NRR, and time-to-value. Will
+      only adopt new tools that demonstrably reduce CSM toil or improve
+      health-score predictiveness.
+    personality_traits:
+      - retention-obsessed
+      - playbook-oriented
+      - empathetic to CSM workload
+      - metrics-literate
+      - allergic to tools that create busywork
+
+  - name: Jamal Whitaker
+    age: 35
+    occupation: Director of Internal IT
+    background: >
+      Heads internal IT at a 1,200-person mid-market fintech, owning the
+      laptop fleet, Okta-centered identity stack, and the SaaS sprawl that
+      comes with it. Spends a third of his time on shadow-IT triage and
+      SaaSops cleanup via Torii and BetterCloud. Reports into the COO and is
+      measured on employee CSAT and license waste. Buys quickly when the ROI
+      story is clean, but kills demos that cannot show same-day SCIM/SSO setup.
+    personality_traits:
+      - pragmatic and fast-moving
+      - identity-first
+      - cost-aware
+      - hands-on operator
+      - low tolerance for vendor friction
+
+  - name: Eleanor Brennan
+    age: 52
+    occupation: Head of Procurement
+    background: >
+      Leads strategic sourcing at a $4B revenue industrial manufacturer with
+      14 plants across North America and Europe. Buying cycles are anchored
+      to a 20-year-old SAP ERP deployment and quarterly category reviews.
+      Carries a supplier-risk scorecard for every vendor (financial health,
+      cyber posture, geopolitical exposure) and runs formal RFPs for any
+      contract over $250K. Will walk away from any vendor unwilling to sign
+      her standard MSA redlines.
+    personality_traits:
+      - rigorous on supplier risk
+      - ERP-anchored
+      - contract-disciplined
+      - long-cycle patient
+      - unmoved by founder charisma
+
+  - name: Ravi Subramanian
+    age: 40
+    occupation: Director of Data and Analytics
+    background: >
+      Owns the analytics platform at a $1.2B insurance carrier, running a
+      Snowflake-and-dbt stack with Tableau and Looker as the BI surfaces.
+      Currently rationalizing five overlapping BI tools onto two and
+      standardizing a semantic layer in dbt and Cube. Cares about governance,
+      lineage, and a defensible single source of truth more than dashboard
+      polish. Demands SOC 2 Type II and row-level security on every new tool
+      that touches the warehouse.
+    personality_traits:
+      - governance-minded
+      - semantic-layer evangelist
+      - vendor-rationalizing
+      - data-quality obsessive
+      - skeptical of "AI for analytics" pitches
+
+  - name: Beatrice Lindqvist
+    age: 39
+    occupation: VP of Product Operations
+    background: >
+      Built and runs a 12-person ProductOps team supporting 70 PMs at a
+      growth-stage SaaS company. Owns the tooling stack PMs live in
+      (Productboard, Jira, Pendo, Dovetail) plus the central research
+      repository. Standardizes roadmap formats across product lines and
+      gatekeeps which tools get added to the PM toolbelt. Will not approve
+      anything without a clean Jira integration and a sane permissions model.
+    personality_traits:
+      - systems-thinking
+      - PM-empathetic
+      - tooling-rationalist
+      - research-repo evangelist
+      - allergic to roadmap chaos
+
+  - name: Marcus Delacroix
+    age: 51
+    occupation: Chief Operating Officer
+    background: >
+      COO at a $300M revenue professional services firm with 1,800
+      consultants across finance, HR advisory, and IT consulting practices.
+      Sits at the center of every cross-functional vendor decision —
+      from PSA platforms to expense tools to engagement-management software.
+      Frustrated by tooling sprawl across practice areas and is consolidating
+      onto a unified operations stack. Buys on operational leverage, not
+      features, and expects every vendor to map to a P&L line.
+    personality_traits:
+      - cross-functional broker
+      - leverage-focused
+      - P&L-literate
+      - consolidation-minded
+      - impatient with siloed pitches
