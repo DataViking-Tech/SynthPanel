@@ -243,7 +243,7 @@ def test_render_escapes_pipes_in_persona_names() -> None:
 
 
 def test_render_synthesis_full_string_shape() -> None:
-    md, raw = _render("rounds_shape.json")
+    md, _raw = _render("rounds_shape.json")
 
     # All four substantive sections render under ## Synthesis.
     synth_idx = md.index("## Synthesis")
