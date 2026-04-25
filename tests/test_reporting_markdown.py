@@ -236,5 +236,155 @@ def test_render_escapes_pipes_in_persona_names() -> None:
     assert "| Alice | Evil |" not in md
 
 
+# ---------------------------------------------------------------------------
+# 8. Synthesis renders full themes/agreements/disagreements/recommendation
+#    (sp-xltd) for string-shape items.
+# ---------------------------------------------------------------------------
+
+
+def test_render_synthesis_full_string_shape() -> None:
+    md, _raw = _render("rounds_shape.json")
+
+    # All four substantive sections render under ## Synthesis.
+    synth_idx = md.index("## Synthesis")
+    failure_idx = md.index("## Failure Stats")
+    synth_block = md[synth_idx:failure_idx]
+
+    assert "**Themes:**" in synth_block
+    assert "**Agreements:**" in synth_block
+    assert "**Disagreements:**" in synth_block
+    assert "**Recommendation:**" in synth_block
+
+    # Theme bullet content (string shape).
+    assert "- pricing" in synth_block
+    assert "- onboarding" in synth_block
+
+    # Agreements/disagreements as numbered lists with verbatim text.
+    assert "1. Pricing transparency is the single largest blocker" in synth_block
+    assert "2. Onboarding friction" in synth_block
+    assert "1. Acceptable per-seat price band" in synth_block
+
+    # Recommendation as a blockquote.
+    assert "> Publish a tiered pricing page" in synth_block
+
+    # Existing summary peek still renders — the detail sections are
+    # additive, not a replacement.
+    assert "Panelists agree that pricing opacity" in synth_block
+
+
+# ---------------------------------------------------------------------------
+# 9. Synthesis renders dict-shape themes/agreements (sp-xltd).
+# ---------------------------------------------------------------------------
+
+
+def test_render_synthesis_full_dict_shape() -> None:
+    md, _ = _render("synthesis_dict_shape.json")
+
+    synth_idx = md.index("## Synthesis")
+    failure_idx = md.index("## Failure Stats")
+    synth_block = md[synth_idx:failure_idx]
+
+    # Dict-shape themes render as "**Title** — description".
+    assert "- **Tedium** — Repeated manual steps" in synth_block
+    assert "- **Speed expectations** — Panelists expect sub-second" in synth_block
+
+    # Dict-shape agreement (title+description) collapses to "title: desc"
+    # in numbered-list form.
+    assert "1. Manual steps: All panelists call out" in synth_block
+
+    # Dict-shape disagreement keyed only on `text` still surfaces.
+    assert "1. Whether to fix UX first" in synth_block
+
+    # Recommendation (string) still rendered.
+    assert "> Cut the three redundant steps" in synth_block
+
+
+# ---------------------------------------------------------------------------
+# 10. Synthesis sections truncate runaway items (sp-xltd).
+# ---------------------------------------------------------------------------
+
+
+def test_render_synthesis_truncates_long_items() -> None:
+    raw: dict = {
+        "id": "long-synth-panel",
+        "model": "claude-sonnet-4-6",
+        "question_count": 1,
+        "persona_count": 1,
+        "results": [
+            {
+                "persona": "Anon",
+                "model": "claude-sonnet-4-6",
+                "responses": [
+                    {
+                        "question": "q?",
+                        "response": "a",
+                        "usage": {"input_tokens": 1, "output_tokens": 1},
+                    }
+                ],
+            }
+        ],
+        "synthesis": {
+            "ran": True,
+            "model": "claude-sonnet-4-6",
+            "summary": "ok",
+            "themes": ["x" * 800],
+            "agreements": ["y" * 800],
+            "disagreements": [],
+            "recommendation": "z" * 800,
+        },
+    }
+
+    report = build_inspect_report(raw)
+    md = render_markdown(report, raw)
+
+    # Truncation marker is the ellipsis; raw 800-char strings must not
+    # appear verbatim.
+    assert "x" * 800 not in md
+    assert "y" * 800 not in md
+    assert "z" * 800 not in md
+    assert "…" in md
+
+
+# ---------------------------------------------------------------------------
+# 11. Empty synthesis fields don't emit empty section headers (sp-xltd).
+# ---------------------------------------------------------------------------
+
+
+def test_render_synthesis_skips_empty_sections() -> None:
+    raw: dict = {
+        "id": "minimal-synth-panel",
+        "model": "claude-sonnet-4-6",
+        "question_count": 1,
+        "persona_count": 1,
+        "results": [
+            {
+                "persona": "Anon",
+                "model": "claude-sonnet-4-6",
+                "responses": [{"question": "q?", "response": "a", "usage": {"input_tokens": 1, "output_tokens": 1}}],
+            }
+        ],
+        "synthesis": {
+            "ran": True,
+            "model": "claude-sonnet-4-6",
+            "summary": "minimal",
+            "themes": [],
+            "agreements": [],
+            "disagreements": [],
+            "recommendation": "",
+        },
+    }
+
+    report = build_inspect_report(raw)
+    md = render_markdown(report, raw)
+
+    # No empty bullet sections.
+    assert "**Themes:**" not in md
+    assert "**Agreements:**" not in md
+    assert "**Disagreements:**" not in md
+    assert "**Recommendation:**" not in md
+    # Status still renders.
+    assert "**Status:** ran" in md
+
+
 if __name__ == "__main__":  # pragma: no cover - convenience
     raise SystemExit(pytest.main([__file__, "-v"]))

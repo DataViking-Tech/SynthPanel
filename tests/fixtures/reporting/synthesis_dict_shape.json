@@ -1,0 +1,52 @@
+{
+  "id": "dict-shape-panel",
+  "created_at": "2026-04-23T10:00:00Z",
+  "model": "claude-sonnet-4-6",
+  "persona_count": 1,
+  "question_count": 1,
+  "total_usage": {
+    "input_tokens": 50,
+    "output_tokens": 20,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0
+  },
+  "total_cost": "$0.0006",
+  "results": [
+    {
+      "persona": "Anon",
+      "model": "claude-sonnet-4-6",
+      "responses": [
+        {
+          "question": "How does the workflow feel?",
+          "response": "Tedious and slow.",
+          "usage": {"input_tokens": 50, "output_tokens": 20}
+        }
+      ]
+    }
+  ],
+  "synthesis": {
+    "ran": true,
+    "model": "claude-sonnet-4-6",
+    "strategy": "single",
+    "summary": "Workflow tedium dominates the qualitative signal.",
+    "themes": [
+      {"title": "Tedium", "description": "Repeated manual steps slow every panelist down."},
+      {"title": "Speed expectations", "description": "Panelists expect sub-second feedback for common actions."}
+    ],
+    "agreements": [
+      {"title": "Manual steps", "description": "All panelists call out the same three manual steps as redundant."}
+    ],
+    "disagreements": [
+      {"text": "Whether to fix UX first or rebuild the data model first."}
+    ],
+    "recommendation": "Cut the three redundant steps in the next sprint; defer the data-model debate.",
+    "cost": "$0.0008"
+  },
+  "failure_stats": {
+    "total_pairs": 1,
+    "errored_pairs": 0,
+    "failure_rate": 0.0,
+    "failed_panelists": 0,
+    "errored_personas": []
+  }
+}
