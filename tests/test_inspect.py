@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 
 from synth_panel.analysis.inspect import build_inspect_report, format_inspect_text
+from synth_panel.llm.aliases import resolve_alias
 from synth_panel.main import main
 
 
@@ -152,8 +153,9 @@ def test_inspect_rounds_shape_full():
     assert report.synthesis.theme_count == 2
     assert report.synthesis.summary_peek and report.synthesis.summary_peek.startswith("The panel converged")
     per_model = {m.model: m for m in report.model_rollup}
-    assert per_model["haiku"].cost_usd == 0.009
-    assert per_model["sonnet"].cost_usd == 0.02
+    # Rollup keys are canonical model ids (aliases resolved).
+    assert per_model[resolve_alias("haiku")].cost_usd == 0.009
+    assert per_model[resolve_alias("sonnet")].cost_usd == 0.02
     assert report.warnings == ["low-n: 3 panelists"]
     assert report.instrument_name == "pricing-discovery"
 
@@ -184,6 +186,60 @@ def test_inspect_summary_peek_truncates_long_summary():
     report = build_inspect_report(data)
     assert report.synthesis.summary_peek is not None
     assert len(report.synthesis.summary_peek) == 301  # 300 + ellipsis
+
+
+def test_inspect_model_rollup_merges_alias_and_canonical(monkeypatch):
+    """Regression for sp-f9jg: panelist keyed by alias must bucket with
+    metadata.cost.per_model keyed by canonical id (no duplicate rows)."""
+    # Pin a deterministic alias map so the test doesn't depend on the
+    # user's ~/.synthpanel/aliases.yaml or env overrides.
+    monkeypatch.setenv(
+        "SYNTHPANEL_MODEL_ALIASES",
+        json.dumps({"haiku": "claude-haiku-4-5-20251001"}),
+    )
+    from synth_panel.llm import aliases as aliases_mod
+
+    aliases_mod._reset_cache()
+    try:
+        data = {
+            "id": "result-merge",
+            "created_at": "2026-04-25T00:00:00+00:00",
+            "model": "haiku",
+            "persona_count": 1,
+            "question_count": 1,
+            "results": [
+                {
+                    "persona": "P0",
+                    "responses": [{"question": "q", "response": "a", "follow_up": False}],
+                    "usage": {"input_tokens": 30, "output_tokens": 20},
+                    "model": "haiku",  # alias
+                }
+            ],
+            "metadata": {
+                "cost": {
+                    "per_model": {
+                        # Canonical id, as written by metadata.py:135.
+                        "claude-haiku-4-5-20251001": {"tokens": 50, "cost_usd": 0.001},
+                    }
+                }
+            },
+        }
+
+        report = build_inspect_report(data)
+
+        assert len(report.model_rollup) == 1, (
+            f"alias and canonical must merge into one row, got "
+            f"{[m.model for m in report.model_rollup]}"
+        )
+        row = report.model_rollup[0]
+        assert row.model == "claude-haiku-4-5-20251001"
+        assert row.input_tokens == 30
+        assert row.output_tokens == 20
+        assert row.total_tokens == 50
+        assert row.cost_usd == 0.001
+        assert row.personas == 1
+    finally:
+        aliases_mod._reset_cache()
 
 
 def test_format_inspect_text_includes_all_sections():
