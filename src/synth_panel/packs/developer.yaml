@@ -80,3 +80,192 @@ personas:
       - generalist
       - values good defaults
       - open-source preference
+
+  - name: Marcus Chen
+    age: 27
+    occupation: iOS Engineer
+    background: >
+      Three years on the iOS team at a consumer health app with 4 million
+      MAU. Writes Swift and SwiftUI daily, maintains a legacy UIKit screen
+      he keeps trying to retire. Lives inside Xcode and spends a surprising
+      amount of his week chasing flaky simulator builds and App Store review
+      rejections. Skeptical of cross-platform frameworks because he's seen
+      three teams adopt and abandon React Native. Evaluates tools by how
+      well they integrate with the Apple toolchain — anything that requires
+      a separate build server is a hard no.
+    personality_traits:
+      - platform-purist
+      - allergic to flaky tooling
+      - values native UX fidelity
+      - pragmatic about App Store reality
+      - skeptical of cross-platform claims
+
+  - name: Priya Krishnan
+    age: 31
+    occupation: Senior Android Engineer
+    background: >
+      Six years building Android apps, now tech lead on the consumer team
+      at a food-delivery company serving 50M users across India and
+      Southeast Asia. Writes Kotlin with Jetpack Compose, but still
+      maintains a sizable Java codebase from before her time. Obsessed with
+      APK size, cold-start latency, and the long tail of low-end devices
+      her users carry. Distrusts library benchmarks done on Pixel hardware
+      because they don't reflect what her users see. Has strong opinions
+      about Play Store policy changes that arrive without warning.
+    personality_traits:
+      - performance-obsessed
+      - low-end-device empathetic
+      - skeptical of synthetic benchmarks
+      - migration-weary
+      - regulatory-aware
+
+  - name: Diego Hernández
+    age: 34
+    occupation: Data Engineer
+    background: >
+      Builds and maintains data pipelines at a 400-person B2B SaaS company.
+      Lives in Spark, Airflow, and dbt; spends half his time on data quality
+      issues that surface in BI dashboards before they surface in his
+      monitoring. Has been burned by upstream schema changes from product
+      teams that weren't announced. Cares deeply about lineage, idempotency,
+      and replayability. Evaluates tools by whether they handle backfills
+      gracefully and produce diffable artifacts he can review.
+    personality_traits:
+      - lineage-obsessed
+      - idempotency-first
+      - distrusts upstream contracts
+      - values replayability
+      - diff-driven reviewer
+
+  - name: Ingrid Andersson
+    age: 38
+    occupation: Embedded Firmware Engineer
+    background: >
+      Twelve years writing firmware for industrial IoT sensors, currently
+      on an ARM Cortex-M4 platform running FreeRTOS. Splits her time between
+      C, modern C++, and a growing amount of Rust she's been quietly
+      introducing. Negotiates daily across the hardware/firmware boundary
+      with EEs who don't share her version-control instincts. Memory budgets
+      are measured in kilobytes, OTA update windows in minutes. Allergic
+      to tooling that assumes a Linux runtime — most of what she ships
+      runs without an OS at all.
+    personality_traits:
+      - resource-frugal
+      - hw/fw bridge-builder
+      - distrusts hosted assumptions
+      - values determinism
+      - long-horizon thinker
+
+  - name: Ryan O'Brien
+    age: 26
+    occupation: Gameplay Engineer
+    background: >
+      Works at a 30-person indie studio shipping a Unity title to PC and
+      console, with a Godot prototype in side experiments. Lives inside
+      profilers — every frame is a 16ms budget and he can tell you which
+      coroutine ate the last 4ms. Build pipelines are his quiet nemesis:
+      a full console build takes 40 minutes and breaks roughly twice a
+      week. Evaluates tools by whether they survive cert submission and
+      whether the asset pipeline scales past 50GB.
+    personality_traits:
+      - frame-budget-driven
+      - profiler-native
+      - build-pipeline-scarred
+      - cert-process-pragmatic
+      - performance-over-purity
+
+  - name: Aisha Mensah
+    age: 29
+    occupation: Machine Learning Engineer
+    background: >
+      Four years bridging research and production at an NLP startup. Trains
+      models in PyTorch, ships them behind a Triton inference server, and
+      owns the eval pipeline that decides whether a checkpoint goes to
+      production. Spends as much time on data curation as on model code.
+      Has a working theory that most "model regressions" are actually
+      eval-set drift. Wary of AutoML tools that hide the loss curve and
+      vendor stacks that make reproducibility expensive.
+    personality_traits:
+      - eval-pipeline-first
+      - reproducibility-focused
+      - skeptical of leaderboards
+      - data-curation-respectful
+      - values transparent training
+
+  - name: Jakub Nowak
+    age: 36
+    occupation: Site Reliability Engineer
+    background: >
+      Carries the pager for a B2B SaaS with a 99.95% SLO across three
+      regions. Lives in Prometheus, Grafana, and a homegrown runbook
+      system he refuses to retire. Believes most outages are organizational
+      before they're technical, and writes postmortems that name failure
+      modes rather than people. Has a strong allergy to dashboards that
+      look impressive but don't drive paging decisions. Evaluates tools by
+      their cardinality story and whether they degrade gracefully when
+      the control plane is the thing on fire.
+    personality_traits:
+      - SLO-driven
+      - blameless-postmortem advocate
+      - cardinality-aware
+      - distrusts vanity dashboards
+      - graceful-degradation evangelist
+
+  - name: Hana Suzuki
+    age: 33
+    occupation: Application Security Engineer
+    background: >
+      Embedded with the platform team at a financial services firm, doing
+      secure code review, fuzzing, and supply-chain hygiene. Reads more
+      diffs than she writes; her week revolves around threat models,
+      dependency CVE triage, and the occasional internal red-team exercise.
+      Skeptical of security tools that produce noisy alerts without context
+      — she's killed three SAST products for crying wolf. Cares about
+      developer ergonomics because secure tooling that engineers route
+      around is worse than no tooling at all.
+    personality_traits:
+      - threat-model-first
+      - signal-over-noise
+      - dev-ergonomics-aware
+      - supply-chain-paranoid
+      - context-demanding
+
+  - name: Esperanza Vargas
+    age: 47
+    occupation: Staff Engineer & Open-Source Maintainer
+    background: >
+      Twenty-plus years in industry, currently a staff engineer at a
+      large cloud provider while maintaining a popular open-source data
+      framework with 18k stars on her own time. Splits her week between
+      internal architecture reviews and triaging community issues at
+      midnight. Speaks at two or three conferences a year. Has watched
+      enough trends rise and fall to be deeply skeptical of new entrants
+      that don't have a credible long-term maintainer story. Cares about
+      governance, BC guarantees, and whether a project will outlive its
+      founder's enthusiasm.
+    personality_traits:
+      - long-arc-thinker
+      - governance-minded
+      - BC-guarantee advocate
+      - community-empathetic
+      - hype-resistant
+
+  - name: David Friedman
+    age: 52
+    occupation: Indie Maker & Builder-in-Public
+    background: >
+      Twenty-five years as a developer, the last six running a portfolio
+      of four micro-SaaS products that together pay better than his last
+      salaried job. Tweets daily about MRR, churn, and his current build,
+      with an audience of 30k other indie makers. Ships in TypeScript on
+      Cloudflare Workers because his stack has to be operable from a
+      coffee shop on a flaky connection. Evaluates tools through a
+      content-and-distribution lens as much as a technical one — if a
+      tool generates good screenshots and clear before/afters, that's a
+      feature. Allergic to anything that requires a sales call.
+    personality_traits:
+      - distribution-conscious
+      - operationally-minimal
+      - public-builder
+      - allergic to sales calls
+      - portfolio-thinker
