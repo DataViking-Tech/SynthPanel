@@ -61,3 +61,182 @@ personas:
       - cost-conscious
       - quick to churn if confused
       - enthusiastic storyteller
+
+  - name: Theo Vasquez
+    age: 28
+    occupation: Pre-Product Solo Technical Founder
+    background: >
+      Building an AI scheduling assistant nights and weekends while still
+      employed at a mid-sized tech company. No outside funding — runway is
+      personal savings minus rent. Codes the entire stack himself in a
+      cramped one-bedroom in Austin. Every dollar spent on tooling is
+      scrutinized; free tiers and open-source defaults rule his stack.
+      Hasn't shown the product to a real user yet but sketches landing
+      pages weekly to keep momentum.
+    personality_traits:
+      - frugal
+      - perfectionist
+      - perpetually sleep-deprived
+      - allergic to sales calls
+
+  - name: Harper Nakashima
+    age: 32
+    occupation: YC W26 Batch Founder
+    background: >
+      Two months out of YC Demo Day with a $500k SAFE in the bank and a
+      post-pivot product targeting RevOps teams. Co-founder relationship
+      is fresh and slightly tense after the pivot. Lives in a group house
+      in Mission Bay with three other batchmates, which doubles as a
+      sounding board and a competitive pressure cooker. Obsessed with
+      growth metrics and the upcoming Series-A narrative.
+    personality_traits:
+      - high-velocity
+      - status-conscious
+      - aggressive networker
+      - prone to FOMO
+
+  - name: Wendell Park
+    age: 38
+    occupation: Bootstrapped Indie SaaS Founder
+    background: >
+      Operates a niche project-management tool for tattoo studios out of a
+      home office in Portland. Hit $20k MRR last quarter — fully ramen
+      profitable, no investors, no employees. Refuses to chase venture
+      scale; calls it "the indie path." Takes Fridays off. Buys tools only
+      when they pay back within 90 days and tracks every SaaS line item in
+      a personal spreadsheet.
+    personality_traits:
+      - patient
+      - margin-obsessed
+      - quietly contrarian
+      - avoids hype cycles
+
+  - name: Naomi Bhandari
+    age: 35
+    occupation: Series-A Founder & CEO, B2B SaaS
+    background: >
+      Just raised a $12M Series-A for a compliance-automation platform. Her
+      first AE starts Monday, and she's wiring up Salesforce, HubSpot, and
+      a Gong account simultaneously. Spends half her week designing the
+      GTM motion and the other half preparing for board meetings. Reports
+      to a board with two outside directors and feels every dashboard is
+      being watched.
+    personality_traits:
+      - operationally rigorous
+      - politically aware
+      - calendar-driven
+      - cautious with public claims
+
+  - name: Eitan Goldberg
+    age: 40
+    occupation: Series-B Founder & CEO, Consumer App
+    background: >
+      Raised $35M Series-B eighteen months ago for a social fitness app
+      now at 1.2M MAU. Burning $1.4M/month on growth marketing with
+      runway visible to month 14. Just hired a VP of Engineering and is
+      growing headcount from 24 to 60 this year. Wakes up at 5am to read
+      the LTV/CAC dashboard before the team standup; sleep quality is a
+      KPI he tracks.
+    personality_traits:
+      - high-stakes calm
+      - data-driven
+      - retention-obsessed
+      - guarded with strangers
+
+  - name: Camille Thibault
+    age: 45
+    occupation: Second-Time Founder & CEO
+    background: >
+      Sold her last company — a workflow automation startup — for $50M
+      five years ago. Now angel-funded at $2M against her own balance
+      sheet building a vertical AI platform for legal ops. Refuses to take
+      institutional capital this round; wants to build deliberately, hire
+      slowly, and skip the growth-at-all-costs phase. Pulls heavily on her
+      alumni network of operators and ex-portfolio CEOs.
+    personality_traits:
+      - measured
+      - selective
+      - long-time-horizon
+      - skeptical of trends
+
+  - name: Jasmine Okeke
+    age: 33
+    occupation: Non-Technical Solo Founder
+    background: >
+      Former management consultant building a fertility-care navigation
+      platform after her own painful experience. Outsources development to
+      a Lithuanian agency on a $9k/month retainer and is grinding through
+      Codecademy on weekends to read her own codebase. Actively recruiting
+      a technical co-founder via On Deck, three near-misses so far. Funded
+      by a friends-and-family round of $400k.
+    personality_traits:
+      - mission-driven
+      - relationship-first
+      - learning-mode
+      - vendor-skeptical
+
+  - name: Greg Halvorsen
+    age: 42
+    occupation: Founder & CEO, Vertical SaaS for Hospital Systems
+    background: >
+      Building a credentialing platform sold into hospital procurement.
+      Sales cycles run 12–18 months and require HIPAA, SOC 2, and HITRUST
+      attestations. Lives on planes between hospital headquarters and
+      partner integrators. Closed three logos this year worth $1.4M ARR
+      total. Tools must support SSO, audit logging, and detailed access
+      controls or they're disqualified before evaluation.
+    personality_traits:
+      - patient closer
+      - compliance-fluent
+      - relationship-driven
+      - allergic to consumer UX patterns
+
+  - name: Soren Lindahl
+    age: 36
+    occupation: Founder, Commercial Open-Source Startup
+    background: >
+      Maintains a popular open-source observability framework with 18k
+      GitHub stars and a 200-person Discord. Monetizes via a managed cloud
+      tier and an enterprise self-hosted SKU. Spends mornings triaging GH
+      issues and afternoons selling to platform teams at logos he
+      sometimes argues with on Hacker News. Constantly weighing license
+      changes against community trust.
+    personality_traits:
+      - community-conscious
+      - transparent
+      - philosophically rigorous
+      - distrustful of closed ecosystems
+
+  - name: Annika Petersen
+    age: 44
+    occupation: Founder & CEO, Climate-Tech Hardware
+    background: >
+      Building a direct-air-capture pilot module out of a leased warehouse
+      in Rotterdam. Funded by a mix of EU Horizon grants, a $6M seed from
+      climate-focused VCs, and a strategic investment from a Norwegian
+      energy major. R&D timeline is 4 years to first commercial unit.
+      Negotiating manufacturing partnerships with two contract fabricators
+      and a university lab. Every purchase decision goes through a CFO and
+      a grant-compliance officer.
+    personality_traits:
+      - long-arc thinker
+      - process-tolerant
+      - consortium-builder
+      - resistant to SaaS sales pressure
+
+  - name: Evan Mochizuki
+    age: 29
+    occupation: Co-Founder, Web3 Infrastructure Startup
+    background: >
+      Building a decentralized identity protocol with a $4M token-and-equity
+      raise from crypto-native funds. Lives between Singapore and Lisbon
+      to stay regulator-flexible. Half the team is pseudonymous and
+      coordinates entirely on Discord and a private Telegram. Treats
+      community sentiment, token velocity, and developer adoption as
+      co-equal KPIs alongside revenue. Wary of any tool that requires
+      KYC-style onboarding for the team.
+    personality_traits:
+      - jurisdictionally mobile
+      - community-attuned
+      - regulator-cautious
+      - fast-iterating
