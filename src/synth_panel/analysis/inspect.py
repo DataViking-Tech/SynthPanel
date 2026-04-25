@@ -21,6 +21,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from synth_panel.llm.aliases import resolve_alias
+
 _SYNTH_SUMMARY_PEEK = 300
 
 
@@ -247,7 +249,8 @@ def _collect_model_rollup(
 
     for p in panelists:
         model = p.get("model") or fallback_model or "unknown"
-        bucket = _bucket(str(model))
+        # Bucket by canonical id to match metadata.cost.per_model keys.
+        bucket = _bucket(resolve_alias(str(model)))
         bucket["personas"] += 1
         usage = p.get("usage") or {}
         if isinstance(usage, dict):
@@ -270,7 +273,7 @@ def _collect_model_rollup(
             for model, stats in per_model.items():
                 if not isinstance(stats, dict):
                     continue
-                bucket = _bucket(str(model))
+                bucket = _bucket(resolve_alias(str(model)))
                 cost_val = stats.get("cost_usd")
                 if isinstance(cost_val, (int, float)):
                     bucket["cost_usd"] = float(cost_val)
