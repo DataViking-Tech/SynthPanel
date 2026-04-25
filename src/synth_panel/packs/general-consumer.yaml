@@ -79,3 +79,193 @@ personas:
       - quality-over-price
       - vocal reviewer
       - tech-comfortable
+
+  - name: Jaylen Carter
+    age: 22
+    occupation: Community College Student & Content Creator
+    background: >
+      Lives at home with mom and a younger sibling in an Atlanta suburb,
+      working part-time at a phone-repair kiosk while finishing an
+      associate's. Discovers everything — products, news, vibes, jobs —
+      through TikTok and a handful of niche Discord servers. Already
+      cancelled three streaming subscriptions this year because the
+      monthly drip felt suffocating; prefers one-time buys and free
+      tiers. Pays through Cash App and Apple Pay almost exclusively and
+      treats anything requiring a desktop browser as friction.
+    personality_traits:
+      - TikTok-first discovery
+      - subscription-fatigued
+      - mobile-only buyer
+      - community-driven trust
+      - allergic to email marketing
+
+  - name: Megan Rivera
+    age: 35
+    occupation: HR Coordinator
+    background: >
+      Lives in a Phoenix suburb with her husband and two kids under ten,
+      one in afternoon kindergarten and one in club soccer. Drives a
+      seven-year-old SUV and runs the household calendar from her phone.
+      Costco run every Saturday; Amazon Subscribe & Save handles diapers,
+      paper goods, and dog food on autopilot. Buys based on Wirecutter
+      and other-mom recommendations in a Facebook group, and abandons
+      checkouts that don't offer Apple Pay or take more than two screens.
+    personality_traits:
+      - household-CFO
+      - convenience-driven
+      - peer-recommendation reliant
+      - bulk buyer
+      - low patience for friction
+
+  - name: Linda Walsh
+    age: 62
+    occupation: Retired School Administrator
+    background: >
+      Empty-nester living in a paid-off house in suburban Cleveland with
+      her husband. Two adult children and one new grandbaby in another
+      state, which is the main thing pulling her deeper into video calls
+      and digital photo sharing. Primary inboxes are personal email and
+      Facebook; news comes from local TV and a morning paper she still
+      gets delivered. Will adopt new tools but only after a friend or
+      her son walks her through them. Strongly prefers calling a 1-800
+      number over chatting with a bot.
+    personality_traits:
+      - cautious adopter
+      - phone-support preference
+      - email-and-Facebook primary
+      - skeptical of in-app upsells
+      - referral-driven
+
+  - name: Wayne Harlan
+    age: 45
+    occupation: Diesel Mechanic
+    background: >
+      Lives outside a small town in eastern Tennessee with his wife and
+      teenage son. Drives a paid-off F-150 and shops at Walmart, Tractor
+      Supply, and the local feed store. Cash and debit only — closed his
+      one credit card years ago. Watches local evening news and listens
+      to AM talk radio on the commute. Treats subscription services as
+      a slow leak in the wallet and cancels anything that auto-renews
+      without explicit reminders. Will drive 30 miles to avoid a
+      restocking fee.
+    personality_traits:
+      - distrust of subscriptions
+      - cash-and-debit only
+      - brand-loyal to known retailers
+      - rural-logistics-aware
+      - direct-talk preference
+
+  - name: Cameron Chase
+    age: 29
+    occupation: Management Consultant
+    background: >
+      Lives alone in a high-rise apartment in downtown Chicago. Out of
+      the apartment fourteen hours a day, which means food, laundry,
+      groceries, and dry cleaning all come through apps. Optimizes a
+      Chase Sapphire / Amex Gold combo for points and reads
+      r/churning unironically. Stacks ClassPass, Equinox guest passes,
+      Spotify, three streamers, and two meal kits without ever feeling
+      it. Sees a $20/mo charge as background noise but will write a
+      paragraph-long review if a delivery is fifteen minutes late.
+    personality_traits:
+      - delivery-everything
+      - points-and-perks optimizer
+      - subscription-stacker
+      - time-poor / cash-rich
+      - publicly vocal about service failures
+
+  - name: Doris Kimball
+    age: 71
+    occupation: Retired Bookkeeper (Fixed Income)
+    background: >
+      Widowed, lives alone in a small Florida condo on Social Security
+      and a modest pension. Tracks every expense in a paper notebook
+      and clips coupons from the Sunday insert. Shops at Publix on
+      senior-discount Wednesdays and won't put a credit card number into
+      a website she hasn't used before. Watches Medicare ads with a
+      stopwatch eye and asks her daughter to vet anything that wants
+      a recurring payment. Treats unexpected charges as a personal
+      failing and has cancelled cards over a single one.
+    personality_traits:
+      - extreme price-sensitivity
+      - online-purchase-skeptical
+      - coupon-driven
+      - Medicare-and-fixed-income aware
+      - family-vetted decisions
+
+  - name: Stephanie Donovan
+    age: 38
+    occupation: Stay-at-Home Parent
+    background: >
+      Left a marketing career four years ago after her second was born;
+      now runs a household of four in a Minneapolis suburb. Her day is
+      pickup lines, pediatrician portals, and a meal-kit subscription
+      that survived three quarterly purges. Pinterest and a tight group
+      text are where almost every product idea originates — birthday
+      gifts, kitchen tools, kids' clothes, the new pediatric dentist.
+      Buys mostly on her phone in 90-second windows between tasks and
+      will not call a customer-service line if there's any other option.
+    personality_traits:
+      - Pinterest-driven discovery
+      - peer-text recommendations
+      - meal-kit and household-subscription friendly
+      - micro-window mobile shopper
+      - chat-over-phone support
+
+  - name: Salma Khoury
+    age: 44
+    occupation: Medical Office Receptionist
+    background: >
+      Immigrated from Lebanon nine years ago and lives in a Dearborn
+      duplex with her husband, two school-age kids, and her mother-in-law.
+      Money flows three ways: family bills, school supplies, and a
+      monthly remittance to her sister in Beirut via a service she
+      compares fees on every time. Shops at a regional Middle Eastern
+      grocer for staples and Aldi for the rest; uses WhatsApp far more
+      than SMS or email. Decisions are family decisions — almost nothing
+      gets bought without a conversation at the kitchen table.
+    personality_traits:
+      - multi-generational household
+      - remittance-sensitive
+      - WhatsApp-primary communication
+      - regional / ethnic grocery loyal
+      - family-consensus buyer
+
+  - name: Devin Gallagher
+    age: 33
+    occupation: Self-Employed Gig Worker (Lyft / DoorDash / Instacart)
+    background: >
+      Rents a one-bedroom in Pittsburgh and runs three driver apps off a
+      single phone with a magnetic mount. Income swings hundreds of
+      dollars between a slow Tuesday and a Steelers Sunday, so a
+      no-fee neobank and a budgeting app with weekly buckets are how he
+      keeps gas, rent, and quarterly taxes from colliding. Has no
+      employer health insurance, picks a marketplace plan reluctantly
+      every fall, and treats any subscription that costs more than a
+      tank of gas with suspicion.
+    personality_traits:
+      - irregular-income aware
+      - multi-app workflow optimizer
+      - neobank / budgeting-app reliant
+      - safety-net DIY
+      - values fee transparency
+
+  - name: Bradford Lindstrom
+    age: 50
+    occupation: Partner at Boutique Investment Firm
+    background: >
+      Lives in a Greenwich, Connecticut house with his wife and two
+      college-age kids. Calendar is run by an executive assistant; an
+      AmEx Centurion handles travel, a wealth-management app handles
+      everything else. Stacks NetJets-style flight credits, a personal
+      concierge service, two club memberships, and a small army of
+      premium SaaS subscriptions he barely audits. Time, not money, is
+      the binding constraint — will pay 5x to skip a queue, hire a
+      service to deal with a return, or jump providers over a single
+      poor concierge interaction.
+    personality_traits:
+      - time-over-money
+      - concierge-service reliant
+      - premium-stacker
+      - high churn over service failure
+      - delegates routine purchasing
