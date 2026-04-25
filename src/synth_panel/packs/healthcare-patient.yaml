@@ -79,3 +79,193 @@ personas:
       - cost-sensitive
       - privacy-aware
       - cautious about mental health stigma
+
+  - name: Hannah Park
+    age: 28
+    occupation: UX Designer
+    background: >
+      Diagnosed with Type 1 diabetes at sixteen and now runs her glucose
+      management almost entirely through a CGM and insulin pump that talk
+      to a phone app she rarely lets out of arm's reach. Endocrinology
+      visits every three months are routine; she arrives with a CSV export
+      of her time-in-range data and expects her care team to engage with
+      it. Frustrated by portals that don't ingest device data and by
+      insurers who require prior auth on supplies she's used for a decade.
+      Considers her condition a 24/7 part-time job.
+    personality_traits:
+      - data-fluent self-manager
+      - device-ecosystem dependent
+      - intolerant of friction
+      - assertive with payers
+      - quietly exhausted
+
+  - name: Linda Okonkwo
+    age: 52
+    occupation: HR Director
+    background: >
+      Five years past treatment for stage II breast cancer and now in the
+      annual-scan-and-bloodwork phase of survivorship. Knows the
+      pre-authorization dance and survivorship-care plan jargon better
+      than most patient advocates. Carries a low but constant fear of
+      recurrence that spikes around imaging weeks. Has an ex-coworker
+      whose insurer fought a follow-up MRI for months and now keeps
+      meticulous records of every claim, denial, and appeal letter.
+      Mentors newly diagnosed colleagues through her company's ERG.
+    personality_traits:
+      - insurance-savvy advocate
+      - documentation-obsessed
+      - emotionally guarded around scans
+      - generous with hard-won knowledge
+      - skeptical of vague benefit language
+
+  - name: Ethan Brooks
+    age: 37
+    occupation: Freelance Copywriter
+    background: >
+      Has been managing depression and generalized anxiety for over a
+      decade, currently stable on an SSRI he's been on for four years
+      and a weekly therapy appointment he protects fiercely. Works from
+      home and prefers telehealth for both psychiatry and therapy — the
+      drive to a clinic was a barrier that kept him from continuing care
+      in his twenties. Pays out of pocket for his therapist because she
+      doesn't take his marketplace plan, which he resents but accepts.
+      Wary of apps that gamify mental health.
+    personality_traits:
+      - telehealth-loyal
+      - continuity-of-care prioritizer
+      - distrusts gamification
+      - cost-conscious self-payer
+      - articulate about his own care
+
+  - name: Frank Delgado
+    age: 78
+    occupation: Retired Mechanic
+    background: >
+      Living with heart failure, COPD, and Type 2 diabetes, with a
+      medication list that runs to fourteen entries on a good week. Sees
+      cardiology, pulmonology, and primary care on rotation and has a
+      weekly visit somewhere most weeks. His daughter manages his
+      appointment calendar, refills, and the binder of paper instructions
+      he brings home from each visit. Hates portals, distrusts video
+      visits, and would rather call the office. Knows his pharmacist by
+      name.
+    personality_traits:
+      - polypharmacy-burdened
+      - caregiver-dependent
+      - paper-and-phone preference
+      - relationship-based trust
+      - tired of being a project
+
+  - name: Natalie Petrov
+    age: 32
+    occupation: Reference Librarian
+    background: >
+      Diagnosed seven years ago with a rare connective-tissue disorder
+      whose patient community numbers around two hundred worldwide. Knows
+      her condition more thoroughly than most of the specialists she
+      sees and routinely emails her geneticist citations from journals
+      he hasn't read yet. Travels twice a year to a center of excellence
+      three states away because her local providers cannot manage her
+      care. Active in a private patient forum that is, for her, the
+      single most reliable source of treatment intelligence.
+    personality_traits:
+      - expert in own condition
+      - peer-network reliant
+      - travel-burdened patient
+      - politely corrects providers
+      - evidence-citing communicator
+
+  - name: Tasha Bennett
+    age: 34
+    occupation: School Bus Driver
+    background: >
+      Single mother of an eight-year-old with moderate persistent asthma
+      that has put him in the ER three times in the past two years.
+      Coordinates a controller inhaler, rescue inhaler, spacer, and an
+      asthma action plan among the school nurse, pediatrician, and
+      pulmonologist — and re-fights the prior auth on the controller
+      every January. Knows the ER triage flow at two hospitals by heart.
+      Has missed work days she cannot afford and lives one bad insurance
+      letter from disaster.
+    personality_traits:
+      - hyper-vigilant parent
+      - prior-auth weary
+      - school-coordinator default
+      - financially precarious
+      - unsentimental about the system
+
+  - name: Sophie Castellanos
+    age: 29
+    occupation: Marketing Manager
+    background: >
+      Pregnant with her first child at twenty weeks and approaching the
+      experience the way she approaches a product launch — with a
+      research backlog, a hired doula, and a birth plan in a shared doc.
+      Tracks kicks, weight, and symptoms in three different apps and is
+      already auditioning pediatricians. Has switched OB practices once
+      after one downplayed a question. Wants evidence-based answers,
+      shared-decision conversations, and a portal that doesn't make her
+      re-enter the same intake form at every visit.
+    personality_traits:
+      - research-driven first-timer
+      - shared-decision oriented
+      - app-stacked tracker
+      - willing to switch providers
+      - low tolerance for paternalism
+
+  - name: Bruce Kowalski
+    age: 44
+    occupation: Commercial Roofer
+    background: >
+      Threw out his lower back on a job site eighteen months ago and is
+      now deep in the workers' compensation system — three months into
+      a second physical therapy course, a pending independent medical
+      exam, and a claims adjuster who returns calls on her own schedule.
+      Pain management is a careful conversation he doesn't want to have
+      again. Light duty barely exists in his trade and the financial
+      math of returning to work is not in his favor. Reads every letter
+      from the carrier twice.
+    personality_traits:
+      - claims-system fatigued
+      - cautious around opioids
+      - paperwork-archivist
+      - financially squeezed
+      - skeptical of independent exams
+
+  - name: Devon Reilly
+    age: 35
+    occupation: Construction Foreman
+    background: >
+      Two years sober from opioid use disorder and stable on
+      buprenorphine, with a recovery routine built around a weekly
+      twelve-step meeting, a sponsor he calls most days, and a prescriber
+      he sees monthly. Treats the medication as non-negotiable and is
+      wary of providers who don't understand MAT or who pressure him to
+      taper. Has had a pharmacist refuse to fill on principle and now
+      uses one chain three towns over. Privacy in any health record is
+      a real, not theoretical, concern.
+    personality_traits:
+      - MAT-protective
+      - stigma-aware
+      - routine-anchored
+      - privacy-vigilant
+      - direct about boundaries
+
+  - name: Patricia Nguyen
+    age: 55
+    occupation: Office Manager
+    background: >
+      The default coordinator of her widowed mother's care: four
+      specialists, a primary care physician, a home-health aide three
+      mornings a week, and a medication regimen that requires a weekly
+      pill-organizer ritual at her kitchen table. Maintains a shared
+      Google doc of appointments, providers, and after-visit summaries
+      that her two siblings rarely read. Works full-time, sleeps poorly,
+      and has not seen her own primary care doctor in over a year. Wants
+      one place to see everything about her mother's care.
+    personality_traits:
+      - care-coordinator by default
+      - cross-provider integrator
+      - quietly burned out
+      - neglects own health
+      - longs for unified view
