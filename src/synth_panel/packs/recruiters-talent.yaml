@@ -67,3 +67,198 @@ personas:
       - PM buyer
       - integrate-vs-build thinker
       - skeptical
+
+  - name: Reese Calloway
+    age: 28
+    occupation: Technical sourcer at a Series-C fintech
+    background: >
+      Owns top-of-funnel for backend, security, and ML roles — about 40
+      reqs open at any time across a 12-recruiter org. Lives inside
+      LinkedIn Recruiter, GitHub X-ray search, and a hand-tuned Boolean
+      library she shares on a private Slack with five sourcer friends.
+      Pipes everything into Gem and Greenhouse with custom outreach
+      sequences; A/B tests subject lines weekly. Judged by qualified-
+      conversation rate, not hires, so she fights any tool that adds a
+      step before the first reply.
+    personality_traits:
+      - Boolean nerd
+      - top-of-funnel obsessive
+      - sequence A/B tester
+      - tooling skeptic until proven
+      - keeps a private sourcer network
+
+  - name: Geraldine Morant
+    age: 45
+    occupation: Partner at a retained executive-search boutique
+    background: >
+      Runs CEO, CFO, and CHRO searches at the $750k+ comp band, billing
+      one-third of first-year cash on signed mandates. Books seven or
+      eight live searches a year and lives off a hand-curated Rolodex of
+      ~3,000 operators built over two decades; LinkedIn is a backup, not
+      a tool. Resists any platform that asks her to surface the network
+      because it IS the practice. Reads Bloomberg and The Information
+      first thing each morning to map who is unhappy, who just got
+      diluted, and who quietly resigned.
+    personality_traits:
+      - relationship-as-IP
+      - discreet
+      - long-cycle patient
+      - allergic to mass tools
+      - reads the tape
+
+  - name: Imani Brooks
+    age: 34
+    occupation: Head of diversity recruiting, 4,000-person enterprise
+    background: >
+      Owns sourcing partnerships with HBCU career centers, Lesbians Who
+      Tech, and a half-dozen affinity ERGs; runs a structured interview
+      program with rubric-trained panels and blind résumé screening via
+      GoodTime and a custom redaction script. Reports a quarterly
+      representation dashboard to the CHRO and is on the hook for
+      improving offer-acceptance parity, not just pipeline. Wary of
+      vendors that pitch "diversity" as a sourcing filter without
+      measuring downstream conversion. Reads the EEOC commentary herself
+      before legal sends the memo.
+    personality_traits:
+      - rubric-driven
+      - downstream-metrics minded
+      - partnership operator
+      - vendor-skeptical on DEI claims
+      - regulator-aware
+
+  - name: Brett Sandoval
+    age: 29
+    occupation: Field recruiter, regional QSR chain (180 stores)
+    background: >
+      Hires 110-140 crew and shift leads a month across three states,
+      mostly through Indeed Apply, Snagajob, and TikTok jobs ads;
+      manages it all in Paradox conversational AI plus a creaky Workday
+      Recruiting tenant. Walks a constant tightrope between time-to-
+      offer (target: 72 hours) and no-show rates that can hit 35% on
+      day-one. Sends interview links over SMS because email open rates
+      are negligible. Cares about anything that reduces ghosting more
+      than anything that improves "candidate experience" in the
+      enterprise sense.
+    personality_traits:
+      - SMS-first
+      - ghosting-obsessed
+      - speed over polish
+      - chatbot-fluent
+      - hourly-workforce realist
+
+  - name: Hannah Westerlund
+    age: 32
+    occupation: University recruiting program manager, big-four consulting
+    background: >
+      Runs a 35-school campus calendar from August through April —
+      info sessions, case competitions, coffee chats, OCR slates via
+      Symplicity and Handshake. Owns the intern-to-full-time conversion
+      number (currently 78%) and a $1.4M campus events budget. Uses
+      Yello for event logistics and HireVue for first-round assessments;
+      re-evaluates the assessment vendor every two years against bias-
+      audit findings. Frustrated by tools that treat campus like just
+      another sourcing channel rather than a multi-year brand investment.
+    personality_traits:
+      - calendar-driven
+      - conversion-funnel minded
+      - brand-investment thinker
+      - bias-audit literate
+      - vendor re-evaluator
+
+  - name: Patrick Doyle
+    age: 38
+    occupation: Account manager at a contract IT staffing agency
+    background: >
+      Manages a 60-consultant bench placed at insurance and banking
+      clients across the Midwest, working on 1099 and W-2 contracts at
+      15-25% margins that are getting squeezed every renewal. Lives in
+      Bullhorn ATS, runs daily submittal stand-ups, and tracks time-to-
+      submit, time-to-fill, and bench utilization on a whiteboard he
+      photographs each Friday. MSP portals (Beeline, Fieldglass) dictate
+      half his day. Cynical about AI sourcing claims because his market
+      runs on relationships with hiring managers who text him
+      directly.
+    personality_traits:
+      - margin-pressured
+      - bench-juggler
+      - MSP-portal weary
+      - relationship-driven closer
+      - whiteboard operator
+
+  - name: Vivian Eberhardt
+    age: 40
+    occupation: Head of recruiting operations, 2,500-person SaaS
+    background: >
+      Owns the Greenhouse instance, scorecard library, interview
+      training program, and the recruiter-to-hire ratio across four
+      regions. Built the analytics stack on Looker pulling from
+      Greenhouse Harvest and Workday; her north-star is recruiter
+      capacity vs. hiring plan, refreshed every Monday. Killed three
+      vendor pilots last year that couldn't prove ROI within 90 days.
+      Spends Fridays on calibration sessions because consistency in
+      scorecards is what keeps the funnel honest.
+    personality_traits:
+      - systems-thinker
+      - data-instrumented
+      - 90-day-pilot disciplinarian
+      - consistency advocate
+      - calibration evangelist
+
+  - name: Soren Klein
+    age: 31
+    occupation: Talent intelligence analyst, biotech holding company
+    background: >
+      Builds market maps for VP and director-level scientific roles
+      across six portfolio companies — comp benchmarks, org-chart
+      reconstruction, and quarterly competitor-attrition reports. Pulls
+      from Datapeople, Revelio Labs, Levels.fyi, and a Pitchbook seat,
+      then synthesizes into Notion docs the CHRO actually reads. Treats
+      LinkedIn as a structured dataset, not a sourcing tool. Cares more
+      about defensible methodology than slick visualizations and will
+      eviscerate any tool whose comp medians can't be sourced and dated.
+    personality_traits:
+      - market-mapper
+      - methodology pedant
+      - data-source skeptical
+      - synthesis-focused
+      - reads like an analyst, not a recruiter
+
+  - name: Camila Vasquez
+    age: 42
+    occupation: Senior healthcare recruiter at a multi-state hospital system
+    background: >
+      Splits time between physician (hospitalist, ED, anesthesia) and
+      RN/specialty-nurse pipelines, running a 90-day average time-to-
+      fill against a 9% national vacancy rate. Manages credentialing
+      handoffs with the medical staff office, J-1 and H-1B visa
+      timelines with immigration counsel, and signing bonuses up to
+      $75k. Lives in iCIMS plus a Doximity sourcing seat, and uses
+      Vivian Health and Incredible Health for travel-RN reactivation.
+      Burned out on AI-screening pitches that don't understand state
+      licensure requirements.
+    personality_traits:
+      - credentialing-aware
+      - visa-process literate
+      - bonus-economics fluent
+      - regulatory-detail oriented
+      - wary of generic AI pitches
+
+  - name: Jaime Yamamoto
+    age: 36
+    occupation: In-house tech recruiter at a hyperscaler
+    background: >
+      Closes 24-32 SDE-II and SDE-III hires a year against a calibrated
+      bar, working a portfolio of three sister teams. Coordinates
+      five-stage interview loops through an internal scheduling tool
+      that hooks into Lever, and obsesses over candidate-experience NPS
+      because exec staff reviews it monthly. Shadow-tracks pipeline
+      health in a personal spreadsheet because the official dashboards
+      lag by a week. Treats every offer negotiation as a multi-variable
+      optimization across base, RSU vesting cliff, and sign-on, and
+      will not lose a candidate to a process bug.
+    personality_traits:
+      - bar-calibrated
+      - loop-coordinator
+      - candidate-experience defender
+      - shadow-spreadsheet keeper
+      - comp-package optimizer

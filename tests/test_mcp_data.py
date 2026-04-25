@@ -83,7 +83,7 @@ class TestPersonaPacks:
 
         expected = {
             "job-seekers": 15,
-            "recruiters-talent": 5,
+            "recruiters-talent": 15,
             "product-research": 20,
             "ai-eval-buyers": 20,
         }
