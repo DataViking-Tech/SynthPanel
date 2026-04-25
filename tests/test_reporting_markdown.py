@@ -360,9 +360,7 @@ def test_render_synthesis_skips_empty_sections() -> None:
             {
                 "persona": "Anon",
                 "model": "claude-sonnet-4-6",
-                "responses": [
-                    {"question": "q?", "response": "a", "usage": {"input_tokens": 1, "output_tokens": 1}}
-                ],
+                "responses": [{"question": "q?", "response": "a", "usage": {"input_tokens": 1, "output_tokens": 1}}],
             }
         ],
         "synthesis": {
