@@ -58,7 +58,7 @@ def render_markdown(
     parts.extend(_persona_summary_block(report))
     parts.append("")
 
-    parts.extend(_synthesis_block(report))
+    parts.extend(_synthesis_block(report, raw))
     parts.append("")
 
     parts.extend(_failure_stats_block(report))
@@ -219,8 +219,12 @@ def _persona_summary_block(report: InspectReport) -> list[str]:
     return lines
 
 
-def _synthesis_block(report: InspectReport) -> list[str]:
-    """Section 7 — synthesis status, themes, summary peek."""
+def _synthesis_block(report: InspectReport, raw: dict[str, Any]) -> list[str]:
+    """Section 7 — synthesis status, meta, summary peek, plus the full
+    themes / agreements / disagreements / recommendation lists pulled
+    straight from ``raw['synthesis']`` so the report is no longer just a
+    240-char peek over a black-box JSON blob (sp-xltd).
+    """
     lines: list[str] = ["## Synthesis", ""]
     s = report.synthesis
     if not s.ran and s.error is None and s.summary_peek is None:
@@ -245,6 +249,35 @@ def _synthesis_block(report: InspectReport) -> list[str]:
         lines.append("**Summary peek:**")
         lines.append("")
         lines.append("> " + s.summary_peek.replace("\n", "\n> "))
+
+    synth = raw.get("synthesis") if isinstance(raw.get("synthesis"), dict) else {}
+
+    themes = synth.get("themes")
+    if isinstance(themes, list) and themes:
+        lines.append("")
+        lines.append("**Themes:**")
+        lines.append("")
+        for item in themes:
+            lines.append(_render_theme_item(item))
+
+    for label, key in (("Agreements", "agreements"), ("Disagreements", "disagreements")):
+        items = synth.get(key)
+        if isinstance(items, list) and items:
+            lines.append("")
+            lines.append(f"**{label}:**")
+            lines.append("")
+            for i, entry in enumerate(items, 1):
+                lines.append(f"{i}. {_format_synth_item(entry)}")
+
+    recommendation = synth.get("recommendation")
+    rec_text = _coerce_str(recommendation).strip() if recommendation else ""
+    if rec_text:
+        lines.append("")
+        lines.append("**Recommendation:**")
+        lines.append("")
+        text = _truncate(rec_text, _SYNTH_ITEM_CAP)
+        lines.append("> " + _escape_inline(text).replace("\n", "\n> "))
+
     return lines
 
 
@@ -280,6 +313,75 @@ def _warnings_block(report: InspectReport) -> list[str]:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+# Cap individual synthesis bullets so a runaway 5000-char dump doesn't
+# turn the report into a wall of text. 500 chars ≈ a long paragraph,
+# generous enough that real synthesis output fits without truncation
+# but short enough that pathological cases stay scannable.
+_SYNTH_ITEM_CAP = 500
+
+
+def _coerce_str(value: Any) -> str:
+    """Best-effort string coercion for synthesizer outputs that may be
+    either strings or dicts.
+
+    Dict shape preference order: ``title``/``name``/``theme`` for the
+    headline, ``description``/``summary``/``detail``/``text`` for the
+    body. Falls back to ``str(value)`` so we never raise on weird inputs.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        title = value.get("title") or value.get("name") or value.get("theme")
+        desc = value.get("description") or value.get("summary") or value.get("detail") or value.get("text")
+        if title and desc:
+            return f"{title}: {desc}"
+        if title:
+            return str(title)
+        if desc:
+            return str(desc)
+        return ", ".join(f"{k}={v}" for k, v in value.items())
+    return str(value)
+
+
+def _truncate(s: str, cap: int) -> str:
+    if len(s) <= cap:
+        return s
+    return s[: cap - 1].rstrip() + "…"
+
+
+def _render_theme_item(item: Any) -> str:
+    """Render a single themes[] entry as a Markdown list bullet.
+
+    Dict items with both ``title`` and ``description`` render as
+    ``- **Title** — description``. String items render verbatim. All
+    text is truncated to ``_SYNTH_ITEM_CAP`` and inline-escaped so
+    stray angle brackets don't break the surrounding HTML preview.
+    """
+    if isinstance(item, dict):
+        title = item.get("title") or item.get("name") or item.get("theme")
+        desc = item.get("description") or item.get("summary") or item.get("detail")
+        if title and desc:
+            t = _escape_inline(_truncate(str(title), _SYNTH_ITEM_CAP))
+            d = _escape_inline(_truncate(str(desc), _SYNTH_ITEM_CAP))
+            return f"- **{t}** — {d}"
+        text = _truncate(_coerce_str(item), _SYNTH_ITEM_CAP)
+        return f"- {_escape_inline(text)}"
+    return f"- {_escape_inline(_truncate(_coerce_str(item), _SYNTH_ITEM_CAP))}"
+
+
+def _format_synth_item(item: Any) -> str:
+    """Render an agreements/disagreements entry inline (no leading bullet).
+
+    Newlines collapse to spaces so a numbered list stays one item per
+    line; truncation + inline escaping mirrors :func:`_render_theme_item`.
+    """
+    text = _truncate(_coerce_str(item), _SYNTH_ITEM_CAP)
+    text = text.replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
+    return _escape_inline(text)
 
 
 def _banner() -> str:

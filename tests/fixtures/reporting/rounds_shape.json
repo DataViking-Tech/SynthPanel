@@ -72,6 +72,14 @@
     "strategy": "single",
     "summary": "Panelists agree that pricing opacity is the key blocker; fair-price band clusters around $15-20/month per seat.",
     "themes": ["pricing", "onboarding"],
+    "agreements": [
+      "Pricing transparency is the single largest blocker to adoption.",
+      "Onboarding friction compounds the pricing concern."
+    ],
+    "disagreements": [
+      "Acceptable per-seat price band ranges from $15 to $20 depending on team size."
+    ],
+    "recommendation": "Publish a tiered pricing page with per-seat costs and an interactive estimator before the next campaign.",
     "cost": "$0.0010"
   },
   "failure_stats": {
