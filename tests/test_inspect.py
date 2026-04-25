@@ -228,8 +228,7 @@ def test_inspect_model_rollup_merges_alias_and_canonical(monkeypatch):
         report = build_inspect_report(data)
 
         assert len(report.model_rollup) == 1, (
-            f"alias and canonical must merge into one row, got "
-            f"{[m.model for m in report.model_rollup]}"
+            f"alias and canonical must merge into one row, got {[m.model for m in report.model_rollup]}"
         )
         row = report.model_rollup[0]
         assert row.model == "claude-haiku-4-5-20251001"
