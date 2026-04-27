@@ -6,6 +6,24 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-04-26
+
+Minor bump shipping two new CLI features (`--best-model-for`,
+`--submit-to-synthbench`), the new `synthpanel pack calibrate` subcommand,
+six bundled persona packs deepened from 5 → 15 personas (~60 new personas
+addressing the 'too generic' finding from the n=100 self-audit), and two
+`synthpanel report` rendering improvements.
+
+### Added
+- (sp-zq3) `synthpanel panel run --best-model-for TOPIC[:DATASET]` — fetches SynthBench public leaderboard.json, picks the top-SPS model for the requested topic, surfaces the recommendation with SPS, JSD, n, and $/100q context. Uses 24h cache at `~/.synthpanel/synthbench-cache.json`. Falls back gracefully when SynthBench is unreachable. Plus a generated docs page at synthpanel.dev/recommended-models mapping use-cases to SynthBench-validated model picks.
+- (sp-ezz) `synthpanel panel run --submit-to-synthbench` — opt-in submission of calibrated panel runs to the SynthBench public leaderboard via Tier-2 API. Hard-fails at parse time without `--calibrate-against` (only calibrated runs produce SynthBench-shaped scores). First-run consent prompt explaining privacy implications; `--yes` to bypass for CI use. Requires `SYNTHPANEL_SYNTHBENCH_API_KEY` env var.
+- (sp-sghl) `synthpanel pack calibrate <pack-yaml> --against DATASET:QUESTION` — first-class pack calibration: runs a panel using the pack against a SynthBench baseline, computes JSD, writes the result back into the pack YAML as a top-level `calibration:` list. Supports `--n`, `--models`, `--samples-per-question`, `--output`, `--dry-run`, `--yes`. Round-trip preserves persona definitions exactly via ruamel.yaml. Plus new docs/calibration.md methodology guide explaining JSD interpretation and which packs to calibrate against which questions.
+- (sp-edqg, sp-bzgm, sp-xjty, sp-cs0q, sp-z28k, sp-ebrl) Six bundled packs deepened from 5 → 15 personas: developer, enterprise-buyer, general-consumer, healthcare-patient, recruiters-talent, startup-founder. ~60 new personas across role specialty, demographic depth, and career stage. Addresses the 'persona packs too generic' finding from the n=100 self-audit.
+
+### Changed
+- (sp-f9jg) Per-model rollup in `synthpanel report` now buckets correctly by canonical model id. Prior reports showed alias rows (haiku, gemini-flash-lite) with tokens but no cost, AND canonical rows (openrouter/anthropic/claude-haiku-4.5) with cost but no tokens — duplicate rows that misled users. Now one row per model with both columns populated.
+- (sp-xltd) `synthpanel report` synthesis section now renders the full themes / agreements / disagreements / recommendation, not just a 240-char summary peek. Closes the 'synthesis is a black box' gap that the n=100 self-audit surfaced as a real product weakness.
+
 ## [0.11.0] - 2026-04-24
 
 Minor bump shipping the `sp-i2ub` scaled-orchestration epic (panelist-level
@@ -287,7 +305,8 @@ Patch release in the 0.7.x series. See the [README Versions table](README.md#ver
 - Rounds-shaped panel output with `path`, `terminal_round`, and `warnings` fields
 - `extend_panel` MCP tool for ad-hoc follow-up rounds
 
-[Unreleased]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.9.9...v0.10.0
 [0.9.9]: https://github.com/DataViking-Tech/SynthPanel/compare/v0.9.8...v0.9.9
