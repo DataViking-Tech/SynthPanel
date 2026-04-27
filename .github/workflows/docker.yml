@@ -8,6 +8,11 @@ name: Build and Publish Docker Image
 #   - tag push matching v*           (normal release path)
 #   - workflow_dispatch              (manual republish, takes a tag input)
 #
+# Floating tags (latest, <major>, <major>.<minor>) are only (re)pushed when
+# the dispatched tag is the latest stable release in the repo. Backfill
+# dispatches against older tags push only the pinned version (e.g. 0.10.0),
+# so dispatching v0.10.0 won't overwrite `latest` when v0.12.0 is current.
+#
 # GHCR uses GITHUB_TOKEN with packages:write — no extra secret needed.
 #
 # Action refs are tag-pinned for now; renovate (config:recommended +
@@ -74,6 +79,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ steps.ref.outputs.tag }}
+          fetch-tags: true
           persist-credentials: false
 
       - name: Set up QEMU (multi-arch emulation)
@@ -92,6 +98,7 @@ jobs:
       - name: Compute image tag list
         id: tags
         env:
+          TAG: ${{ steps.ref.outputs.tag }}
           VERSION: ${{ steps.ref.outputs.version }}
           IS_STABLE: ${{ steps.ref.outputs.is_stable }}
         run: |
@@ -100,10 +107,23 @@ jobs:
           MAJOR="${VERSION%%.*}"
           REST="${VERSION#*.}"
           MINOR="${REST%%.*}"
+          # Floating tags only update when this build is for the repo's
+          # current latest stable tag. Backfill dispatches against older
+          # tags must not overwrite `latest`/major/minor pointers.
+          LATEST_STABLE=$(git tag -l 'v*' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V \
+            | tail -n 1 || true)
+          if [ -n "$LATEST_STABLE" ] && [ "$TAG" = "$LATEST_STABLE" ]; then
+            IS_LATEST=true
+          else
+            IS_LATEST=false
+          fi
+          echo "Latest stable tag in repo: ${LATEST_STABLE:-<none>} (this=$TAG, is_latest=$IS_LATEST)"
           TAGS=()
           for img in "${IMAGES[@]}"; do
             TAGS+=("${img}:${VERSION}")
-            if [ "$IS_STABLE" = "true" ]; then
+            if [ "$IS_STABLE" = "true" ] && [ "$IS_LATEST" = "true" ]; then
               TAGS+=("${img}:${MAJOR}.${MINOR}" "${img}:${MAJOR}" "${img}:latest")
             fi
           done
