@@ -6,6 +6,9 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [Unreleased]
 
+### Changed (loudness)
+- (sp-g59o) Detection: warn loudly when synthesis output appears unstructured (likely model schema-adherence flake). Triggered when every list field — themes, agreements, disagreements, surprises — is empty while the recommendation slot carries >600 chars of prose. Surfaces as a `synth_panel.synthesis` `logger.warning`, on `SynthesisResult.warnings`, and propagated up to `PanelResult.warnings`. Schema-honoring runs are unchanged. Observed at ~25% on `gemini-flash-lite` synthesis; detection is provider-agnostic.
+
 ## [0.12.0] - 2026-04-26
 
 Minor bump shipping two new CLI features (`--best-model-for`,

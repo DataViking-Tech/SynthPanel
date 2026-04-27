@@ -385,3 +385,109 @@ class TestSynthesisSchema:
         props = _SYNTHESIS_SCHEMA["properties"]
         assert props["summary"]["type"] == "string"
         assert props["recommendation"]["type"] == "string"
+
+
+# sp-g59o: gemini-flash-lite-style schema-adherence flake. The synthesizer
+# returns every required key but every list is empty and the recommendation
+# field carries the full prose. We must detect-and-warn at consume time.
+_UNSTRUCTURED_SYNTHESIS_DATA = {
+    "summary": "Panel discussed product reception.",
+    "themes": [],
+    "agreements": [],
+    "disagreements": [],
+    "surprises": [],
+    "recommendation": (
+        "The panel had a wide-ranging discussion about productivity, "
+        "pricing concerns, and ease of use. Several participants felt the "
+        "tool saves time on repetitive tasks while others questioned "
+        "whether the price is justified for small teams. There were also "
+        "unexpected comments about using it for unintended use cases. "
+        "Overall the recommendation would be to focus messaging on "
+        "productivity gains while considering a small-team tier and "
+        "improving onboarding for new users. The team should also "
+        "consider gathering more data on which user segments derive the "
+        "most value, since pricing concerns appeared to vary widely "
+        "across panelist backgrounds and team sizes."
+    ),
+}
+
+
+class TestUnstructuredOutputDetection:
+    def test_warns_when_empty_lists_and_long_recommendation(self):
+        """sp-g59o: degenerate output (empty lists + long recommendation)
+        emits a warning on result.warnings without flipping is_fallback."""
+        mock_client = MagicMock()
+        mock_client.send.return_value = _make_synthesis_response(_UNSTRUCTURED_SYNTHESIS_DATA)
+
+        result = synthesize_panel(mock_client, _PANELIST_RESULTS, _QUESTIONS)
+
+        # The schema was technically honored — every required key is present —
+        # so we accept the result rather than treat it as a fallback.
+        assert not result.is_fallback
+        assert result.error is None
+        # But we surface a heuristic warning so the operator knows the
+        # output is degenerate.
+        assert result.warnings, "expected unstructured-output warning"
+        assert any("unstructured" in w for w in result.warnings)
+
+    def test_warning_appears_in_to_dict(self):
+        """sp-g59o: warnings round-trip through to_dict() so MCP / file
+        persistence consumers see them."""
+        mock_client = MagicMock()
+        mock_client.send.return_value = _make_synthesis_response(_UNSTRUCTURED_SYNTHESIS_DATA)
+
+        result = synthesize_panel(mock_client, _PANELIST_RESULTS, _QUESTIONS)
+        d = result.to_dict()
+
+        assert "warnings" in d
+        assert any("unstructured" in w for w in d["warnings"])
+
+    def test_no_warning_on_healthy_output(self):
+        """Healthy structured output produces no heuristic warning, and
+        to_dict() omits the warnings key entirely so the serialized shape
+        is unchanged for backwards-compat consumers."""
+        mock_client = MagicMock()
+        mock_client.send.return_value = _make_synthesis_response(_SYNTHESIS_DATA)
+
+        result = synthesize_panel(mock_client, _PANELIST_RESULTS, _QUESTIONS)
+        d = result.to_dict()
+
+        assert result.warnings == []
+        assert "warnings" not in d
+
+    def test_no_warning_when_themes_present(self):
+        """If at least one structured list is populated, the recommendation
+        prose is permissible — no warning even when long."""
+        data = dict(_UNSTRUCTURED_SYNTHESIS_DATA)
+        data["themes"] = ["productivity"]
+        mock_client = MagicMock()
+        mock_client.send.return_value = _make_synthesis_response(data)
+
+        result = synthesize_panel(mock_client, _PANELIST_RESULTS, _QUESTIONS)
+
+        assert result.warnings == []
+
+    def test_no_warning_when_recommendation_short(self):
+        """Empty lists are not enough on their own — only the
+        long-recommendation pattern signals the schema-adherence flake."""
+        data = dict(_UNSTRUCTURED_SYNTHESIS_DATA)
+        data["recommendation"] = "Short rec."
+        mock_client = MagicMock()
+        mock_client.send.return_value = _make_synthesis_response(data)
+
+        result = synthesize_panel(mock_client, _PANELIST_RESULTS, _QUESTIONS)
+
+        assert result.warnings == []
+
+    def test_unstructured_output_logs_warning(self, caplog):
+        """sp-g59o: detection emits a logger.warning so the signal is
+        visible in run logs even before structured consumption."""
+        import logging
+
+        mock_client = MagicMock()
+        mock_client.send.return_value = _make_synthesis_response(_UNSTRUCTURED_SYNTHESIS_DATA)
+
+        with caplog.at_level(logging.WARNING, logger="synth_panel.synthesis"):
+            synthesize_panel(mock_client, _PANELIST_RESULTS, _QUESTIONS)
+
+        assert any("unstructured" in rec.message for rec in caplog.records)

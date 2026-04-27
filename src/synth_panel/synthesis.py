@@ -99,6 +99,40 @@ _SYNTHESIS_SCHEMA: dict[str, Any] = {
 _DEFAULT_MODEL = "sonnet"
 _MAX_TOKENS = 4096
 
+# sp-g59o: heuristic threshold for detecting "schema honored in form, not in
+# spirit" output — when every list field is empty but the recommendation
+# field carries a long prose dump, the synthesizer most likely ignored the
+# structure and consolidated everything into the unstructured slot. The
+# 600-char cutoff sits comfortably between the largest healthy
+# recommendation observed in the v0.12 variance probe (~507) and the
+# smallest degenerate one (~1078).
+_UNSTRUCTURED_RECOMMENDATION_CHAR_THRESHOLD = 600
+_UNSTRUCTURED_OUTPUT_WARNING = (
+    "synthesis structured output appears unstructured — model may have "
+    "ignored schema (themes/agreements/disagreements/surprises all empty "
+    "while recommendation carries long prose). Consider rerunning or "
+    "switching synthesis model."
+)
+
+
+def _detect_unstructured_output(
+    themes: list[str],
+    agreements: list[str],
+    disagreements: list[str],
+    surprises: list[str],
+    recommendation: str,
+) -> bool:
+    """Heuristic for the gemini-flash-lite-style schema-adherence flake.
+
+    Returns True when every list field is empty AND the recommendation is
+    longer than the threshold. The information content is similar in that
+    case — the model just packed the whole synthesis into the one
+    unstructured slot instead of partitioning across the schema.
+    """
+    if themes or agreements or disagreements or surprises:
+        return False
+    return len(recommendation) > _UNSTRUCTURED_RECOMMENDATION_CHAR_THRESHOLD
+
 
 @dataclass
 class SynthesisResult:
@@ -123,6 +157,11 @@ class SynthesisResult:
     per_question_synthesis: dict[int, str] | None = None
     map_cost_breakdown: list[dict[str, Any]] | None = None
     reduce_cost_breakdown: dict[str, Any] | None = None
+    # sp-g59o: post-parse heuristic warnings (e.g. degenerate structured
+    # output where every list field is empty but the recommendation field
+    # carries long prose). Empty by default; included in to_dict() only
+    # when non-empty so the serialized shape is unchanged for healthy runs.
+    warnings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a plain dict."""
@@ -144,6 +183,8 @@ class SynthesisResult:
             # JSON requires string keys; keep indices as strings in the
             # serialized shape so MCP / file persistence round-trips cleanly.
             d["per_question_synthesis"] = {str(k): v for k, v in self.per_question_synthesis.items()}
+        if self.warnings:
+            d["warnings"] = list(self.warnings)
         return d
 
 
@@ -302,16 +343,38 @@ def synthesize_panel(
             error=error_msg,
         )
 
+    themes = data.get("themes", [])
+    agreements = data.get("agreements", [])
+    disagreements = data.get("disagreements", [])
+    surprises = data.get("surprises", [])
+    recommendation = data.get("recommendation", "")
+    warnings: list[str] = []
+    # sp-g59o: detect-and-warn for schema-adherence flake (gemini-flash-lite
+    # was the trigger but this is provider-agnostic). The synthesis call
+    # technically returned every required key, but every list is empty and
+    # the recommendation slot carries a long prose dump — the model
+    # ignored the structure. Surface a warning rather than silently
+    # accepting degenerate output. Cheap, no retry, no extra cost.
+    if _detect_unstructured_output(themes, agreements, disagreements, surprises, recommendation):
+        logger.warning(
+            "synthesis output appears unstructured (model=%s, recommendation_chars=%d): %s",
+            resolved_model,
+            len(recommendation),
+            _UNSTRUCTURED_OUTPUT_WARNING,
+        )
+        warnings.append(_UNSTRUCTURED_OUTPUT_WARNING)
+
     return SynthesisResult(
         summary=data.get("summary", ""),
-        themes=data.get("themes", []),
-        agreements=data.get("agreements", []),
-        disagreements=data.get("disagreements", []),
-        surprises=data.get("surprises", []),
-        recommendation=data.get("recommendation", ""),
+        themes=themes,
+        agreements=agreements,
+        disagreements=disagreements,
+        surprises=surprises,
+        recommendation=recommendation,
         usage=usage,
         cost=cost,
         model=resolved_model,
+        warnings=warnings,
     )
 
 
