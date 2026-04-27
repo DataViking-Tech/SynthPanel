@@ -761,6 +761,65 @@ def build_parser() -> argparse.ArgumentParser:
         help="Custom pack ID (default: auto-generated).",
     )
 
+    # pack calibrate (sp-sghl): calibrate a pack against a SynthBench baseline
+    # and write the resulting JSD into the pack manifest.
+    pack_calibrate_parser = pack_subparsers.add_parser(
+        "calibrate",
+        help="Calibrate a persona pack against a SynthBench human baseline.",
+    )
+    pack_calibrate_parser.add_argument(
+        "pack_yaml",
+        metavar="PACK_YAML",
+        help="Path to the persona pack YAML file to calibrate.",
+    )
+    pack_calibrate_parser.add_argument(
+        "--against",
+        required=True,
+        metavar="DATASET:QUESTION",
+        dest="against",
+        help=("SynthBench baseline to calibrate against, e.g. gss:HAPPY. v1 inline-publishable allowlist: gss, ntia."),
+    )
+    pack_calibrate_parser.add_argument(
+        "--n",
+        type=int,
+        default=50,
+        help="Panel size (default: 50).",
+    )
+    pack_calibrate_parser.add_argument(
+        "--models",
+        default=None,
+        metavar="MODELS",
+        help=(
+            "Models to use for the calibration panel (same format as 'panel run --models'). Default: panel run default."
+        ),
+    )
+    pack_calibrate_parser.add_argument(
+        "--samples-per-question",
+        type=int,
+        default=15,
+        dest="samples_per_question",
+        help="Samples per question for stable JSD (default: 15).",
+    )
+    pack_calibrate_parser.add_argument(
+        "--output",
+        "-o",
+        default=None,
+        metavar="PATH",
+        help="Write the updated pack to PATH (default: rewrite PACK_YAML in place).",
+    )
+    pack_calibrate_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        dest="dry_run",
+        help="Print what would be written to the YAML without touching the file.",
+    )
+    pack_calibrate_parser.add_argument(
+        "--yes",
+        action="store_true",
+        dest="yes",
+        help="Non-interactive overwrite confirm (skip the y/N prompt).",
+    )
+
     # instruments
     instruments_parser = subparsers.add_parser(
         "instruments",

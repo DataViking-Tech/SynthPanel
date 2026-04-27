@@ -3241,6 +3241,266 @@ def handle_pack_generate(args: argparse.Namespace, fmt: OutputFormat) -> int:
     return 0
 
 
+# ---------------------------------------------------------------------------
+# Pack calibrate (sp-sghl)
+# ---------------------------------------------------------------------------
+
+
+def _run_calibration_panel(
+    *,
+    pack_yaml_path: str,
+    against: str,
+    n: int,
+    samples_per_question: int,
+    models: str | None,
+) -> dict[str, Any]:
+    """Drive the actual calibration run and return a dict the YAML writer consumes.
+
+    Shells out to ``synthpanel panel run`` so this command composes from the
+    same orchestrator the user would invoke manually. Tests monkeypatch this
+    function, so the real subprocess path is exercised only at integration
+    time.
+
+    The returned dict has keys: ``jsd``, ``extractor``, ``models`` (list of
+    ``model:weight`` strings), ``panelist_cost_usd``, and optionally
+    ``alignment_error``.
+    """
+    import contextlib
+    import subprocess
+    import tempfile
+
+    # The instrument used here is intentionally minimal — a single open-text
+    # question whose text comes from the SynthBench baseline payload (when
+    # available). The panelists' answers are extracted via the auto-derived
+    # pick_one schema (see convergence.derive_pick_one_schema_from_baseline)
+    # and compared against the baseline's human distribution to compute JSD.
+    try:
+        baseline = load_synthbench_baseline(against)
+    except SynthbenchUnavailableError as exc:
+        raise RuntimeError(str(exc)) from exc
+
+    question_text = baseline.get("question_text") or baseline.get("prompt")
+    if not question_text:
+        dataset, _, question = against.partition(":")
+        question_text = f"Please answer the SynthBench {dataset} question {question} as honestly as you can."
+
+    instrument_payload = {
+        "instrument": {
+            "version": 1,
+            "questions": [{"text": str(question_text)}],
+        }
+    }
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as inst_fh:
+        yaml.safe_dump(instrument_payload, inst_fh, sort_keys=False)
+        instrument_path = inst_fh.name
+
+    try:
+        cmd = [
+            sys.executable,
+            "-m",
+            "synth_panel",
+            "--output-format",
+            "json",
+            "panel",
+            "run",
+            "--personas",
+            pack_yaml_path,
+            "--instrument",
+            instrument_path,
+            "--n",
+            str(n),
+            "--samples-per-question",
+            str(samples_per_question),
+            "--calibrate-against",
+            against,
+        ]
+        if models:
+            cmd.extend(["--models", models])
+
+        proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    finally:
+        with contextlib.suppress(OSError):
+            os.unlink(instrument_path)
+
+    if proc.returncode != 0:
+        raise RuntimeError(f"panel run for calibration failed (exit {proc.returncode}): {proc.stderr.strip()[:500]}")
+
+    try:
+        payload = json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"could not parse panel run JSON output: {exc}") from exc
+
+    convergence = payload.get("convergence") or {}
+    per_question = convergence.get("per_question") or {}
+    if not per_question:
+        raise RuntimeError("panel run produced no convergence.per_question — calibration JSD unavailable")
+    # We expect exactly one tracked question (instrument has one).
+    first_key = next(iter(per_question))
+    calib = (per_question[first_key] or {}).get("calibration") or {}
+    if "jsd" not in calib:
+        raise RuntimeError("panel run convergence report has no calibration.jsd — was --calibrate-against rejected?")
+
+    panelist_cost_usd = 0.0
+    cost_section = payload.get("total_cost") or payload.get("cost") or {}
+    if isinstance(cost_section, dict):
+        panelist_cost_usd = float(
+            cost_section.get("usd") or cost_section.get("total_usd") or cost_section.get("cost_usd") or 0.0
+        )
+
+    return {
+        "jsd": float(calib["jsd"]),
+        "extractor": calib.get("extractor") or "pick_one:auto-derived",
+        "models": _split_models_arg(models) if models else _default_models_list(payload),
+        "panelist_cost_usd": panelist_cost_usd,
+        "alignment_error": calib.get("alignment_error"),
+    }
+
+
+def _split_models_arg(models: str | None) -> list[str]:
+    """Split a comma-separated --models argument into a list."""
+    if not models:
+        return []
+    return [m.strip() for m in models.split(",") if m.strip()]
+
+
+def _default_models_list(payload: dict[str, Any]) -> list[str]:
+    """Best-effort recovery of the default model used when --models was not set."""
+    model = payload.get("model")
+    if isinstance(model, str) and model:
+        return [model]
+    metadata = payload.get("metadata") or {}
+    model_meta = metadata.get("model")
+    if isinstance(model_meta, str) and model_meta:
+        return [model_meta]
+    return []
+
+
+def handle_pack_calibrate(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Calibrate a persona pack against a SynthBench baseline (sp-sghl).
+
+    Orchestrates a panel run with ``--calibrate-against`` and writes the
+    resulting JSD into the pack YAML's ``calibration:`` list. Re-running
+    against the same dataset+question replaces the prior entry.
+    """
+    from synth_panel import calibration as calib_mod
+    from synth_panel.__version__ import __version__
+
+    pack_yaml_path = args.pack_yaml
+    against = args.against
+    output_path = args.output or pack_yaml_path
+    dry_run = bool(args.dry_run)
+    yes = bool(args.yes)
+
+    # ── Validate --against spec + allowlist before any work ───────────
+    dataset, sep, question = against.partition(":")
+    if not sep or not dataset or not question:
+        print(
+            "Error: --against requires DATASET:QUESTION (colon-separated, both non-empty).",
+            file=sys.stderr,
+        )
+        return 2
+    if dataset not in _INLINE_CALIBRATION_ALLOWED and os.environ.get("SYNTHBENCH_ALLOW_GATED") != "1":
+        allowed = ", ".join(sorted(_INLINE_CALIBRATION_ALLOWED))
+        print(
+            f"Error: --against only supports inline-publishable datasets ({allowed}). "
+            f"For gated datasets use post-hoc calibration.",
+            file=sys.stderr,
+        )
+        return 1
+
+    # ── Load + validate the pack YAML ────────────────────────────────
+    if not Path(pack_yaml_path).exists():
+        print(f"Error: pack YAML not found: {pack_yaml_path}", file=sys.stderr)
+        return 1
+    try:
+        raw_text, parsed = calib_mod.load_pack_yaml(pack_yaml_path)
+    except (OSError, ValueError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    # ── Run the calibration panel ────────────────────────────────────
+    try:
+        run_result = _run_calibration_panel(
+            pack_yaml_path=pack_yaml_path,
+            against=against,
+            n=int(args.n),
+            samples_per_question=int(args.samples_per_question),
+            models=args.models,
+        )
+    except RuntimeError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    # ── Build the calibration entry ──────────────────────────────────
+    entry = calib_mod.CalibrationEntry(
+        dataset=dataset,
+        question=question,
+        jsd=round(float(run_result["jsd"]), 6),
+        n=int(args.n),
+        samples_per_question=int(args.samples_per_question),
+        models=list(run_result.get("models") or []),
+        extractor=str(run_result.get("extractor") or "pick_one:auto-derived"),
+        panelist_cost_usd=round(float(run_result.get("panelist_cost_usd") or 0.0), 4),
+        calibrated_at=calib_mod.now_iso_utc(),
+        synthpanel_version=str(__version__),
+        alignment_error=run_result.get("alignment_error"),
+    )
+    new_dict = entry.to_yaml_dict()
+    new_yaml = calib_mod.update_pack_calibration_text(raw_text, parsed, new_dict)
+
+    # ── Dry-run: print, don't write ──────────────────────────────────
+    if dry_run:
+        if fmt is OutputFormat.TEXT:
+            print(f"# DRY RUN — would write to {output_path}")
+            print(new_yaml, end="")
+        else:
+            emit(
+                fmt,
+                message="Dry-run preview",
+                extra={
+                    "pack_yaml": pack_yaml_path,
+                    "output": output_path,
+                    "calibration_entry": new_dict,
+                    "rendered_yaml": new_yaml,
+                },
+            )
+        return 0
+
+    # ── Confirm overwrite when output path already exists ────────────
+    out_exists = Path(output_path).exists()
+    if out_exists and not yes and sys.stdin.isatty():
+        prompt = f"Overwrite {output_path}? [y/N]: "
+        try:
+            answer = input(prompt).strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("\nAborted.", file=sys.stderr)
+            return 1
+        if answer not in {"y", "yes"}:
+            print("Aborted.", file=sys.stderr)
+            return 1
+
+    try:
+        Path(output_path).write_text(new_yaml, encoding="utf-8")
+    except OSError as exc:
+        print(f"Error: failed to write {output_path}: {exc}", file=sys.stderr)
+        return 1
+
+    if fmt is OutputFormat.TEXT:
+        print(f"Wrote calibration entry ({dataset}:{question}, JSD {entry.jsd}) → {output_path}")
+    else:
+        emit(
+            fmt,
+            message="Pack calibrated",
+            extra={
+                "pack_yaml": pack_yaml_path,
+                "output": output_path,
+                "calibration_entry": new_dict,
+            },
+        )
+    return 0
+
+
 def handle_mcp_serve(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """Start the MCP server on stdio transport."""
     from synth_panel.mcp.server import serve
