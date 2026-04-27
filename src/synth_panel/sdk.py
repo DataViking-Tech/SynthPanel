@@ -360,6 +360,10 @@ def _build_panel_result_from_single_round(
     # so MCP/CI consumers can branch on run validity without walking into
     # the nested synthesis envelope.
     synthesis_error = synthesis_dict.get("synthesis_error") if isinstance(synthesis_dict, dict) else None
+    # sp-g59o: surface synthesis-level heuristic warnings (e.g. degenerate
+    # structured output) at the top level so MCP consumers don't have to
+    # walk into the nested synthesis dict to find them.
+    synthesis_warnings = list(synthesis_dict.get("warnings") or []) if isinstance(synthesis_dict, dict) else []
     return PanelResult(
         result_id=result_id,
         model=model,
@@ -376,7 +380,7 @@ def _build_panel_result_from_single_round(
         synthesis=synthesis_dict,
         total_cost=total_cost.format_usd(),
         total_usage=total_usage.to_dict(),
-        warnings=list(cost_warnings),
+        warnings=[*cost_warnings, *synthesis_warnings],
         cost_is_estimated=bool(cost_warnings),
         terminal_round=None,
         results=result_dicts,
@@ -428,6 +432,18 @@ def _build_panel_result_from_multi_round(
     synth_model = getattr(mr.final_synthesis, "model", None) if mr.final_synthesis else None
     cost_warnings = build_cost_fallback_warnings([*sorted(contributing), synth_model])
 
+    # sp-g59o: gather synthesis-level heuristic warnings from per-round
+    # syntheses + the final reduce so the degenerate-output detector
+    # surfaces uniformly across single and multi-round runs.
+    synthesis_warnings: list[str] = []
+    for rr in mr.rounds:
+        round_warnings = getattr(rr.synthesis, "warnings", None)
+        if round_warnings:
+            synthesis_warnings.extend(round_warnings)
+    final_warnings = getattr(mr.final_synthesis, "warnings", None) if mr.final_synthesis else None
+    if final_warnings:
+        synthesis_warnings.extend(final_warnings)
+
     return PanelResult(
         result_id=result_id,
         model=model,
@@ -438,7 +454,7 @@ def _build_panel_result_from_multi_round(
         synthesis=final_synth_dict,
         total_cost=total_cost.format_usd(),
         total_usage=mr.usage.to_dict(),
-        warnings=list(mr.warnings) + list(cost_warnings),
+        warnings=list(mr.warnings) + list(cost_warnings) + synthesis_warnings,
         cost_is_estimated=bool(cost_warnings),
         terminal_round=mr.terminal_round,
         results=flat_results,
