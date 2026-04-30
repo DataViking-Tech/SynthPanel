@@ -29,13 +29,17 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 
 WORKDIR /build
 
+# Install build tooling first so it caches independent of source. Without
+# this split, every code change reruns the pip-install step alongside the
+# wheel build.
+RUN pip install --upgrade pip build
+
 # Copy only what's needed to build the wheel. Source layout matches
 # pyproject.toml's [tool.setuptools.packages.find] (where = ["src"]).
 COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
 
-RUN pip install --upgrade pip build \
- && python -m build --wheel --outdir /build/dist
+RUN python -m build --wheel --outdir /build/dist
 
 # ---------- runtime ----------
 FROM python:${PYTHON_VERSION}-slim AS runtime
@@ -66,16 +70,23 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 RUN groupadd --gid 1000 synthpanel \
  && useradd --uid 1000 --gid synthpanel --create-home --home-dir /home/synthpanel synthpanel
 
-COPY --from=builder /build/dist/*.whl /tmp/
+# Install runtime dependencies BEFORE copying the wheel so this expensive
+# layer caches across source-only changes. The wheel content changes on
+# every code edit; the dep set rarely does. Reading from pyproject.toml
+# keeps the dep list authoritative — no Dockerfile drift when deps change.
+# [mcp] extras are baked in because the image's primary use case is
+# `mcp-serve`.
+COPY --from=builder /build/pyproject.toml /tmp/pyproject.toml
+RUN pip install --no-cache-dir $(python -c "import tomllib; d = tomllib.load(open('/tmp/pyproject.toml', 'rb')); print(' '.join(d['project']['dependencies'] + d['project'].get('optional-dependencies', {}).get('mcp', [])))") \
+ && rm /tmp/pyproject.toml
 
-# Install with [mcp] extras so `mcp-serve` works out of the box. The MCP
-# server is the primary use case for this image (agent tool-call target).
-# The shell-form RUN resolves the wheel via a variable so the [mcp] extras
-# suffix doesn't get interpreted as a shell character class against the
-# glob.
+# Install just the project from its wheel, without re-resolving deps. The
+# shell-form RUN resolves the wheel via a variable so the glob doesn't
+# trip on the wheel filename's metadata.
+COPY --from=builder /build/dist/*.whl /tmp/
 RUN set -eux \
  && wheel="$(ls /tmp/synthpanel-*.whl | head -n1)" \
- && pip install "${wheel}[mcp]" \
+ && pip install --no-deps "${wheel}" \
  && rm -f /tmp/synthpanel-*.whl
 
 USER synthpanel
