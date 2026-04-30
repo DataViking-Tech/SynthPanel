@@ -35,6 +35,7 @@ class PersonaSummary:
     response_count: int
     error_count: int
     panelist_error: str | None
+    skip_count: int = 0
 
 
 @dataclass
@@ -71,6 +72,7 @@ class FailureStats:
     failure_rate: float
     failed_panelists: int
     errored_personas: list[str]
+    skipped_follow_ups: int = 0
 
 
 @dataclass
@@ -207,6 +209,7 @@ def _collect_persona_summaries(panelists: list[dict[str, Any]]) -> list[PersonaS
         responses = p.get("responses") or []
         resp_count = sum(1 for r in responses if isinstance(r, dict))
         err_count = sum(1 for r in responses if isinstance(r, dict) and r.get("error") and not r.get("follow_up"))
+        skip_count = sum(1 for r in responses if isinstance(r, dict) and r.get("skipped_by_condition"))
         panelist_error = p.get("error")
         out.append(
             PersonaSummary(
@@ -215,6 +218,7 @@ def _collect_persona_summaries(panelists: list[dict[str, Any]]) -> list[PersonaS
                 response_count=resp_count,
                 error_count=err_count,
                 panelist_error=panelist_error if panelist_error else None,
+                skip_count=skip_count,
             )
         )
     return out
@@ -338,11 +342,13 @@ def _collect_failure_stats(
             failure_rate=float(fs.get("failure_rate", 0.0) or 0.0),
             failed_panelists=int(fs.get("failed_panelists", 0) or 0),
             errored_personas=list(fs.get("errored_personas") or []),
+            skipped_follow_ups=int(fs.get("skipped_follow_ups", 0) or 0),
         )
 
     total = 0
     errored = 0
     failed_panelists = 0
+    skipped_follow_ups = 0
     bad_personas: set[str] = set()
     for p in panelists:
         name = str(p.get("persona", "unknown"))
@@ -356,6 +362,8 @@ def _collect_failure_stats(
         bad = 0
         for resp in p.get("responses") or []:
             if not isinstance(resp, dict) or resp.get("follow_up"):
+                if isinstance(resp, dict) and resp.get("skipped_by_condition"):
+                    skipped_follow_ups += 1
                 continue
             seen += 1
             if resp.get("error"):
@@ -375,6 +383,7 @@ def _collect_failure_stats(
         failure_rate=rate,
         failed_panelists=failed_panelists,
         errored_personas=sorted(bad_personas),
+        skipped_follow_ups=skipped_follow_ups,
     )
 
 

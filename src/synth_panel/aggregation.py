@@ -189,16 +189,24 @@ def robustness_report(
         for group in scorable:
             if qi >= len(group.original.responses):
                 continue
+            orig_resp = group.original.responses[qi]
+            # No reference answer when the original itself was conditionally skipped.
+            if isinstance(orig_resp, dict) and orig_resp.get("skipped_by_condition"):
+                continue
 
-            ref = extract(group.original.responses[qi])
+            ref = extract(orig_resp)
 
             k = 0
             agreements = 0
             for v in group.variants:
                 if qi >= len(v.responses):
                     continue
+                v_resp = v.responses[qi]
+                # Don't count a variant that skipped this question by condition.
+                if isinstance(v_resp, dict) and v_resp.get("skipped_by_condition"):
+                    continue
                 k += 1
-                if extract(v.responses[qi]) == ref:
+                if extract(v_resp) == ref:
                     agreements += 1
 
             score = agreements / k if k > 0 else 0.0
