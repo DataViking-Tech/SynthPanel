@@ -1055,4 +1055,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show which providers have credentials available (env or stored).",
     )
 
+    subparsers.add_parser(
+        "doctor",
+        help=(
+            "Preflight diagnostics: runtime, deps, and provider credentials "
+            "(never prints secrets; exits 1 if no provider credential is configured)."
+        ),
+    )
+
     return parser

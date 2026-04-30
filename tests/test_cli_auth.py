@@ -167,6 +167,90 @@ class TestLogout:
         assert "No stored credential" in capsys.readouterr().out
 
 
+class TestDoctor:
+    """synthpanel doctor preflight — must never leak credentials (GH #310)."""
+
+    def test_doctor_is_registered(self):
+        parser = build_parser()
+        args = parser.parse_args(["doctor"])
+        assert args.command == "doctor"
+
+    def test_doctor_fails_when_no_credentials(self, capsys, monkeypatch):
+        for env in (
+            "ANTHROPIC_API_KEY",
+            "OPENAI_API_KEY",
+            "GEMINI_API_KEY",
+            "GOOGLE_API_KEY",
+            "XAI_API_KEY",
+            "OPENROUTER_API_KEY",
+        ):
+            monkeypatch.delenv(env, raising=False)
+        monkeypatch.delenv("SYNTHPANEL_CREDENTIALS_PATH", raising=False)
+        rc = main(["doctor"])
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "No LLM credentials found" in err
+
+    def test_doctor_passes_when_env_credentials_set(self, capsys, monkeypatch):
+        for env in (
+            "ANTHROPIC_API_KEY",
+            "OPENAI_API_KEY",
+            "GEMINI_API_KEY",
+            "GOOGLE_API_KEY",
+            "XAI_API_KEY",
+            "OPENROUTER_API_KEY",
+        ):
+            monkeypatch.delenv(env, raising=False)
+        monkeypatch.delenv("SYNTHPANEL_CREDENTIALS_PATH", raising=False)
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-do-not-leak-this-value")
+        rc = main(["doctor"])
+        assert rc == 0
+        captured = capsys.readouterr()
+        combined = captured.out + captured.err
+        assert "sk-ant-do-not-leak-this-value" not in combined
+        assert "do-not-leak" not in combined
+
+    def test_doctor_never_echoes_stored_credentials(self, capsys, monkeypatch):
+        for env in (
+            "ANTHROPIC_API_KEY",
+            "OPENAI_API_KEY",
+            "GEMINI_API_KEY",
+            "GOOGLE_API_KEY",
+            "XAI_API_KEY",
+            "OPENROUTER_API_KEY",
+        ):
+            monkeypatch.delenv(env, raising=False)
+        save_credential("OPENAI_API_KEY", "sk-stored-ultra-secret-999")
+        rc = main(["doctor"])
+        assert rc == 0
+        captured = capsys.readouterr()
+        combined = captured.out + captured.err
+        assert "sk-stored-ultra-secret-999" not in combined
+        assert "ultra-secret" not in combined
+
+    def test_doctor_json_has_no_secret_values(self, capsys, monkeypatch):
+        for env in (
+            "ANTHROPIC_API_KEY",
+            "OPENAI_API_KEY",
+            "GEMINI_API_KEY",
+            "GOOGLE_API_KEY",
+            "XAI_API_KEY",
+            "OPENROUTER_API_KEY",
+        ):
+            monkeypatch.delenv(env, raising=False)
+        monkeypatch.setenv("XAI_API_KEY", "xai-json-secret-banned")
+        rc = main(["--output-format", "json", "doctor"])
+        assert rc == 0
+        raw = capsys.readouterr().out
+        assert "xai-json-secret-banned" not in raw
+        payload = json.loads(raw)
+        assert payload["message"] == "doctor_report"
+        assert payload["credential_configured"] is True
+        assert payload["checks_ok"] is True
+        dumped = json.dumps(payload)
+        assert "xai-json-secret-banned" not in dumped
+
+
 class TestWhoami:
     def test_whoami_reports_no_credentials(self, capsys, monkeypatch):
         for env in (
