@@ -26,6 +26,7 @@ from synth_panel.checkpoint import (
     CheckpointDriftError,
     CheckpointFormatError,
     CheckpointNotFoundError,
+    CheckpointSchemaTooNewError,
     CheckpointWriter,
     PanelCheckpoint,
     _merge_usage,
@@ -43,6 +44,11 @@ from synth_panel.llm.models import (
 )
 from synth_panel.llm.models import (
     TokenUsage as LLMTokenUsage,
+)
+from synth_panel.metadata_migrations import (
+    CURRENT_SCHEMA_VERSION,
+    migrate_to_current,
+    migrate_v1_to_v2,
 )
 from synth_panel.orchestrator import PanelistResult, run_panel_parallel
 
@@ -1041,3 +1047,140 @@ class TestResumeFromCheckpointCli:
         err = capsys.readouterr().err
         assert "drift" in err.lower()
         assert "statistically inconsistent" in err.lower()
+
+
+# ---------------------------------------------------------------------------
+# sy-z8p6: schema_version field + migration registry
+# ---------------------------------------------------------------------------
+
+
+class TestSchemaMigration:
+    """schema_version field and migrate_to_current() migration chain."""
+
+    def test_current_version_written_on_save(self, tmp_path: Path) -> None:
+        cfg = _make_config(["Alice"])
+        ckpt = PanelCheckpoint(
+            run_id="run-ver",
+            created_at="now",
+            updated_at="now",
+            config_fingerprint=fingerprint_config(cfg),
+            config=cfg,
+        )
+        d = ckpt.to_dict()
+        assert d["schema_version"] == CURRENT_SCHEMA_VERSION
+        assert "version" not in d
+
+    def test_current_version_persisted_to_disk(self, tmp_path: Path) -> None:
+        cfg = _make_config(["Alice"])
+        ckpt = PanelCheckpoint(
+            run_id="run-ver-disk",
+            created_at="now",
+            updated_at="now",
+            config_fingerprint=fingerprint_config(cfg),
+            config=cfg,
+        )
+        directory = checkpoint_dir_for("run-ver-disk", tmp_path)
+        save_checkpoint(ckpt, directory)
+        raw = json.loads((directory / "state.json").read_text())
+        assert raw["schema_version"] == CURRENT_SCHEMA_VERSION
+
+    def test_v1_checkpoint_migrates_on_load(self, tmp_path: Path) -> None:
+        cfg = _make_config(["Alice", "Bob"])
+        directory = checkpoint_dir_for("run-v1", tmp_path)
+        directory.mkdir(parents=True)
+        v1_data = {
+            "version": 1,
+            "run_id": "run-v1",
+            "created_at": "2026-04-24T00:00:00Z",
+            "updated_at": "2026-04-24T00:00:00Z",
+            "config_fingerprint": fingerprint_config(cfg),
+            "config": cfg,
+            "completed": [{"persona": "Alice", "responses": [], "usage": {}, "error": None}],
+            "remaining": ["Bob"],
+            "usage": {"input_tokens": 5},
+            "abort_reason": None,
+            # No cli_args, no schema_version
+        }
+        (directory / "state.json").write_text(json.dumps(v1_data))
+        loaded = load_checkpoint("run-v1", tmp_path)
+        assert loaded.run_id == "run-v1"
+        assert loaded.cli_args is None
+        assert loaded.completed[0]["persona"] == "Alice"
+        assert loaded.remaining == ["Bob"]
+
+    def test_schema_too_new_raises(self, tmp_path: Path) -> None:
+        cfg = _make_config(["Alice"])
+        directory = checkpoint_dir_for("run-future", tmp_path)
+        directory.mkdir(parents=True)
+        future_data = {
+            "schema_version": CURRENT_SCHEMA_VERSION + 1,
+            "run_id": "run-future",
+            "created_at": "now",
+            "updated_at": "now",
+            "config_fingerprint": fingerprint_config(cfg),
+            "config": cfg,
+        }
+        (directory / "state.json").write_text(json.dumps(future_data))
+        with pytest.raises(CheckpointSchemaTooNewError, match="newer than this synthpanel"):
+            load_checkpoint("run-future", tmp_path)
+
+    def test_migrate_v1_to_v2_adds_defaults(self) -> None:
+        v1 = {
+            "version": 1,
+            "run_id": "x",
+            "created_at": "now",
+            "updated_at": "now",
+            "config_fingerprint": "abc",
+            "config": {},
+        }
+        result = migrate_v1_to_v2(v1)
+        assert result["schema_version"] == 2
+        assert result["cli_args"] is None
+        assert result["completed"] == []
+        assert result["remaining"] == []
+        assert result["usage"] == {}
+        assert result["abort_reason"] is None
+
+    def test_migrate_v1_to_v2_preserves_existing_fields(self) -> None:
+        v1 = {
+            "version": 1,
+            "run_id": "x",
+            "created_at": "now",
+            "updated_at": "now",
+            "config_fingerprint": "abc",
+            "config": {},
+            "completed": [{"persona": "Alice"}],
+            "remaining": ["Bob"],
+            "usage": {"input_tokens": 7},
+            "abort_reason": "signal:SIGINT",
+        }
+        result = migrate_v1_to_v2(v1)
+        assert result["completed"] == [{"persona": "Alice"}]
+        assert result["remaining"] == ["Bob"]
+        assert result["usage"] == {"input_tokens": 7}
+        assert result["abort_reason"] == "signal:SIGINT"
+
+    def test_migrate_to_current_noop_at_current_version(self) -> None:
+        data = {"schema_version": CURRENT_SCHEMA_VERSION, "run_id": "x"}
+        assert migrate_to_current(data) is data
+
+    def test_migrate_to_current_raises_on_future_version(self) -> None:
+        data = {"schema_version": CURRENT_SCHEMA_VERSION + 1}
+        with pytest.raises(ValueError, match="newer than this synthpanel"):
+            migrate_to_current(data)
+
+    def test_round_trip_preserves_schema_version(self, tmp_path: Path) -> None:
+        cfg = _make_config(["Alice"])
+        ckpt = PanelCheckpoint(
+            run_id="run-rt-ver",
+            created_at="now",
+            updated_at="now",
+            config_fingerprint=fingerprint_config(cfg),
+            config=cfg,
+        )
+        directory = checkpoint_dir_for("run-rt-ver", tmp_path)
+        save_checkpoint(ckpt, directory)
+        loaded = load_checkpoint("run-rt-ver", tmp_path)
+        # Re-saving the loaded checkpoint still writes the current version.
+        d = loaded.to_dict()
+        assert d["schema_version"] == CURRENT_SCHEMA_VERSION
