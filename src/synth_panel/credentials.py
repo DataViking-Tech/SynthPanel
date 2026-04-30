@@ -16,9 +16,15 @@ offer a dedicated ``synthpanel login`` instead of auto-bridging.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 from pathlib import Path
+
+
+class CredentialIntegrityError(Exception):
+    """Raised when credentials.json sha256 sidecar does not match the file content."""
+
 
 # Recognised provider env var names. ``synthpanel login`` validates
 # against this list so a typo doesn't silently persist a key nothing
@@ -84,6 +90,14 @@ def detect_provider_from_key(value: str) -> str | None:
     return None
 
 
+def _sidecar_path(path: Path) -> Path:
+    return path.with_name(path.name + ".sha256")
+
+
+def _compute_hash(content: str) -> str:
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
 def credentials_path() -> Path:
     """Return the path to the credential store.
 
@@ -103,14 +117,45 @@ def load_credentials() -> dict[str, str]:
 
     Returns an empty dict if the file is missing or unreadable. Only
     string values are kept so malformed entries can't crash the caller.
+
+    Raises ``CredentialIntegrityError`` if a sha256 sidecar exists and does
+    not match the file content. When no sidecar exists the sidecar is
+    generated (migration) and the credentials are returned normally.
     """
     path = credentials_path()
     if not path.exists():
         return {}
     try:
         raw = path.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+
+    sidecar = _sidecar_path(path)
+    actual_hash = _compute_hash(raw)
+    if sidecar.exists():
+        try:
+            stored_hash = sidecar.read_text(encoding="utf-8").strip()
+        except OSError:
+            stored_hash = ""
+        if stored_hash != actual_hash:
+            raise CredentialIntegrityError(
+                f"Credential file {path} failed integrity check — "
+                "re-run `synthpanel login` to restore your credentials."
+            )
+    else:
+        # Migration: generate sidecar on first successful read
+        try:
+            sidecar_tmp = path.with_name(path.name + ".sha256.tmp")
+            sidecar_tmp.write_text(actual_hash + "\n", encoding="utf-8")
+            with contextlib.suppress(OSError):
+                os.chmod(sidecar_tmp, 0o600)
+            os.replace(sidecar_tmp, sidecar)
+        except OSError:
+            pass
+
+    try:
         data = json.loads(raw) if raw.strip() else {}
-    except (OSError, json.JSONDecodeError):
+    except json.JSONDecodeError:
         return {}
     if not isinstance(data, dict):
         return {}
@@ -133,8 +178,14 @@ def save_credential(env_var: str, value: str) -> Path:
     if not value:
         raise ValueError("value must be non-empty")
 
-    existing = load_credentials()
+    try:
+        existing = load_credentials()
+    except CredentialIntegrityError:
+        existing = {}  # login supersedes tampered credentials
     existing[env_var] = value
+
+    content = json.dumps(existing, indent=2, sort_keys=True) + "\n"
+    new_hash = _compute_hash(content)
 
     path = credentials_path()
     parent = path.parent
@@ -142,10 +193,18 @@ def save_credential(env_var: str, value: str) -> Path:
     with contextlib.suppress(OSError):
         os.chmod(parent, 0o700)
 
+    sidecar = _sidecar_path(path)
+    sidecar_tmp = path.with_name(path.name + ".sha256.tmp")
+    sidecar_tmp.write_text(new_hash + "\n", encoding="utf-8")
+    with contextlib.suppress(OSError):
+        os.chmod(sidecar_tmp, 0o600)
+
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(existing, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    tmp.write_text(content, encoding="utf-8")
     with contextlib.suppress(OSError):
         os.chmod(tmp, 0o600)
+
+    os.replace(sidecar_tmp, sidecar)
     os.replace(tmp, path)
     return path
 
@@ -161,15 +220,25 @@ def delete_credential(env_var: str) -> bool:
         return False
     del existing[env_var]
     path = credentials_path()
+    sidecar = _sidecar_path(path)
     if existing:
+        content = json.dumps(existing, indent=2, sort_keys=True) + "\n"
+        new_hash = _compute_hash(content)
+        sidecar_tmp = path.with_name(path.name + ".sha256.tmp")
+        sidecar_tmp.write_text(new_hash + "\n", encoding="utf-8")
+        with contextlib.suppress(OSError):
+            os.chmod(sidecar_tmp, 0o600)
         tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(json.dumps(existing, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        tmp.write_text(content, encoding="utf-8")
         with contextlib.suppress(OSError):
             os.chmod(tmp, 0o600)
+        os.replace(sidecar_tmp, sidecar)
         os.replace(tmp, path)
     else:
         with contextlib.suppress(FileNotFoundError):
             path.unlink()
+        with contextlib.suppress(FileNotFoundError):
+            sidecar.unlink()
     return True
 
 
