@@ -13,8 +13,7 @@ from synth_panel.convergence import (
     identify_tracked_questions,
     jensen_shannon_divergence,
 )
-from synth_panel.stats import ChiSquaredResult, chi_squared_test
-
+from synth_panel.stats import chi_squared_test
 
 # ---------------------------------------------------------------------------
 # Data models
@@ -100,14 +99,79 @@ def load_result(id_or_path: str) -> dict[str, Any]:
 
 _STOP_WORDS: frozenset[str] = frozenset(
     {
-        "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
-        "of", "with", "by", "from", "as", "is", "are", "was", "were", "be",
-        "been", "being", "have", "has", "had", "do", "does", "did", "will",
-        "would", "could", "should", "may", "might", "can", "i", "my", "me",
-        "we", "our", "you", "your", "it", "its", "this", "that", "these",
-        "those", "not", "no", "so", "if", "when", "what", "how", "why",
-        "which", "who", "just", "also", "more", "very", "much", "like",
-        "really", "about", "there", "their", "they", "them", "then", "than",
+        "the",
+        "a",
+        "an",
+        "and",
+        "or",
+        "but",
+        "in",
+        "on",
+        "at",
+        "to",
+        "for",
+        "of",
+        "with",
+        "by",
+        "from",
+        "as",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "could",
+        "should",
+        "may",
+        "might",
+        "can",
+        "i",
+        "my",
+        "me",
+        "we",
+        "our",
+        "you",
+        "your",
+        "it",
+        "its",
+        "this",
+        "that",
+        "these",
+        "those",
+        "not",
+        "no",
+        "so",
+        "if",
+        "when",
+        "what",
+        "how",
+        "why",
+        "which",
+        "who",
+        "just",
+        "also",
+        "more",
+        "very",
+        "much",
+        "like",
+        "really",
+        "about",
+        "there",
+        "their",
+        "they",
+        "them",
+        "then",
+        "than",
     }
 )
 
@@ -126,11 +190,7 @@ def _question_key(question: Any, index: int) -> str:
 
 
 def _main_responses(panelist: dict[str, Any]) -> list[dict[str, Any]]:
-    return [
-        r
-        for r in panelist.get("responses", [])
-        if isinstance(r, dict) and not r.get("follow_up")
-    ]
+    return [r for r in panelist.get("responses", []) if isinstance(r, dict) and not r.get("follow_up")]
 
 
 def _build_categorical_dist(
