@@ -7,6 +7,7 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 ## [Unreleased]
 
 ### Added
+- (GH-308, sp-4y5.1) `synthpanel pack diff <pack-a> <pack-b>` — compare two persona packs side-by-side. Reports added/removed/unchanged/changed personas (matched by name), per-persona field-level diffs (age, occupation, background, traits, gender), and composition deltas (age range, age mean, role distribution, gender split when present). Accepts built-in pack names, user-saved pack IDs, or YAML file paths for either side; supports `--format json` for CI integration.
 - (sy-ws76) `synthpanel panel run --resume <run-id>` is now a standalone entry point: pass just the run id and the original `--personas` / `--instrument` paths are recovered from the checkpoint's saved CLI args. Existing flags can still be passed to override. New `--allow-drift` flag downgrades checkpoint config drift from a hard error to a warning ("statistically inconsistent" run), for cases where intentionally mixing configs is acceptable. Pre-`sy-ws76` checkpoints (no `cli_args` field) still load — back-compat preserved.
 
 ### Changed (loudness)

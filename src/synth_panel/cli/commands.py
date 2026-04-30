@@ -74,6 +74,14 @@ from synth_panel.instrument import Instrument, InstrumentError, parse_instrument
 from synth_panel.llm.client import LLMClient
 from synth_panel.metadata import PanelTimer, build_metadata
 from synth_panel.orchestrator import PanelistResult, RunAbortedError, run_panel_parallel
+from synth_panel.pack_diff import (
+    CompositionStats,
+    PackDiff,
+    PersonaChange,
+    compute_pack_diff,
+    load_pack,
+    trait_delta,
+)
 from synth_panel.persistence import Session
 from synth_panel.perturbation import generate_panel_variants
 from synth_panel.prompts import (
@@ -3426,6 +3434,184 @@ def handle_pack_inspect(args: argparse.Namespace, fmt: OutputFormat) -> int:
 
     print("\n".join(lines))
     return 0
+
+
+def handle_pack_diff(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Compare two persona packs side-by-side (GH #308).
+
+    Accepts built-in pack names, user-saved pack IDs, or YAML file paths
+    for either side. Prints a human-readable summary by default; pass
+    ``--format json`` for CI-friendly structured output.
+    """
+    try:
+        pack_a, pack_a_id = load_pack(args.pack_a)
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except (ValueError, yaml.YAMLError) as exc:
+        print(f"Error reading {args.pack_a!r}: {exc}", file=sys.stderr)
+        return 1
+
+    try:
+        pack_b, pack_b_id = load_pack(args.pack_b)
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except (ValueError, yaml.YAMLError) as exc:
+        print(f"Error reading {args.pack_b!r}: {exc}", file=sys.stderr)
+        return 1
+
+    diff = compute_pack_diff(pack_a, pack_b, pack_a_id=pack_a_id, pack_b_id=pack_b_id)
+
+    diff_format = getattr(args, "diff_format", "text")
+    if diff_format == "json" or fmt is not OutputFormat.TEXT:
+        payload = {
+            "pack_a": {
+                "id": diff.pack_a_id,
+                "name": diff.pack_a_name,
+                "composition": _composition_to_dict(diff.composition_a),
+            },
+            "pack_b": {
+                "id": diff.pack_b_id,
+                "name": diff.pack_b_name,
+                "composition": _composition_to_dict(diff.composition_b),
+            },
+            "added": diff.added,
+            "removed": diff.removed,
+            "unchanged": diff.unchanged,
+            "changed": [
+                {
+                    "name": c.name,
+                    "fields": _changed_fields_to_dict(c, trait_delta(c)),
+                }
+                for c in diff.changed
+            ],
+        }
+        if diff_format == "json" and fmt is OutputFormat.TEXT:
+            print(json.dumps(payload, indent=2))
+        else:
+            emit(fmt, message="pack_diff", extra=payload)
+        return 0
+
+    _print_pack_diff_text(diff)
+    return 0
+
+
+def _composition_to_dict(c: CompositionStats) -> dict[str, Any]:
+    return {
+        "persona_count": c.persona_count,
+        "age_min": c.age_min,
+        "age_max": c.age_max,
+        "age_mean": c.age_mean,
+        "gender_split": c.gender_split,
+        "role_distribution": c.role_distribution,
+    }
+
+
+def _changed_fields_to_dict(
+    change: PersonaChange,
+    trait_added_removed: tuple[list[str], list[str]],
+) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    added_traits, removed_traits = trait_added_removed
+    for key, vals in change.changed.items():
+        if key == "personality_traits":
+            out[key] = {
+                "a": vals.get("a"),
+                "b": vals.get("b"),
+                "added": added_traits,
+                "removed": removed_traits,
+            }
+        else:
+            out[key] = {"a": vals.get("a"), "b": vals.get("b")}
+    return out
+
+
+def _print_pack_diff_text(diff: PackDiff) -> None:
+    a_count = diff.composition_a.persona_count
+    b_count = diff.composition_b.persona_count
+    print(f"Pack A: {diff.pack_a_id}  ({diff.pack_a_name}, {a_count} personas)")
+    print(f"Pack B: {diff.pack_b_id}  ({diff.pack_b_name}, {b_count} personas)")
+
+    print()
+    print("── Composition " + "─" * 37)
+    print(_compose_line("Personas", a_count, b_count))
+    print(_compose_line("Age range", _age_range_str(diff.composition_a), _age_range_str(diff.composition_b)))
+    print(_compose_line("Age mean", diff.composition_a.age_mean or "—", diff.composition_b.age_mean or "—"))
+    if diff.composition_a.gender_split or diff.composition_b.gender_split:
+        print(
+            _compose_line(
+                "Gender",
+                _bucket_str(diff.composition_a.gender_split) or "—",
+                _bucket_str(diff.composition_b.gender_split) or "—",
+            )
+        )
+    if diff.composition_a.role_distribution or diff.composition_b.role_distribution:
+        print()
+        print("── Role distribution " + "─" * 31)
+        print(f"  A: {_bucket_str(diff.composition_a.role_distribution) or '(none)'}")
+        print(f"  B: {_bucket_str(diff.composition_b.role_distribution) or '(none)'}")
+
+    print()
+    print("── Personas " + "─" * 40)
+    print(f"  Added in B:    {len(diff.added)}")
+    if diff.added:
+        for name in diff.added:
+            print(f"    + {name}")
+    print(f"  Removed in B:  {len(diff.removed)}")
+    if diff.removed:
+        for name in diff.removed:
+            print(f"    - {name}")
+    print(f"  Unchanged:     {len(diff.unchanged)}")
+    print(f"  Changed:       {len(diff.changed)}")
+
+    if diff.changed:
+        print()
+        print("── Changed personas " + "─" * 32)
+        for change in diff.changed:
+            print(f"\n  {change.name}")
+            for key, vals in change.changed.items():
+                if key == "personality_traits":
+                    added, removed = trait_delta(change)
+                    if added:
+                        print(f"    + traits: {', '.join(added)}")
+                    if removed:
+                        print(f"    - traits: {', '.join(removed)}")
+                elif key == "background":
+                    a_text = vals.get("a") or ""
+                    b_text = vals.get("b") or ""
+                    a_excerpt = _excerpt(str(a_text), 60)
+                    b_excerpt = _excerpt(str(b_text), 60)
+                    print(f"    {key}:")
+                    print(f"      A: {a_excerpt}")
+                    print(f"      B: {b_excerpt}")
+                else:
+                    print(f"    {key}: {vals.get('a')!r} → {vals.get('b')!r}")
+
+
+def _age_range_str(c: CompositionStats) -> str:
+    if c.age_min is None or c.age_max is None:
+        return "—"
+    return f"{c.age_min}-{c.age_max}"
+
+
+def _bucket_str(buckets: dict[str, int]) -> str:
+    if not buckets:
+        return ""
+    items = sorted(buckets.items(), key=lambda kv: (-kv[1], kv[0]))
+    return " ".join(f"{k}({v})" for k, v in items)
+
+
+def _compose_line(label: str, a: object, b: object) -> str:
+    eq = "=" if str(a) == str(b) else "→"
+    return f"  {label:<14} {a!s:<22} {eq}  {b}"
+
+
+def _excerpt(text: str, n: int) -> str:
+    collapsed = " ".join(text.split())
+    if len(collapsed) <= n:
+        return collapsed or "(empty)"
+    return collapsed[:n] + "…"
 
 
 def handle_pack_generate(args: argparse.Namespace, fmt: OutputFormat) -> int:
