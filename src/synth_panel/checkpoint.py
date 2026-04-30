@@ -458,8 +458,8 @@ def _merge_usage(
         if prev is None and add is None:
             merged.pop("provider_reported_cost", None)
         else:
-            p = coerce_provider_reported_cost(prev) if prev is not None else Decimal(0)
-            a = coerce_provider_reported_cost(add) if add is not None else Decimal(0)
+            p = Decimal(0) if prev is None else (coerce_provider_reported_cost(prev) or Decimal(0))
+            a = Decimal(0) if add is None else (coerce_provider_reported_cost(add) or Decimal(0))
             merged["provider_reported_cost"] = float(p + a)
     return merged
 
