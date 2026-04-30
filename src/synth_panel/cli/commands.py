@@ -1725,9 +1725,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     else:
         # Show a live progress bar when the user is watching a TTY in text mode.
         _show_progress = fmt is OutputFormat.TEXT and sys.stdout.isatty() and bool(active_personas)
-        progress: PanelProgressBar | None = (
-            PanelProgressBar(len(active_personas), model) if _show_progress else None
-        )
+        progress: PanelProgressBar | None = PanelProgressBar(len(active_personas), model) if _show_progress else None
 
         def _on_complete(pr: PanelistResult) -> None:
             if checkpoint_writer is not None:
