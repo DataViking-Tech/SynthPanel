@@ -157,7 +157,7 @@ def test_convergence_report_shape():
     # Feed enough panelists to trigger at least a couple of checks so
     # converged_at has a chance to latch on question "a".
     for i in range(15):
-        tracker.record({"a": "steady", "b": ["x", "y"][i % 2]})
+        tracker.record({"a": ["steady", "alt"][i % 2], "b": ["x", "y"][i % 2]})
 
     report = tracker.build_report()
     assert set(report.keys()) >= {
@@ -183,6 +183,11 @@ def test_convergence_report_shape():
         # Converged_at is either None or an integer <= final_n.
         ca = qrep["converged_at"]
         assert ca is None or (isinstance(ca, int) and ca <= 15)
+        skew = report["per_question"][qkey].get("skew_vs_uniform")
+        assert skew is not None
+        assert 0.0 <= skew["cramers_v"] <= 1.0
+        assert "lead_interpretation" in skew
+        assert "p_value" in skew
 
 
 def test_convergence_baseline_loaded_when_synthbench_available(monkeypatch):
@@ -438,7 +443,7 @@ def test_build_report_omits_calibration_when_spec_none():
 
     for report in (report_default, report_with_baseline_only):
         entry = report["per_question"]["happy"]
-        assert set(entry.keys()) == {"final_n", "converged_at", "curve", "support_size"}
+        assert set(entry.keys()) == {"final_n", "converged_at", "curve", "support_size", "skew_vs_uniform"}
         assert "calibration" not in entry
 
 
@@ -493,6 +498,29 @@ def test_build_report_calibration_matches_golden_fixture():
     )
 
     assert report["per_question"] == expected
+
+
+def test_build_report_skews_omit_with_single_observed_category():
+    """Only one category in the running histogram → no GOF / Cramer's V."""
+    questions = [_pick_one_question("only")]
+    tracked = identify_tracked_questions(questions)
+    tracker = ConvergenceTracker(tracked, check_every=5, min_n=0, m_consecutive=2)
+    for _ in range(5):
+        tracker.record({"only": "A"})
+    report = tracker.build_report()
+    assert "skew_vs_uniform" not in report["per_question"]["only"]
+
+
+def test_build_report_orchestrator_metadata_optional():
+    questions = [_pick_one_question("x")]
+    tracked = identify_tracked_questions(questions)
+    tracker = ConvergenceTracker(tracked, check_every=100, min_n=0, m_consecutive=2)
+    tracker.record({"x": "a"})
+    tracker.record({"x": "b"})
+    without = tracker.build_report()
+    assert "orchestrator" not in without
+    with_meta = tracker.build_report(orchestrator={"primary_model": "test-model", "mixed_models": False})
+    assert with_meta["orchestrator"] == {"primary_model": "test-model", "mixed_models": False}
 
 
 def test_compute_calibration_jsd_wraps_local_implementation():

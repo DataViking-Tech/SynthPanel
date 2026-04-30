@@ -32,6 +32,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
 
+from synth_panel.stats import chi_squared_test
 from synth_panel.structured.schemas import PICK_ONE_SCHEMA
 
 logger = logging.getLogger(__name__)
@@ -111,6 +112,53 @@ def compute_calibration_jsd(
     import it — see ``specs/sp-inline-calibration/structure.md`` §5.
     """
     return jensen_shannon_divergence(model_dist, human_dist)
+
+
+def _lead_interpretation_for_uniform_skew(
+    cramers_v: float,
+    *,
+    p_value: float,
+    n_categories: int,
+    total_n: int,
+    chi2_warning: str | None,
+) -> str:
+    """Human-readable readout for Cramer's V vs a discrete uniform (GOF).
+
+    Uses common Cohen-style thresholds for Cramer's *V* on categorical data
+    (negligible <0.1, small 0.1-0.3, medium 0.3-0.5, large >=0.5). *V* here
+    comes from :func:`synth_panel.stats.chi_squared_test` (single-row GOF),
+    so it measures how far the observed histogram is from *uniform* over the
+    categories that appeared — a practical "leading / concentrated response"
+    signal for panel operators.
+    """
+    if chi2_warning:
+        reliability = (
+            f"p={p_value:.4g} (approximate - {chi2_warning.rstrip('.')}); "
+            "treat effect size as directional."
+        )
+    else:
+        reliability = f"p={p_value:.4g} vs discrete uniform over {n_categories} categories (n={total_n})."
+
+    if cramers_v < 0.1:
+        bucket = "negligible"
+        gist = "Close to uniform; little skew across the options that appeared."
+    elif cramers_v < 0.3:
+        bucket = "small"
+        gist = "Mild concentration - a modal choice is emerging but the histogram is still fairly spread."
+    elif cramers_v < 0.5:
+        bucket = "medium"
+        gist = (
+            "Moderate concentration - one or a few options dominate. "
+            "Pair with diversity warnings and question wording to rule out a leading prompt."
+        )
+    else:
+        bucket = "large"
+        gist = (
+            "Strong concentration - responses pile heavily on few options. "
+            "High risk of wording, sampling, or persona skew; investigate before trusting marginal proportions."
+        )
+
+    return f"Cramer's V={cramers_v:.3f} ({bucket} effect vs uniform). {gist} {reliability}"
 
 
 # ---------------------------------------------------------------------------
@@ -456,6 +504,7 @@ class ConvergenceTracker:
         calibration_spec: str | None = None,
         extractor_label: str | None = None,
         auto_derived: bool = False,
+        orchestrator: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Assemble the post-run ``convergence`` section.
 
@@ -470,6 +519,10 @@ class ConvergenceTracker:
         not synthbench's copy — see ``specs/sp-inline-calibration/structure.md``
         §5). When supplied without a baseline distribution, the kwargs are
         accepted but no calibration data is attached.
+
+        ``orchestrator`` — optional small dict (e.g. primary model, mixed-model
+        flags) merged verbatim under ``report['orchestrator']`` so JSON
+        consumers can tell how the panel was run without scraping logs.
         """
         with self._lock:
             human_dist: dict[str, float] | None = None
@@ -517,6 +570,26 @@ class ConvergenceTracker:
                         calibration["jsd"] = 1.0
                         calibration["alignment_error"] = f"{sorted(model_keys)} vs {sorted(baseline_keys)}"
                     entry["calibration"] = calibration
+                observed = dict(state.cumulative)
+                n_obs = sum(observed.values())
+                if len(observed) >= 2 and n_obs > 0:
+                    gof = chi_squared_test(observed)
+                    skew: dict[str, Any] = {
+                        "cramers_v": round(gof.cramers_v, 6),
+                        "chi2": round(gof.statistic, 6),
+                        "df": gof.df,
+                        "p_value": round(gof.p_value, 6),
+                        "lead_interpretation": _lead_interpretation_for_uniform_skew(
+                            gof.cramers_v,
+                            p_value=gof.p_value,
+                            n_categories=len(observed),
+                            total_n=n_obs,
+                            chi2_warning=gof.warning,
+                        ),
+                    }
+                    if gof.warning:
+                        skew["chi2_warning"] = gof.warning
+                    entry["skew_vs_uniform"] = skew
                 per_question[key] = entry
             overall = self._overall_converged_at_locked()
             report: dict[str, Any] = {
@@ -532,6 +605,8 @@ class ConvergenceTracker:
                 "human_baseline": baseline,
                 "diversity_warnings": self._build_diversity_warnings_locked(),
             }
+            if orchestrator:
+                report["orchestrator"] = dict(orchestrator)
             return report
 
     # ------------------------------------------------------------------

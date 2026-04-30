@@ -2008,11 +2008,18 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     convergence_report: dict[str, Any] | None = None
     convergence_model_distributions: dict[str, dict[str, float]] = {}
     if convergence_tracker is not None:
+        orch_meta: dict[str, Any] = {
+            "primary_model": model,
+            "mixed_models": bool(persona_models),
+        }
+        if persona_models:
+            orch_meta["distinct_model_count"] = len({m for m in persona_models.values()})
         convergence_report = convergence_tracker.build_report(
             baseline=convergence_baseline_payload,
             calibration_spec=calibrate_against_spec,
             extractor_label=extractor_label,
             auto_derived=auto_derived,
+            orchestrator=orch_meta,
         )
         convergence_model_distributions = convergence_tracker.cumulative_distributions()
         if convergence_baseline_error:
@@ -2124,6 +2131,12 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 ca = qdata.get("converged_at")
                 ca_str = f"n={ca}" if ca else "pending"
                 print(f"  {qkey}: converged_at={ca_str}, support={qdata.get('support_size', 0)}")
+                skew = qdata.get("skew_vs_uniform")
+                if skew:
+                    print(f"    vs uniform: Cramer's V={skew.get('cramers_v')}, p={skew.get('p_value')}")
+                    interp = skew.get("lead_interpretation") or ""
+                    if interp:
+                        print(f"      {interp}")
             if convergence_baseline_payload:
                 hb_n = convergence_baseline_payload.get("converged_at")
                 if hb_n is not None:
