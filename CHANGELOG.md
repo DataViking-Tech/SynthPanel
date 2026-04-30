@@ -6,6 +6,9 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [Unreleased]
 
+### Added
+- (sy-ws76) `synthpanel panel run --resume <run-id>` is now a standalone entry point: pass just the run id and the original `--personas` / `--instrument` paths are recovered from the checkpoint's saved CLI args. Existing flags can still be passed to override. New `--allow-drift` flag downgrades checkpoint config drift from a hard error to a warning ("statistically inconsistent" run), for cases where intentionally mixing configs is acceptable. Pre-`sy-ws76` checkpoints (no `cli_args` field) still load — back-compat preserved.
+
 ### Changed (loudness)
 - (sp-g59o) Detection: warn loudly when synthesis output appears unstructured (likely model schema-adherence flake). Triggered when every list field — themes, agreements, disagreements, surprises — is empty while the recommendation slot carries >600 chars of prose. Surfaces as a `synth_panel.synthesis` `logger.warning`, on `SynthesisResult.warnings`, and propagated up to `PanelResult.warnings`. Schema-honoring runs are unchanged. Observed at ~25% on `gemini-flash-lite` synthesis; detection is provider-agnostic.
 

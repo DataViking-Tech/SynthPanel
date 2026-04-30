@@ -886,6 +886,48 @@ def _build_run_config_fingerprint(
     }
 
 
+def _build_resume_cli_args(args: argparse.Namespace) -> dict[str, Any]:
+    """Snapshot the CLI args needed to re-run this command via --resume.
+
+    Stored alongside the checkpoint so ``synthpanel panel run --resume <id>``
+    can recover --personas / --instrument paths without the user having to
+    re-pass them. Deliberately excluded from the config fingerprint so that
+    moving the file (or running from a different cwd) doesn't trigger drift
+    — only semantic changes to the personas / questions / model do.
+    """
+    return {
+        "personas": getattr(args, "personas", None),
+        "instrument": getattr(args, "instrument", None),
+        "personas_merge": list(getattr(args, "personas_merge", None) or []),
+        "personas_merge_on_collision": getattr(args, "personas_merge_on_collision", None),
+    }
+
+
+def _apply_resume_cli_args(args: argparse.Namespace, saved: dict[str, Any]) -> None:
+    """Fill in absent --personas / --instrument from a checkpoint's saved cli_args.
+
+    Only fills fields the current invocation left unset so an explicit
+    flag from the user always wins.
+    """
+    if getattr(args, "personas", None) is None and saved.get("personas"):
+        args.personas = saved["personas"]
+    if getattr(args, "instrument", None) is None and saved.get("instrument"):
+        args.instrument = saved["instrument"]
+    if not getattr(args, "personas_merge", None) and saved.get("personas_merge"):
+        args.personas_merge = list(saved["personas_merge"])
+    # ``personas_merge_on_collision`` has a default ('dedup') so we can't
+    # tell whether the user explicitly passed it. Restore the saved value
+    # only when the current value is the default and the saved value
+    # differs — otherwise an explicit ``--personas-merge-on-collision=dedup``
+    # would silently get overridden.
+    if (
+        getattr(args, "personas_merge_on_collision", None) == "dedup"
+        and saved.get("personas_merge_on_collision")
+        and saved["personas_merge_on_collision"] != "dedup"
+    ):
+        args.personas_merge_on_collision = saved["personas_merge_on_collision"]
+
+
 def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """Run a panel: load personas + instrument, run panelists in parallel."""
     # ── sp-prof: profile loading ──────────────────────────────────────
@@ -893,6 +935,39 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     profile, profile_err = _load_profile(args)
     if profile_err is not None:
         return profile_err
+
+    # ── sy-ws76: --resume early-arg recovery ──────────────────────────
+    # If the user typed ``synthpanel panel run --resume <id>`` and omitted
+    # --personas / --instrument, recover those paths from the checkpoint
+    # before any downstream loader runs. We keep the heavy drift check
+    # below in the main checkpoint path; this just patches missing args.
+    resume_id = getattr(args, "resume", None)
+    if resume_id and (args.personas is None or args.instrument is None):
+        checkpoint_root_arg = getattr(args, "checkpoint_dir", None)
+        root_path = Path(checkpoint_root_arg) if checkpoint_root_arg else default_checkpoint_root()
+        try:
+            preview_ckpt = load_checkpoint(resume_id, root_path)
+        except CheckpointNotFoundError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        except CheckpointError as exc:
+            print(f"Error: checkpoint load failed: {exc}", file=sys.stderr)
+            return 1
+        if preview_ckpt.cli_args:
+            _apply_resume_cli_args(args, preview_ckpt.cli_args)
+
+    if args.personas is None:
+        print(
+            "Error: --personas is required (or pass --resume <run-id> to recover the path from a checkpoint).",
+            file=sys.stderr,
+        )
+        return 1
+    if args.instrument is None:
+        print(
+            "Error: --instrument is required (or pass --resume <run-id> to recover the path from a checkpoint).",
+            file=sys.stderr,
+        )
+        return 1
 
     # Validate mutual exclusivity of --model and --models
     has_model = getattr(args, "model", None)
@@ -1518,20 +1593,36 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             except CheckpointError as exc:
                 print(f"Error: checkpoint load failed: {exc}", file=sys.stderr)
                 return 1
+            allow_drift = bool(getattr(args, "allow_drift", False))
             try:
                 ensure_config_matches(ckpt, run_config_dict)
             except CheckpointDriftError as exc:
-                print(f"Error: {exc}", file=sys.stderr)
-                return 1
+                if allow_drift:
+                    print(
+                        f"Warning: {exc}\nWarning: --allow-drift active; "
+                        f"this resumed run mixes panelists answered under "
+                        f"different config and is statistically inconsistent.",
+                        file=sys.stderr,
+                    )
+                else:
+                    print(f"Error: {exc}", file=sys.stderr)
+                    print(
+                        "Hint: pass --allow-drift to continue anyway (produces a statistically inconsistent run).",
+                        file=sys.stderr,
+                    )
+                    return 1
             # Reconstitute completed panelists as PanelistResult so the
             # downstream output pipeline (cost/metadata/synthesis) sees
             # a single unified list across the original + resumed slices.
             preloaded_results = [_panelist_result_from_dict(r) for r in ckpt.completed]
             skip = {pr.persona_name for pr in preloaded_results}
             active_personas = [p for p in personas if p.get("name", "Anonymous") not in skip]
+            preloaded_cost_raw = ckpt.usage.get("provider_reported_cost") if isinstance(ckpt.usage, dict) else None
+            cost_note = f", spent ${float(preloaded_cost_raw):.4f}" if preloaded_cost_raw else ""
             resumed_config_note = (
-                f"resumed run {resume_id}: {len(preloaded_results)} panelists "
-                f"already complete, {len(active_personas)} remaining"
+                f"resumed run {resume_id}: {len(preloaded_results)} of "
+                f"{len(personas)} panelists already complete, "
+                f"{len(active_personas)} remaining{cost_note}"
             )
             print(resumed_config_note, file=sys.stderr)
             run_id = resume_id
@@ -1556,6 +1647,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             every=checkpoint_every,
             preloaded_completed=[_panelist_result_to_ckpt_dict(pr, model) for pr in preloaded_results],
             preloaded_usage=preloaded_usage_dict,
+            cli_args=_build_resume_cli_args(args),
         )
         checkpoint_writer.install_signal_handlers()
 

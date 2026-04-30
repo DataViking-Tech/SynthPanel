@@ -598,3 +598,446 @@ class TestCLIHelpers:
             template_vars=None,
         )
         assert fingerprint_config(cfg_a) == fingerprint_config(cfg_b)
+
+
+# ---------------------------------------------------------------------------
+# sy-ws76: --resume <run-id> standalone CLI entry point
+# ---------------------------------------------------------------------------
+
+
+class TestCheckpointCliArgs:
+    """``cli_args`` is the field that backs bare ``--resume <id>`` flow."""
+
+    def test_cli_args_round_trips_through_dict(self) -> None:
+        cfg = _make_config(["a"])
+        ckpt = PanelCheckpoint(
+            run_id="run-cli-args",
+            created_at="now",
+            updated_at="now",
+            config_fingerprint=fingerprint_config(cfg),
+            config=cfg,
+            cli_args={"personas": "/tmp/p.yaml", "instrument": "/tmp/i.yaml"},
+        )
+        d = ckpt.to_dict()
+        assert d["cli_args"] == {"personas": "/tmp/p.yaml", "instrument": "/tmp/i.yaml"}
+        restored = PanelCheckpoint.from_dict(json.loads(json.dumps(d)))
+        assert restored.cli_args == {"personas": "/tmp/p.yaml", "instrument": "/tmp/i.yaml"}
+
+    def test_cli_args_round_trips_through_disk(self, tmp_path: Path) -> None:
+        cfg = _make_config(["a"])
+        ckpt = PanelCheckpoint(
+            run_id="run-cli-disk",
+            created_at="now",
+            updated_at="now",
+            config_fingerprint=fingerprint_config(cfg),
+            config=cfg,
+            cli_args={
+                "personas": "examples/personas.yaml",
+                "instrument": "examples/survey.yaml",
+                "personas_merge": ["a.yaml", "b.yaml"],
+                "personas_merge_on_collision": "error",
+            },
+        )
+        directory = checkpoint_dir_for("run-cli-disk", tmp_path)
+        save_checkpoint(ckpt, directory)
+        loaded = load_checkpoint("run-cli-disk", tmp_path)
+        assert loaded.cli_args is not None
+        assert loaded.cli_args["personas"] == "examples/personas.yaml"
+        assert loaded.cli_args["instrument"] == "examples/survey.yaml"
+        assert loaded.cli_args["personas_merge"] == ["a.yaml", "b.yaml"]
+        assert loaded.cli_args["personas_merge_on_collision"] == "error"
+
+    def test_legacy_checkpoint_without_cli_args_still_loads(self, tmp_path: Path) -> None:
+        # Pre-sy-ws76 checkpoints predate the cli_args field. They must
+        # still load — backwards compat for the existing on-disk format.
+        directory = checkpoint_dir_for("run-legacy", tmp_path)
+        directory.mkdir(parents=True)
+        cfg = _make_config(["a"])
+        legacy = {
+            "version": 1,
+            "run_id": "run-legacy",
+            "created_at": "now",
+            "updated_at": "now",
+            "config_fingerprint": fingerprint_config(cfg),
+            "config": cfg,
+            "completed": [],
+            "remaining": ["a"],
+            "usage": {},
+            "abort_reason": None,
+            # No cli_args field at all.
+        }
+        (directory / "state.json").write_text(json.dumps(legacy))
+        loaded = load_checkpoint("run-legacy", tmp_path)
+        assert loaded.cli_args is None
+
+    def test_writer_persists_cli_args(self, tmp_path: Path) -> None:
+        run_id = "run-writer-cli-args"
+        directory = checkpoint_dir_for(run_id, tmp_path)
+        writer = CheckpointWriter(
+            run_id=run_id,
+            directory=directory,
+            config=_make_config(["a"]),
+            all_personas=["a"],
+            every=1,
+            cli_args={"personas": "examples/p.yaml", "instrument": "examples/i.yaml"},
+        )
+        writer.flush(force=True)
+        loaded = load_checkpoint(run_id, tmp_path)
+        assert loaded.cli_args == {"personas": "examples/p.yaml", "instrument": "examples/i.yaml"}
+
+    def test_build_resume_cli_args_captures_fields(self) -> None:
+        from argparse import Namespace
+
+        from synth_panel.cli.commands import _build_resume_cli_args
+
+        ns = Namespace(
+            personas="examples/p.yaml",
+            instrument="examples/i.yaml",
+            personas_merge=["a.yaml", "b.yaml"],
+            personas_merge_on_collision="error",
+        )
+        snapshot = _build_resume_cli_args(ns)
+        assert snapshot["personas"] == "examples/p.yaml"
+        assert snapshot["instrument"] == "examples/i.yaml"
+        assert snapshot["personas_merge"] == ["a.yaml", "b.yaml"]
+        assert snapshot["personas_merge_on_collision"] == "error"
+
+    def test_apply_resume_cli_args_fills_missing_only(self) -> None:
+        from argparse import Namespace
+
+        from synth_panel.cli.commands import _apply_resume_cli_args
+
+        # User omitted both --personas and --instrument.
+        ns = Namespace(
+            personas=None,
+            instrument=None,
+            personas_merge=[],
+            personas_merge_on_collision="dedup",
+        )
+        _apply_resume_cli_args(
+            ns,
+            {
+                "personas": "saved/p.yaml",
+                "instrument": "saved/i.yaml",
+                "personas_merge": ["m.yaml"],
+                "personas_merge_on_collision": "error",
+            },
+        )
+        assert ns.personas == "saved/p.yaml"
+        assert ns.instrument == "saved/i.yaml"
+        assert ns.personas_merge == ["m.yaml"]
+        assert ns.personas_merge_on_collision == "error"
+
+    def test_apply_resume_cli_args_user_explicit_wins(self) -> None:
+        from argparse import Namespace
+
+        from synth_panel.cli.commands import _apply_resume_cli_args
+
+        # User passed --personas explicitly; saved value must NOT clobber.
+        ns = Namespace(
+            personas="user/explicit.yaml",
+            instrument=None,
+            personas_merge=[],
+            personas_merge_on_collision="dedup",
+        )
+        _apply_resume_cli_args(
+            ns,
+            {"personas": "saved/p.yaml", "instrument": "saved/i.yaml"},
+        )
+        assert ns.personas == "user/explicit.yaml"  # unchanged
+        assert ns.instrument == "saved/i.yaml"  # filled in
+
+
+# ---------------------------------------------------------------------------
+# End-to-end CLI: synthpanel panel run --resume <id> (no --personas/--instrument)
+# ---------------------------------------------------------------------------
+
+
+def _personas_yaml() -> str:
+    return "personas:\n  - name: Alice\n  - name: Bob\n  - name: Carol\n"
+
+
+def _instrument_yaml() -> str:
+    return "instrument:\n  questions:\n    - text: Q1\n"
+
+
+def _seed_partial_checkpoint(
+    *,
+    tmp_path: Path,
+    run_id: str,
+    persona_names: list[str],
+    completed_names: list[str],
+    personas_path: str,
+    instrument_path: str,
+) -> Path:
+    """Drop a checkpoint on disk that mirrors a SIGINT'd CLI run.
+
+    Uses ``_build_run_config_fingerprint`` so the saved fingerprint
+    matches what a real ``handle_panel_run`` will compute for the same
+    personas + questions on resume.
+    """
+    from synth_panel.cli.commands import _build_run_config_fingerprint
+
+    cfg = _build_run_config_fingerprint(
+        personas=[{"name": n} for n in persona_names],
+        questions=[{"text": "Q1"}],
+        model="sonnet",
+        persona_models=None,
+        temperature=None,
+        top_p=None,
+        response_schema=None,
+        extract_schema=None,
+        template_vars=None,
+    )
+    directory = checkpoint_dir_for(run_id, tmp_path)
+    completed = [
+        {
+            "persona": n,
+            "responses": [{"question": "Q1", "response": f"answer from {n}"}],
+            "usage": {"input_tokens": 7, "output_tokens": 3},
+            "cost": "$0.0001",
+            "error": None,
+        }
+        for n in completed_names
+    ]
+    ckpt = PanelCheckpoint(
+        run_id=run_id,
+        created_at="2026-04-30T00:00:00Z",
+        updated_at="2026-04-30T00:00:00Z",
+        config_fingerprint=fingerprint_config(cfg),
+        config=cfg,
+        completed=completed,
+        remaining=[n for n in persona_names if n not in completed_names],
+        usage={"input_tokens": 7 * len(completed_names), "output_tokens": 3 * len(completed_names)},
+        abort_reason="signal:SIGINT",
+        cli_args={
+            "personas": personas_path,
+            "instrument": instrument_path,
+            "personas_merge": [],
+            "personas_merge_on_collision": "dedup",
+        },
+    )
+    save_checkpoint(ckpt, directory)
+    return directory
+
+
+class TestResumeFromCheckpointCli:
+    """Bare ``synthpanel panel run --resume <id>`` recovers paths and skips done panelists.
+
+    These tests dispatch ``handle_panel_run`` directly rather than ``main()``
+    so they don't trigger ``setup_logging`` and pollute downstream
+    capsys-based tests in other files.
+    """
+
+    @staticmethod
+    def _parsed(argv: list[str]):
+        from synth_panel.cli.parser import build_parser
+
+        return build_parser().parse_args(argv)
+
+    @staticmethod
+    def _fmt():
+        from synth_panel.cli.output import OutputFormat
+
+        return OutputFormat("text")
+
+    def test_resume_without_personas_or_instrument_succeeds(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from unittest.mock import patch
+
+        from synth_panel.cli.commands import handle_panel_run
+        from synth_panel.cost import TokenUsage as CostTokenUsage
+        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+
+        # Anchor checkpoint root + creds so the CLI doesn't need real env.
+        ckpt_root = tmp_path / "ckpts"
+        monkeypatch.setenv("SYNTHPANEL_CHECKPOINT_ROOT", str(ckpt_root))
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text(_personas_yaml())
+        instrument_file = tmp_path / "survey.yaml"
+        instrument_file.write_text(_instrument_yaml())
+
+        run_id = "run-resume-cli"
+        _seed_partial_checkpoint(
+            tmp_path=ckpt_root,
+            run_id=run_id,
+            persona_names=["Alice", "Bob", "Carol"],
+            completed_names=["Alice"],  # 1 done, 2 remaining
+            personas_path=str(personas_file),
+            instrument_path=str(instrument_file),
+        )
+
+        # Mock the orchestrator: only Bob+Carol should be dispatched.
+        registry = WorkerRegistry()
+        dispatched_personas: list[list[str]] = []
+
+        def fake_run_panel_parallel(*args, **kwargs):
+            personas = kwargs["personas"]
+            dispatched_personas.append([p.get("name") for p in personas])
+            return (
+                [
+                    PanelistResult(
+                        persona_name=p["name"],
+                        responses=[{"question": "Q1", "response": f"fresh answer {p['name']}"}],
+                        usage=CostTokenUsage(input_tokens=5, output_tokens=2),
+                    )
+                    for p in personas
+                ],
+                registry,
+                {},
+            )
+
+        args = self._parsed(
+            [
+                "--model",
+                "sonnet",
+                "panel",
+                "run",
+                "--resume",
+                run_id,
+                "--no-synthesis",
+            ]
+        )
+        with (
+            patch("synth_panel.cli.commands.run_panel_parallel", side_effect=fake_run_panel_parallel),
+            patch("synth_panel.cli.commands.LLMClient"),
+        ):
+            code = handle_panel_run(args, self._fmt())
+
+        assert code == 0, "resume without --personas/--instrument should succeed"
+        # Only the 2 remaining panelists were dispatched (Alice was skipped).
+        assert dispatched_personas == [["Bob", "Carol"]]
+
+    def test_missing_personas_without_resume_errors(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from synth_panel.cli.commands import handle_panel_run
+
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+        instrument_file = tmp_path / "survey.yaml"
+        instrument_file.write_text(_instrument_yaml())
+
+        args = self._parsed(
+            [
+                "panel",
+                "run",
+                "--instrument",
+                str(instrument_file),
+            ]
+        )
+        code = handle_panel_run(args, self._fmt())
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "--personas is required" in err
+
+    def test_resume_drift_refuses_by_default(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from synth_panel.cli.commands import handle_panel_run
+
+        ckpt_root = tmp_path / "ckpts"
+        monkeypatch.setenv("SYNTHPANEL_CHECKPOINT_ROOT", str(ckpt_root))
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text(_personas_yaml())
+        instrument_file = tmp_path / "survey.yaml"
+        instrument_file.write_text(_instrument_yaml())
+
+        run_id = "run-drift"
+        _seed_partial_checkpoint(
+            tmp_path=ckpt_root,
+            run_id=run_id,
+            persona_names=["Alice", "Bob", "Carol"],
+            completed_names=["Alice"],
+            personas_path=str(personas_file),
+            instrument_path=str(instrument_file),
+        )
+
+        # Ask for a different model on resume — original was 'sonnet'.
+        args = self._parsed(
+            [
+                "--model",
+                "haiku",
+                "panel",
+                "run",
+                "--resume",
+                run_id,
+            ]
+        )
+        code = handle_panel_run(args, self._fmt())
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "drift" in err.lower()
+        assert "--allow-drift" in err
+
+    def test_resume_with_allow_drift_continues(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from unittest.mock import patch
+
+        from synth_panel.cli.commands import handle_panel_run
+        from synth_panel.cost import TokenUsage as CostTokenUsage
+        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+
+        ckpt_root = tmp_path / "ckpts"
+        monkeypatch.setenv("SYNTHPANEL_CHECKPOINT_ROOT", str(ckpt_root))
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text(_personas_yaml())
+        instrument_file = tmp_path / "survey.yaml"
+        instrument_file.write_text(_instrument_yaml())
+
+        run_id = "run-drift-allowed"
+        _seed_partial_checkpoint(
+            tmp_path=ckpt_root,
+            run_id=run_id,
+            persona_names=["Alice", "Bob", "Carol"],
+            completed_names=["Alice"],
+            personas_path=str(personas_file),
+            instrument_path=str(instrument_file),
+        )
+
+        registry = WorkerRegistry()
+
+        def fake_run_panel_parallel(*args, **kwargs):
+            personas = kwargs["personas"]
+            return (
+                [
+                    PanelistResult(
+                        persona_name=p["name"],
+                        responses=[{"question": "Q1", "response": "x"}],
+                        usage=CostTokenUsage(input_tokens=1, output_tokens=1),
+                    )
+                    for p in personas
+                ],
+                registry,
+                {},
+            )
+
+        args = self._parsed(
+            [
+                "--model",
+                "haiku",  # drift: original was sonnet
+                "panel",
+                "run",
+                "--resume",
+                run_id,
+                "--allow-drift",
+                "--no-synthesis",
+            ]
+        )
+        with (
+            patch("synth_panel.cli.commands.run_panel_parallel", side_effect=fake_run_panel_parallel),
+            patch("synth_panel.cli.commands.LLMClient"),
+        ):
+            code = handle_panel_run(args, self._fmt())
+
+        assert code == 0
+        err = capsys.readouterr().err
+        assert "drift" in err.lower()
+        assert "statistically inconsistent" in err.lower()

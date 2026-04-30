@@ -101,9 +101,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     panel_run_parser.add_argument(
         "--personas",
-        required=True,
+        default=None,
         metavar="PATH",
-        help="Path to a YAML file defining personas.",
+        help=(
+            "Path to a YAML file defining personas. Required unless "
+            "--resume <run-id> is given, in which case the original "
+            "personas path is recovered from the checkpoint."
+        ),
     )
     panel_run_parser.add_argument(
         "--personas-merge",
@@ -132,9 +136,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     panel_run_parser.add_argument(
         "--instrument",
-        required=True,
+        default=None,
         metavar="PATH",
-        help="Path to a YAML file defining the survey/instrument.",
+        help=(
+            "Path to a YAML file defining the survey/instrument. "
+            "Required unless --resume <run-id> is given, in which case "
+            "the original instrument path is recovered from the checkpoint."
+        ),
     )
     panel_run_parser.add_argument(
         "--models",
@@ -431,9 +439,24 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Resume a previously-checkpointed run by id. Skips panelists "
             "that already completed, replays the rest, and merges results "
-            "into one final output. Refuses to start if the current config "
-            "does not match the checkpointed config — rerun without "
-            "--resume or restore the original config to continue."
+            "into one final output. May be used standalone — when "
+            "--personas / --instrument are omitted they are recovered "
+            "from the checkpoint's saved CLI args. Refuses to start if "
+            "the current config does not match the checkpointed config; "
+            "pass --allow-drift to override (statistically inconsistent)."
+        ),
+    )
+    panel_run_parser.add_argument(
+        "--allow-drift",
+        action="store_true",
+        default=False,
+        dest="allow_drift",
+        help=(
+            "When combined with --resume, downgrade checkpoint config "
+            "drift from a hard error to a warning and continue. The "
+            "resulting run will mix panelists answered under different "
+            "config (model / temperature / questions / etc.) and is "
+            "statistically inconsistent — use only when you accept that."
         ),
     )
     # sp-utnk: mid-run cost gate (projected-total ceiling)

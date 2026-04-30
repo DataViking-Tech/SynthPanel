@@ -155,6 +155,11 @@ class PanelCheckpoint:
     # Populated on signal-triggered flush so consumers can distinguish a
     # mid-run snapshot from a voluntary abort.
     abort_reason: str | None = None
+    # CLI invocation paths/args sufficient to re-run the original command.
+    # Excluded from the fingerprint (paths can move without changing the
+    # semantic config) but read back on bare ``--resume <id>`` so callers
+    # don't have to re-pass --personas / --instrument.
+    cli_args: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -168,6 +173,7 @@ class PanelCheckpoint:
             "remaining": self.remaining,
             "usage": self.usage,
             "abort_reason": self.abort_reason,
+            "cli_args": self.cli_args,
         }
 
     @classmethod
@@ -181,6 +187,8 @@ class PanelCheckpoint:
         ):
             if key not in data:
                 raise CheckpointFormatError(f"checkpoint missing required field: {key!r}")
+        cli_args_raw = data.get("cli_args")
+        cli_args = dict(cli_args_raw) if isinstance(cli_args_raw, dict) else None
         return cls(
             run_id=data["run_id"],
             created_at=data["created_at"],
@@ -191,6 +199,7 @@ class PanelCheckpoint:
             remaining=list(data.get("remaining", [])),
             usage=dict(data.get("usage", {})),
             abort_reason=data.get("abort_reason"),
+            cli_args=cli_args,
         )
 
 
@@ -275,6 +284,7 @@ class CheckpointWriter:
         every: int = DEFAULT_CHECKPOINT_EVERY,
         preloaded_completed: list[dict[str, Any]] | None = None,
         preloaded_usage: dict[str, Any] | None = None,
+        cli_args: dict[str, Any] | None = None,
     ) -> None:
         _validate_run_id(run_id)
         if every < 1:
@@ -288,6 +298,7 @@ class CheckpointWriter:
         self.completed: list[dict[str, Any]] = list(preloaded_completed or [])
         self._completed_names: set[str] = {_persona_name_of(r) for r in self.completed if _persona_name_of(r)}
         self.usage: dict[str, Any] = dict(preloaded_usage or {})
+        self.cli_args: dict[str, Any] | None = dict(cli_args) if cli_args else None
         self._created_at = datetime.now(timezone.utc).isoformat()
         self._lock = threading.Lock()
         self._since_flush = 0
@@ -410,6 +421,7 @@ class CheckpointWriter:
             remaining=[n for n in self.all_personas if n not in self._completed_names],
             usage=dict(self.usage),
             abort_reason=self._abort_reason,
+            cli_args=dict(self.cli_args) if self.cli_args else None,
         )
 
     # -- Accessors ----------------------------------------------------------
