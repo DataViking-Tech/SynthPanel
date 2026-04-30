@@ -37,11 +37,6 @@ from synth_panel.checkpoint import (
     new_run_id,
     save_checkpoint,
 )
-from synth_panel.metadata_migrations import (
-    CURRENT_SCHEMA_VERSION,
-    migrate_to_current,
-    migrate_v1_to_v2,
-)
 from synth_panel.llm.models import (
     CompletionResponse,
     StopReason,
@@ -49,6 +44,11 @@ from synth_panel.llm.models import (
 )
 from synth_panel.llm.models import (
     TokenUsage as LLMTokenUsage,
+)
+from synth_panel.metadata_migrations import (
+    CURRENT_SCHEMA_VERSION,
+    migrate_to_current,
+    migrate_v1_to_v2,
 )
 from synth_panel.orchestrator import PanelistResult, run_panel_parallel
 
