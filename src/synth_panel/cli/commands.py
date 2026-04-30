@@ -11,6 +11,7 @@ import logging
 import os
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -3520,6 +3521,44 @@ def handle_mcp_serve(args: argparse.Namespace, fmt: OutputFormat) -> int:
     from synth_panel.mcp.server import serve
 
     serve()
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Cost subcommands (sy-kmw1)
+# ---------------------------------------------------------------------------
+
+
+def handle_cost_summary(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Aggregate cost across saved panel runs and print a summary."""
+    from synth_panel import cost_summary as cs
+
+    runs_dir_arg = getattr(args, "runs_dir", None)
+    runs_dir = Path(runs_dir_arg).expanduser() if runs_dir_arg else cs.default_runs_dir()
+
+    since_arg = getattr(args, "since", None)
+    since: datetime | None = None
+    if since_arg:
+        try:
+            since = cs.parse_since(since_arg)
+        except ValueError as exc:
+            print(f"Error: invalid --since value {since_arg!r}: {exc}", file=sys.stderr)
+            return 1
+
+    parsed: list[cs.RunInfo] = []
+    for path in cs.discover_run_files(runs_dir):
+        info = cs.parse_run(path)
+        if info is not None:
+            parsed.append(info)
+    report = cs.aggregate_runs(parsed, since=since)
+
+    group_by = getattr(args, "by", "model") or "model"
+    cost_format = getattr(args, "cost_format", "text") or "text"
+
+    if cost_format == "json":
+        print(json.dumps(cs.to_json_payload(report, group_by=group_by), indent=2))
+    else:
+        print(cs.format_text(report, group_by=group_by))
     return 0
 
 

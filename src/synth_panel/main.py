@@ -10,6 +10,7 @@ import sys
 
 from synth_panel.cli.commands import (
     handle_analyze,
+    handle_cost_summary,
     handle_instruments_graph,
     handle_instruments_install,
     handle_instruments_list,
@@ -95,6 +96,13 @@ def main(argv: list[str] | None = None) -> int:
             return handle_instruments_graph(args, output_format)
         else:
             parser.parse_args(["instruments", "--help"])
+            return 1
+    elif args.command == "cost":
+        sub = getattr(args, "cost_command", None)
+        if sub == "summary":
+            return handle_cost_summary(args, output_format)
+        else:
+            parser.parse_args(["cost", "--help"])
             return 1
     elif args.command == "analyze":
         return handle_analyze(args, output_format)

@@ -920,6 +920,50 @@ def build_parser() -> argparse.ArgumentParser:
         help="Report format (default: markdown). HTML reserved for v2.",
     )
 
+    # cost (sy-kmw1): standalone cost reporting for past runs
+    cost_parser = subparsers.add_parser(
+        "cost",
+        help="Cost reporting for saved panel runs.",
+    )
+    cost_subparsers = cost_parser.add_subparsers(dest="cost_command")
+
+    cost_summary_parser = cost_subparsers.add_parser(
+        "summary",
+        help="Summarize cost across saved panel runs (totals, by model, by month).",
+    )
+    cost_summary_parser.add_argument(
+        "--since",
+        default=None,
+        metavar="DATE",
+        help=(
+            "Only include runs at or after DATE. Accepts YYYY-MM-DD or "
+            "ISO-8601 (e.g. 2026-04-01 or 2026-04-01T12:00:00Z)."
+        ),
+    )
+    cost_summary_parser.add_argument(
+        "--by",
+        default="model",
+        choices=["model", "run"],
+        help="Grouping for the by-* breakdown (default: model).",
+    )
+    cost_summary_parser.add_argument(
+        "--format",
+        default="text",
+        choices=["text", "json"],
+        dest="cost_format",
+        help="Output format (default: text).",
+    )
+    cost_summary_parser.add_argument(
+        "--runs-dir",
+        default=None,
+        metavar="PATH",
+        dest="runs_dir",
+        help=(
+            "Directory containing saved result-*.json files. Default: "
+            "$SYNTH_PANEL_DATA_DIR/results (or ~/.synthpanel/results)."
+        ),
+    )
+
     # mcp-serve
     subparsers.add_parser(
         "mcp-serve",
