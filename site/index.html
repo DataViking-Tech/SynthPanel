@@ -398,8 +398,9 @@ Consensus: price is not the blocker; trust + integration depth are.
 <pre class="text-slate-300"><span class="text-slate-500"># 1. install</span>
 <span class="text-emerald-400">pip install</span> synthpanel
 
-<span class="text-slate-500"># 2. set a key for any provider you have</span>
-<span class="text-emerald-400">export</span> ANTHROPIC_API_KEY=<span class="text-amber-300">"sk-..."</span>
+<span class="text-slate-500"># 2. add a key — env var (one-shot) or stored (persistent)</span>
+<span class="text-emerald-400">export</span> ANTHROPIC_API_KEY=<span class="text-amber-300">"sk-..."</span>             <span class="text-slate-600"># env var</span>
+<span class="text-slate-600"># or: synthpanel login --provider anthropic --api-key sk-...   # persisted</span>
 
 <span class="text-slate-500"># 3. one-shot prompt against the default model</span>
 synthpanel prompt <span class="text-amber-300">"What do you think of the name Traitprint?"</span>
@@ -413,6 +414,18 @@ synthpanel panel run \
 <span class="text-slate-500"># 5. render a shareable Markdown report from the saved result</span>
 synthpanel report &lt;result-id&gt; -o report.md</pre>
         </div>
+        <p class="mt-3 text-xs text-slate-500">
+          More commands: <code class="text-slate-400">synthpanel pack calibrate</code>
+          (calibrate a persona pack against a SynthBench baseline),
+          <code class="text-slate-400">synthpanel instruments</code>
+          (manage branching instrument packs),
+          <code class="text-slate-400">synthpanel analyze</code> (statistics on saved
+          results), <code class="text-slate-400">synthpanel cost</code> (spend
+          summary), <code class="text-slate-400">synthpanel login</code> /
+          <code class="text-slate-400">whoami</code> (credential management).
+          Run <code class="text-slate-400">synthpanel --help</code> for the full
+          list.
+        </p>
         <p class="mt-3 text-xs text-slate-500">
           Every <code class="text-slate-400">synthpanel report</code>
           output opens with a mandatory synthetic-panel banner —
