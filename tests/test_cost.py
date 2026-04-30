@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pytest
 
 from synth_panel.cost import (
@@ -646,3 +648,28 @@ class TestBudgetGate:
     def test_default_budget(self):
         gate = BudgetGate()
         assert gate.max_tokens == 2000
+
+
+# --- Float drift regression (sp-cost-float-drift) --------------------------
+
+
+class TestCostFloatDrift:
+    def test_token_usage_cost_no_float_drift(self):
+        """Repeated record_turn over 5000 micro-costs must agree with Decimal sum to 4dp."""
+        rng = __import__('random').Random(42)
+        costs = [rng.uniform(0.0001, 0.003) for _ in range(5000)]
+
+        # Sum via UsageTracker (the real aggregation path)
+        tracker = UsageTracker()
+        for c in costs:
+            tracker.record_turn(TokenUsage(provider_reported_cost=c))
+
+        # Sum via Decimal (gold standard)
+        expected = sum(Decimal(str(c)) for c in costs)
+
+        actual = tracker.cumulative_usage.provider_reported_cost
+        assert actual is not None
+        assert abs(float(expected) - actual) < 0.0001, (
+            f"Cost drift: tracker={actual}, decimal={float(expected)}, "
+            f"diff={abs(float(expected) - actual)}"
+        )

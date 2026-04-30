@@ -7,6 +7,7 @@ cost estimation, budget enforcement, and human-readable summaries.
 from __future__ import annotations
 
 import logging
+import math
 import re
 import threading
 from collections.abc import Iterable
@@ -84,6 +85,23 @@ class TokenUsage:
 
 
 ZERO_USAGE = TokenUsage()
+
+
+def _sum_usages(usages: Iterable[TokenUsage]) -> TokenUsage:
+    """Sum an iterable of usages using math.fsum for cost precision."""
+    items = list(usages)
+    if not items:
+        return ZERO_USAGE
+    costs = [u.provider_reported_cost for u in items if u.provider_reported_cost is not None]
+    return TokenUsage(
+        input_tokens=sum(u.input_tokens for u in items),
+        output_tokens=sum(u.output_tokens for u in items),
+        cache_creation_input_tokens=sum(u.cache_creation_input_tokens for u in items),
+        cache_read_input_tokens=sum(u.cache_read_input_tokens for u in items),
+        provider_reported_cost=math.fsum(costs) if costs else None,
+        reasoning_tokens=sum(u.reasoning_tokens for u in items),
+        cached_tokens=sum(u.cached_tokens for u in items),
+    )
 
 
 @dataclass(frozen=True)
@@ -548,10 +566,12 @@ def aggregate_per_model(
     identifiers as recorded on panelist results (alias resolution happens
     later in ``build_metadata`` when producing the public payload).
     """
-    per_usage: dict[str, TokenUsage] = {}
+    per_model_usages: dict[str, list[TokenUsage]] = {}
     for pr in panelist_results:
         m = getattr(pr, "model", None) or default_model
-        per_usage[m] = per_usage.get(m, ZERO_USAGE) + pr.usage
+        per_model_usages.setdefault(m, []).append(pr.usage)
+
+    per_usage: dict[str, TokenUsage] = {m: _sum_usages(us) for m, us in per_model_usages.items()}
 
     per_cost: dict[str, CostEstimate] = {}
     for m, usage in per_usage.items():
@@ -602,20 +622,20 @@ class UsageTracker:
 
     def __init__(self) -> None:
         self._turns: list[TokenUsage] = []
-        self._cumulative: TokenUsage = ZERO_USAGE
+        self._cumulative: TokenUsage | None = None
 
     # --- Recording -------------------------------------------------------
 
     def record_turn(self, usage: TokenUsage) -> None:
         """Append a single turn's usage and update the running total."""
         self._turns.append(usage)
-        self._cumulative = self._cumulative + usage
+        self._cumulative = None  # invalidate lazy cache
         logger.debug(
             "usage turn %d: in=%d out=%d cumulative=%d",
             len(self._turns),
             usage.input_tokens,
             usage.output_tokens,
-            self._cumulative.total_tokens,
+            self.cumulative_usage.total_tokens,
         )
 
     # --- Queries ---------------------------------------------------------
@@ -633,6 +653,8 @@ class UsageTracker:
 
     @property
     def cumulative_usage(self) -> TokenUsage:
+        if self._cumulative is None:
+            self._cumulative = _sum_usages(self._turns)
         return self._cumulative
 
     def get_turn(self, index: int) -> TokenUsage:
@@ -644,8 +666,8 @@ class UsageTracker:
     def from_usages(cls, usages: list[TokenUsage]) -> UsageTracker:
         """Reconstruct a tracker by replaying a list of per-turn usages."""
         tracker = cls()
-        for u in usages:
-            tracker.record_turn(u)
+        tracker._turns = list(usages)
+        tracker._cumulative = _sum_usages(usages)
         return tracker
 
     # --- Summaries -------------------------------------------------------
