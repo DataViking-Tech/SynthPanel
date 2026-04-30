@@ -8,6 +8,7 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ### Changed (loudness)
 - (sp-g59o) Detection: warn loudly when synthesis output appears unstructured (likely model schema-adherence flake). Triggered when every list field — themes, agreements, disagreements, surprises — is empty while the recommendation slot carries >600 chars of prose. Surfaces as a `synth_panel.synthesis` `logger.warning`, on `SynthesisResult.warnings`, and propagated up to `PanelResult.warnings`. Schema-honoring runs are unchanged. Observed at ~25% on `gemini-flash-lite` synthesis; detection is provider-agnostic.
+- (GH #312) Ensemble: partial-provider failures (e.g. one model rate-limited mid-run while others succeeded) are now surfaced via a new `ensemble_incidents` field on `build_ensemble_output` and the `run_panel` ensemble result. The structure carries per-model failed-turn counts, rate-limited-turn counts, a flat list of `{persona, model, question_index, error_type, message, scope}` records, and a human-readable `summary`. The summary is also appended to `warnings` so existing consumers see the skew without opting in. Previously, an ensemble configured for N providers would silently report only N-1 when any provider raised, leaving downstream stats computed against an unflagged truncated sample.
 
 ## [0.12.0] - 2026-04-26
 

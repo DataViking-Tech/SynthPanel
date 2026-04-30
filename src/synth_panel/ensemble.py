@@ -190,6 +190,200 @@ def _default_panelist_formatter(pr: PanelistResult, model: str) -> dict[str, Any
     return out
 
 
+def _classify_panelist_error(error_str: str) -> str:
+    """Classify a panelist/response error string into a coarse category.
+
+    The provider exception text is the only signal we have at this
+    layer (``_run_panelist`` swallows the typed ``LLMError`` and stores
+    ``f"[error: {exc}]"``), so we string-match on the rendered HTTP
+    status / category words. The categories mirror
+    :class:`synth_panel.llm.errors.LLMErrorCategory` so downstream
+    consumers can reason about retryability without re-classifying.
+    """
+    if not error_str:
+        return "other"
+    lower = error_str.lower()
+    if (
+        " 429" in lower
+        or "/429" in lower
+        or ":429" in lower
+        or "error 429" in lower
+        or "rate_limit" in lower
+        or "rate-limit" in lower
+        or "rate limit" in lower
+        or "ratelimit" in lower
+    ):
+        return "rate_limit"
+    if (
+        " 401" in lower
+        or " 403" in lower
+        or "error 401" in lower
+        or "error 403" in lower
+        or "missing_credentials" in lower
+        or "authentication" in lower
+        or "unauthorized" in lower
+    ):
+        return "authentication"
+    if (
+        "error 5" in lower
+        or " 500" in lower
+        or " 502" in lower
+        or " 503" in lower
+        or " 504" in lower
+        or "server_error" in lower
+        or "server error" in lower
+    ):
+        return "server_error"
+    if "timeout" in lower or "timed out" in lower:
+        return "timeout"
+    if "transport" in lower or "connection" in lower:
+        return "transport"
+    return "other"
+
+
+def _truncate_error(text: str, limit: int = 240) -> str:
+    """Cap an error message so the incidents list stays banner-friendly."""
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3] + "..."
+
+
+def collect_ensemble_incidents(ens: EnsembleResult) -> dict[str, Any]:
+    """Surface per-model failure incidents from an ensemble run (GH #312).
+
+    Walks every panelist response across every model and records:
+
+    * A flat list of incidents (persona, model, question_index, error
+      category, truncated message). Wholesale panelist exceptions
+      (``pr.error``) appear with ``question_index = -1`` and
+      ``scope = "panelist"``.
+    * A per-model bucket with attempted-turn / failed-turn / rate-limited
+      counters so callers can show "claude missing on 15% of turns" without
+      re-walking the structure.
+    * The number of unique ``(persona, question_index)`` pairs where at
+      least one model failed (``skewed_turns``) and the percentage of the
+      full ``persona_count * question_count`` grid those represent. This
+      is what makes "your dataset is skewed" quantifiable: it's the
+      fraction of cells where the ensemble could not actually compare N
+      providers.
+    * A human-readable ``summary`` string callers can lift verbatim into
+      a banner / warnings list. Empty when nothing failed.
+
+    The function is deliberately pure / side-effect-free so the same
+    payload feeds both the CLI ensemble emitter and the MCP tool result.
+    """
+    by_model: dict[str, dict[str, int]] = {}
+    for m in ens.models:
+        by_model[m] = {
+            "total_turns": 0,
+            "failed_turns": 0,
+            "rate_limited_turns": 0,
+            "panelists_with_errors": 0,
+        }
+
+    incidents: list[dict[str, Any]] = []
+    skewed_keys: set[tuple[str, int]] = set()
+
+    for mr in ens.model_results:
+        model = mr.model
+        # Defensive: a panelist could be tagged with a model that isn't in
+        # ``ens.models`` if the caller mutated the result. Materialize a
+        # bucket for it so we don't drop the failure on the floor.
+        bucket = by_model.setdefault(
+            model,
+            {
+                "total_turns": 0,
+                "failed_turns": 0,
+                "rate_limited_turns": 0,
+                "panelists_with_errors": 0,
+            },
+        )
+
+        for pr in mr.panelist_results:
+            persona = pr.persona_name
+
+            if pr.error:
+                bucket["panelists_with_errors"] += 1
+                err_cat = _classify_panelist_error(str(pr.error))
+                incidents.append(
+                    {
+                        "persona": persona,
+                        "model": model,
+                        "question_index": -1,
+                        "error_type": err_cat,
+                        "message": _truncate_error(str(pr.error)),
+                        "scope": "panelist",
+                    }
+                )
+
+            primary_qi = -1
+            for resp in pr.responses:
+                if not isinstance(resp, dict):
+                    continue
+                if resp.get("follow_up"):
+                    continue
+                primary_qi += 1
+                bucket["total_turns"] += 1
+
+                if resp.get("error"):
+                    bucket["failed_turns"] += 1
+                    err_str = str(resp.get("response", ""))
+                    err_cat = _classify_panelist_error(err_str)
+                    if err_cat == "rate_limit":
+                        bucket["rate_limited_turns"] += 1
+
+                    incidents.append(
+                        {
+                            "persona": persona,
+                            "model": model,
+                            "question_index": primary_qi,
+                            "error_type": err_cat,
+                            "message": _truncate_error(err_str),
+                            "scope": "turn",
+                        }
+                    )
+                    skewed_keys.add((persona, primary_qi))
+
+    total_attempts = sum(s["total_turns"] for s in by_model.values())
+    total_failures = sum(s["failed_turns"] for s in by_model.values())
+    total_grid = ens.persona_count * ens.question_count
+    skewed_count = len(skewed_keys)
+    skewed_pct = (skewed_count / total_grid * 100) if total_grid > 0 else 0.0
+
+    summary = ""
+    if total_failures > 0 or any(s["panelists_with_errors"] > 0 for s in by_model.values()):
+        provider_msgs: list[str] = []
+        for m, stats in by_model.items():
+            failed = stats["failed_turns"]
+            attempted = stats["total_turns"]
+            if failed == 0 and stats["panelists_with_errors"] == 0:
+                continue
+            pct = (failed / attempted * 100) if attempted else 0.0
+            rl = stats["rate_limited_turns"]
+            tag = f", {rl} rate-limited" if rl > 0 else ""
+            wholesale = stats["panelists_with_errors"]
+            wtag = f", {wholesale} panelist crash(es)" if wholesale > 0 else ""
+            provider_msgs.append(f"{m}: {failed}/{attempted} turns failed ({pct:.1f}%){tag}{wtag}")
+        if total_grid > 0:
+            summary = (
+                f"Partial ensemble: {skewed_count}/{total_grid} persona-question cells "
+                f"({skewed_pct:.1f}%) missing at least one provider — your ensemble dataset is skewed. "
+                + "; ".join(provider_msgs)
+            )
+        else:
+            summary = "Partial ensemble: " + "; ".join(provider_msgs)
+
+    return {
+        "total_turns": total_attempts,
+        "failed_turns": total_failures,
+        "skewed_turns": skewed_count,
+        "skewed_pct": round(skewed_pct, 2),
+        "by_model": by_model,
+        "incidents": incidents,
+        "summary": summary,
+    }
+
+
 def build_ensemble_output(
     ens: EnsembleResult,
     *,
@@ -210,6 +404,13 @@ def build_ensemble_output(
     populated from every model in the ensemble (sp-atvc). Without this,
     downstream audits that read ``metadata.cost.per_model`` only saw the
     first model and undercounted multi-model ensemble spend.
+
+    ``ensemble_incidents`` (GH #312) records per-model turn failures so
+    a partial ensemble — e.g. one provider rate-limited mid-run while
+    others succeeded — is visible to the caller instead of being silently
+    folded into the response distribution. The summary string is also
+    appended to ``warnings`` so existing consumers that only look at
+    ``warnings`` still see "your dataset is skewed".
 
     ``panelist_formatter`` customises how each :class:`PanelistResult` is
     rendered; when omitted, a minimal ``{persona, responses, model}`` dict
@@ -246,7 +447,17 @@ def build_ensemble_output(
     # sp-nn8k: flag models priced via DEFAULT_PRICING fallback so the
     # ensemble payload exposes estimated spend the same way the
     # single-model + mixed-model rollups do.
-    cost_warnings = build_cost_fallback_warnings(ens.models)
+    cost_fallback_warnings = list(build_cost_fallback_warnings(ens.models))
+    cost_is_estimated = bool(cost_fallback_warnings)
+
+    # GH #312: collect per-model failure incidents so partial-ensemble
+    # runs surface the missing-provider list to the caller. The summary
+    # also lands in ``warnings`` so consumers that only scan that field
+    # still see the skew.
+    incidents_payload = collect_ensemble_incidents(ens)
+    warnings = list(cost_fallback_warnings)
+    if incidents_payload["summary"]:
+        warnings.append(incidents_payload["summary"])
 
     return {
         "per_model_results": per_model_results,
@@ -256,9 +467,10 @@ def build_ensemble_output(
         },
         "models": list(ens.models),
         "total_usage": ens.total_usage.to_dict(),
-        "warnings": list(cost_warnings),
-        "cost_is_estimated": bool(cost_warnings),
+        "warnings": warnings,
+        "cost_is_estimated": cost_is_estimated,
         "metadata": ens_metadata,
+        "ensemble_incidents": incidents_payload,
     }
 
 

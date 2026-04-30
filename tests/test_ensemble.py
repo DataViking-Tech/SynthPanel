@@ -839,6 +839,7 @@ class TestBuildEnsembleOutput:
             "warnings",
             "cost_is_estimated",
             "metadata",
+            "ensemble_incidents",
         }
 
     def test_priced_models_have_no_cost_warnings(self):
@@ -967,6 +968,306 @@ class TestBuildEnsembleOutput:
         meta_cost = out["metadata"]["cost"]
         summed = sum(e["cost_usd"] for e in meta_cost["per_model"].values())
         assert summed == pytest.approx(meta_cost["total_cost_usd"])
+
+    def test_clean_run_has_empty_incidents(self):
+        """GH #312: when no model failed, ensemble_incidents reports zeros."""
+        from synth_panel.ensemble import build_ensemble_output
+
+        out = build_ensemble_output(self._fixture())
+        inc = out["ensemble_incidents"]
+        assert inc["failed_turns"] == 0
+        assert inc["skewed_turns"] == 0
+        assert inc["incidents"] == []
+        assert inc["summary"] == ""
+        # Per-model buckets exist for every ensemble model even on a clean run.
+        assert set(inc["by_model"]) == {"haiku", "sonnet"}
+        for stats in inc["by_model"].values():
+            assert stats["failed_turns"] == 0
+            assert stats["rate_limited_turns"] == 0
+            assert stats["panelists_with_errors"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Tests: collect_ensemble_incidents (GH #312)
+# ---------------------------------------------------------------------------
+
+
+class TestCollectEnsembleIncidents:
+    """GH #312: ensemble runs must surface partial-provider failures.
+
+    The previous behaviour silently dropped a provider's contribution when
+    its calls raised mid-run (e.g. one model rate-limited while the others
+    succeeded). Aggregated stats then represented N-1 providers without
+    warning the user. ``collect_ensemble_incidents`` walks the panelist
+    results to expose exactly which provider went missing on which turns
+    and whether the failure was a rate-limit, so callers can warn that
+    "your ensemble dataset is skewed".
+    """
+
+    def _build_ens(
+        self,
+        model_panels: list[tuple[str, list[PanelistResult]]],
+        *,
+        persona_count: int,
+        question_count: int,
+    ):
+        from synth_panel.cost import CostEstimate, TokenUsage
+        from synth_panel.ensemble import EnsembleResult, ModelRunResult
+
+        usage = TokenUsage(input_tokens=10, output_tokens=5)
+        cost = CostEstimate(input_cost=0.001, output_cost=0.001)
+        mrs = []
+        models = []
+        for model, prs in model_panels:
+            models.append(model)
+            mrs.append(
+                ModelRunResult(
+                    model=model,
+                    panelist_results=prs,
+                    usage=usage,
+                    cost=cost,
+                    sessions={},
+                )
+            )
+        return EnsembleResult(
+            model_results=mrs,
+            models=models,
+            total_usage=usage,
+            total_cost=cost,
+            per_model_cost={m: cost.format_usd() for m in models},
+            per_model_usage={m: usage.to_dict() for m in models},
+            persona_count=persona_count,
+            question_count=question_count,
+        )
+
+    def _pr(
+        self,
+        name: str,
+        model: str,
+        responses: list[dict[str, Any]],
+        *,
+        error: str | None = None,
+    ) -> PanelistResult:
+        from synth_panel.cost import TokenUsage
+
+        return PanelistResult(
+            persona_name=name,
+            responses=responses,
+            usage=TokenUsage(input_tokens=10, output_tokens=5),
+            error=error,
+            model=model,
+        )
+
+    def test_rate_limit_on_one_provider_records_incident(self):
+        """One provider returns 429 on Q2: incident captured + skew flagged."""
+        from synth_panel.ensemble import collect_ensemble_incidents
+
+        haiku_responses = [
+            {"question": "Q1", "response": "ok-1"},
+            {
+                "question": "Q2",
+                "response": "[error: anthropic API error 429: rate limit exceeded]",
+                "error": True,
+            },
+        ]
+        sonnet_responses = [
+            {"question": "Q1", "response": "ok-1"},
+            {"question": "Q2", "response": "ok-2"},
+        ]
+        ens = self._build_ens(
+            [
+                ("haiku", [self._pr("Alice", "haiku", haiku_responses)]),
+                ("sonnet", [self._pr("Alice", "sonnet", sonnet_responses)]),
+            ],
+            persona_count=1,
+            question_count=2,
+        )
+
+        inc = collect_ensemble_incidents(ens)
+        assert inc["failed_turns"] == 1
+        assert inc["skewed_turns"] == 1
+        # 1 skewed cell out of 1 persona × 2 questions = 50%.
+        assert inc["skewed_pct"] == 50.0
+
+        assert inc["by_model"]["haiku"]["failed_turns"] == 1
+        assert inc["by_model"]["haiku"]["rate_limited_turns"] == 1
+        assert inc["by_model"]["sonnet"]["failed_turns"] == 0
+
+        assert len(inc["incidents"]) == 1
+        record = inc["incidents"][0]
+        assert record["persona"] == "Alice"
+        assert record["model"] == "haiku"
+        assert record["question_index"] == 1
+        assert record["error_type"] == "rate_limit"
+        assert record["scope"] == "turn"
+        assert "429" in record["message"]
+
+    def test_summary_names_failing_provider_loudly(self):
+        """The summary string must call out the failing provider + rate-limit count."""
+        from synth_panel.ensemble import collect_ensemble_incidents
+
+        haiku_responses = [
+            {
+                "question": "Q1",
+                "response": "[error: anthropic API error 429: rate limit]",
+                "error": True,
+            },
+        ]
+        sonnet_responses = [{"question": "Q1", "response": "ok"}]
+        ens = self._build_ens(
+            [
+                ("haiku", [self._pr("Alice", "haiku", haiku_responses)]),
+                ("sonnet", [self._pr("Alice", "sonnet", sonnet_responses)]),
+            ],
+            persona_count=1,
+            question_count=1,
+        )
+
+        summary = collect_ensemble_incidents(ens)["summary"]
+        assert "skewed" in summary.lower()
+        assert "haiku" in summary
+        assert "rate-limited" in summary
+
+    def test_summary_lands_in_warnings_when_partial(self):
+        """build_ensemble_output appends the incidents summary to warnings."""
+        from synth_panel.ensemble import build_ensemble_output
+
+        haiku_responses = [
+            {
+                "question": "Q1",
+                "response": "[error: 429 rate limit]",
+                "error": True,
+            },
+        ]
+        sonnet_responses = [{"question": "Q1", "response": "ok"}]
+        ens = self._build_ens(
+            [
+                ("haiku", [self._pr("Alice", "haiku", haiku_responses)]),
+                ("sonnet", [self._pr("Alice", "sonnet", sonnet_responses)]),
+            ],
+            persona_count=1,
+            question_count=1,
+        )
+
+        out = build_ensemble_output(ens)
+        # cost_is_estimated stays False — pricing is fine, only the run is partial.
+        assert out["cost_is_estimated"] is False
+        # warnings carries the incidents summary.
+        assert any("skewed" in w.lower() for w in out["warnings"])
+        # ensemble_incidents key is fully populated alongside warnings.
+        assert out["ensemble_incidents"]["skewed_turns"] == 1
+
+    def test_clean_run_keeps_warnings_empty(self):
+        """A successful ensemble must not pollute warnings with an empty summary."""
+        from synth_panel.ensemble import build_ensemble_output
+
+        ens = self._build_ens(
+            [
+                (
+                    "haiku",
+                    [self._pr("Alice", "haiku", [{"question": "Q1", "response": "ok"}])],
+                ),
+                (
+                    "sonnet",
+                    [self._pr("Alice", "sonnet", [{"question": "Q1", "response": "ok"}])],
+                ),
+            ],
+            persona_count=1,
+            question_count=1,
+        )
+
+        out = build_ensemble_output(ens)
+        assert out["warnings"] == []
+        assert out["ensemble_incidents"]["summary"] == ""
+
+    def test_wholesale_panelist_failure_recorded_as_panelist_scope(self):
+        """A panelist that crashes wholesale appears with scope=panelist + qi=-1."""
+        from synth_panel.ensemble import collect_ensemble_incidents
+
+        ens = self._build_ens(
+            [
+                (
+                    "haiku",
+                    [
+                        self._pr(
+                            "Alice",
+                            "haiku",
+                            [],
+                            error="connection error: timed out",
+                        )
+                    ],
+                ),
+                (
+                    "sonnet",
+                    [self._pr("Alice", "sonnet", [{"question": "Q1", "response": "ok"}])],
+                ),
+            ],
+            persona_count=1,
+            question_count=1,
+        )
+
+        inc = collect_ensemble_incidents(ens)
+        assert inc["by_model"]["haiku"]["panelists_with_errors"] == 1
+        panelist_records = [r for r in inc["incidents"] if r["scope"] == "panelist"]
+        assert len(panelist_records) == 1
+        assert panelist_records[0]["question_index"] == -1
+        assert panelist_records[0]["error_type"] in {"timeout", "transport"}
+        # Even with no per-turn failures, the panelist crash drives a non-empty summary.
+        assert "haiku" in inc["summary"]
+
+    def test_follow_up_responses_excluded_from_turn_count(self):
+        """Follow-ups don't inflate primary-turn totals or skew accounting."""
+        from synth_panel.ensemble import collect_ensemble_incidents
+
+        haiku_responses = [
+            {"question": "Q1", "response": "ok"},
+            {"question": "Q1-follow", "response": "fu", "follow_up": True},
+            {
+                "question": "Q1-follow-2",
+                "response": "[error: 429 rate limit]",
+                "error": True,
+                "follow_up": True,
+            },
+            {"question": "Q2", "response": "ok-2"},
+        ]
+        sonnet_responses = [
+            {"question": "Q1", "response": "ok"},
+            {"question": "Q2", "response": "ok-2"},
+        ]
+        ens = self._build_ens(
+            [
+                ("haiku", [self._pr("Alice", "haiku", haiku_responses)]),
+                ("sonnet", [self._pr("Alice", "sonnet", sonnet_responses)]),
+            ],
+            persona_count=1,
+            question_count=2,
+        )
+
+        inc = collect_ensemble_incidents(ens)
+        # Only Q1, Q2 count toward turns (not the two follow-ups).
+        assert inc["by_model"]["haiku"]["total_turns"] == 2
+        assert inc["by_model"]["sonnet"]["total_turns"] == 2
+        # The follow-up error shouldn't be counted as a primary failure.
+        assert inc["by_model"]["haiku"]["failed_turns"] == 0
+        assert inc["skewed_turns"] == 0
+
+    def test_incidents_message_truncated_to_keep_payload_bounded(self):
+        """Long upstream errors are capped so the JSON payload stays sane."""
+        from synth_panel.ensemble import collect_ensemble_incidents
+
+        long_error = "[error: 429 rate limit] " + "x" * 5_000
+        responses = [{"question": "Q1", "response": long_error, "error": True}]
+        ens = self._build_ens(
+            [
+                ("haiku", [self._pr("Alice", "haiku", responses)]),
+                ("sonnet", [self._pr("Alice", "sonnet", [{"question": "Q1", "response": "ok"}])]),
+            ],
+            persona_count=1,
+            question_count=1,
+        )
+        inc = collect_ensemble_incidents(ens)
+        assert len(inc["incidents"][0]["message"]) <= 240
+        assert inc["incidents"][0]["message"].endswith("...")
 
 
 # ---------------------------------------------------------------------------
