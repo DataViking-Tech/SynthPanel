@@ -2,18 +2,16 @@
 
 ## Development Setup
 
-External contributors: please **fork** the repository first, then clone your fork.
-The upstream repository is protected — direct branch pushes are not permitted.
-See [Submitting Changes](#submitting-changes) for the full PR flow.
+This project does **not** require forking. To contribute:
+
+1. **[Request access](https://github.com/DataViking-Tech/SynthPanel/issues/new?template=access_request.yml)** — open the "Request contributor access" issue. You'll be auto-granted `write` access to the repository within seconds.
+2. Clone upstream directly and create a feature branch.
 
 ```bash
-# Fork via the GitHub UI or:
-gh repo fork DataViking-Tech/SynthPanel --clone
+# After your access request issue auto-closes:
+git clone https://github.com/DataViking-Tech/SynthPanel.git
 cd SynthPanel
-
-# (Maintainers only — direct clone of upstream)
-# git clone https://github.com/DataViking-Tech/SynthPanel.git
-# cd SynthPanel
+git checkout -b feat/my-change
 
 # Create a virtual environment (using uv or standard venv)
 uv venv .venv && source .venv/bin/activate
@@ -105,12 +103,12 @@ Adapters are the highest-leverage contribution — one adapter brings every synt
 
 ## Submitting Changes
 
-1. Fork the repository (`gh repo fork DataViking-Tech/SynthPanel --clone`).
-2. Create a feature branch from `main` on your fork: `git checkout -b feat/my-change`.
+1. [Request access](https://github.com/DataViking-Tech/SynthPanel/issues/new?template=access_request.yml) if you haven't already. Auto-granted in seconds.
+2. Clone upstream and create a feature branch: `git checkout -b feat/my-change`.
 3. Make your changes. Add tests for new functionality.
 4. Run the test suite: `pytest tests/`
 5. Run lint: `ruff check src/ tests/`
-6. Push to your fork and open a pull request against `DataViking-Tech/SynthPanel:main`.
+6. Push your branch (`git push -u origin feat/my-change`) and open a pull request against `main`.
 
 ### What to expect on the PR
 
