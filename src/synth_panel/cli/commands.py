@@ -33,8 +33,11 @@ from synth_panel.checkpoint import (
     checkpoint_dir_for,
     default_checkpoint_root,
     ensure_config_matches,
+    list_runs,
     load_checkpoint,
     new_run_id,
+    parse_duration,
+    prune_runs,
 )
 from synth_panel.cli.output import (
     OutputFormat,
@@ -4746,3 +4749,80 @@ def handle_doctor(args: argparse.Namespace, fmt: OutputFormat) -> int:
         extra=extra,
     )
     return rc
+
+
+def handle_runs_prune(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Prune stale checkpoint run directories from the checkpoint root."""
+    from pathlib import Path
+
+    root = Path(args.root) if getattr(args, "root", None) else None
+
+    older_than = None
+    if getattr(args, "older_than", None):
+        try:
+            older_than = parse_duration(args.older_than)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+
+    keep = getattr(args, "keep", None)
+    dry_run: bool = getattr(args, "dry_run", False)
+
+    if older_than is None and keep is None:
+        print("error: specify at least one of --older-than or --keep", file=sys.stderr)
+        return 1
+
+    try:
+        pruned = prune_runs(root=root, older_than=older_than, keep=keep, dry_run=dry_run)
+    except Exception as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    if fmt is OutputFormat.TEXT:
+        checkpoint_root = root or default_checkpoint_root()
+        prefix = "[dry-run] would prune" if dry_run else "pruned"
+        if not pruned:
+            print(f"Nothing to prune under {checkpoint_root}")
+        else:
+            for run_id in pruned:
+                print(f"{prefix}: {run_id}")
+            noun = "run" if len(pruned) == 1 else "runs"
+            suffix = " (no files deleted)" if dry_run else ""
+            print(f"\n{len(pruned)} {noun}{suffix}")
+        return 0
+
+    emit(
+        fmt,
+        message="runs_pruned",
+        extra={
+            "dry_run": dry_run,
+            "pruned": pruned,
+            "count": len(pruned),
+        },
+    )
+    return 0
+
+
+def handle_runs_list(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """List checkpoint run directories and their status."""
+    from pathlib import Path
+
+    root = Path(args.root) if getattr(args, "root", None) else None
+
+    runs = list_runs(root=root)
+
+    if fmt is OutputFormat.TEXT:
+        checkpoint_root = root or default_checkpoint_root()
+        if not runs:
+            print(f"No runs found under {checkpoint_root}")
+            return 0
+        for run in runs:
+            if run.get("malformed"):
+                print(f"  {run['run_id']}  [malformed]")
+            else:
+                status = "in-progress" if run["in_progress"] else ("aborted" if run["abort_reason"] else "complete")
+                print(f"  {run['run_id']}  [{status}]  updated={run['updated_at']}")
+        return 0
+
+    emit(fmt, message="runs_list", extra={"runs": runs, "count": len(runs)})
+    return 0

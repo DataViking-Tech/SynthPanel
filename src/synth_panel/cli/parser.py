@@ -1063,4 +1063,56 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    # runs — manage checkpoint run directories
+    runs_parser = subparsers.add_parser(
+        "runs",
+        help="Manage checkpoint run directories (~/.synthpanel/checkpoints).",
+    )
+    runs_subparsers = runs_parser.add_subparsers(dest="runs_command")
+
+    # runs list
+    runs_list_parser = runs_subparsers.add_parser(
+        "list",
+        help="List checkpoint runs and their status.",
+    )
+    runs_list_parser.add_argument(
+        "--root",
+        default=None,
+        metavar="DIR",
+        help="Checkpoint root directory (default: $SYNTHPANEL_CHECKPOINT_ROOT or ~/.synthpanel/checkpoints).",
+    )
+
+    # runs prune
+    runs_prune_parser = runs_subparsers.add_parser(
+        "prune",
+        help="Delete stale checkpoint runs. At least one of --older-than or --keep is required.",
+    )
+    runs_prune_parser.add_argument(
+        "--older-than",
+        default=None,
+        metavar="DURATION",
+        dest="older_than",
+        help="Prune runs last updated more than DURATION ago. Format: Nd, Nh, Nw, Nm (e.g. 7d, 24h, 2w).",
+    )
+    runs_prune_parser.add_argument(
+        "--keep",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Keep the N most-recently-updated non-in-progress runs; prune the rest.",
+    )
+    runs_prune_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        dest="dry_run",
+        help="Show what would be pruned without deleting anything.",
+    )
+    runs_prune_parser.add_argument(
+        "--root",
+        default=None,
+        metavar="DIR",
+        help="Checkpoint root directory (default: $SYNTHPANEL_CHECKPOINT_ROOT or ~/.synthpanel/checkpoints).",
+    )
+
     return parser
