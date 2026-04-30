@@ -374,7 +374,7 @@ def test_cli_pack_calibrate_rejects_gated_dataset(tmp_path, capsys, monkeypatch)
             "wvs:Q1",
         ]
     )
-    assert rc == 1
+    assert rc == 2
     err = capsys.readouterr().err
     assert "inline-publishable" in err
 
@@ -413,6 +413,32 @@ def test_cli_pack_calibrate_rejects_empty_yaml(tmp_path, capsys):
 def test_cli_pack_calibrate_rejects_zero_personas(tmp_path, capsys):
     pack = tmp_path / "no_personas.yaml"
     pack.write_text("name: empty pack\npersonas: []\n", encoding="utf-8")
+    rc = main(
+        [
+            "pack",
+            "calibrate",
+            str(pack),
+            "--against",
+            "gss:HAPPY",
+        ]
+    )
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "no personas" in err
+
+
+@pytest.mark.parametrize(
+    "personas_yaml",
+    [
+        "name: missing key pack\n",
+        "name: null personas pack\npersonas: null\n",
+        "name: scalar personas pack\npersonas: not-a-list\n",
+    ],
+    ids=["missing-key", "null-value", "scalar-value"],
+)
+def test_cli_pack_calibrate_rejects_personas_not_a_nonempty_list(tmp_path, capsys, personas_yaml):
+    pack = tmp_path / "bad_personas.yaml"
+    pack.write_text(personas_yaml, encoding="utf-8")
     rc = main(
         [
             "pack",
@@ -472,26 +498,28 @@ def test_cli_pack_calibrate_unexpected_error_clean_message(tmp_path, capsys):
 
 def test_cli_pack_calibrate_debug_reraises_unexpected(tmp_path):
     pack = _write_pack(tmp_path)
-    with patch(
-        "synth_panel.cli.commands._run_calibration_panel",
-        side_effect=KeyError("missing-field"),
+    with (
+        patch(
+            "synth_panel.cli.commands._run_calibration_panel",
+            side_effect=KeyError("missing-field"),
+        ),
+        pytest.raises(KeyError),
     ):
-        with pytest.raises(KeyError):
-            main(
-                [
-                    "pack",
-                    "calibrate",
-                    str(pack),
-                    "--against",
-                    "gss:HAPPY",
-                    "--n",
-                    "20",
-                    "--samples-per-question",
-                    "5",
-                    "--yes",
-                    "--debug",
-                ]
-            )
+        main(
+            [
+                "pack",
+                "calibrate",
+                str(pack),
+                "--against",
+                "gss:HAPPY",
+                "--n",
+                "20",
+                "--samples-per-question",
+                "5",
+                "--yes",
+                "--debug",
+            ]
+        )
 
 
 def test_cli_pack_calibrate_propagates_panel_failure(tmp_path, capsys):

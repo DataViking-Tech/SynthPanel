@@ -3409,7 +3409,7 @@ def handle_pack_calibrate(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 f"For gated datasets use post-hoc calibration.",
                 file=sys.stderr,
             )
-            return 1
+            return 2
 
         # ── Load + validate the pack YAML ────────────────────────────────
         if not Path(pack_yaml_path).exists():
@@ -3501,7 +3501,7 @@ def handle_pack_calibrate(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 },
             )
         return 0
-    except Exception as exc:  # noqa: BLE001 - intentional catch-all safety net
+    except Exception as exc:
         if debug:
             raise
         print(
