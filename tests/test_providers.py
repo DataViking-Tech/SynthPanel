@@ -631,9 +631,88 @@ class TestAnthropicProvider:
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-test"}):
             provider = AnthropicProvider()
         body = provider._build_body(req)
-        assert body["system"] == "Be helpful."
+        assert body["system"] == [{"type": "text", "text": "Be helpful.", "cache_control": {"type": "ephemeral"}}]
         assert len(body["tools"]) == 1
         assert body["tool_choice"] == {"type": "any"}
+
+    def test_cache_control_on_system_prompt(self):
+        from synth_panel.llm.providers.anthropic import AnthropicProvider
+
+        req = CompletionRequest(
+            model="claude-sonnet-4-6-20250414",
+            max_tokens=100,
+            messages=[InputMessage(role="user", content=[TextBlock(text="Hello")])],
+            system="You are a helpful assistant.",
+        )
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-test"}):
+            provider = AnthropicProvider()
+        body = provider._build_body(req)
+        system = body["system"]
+        assert isinstance(system, list)
+        assert len(system) == 1
+        assert system[0]["type"] == "text"
+        assert system[0]["text"] == "You are a helpful assistant."
+        assert system[0]["cache_control"] == {"type": "ephemeral"}
+
+    def test_no_system_omits_system_key(self):
+        from synth_panel.llm.providers.anthropic import AnthropicProvider
+
+        req = CompletionRequest(
+            model="claude-sonnet-4-6-20250414",
+            max_tokens=100,
+            messages=[InputMessage(role="user", content=[TextBlock(text="Hello")])],
+        )
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-test"}):
+            provider = AnthropicProvider()
+        body = provider._build_body(req)
+        assert "system" not in body
+
+    def test_cache_control_on_last_user_message_last_text_block(self):
+        from synth_panel.llm.providers.anthropic import _build_messages
+
+        req = CompletionRequest(
+            model="claude-sonnet-4-6-20250414",
+            max_tokens=100,
+            messages=[
+                InputMessage(role="user", content=[TextBlock(text="First question")]),
+                InputMessage(role="assistant", content=[TextBlock(text="First answer")]),
+                InputMessage(role="user", content=[TextBlock(text="Second question")]),
+            ],
+        )
+        messages = _build_messages(req)
+        last_user_content = messages[2]["content"]
+        assert last_user_content[-1]["cache_control"] == {"type": "ephemeral"}
+        # Earlier user message must NOT have cache_control
+        first_user_content = messages[0]["content"]
+        assert "cache_control" not in first_user_content[0]
+
+    def test_cache_control_only_on_last_user_message(self):
+        from synth_panel.llm.providers.anthropic import _build_messages
+
+        req = CompletionRequest(
+            model="claude-sonnet-4-6-20250414",
+            max_tokens=100,
+            messages=[
+                InputMessage(role="user", content=[TextBlock(text="Q1")]),
+            ],
+        )
+        messages = _build_messages(req)
+        assert messages[0]["content"][0]["cache_control"] == {"type": "ephemeral"}
+
+    def test_cache_control_not_on_assistant_messages(self):
+        from synth_panel.llm.providers.anthropic import _build_messages
+
+        req = CompletionRequest(
+            model="claude-sonnet-4-6-20250414",
+            max_tokens=100,
+            messages=[
+                InputMessage(role="user", content=[TextBlock(text="Q1")]),
+                InputMessage(role="assistant", content=[TextBlock(text="A1")]),
+            ],
+        )
+        messages = _build_messages(req)
+        assistant_content = messages[1]["content"]
+        assert "cache_control" not in assistant_content[0]
 
 
 # ---------------------------------------------------------------------------
