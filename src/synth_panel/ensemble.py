@@ -28,6 +28,124 @@ from synth_panel.prompts import build_question_prompt, persona_system_prompt
 
 logger = logging.getLogger(__name__)
 
+# Mirrors CLI `_RATE_LIMIT_ABORT_MARKERS` (sp-56pb): substring hints that an
+# error likely came from provider rate-limit / retry exhaustion. Used to flag
+# ensemble incidents without importing the CLI stack.
+_RATE_LIMIT_HINT_MARKERS = (
+    "retries_exhausted",
+    "retries exhausted",
+    "rate_limit",
+    "rate limit",
+    "429",
+)
+
+
+def _rate_limit_likely(message: str | None) -> bool:
+    if not message:
+        return False
+    lower = message.lower()
+    return any(marker in lower for marker in _RATE_LIMIT_HINT_MARKERS)
+
+
+def collect_ensemble_incidents(ens: EnsembleResult) -> list[dict[str, Any]]:
+    """Collect structured records for partial ensemble failures (GH #312).
+
+    Walks each model's panelists and records panelist-level failures,
+    per-question ``error`` responses, and shortfalls vs ``question_count``.
+    Downstream consumers use this for provenance; :func:`build_ensemble_output`
+    merges derived warnings into the public ``warnings`` list.
+    """
+    incidents: list[dict[str, Any]] = []
+    expected_primary = ens.question_count
+
+    for mr in ens.model_results:
+        model = mr.model
+        for pr in mr.panelist_results:
+            persona = pr.persona_name
+            if pr.error:
+                incidents.append(
+                    {
+                        "model": model,
+                        "persona": persona,
+                        "kind": "panelist_failure",
+                        "question_index": None,
+                        "question": None,
+                        "detail": pr.error,
+                        "rate_limit_suspected": _rate_limit_likely(pr.error),
+                    }
+                )
+                continue
+
+            primary: list[dict[str, Any]] = []
+            for resp in pr.responses or []:
+                if isinstance(resp, dict) and resp.get("follow_up"):
+                    continue
+                if isinstance(resp, dict):
+                    primary.append(resp)
+
+            for qi, resp in enumerate(primary):
+                if not isinstance(resp, dict):
+                    continue
+                if resp.get("error"):
+                    qtext = resp.get("question")
+                    detail = str(resp.get("response", ""))
+                    incidents.append(
+                        {
+                            "model": model,
+                            "persona": persona,
+                            "kind": "question_failure",
+                            "question_index": qi,
+                            "question": qtext,
+                            "detail": detail,
+                            "rate_limit_suspected": _rate_limit_likely(detail),
+                        }
+                    )
+
+            if expected_primary > len(primary):
+                for qi in range(len(primary), expected_primary):
+                    incidents.append(
+                        {
+                            "model": model,
+                            "persona": persona,
+                            "kind": "missing_response",
+                            "question_index": qi,
+                            "question": None,
+                            "detail": "panelist produced fewer primary answers than questions in the instrument",
+                            "rate_limit_suspected": False,
+                        }
+                    )
+
+    return incidents
+
+
+def build_ensemble_incident_warnings(incidents: list[dict[str, Any]]) -> list[str]:
+    """Human-readable summary lines for partial ensemble runs."""
+    if not incidents:
+        return []
+
+    by_model: dict[str, int] = {}
+    rate_limit_hits = 0
+    for inc in incidents:
+        model = str(inc.get("model") or "unknown")
+        by_model[model] = by_model.get(model, 0) + 1
+        if inc.get("rate_limit_suspected"):
+            rate_limit_hits += 1
+
+    model_parts = [f"{m} ({by_model[m]})" for m in sorted(by_model)]
+    summary = (
+        f"Ensemble partial failure: {len(incidents)} incident(s) "
+        f"across models [{', '.join(model_parts)}]. "
+        "Some provider-persona-question tuples did not complete successfully — "
+        "cross-model comparisons may be skewed."
+    )
+    out = [summary]
+    if rate_limit_hits:
+        out.append(
+            f"{rate_limit_hits} incident(s) look rate-limit-related "
+            "(429 / retries exhausted / rate_limit markers in errors)."
+        )
+    return out
+
 
 @dataclass
 class ModelRunResult:
@@ -215,6 +333,11 @@ def build_ensemble_output(
     rendered; when omitted, a minimal ``{persona, responses, model}`` dict
     is produced so callers without the full runner context still get a
     useful payload.
+
+    ``ensemble_incidents`` lists structured partial-failure records (GH #312):
+    panelist-level failures, per-question errors, and shortfalls versus
+    ``question_count``. Non-empty incidents append loud warnings alongside
+    any cost-tier fallback warnings.
     """
     from synth_panel.metadata import build_metadata
 
@@ -248,6 +371,13 @@ def build_ensemble_output(
     # single-model + mixed-model rollups do.
     cost_warnings = build_cost_fallback_warnings(ens.models)
 
+    # GH #312 / sp-4y5.5: surface partial ensemble failures (rate limits,
+    # per-question errors) so callers are not fooled into treating N models
+    # as fully represented when some tuples dropped on the floor.
+    ensemble_incidents = collect_ensemble_incidents(ens)
+    incident_warnings = build_ensemble_incident_warnings(ensemble_incidents)
+    merged_warnings = list(cost_warnings) + incident_warnings
+
     return {
         "per_model_results": per_model_results,
         "cost_breakdown": {
@@ -256,8 +386,9 @@ def build_ensemble_output(
         },
         "models": list(ens.models),
         "total_usage": ens.total_usage.to_dict(),
-        "warnings": list(cost_warnings),
+        "warnings": merged_warnings,
         "cost_is_estimated": bool(cost_warnings),
+        "ensemble_incidents": ensemble_incidents,
         "metadata": ens_metadata,
     }
 
