@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from collections import defaultdict
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+import jinja2
+from jinja2.sandbox import SandboxedEnvironment
+
+if TYPE_CHECKING:
+    pass
 
 # Synthesis prompt version — increment when the prompt changes materially.
 SYNTHESIS_PROMPT_VERSION = 1
@@ -22,6 +28,25 @@ SYNTHESIS_PROMPT = (
     "- recommendation: A brief actionable recommendation based on the findings\n\n"
     "Be specific and cite panelist names when relevant. Focus on substance, not meta-commentary."
 )
+
+# Markers that distinguish Jinja2 templates from legacy Python format strings.
+_JINJA2_MARKERS = ("{{", "{%", "{#")
+
+
+def is_jinja2_template(template: str) -> bool:
+    """Return True if the string contains Jinja2 syntax markers."""
+    return any(marker in template for marker in _JINJA2_MARKERS)
+
+
+def compile_jinja2_template(template_str: str) -> jinja2.Template:
+    """Compile a Jinja2 template string using SandboxedEnvironment.
+
+    Validates syntax at compile time — callers should do this once at
+    load time, not per persona render.  Raises
+    :class:`jinja2.TemplateSyntaxError` on invalid syntax.
+    """
+    env = SandboxedEnvironment()
+    return env.from_string(template_str)
 
 
 def persona_system_prompt(persona: dict[str, Any]) -> str:
@@ -49,10 +74,11 @@ def persona_system_prompt(persona: dict[str, Any]) -> str:
 def load_prompt_template(path: str) -> str:
     """Load a prompt template from a file path.
 
-    The template should contain Python format-string placeholders such as
-    ``{name}``, ``{age}``, ``{occupation}``, ``{background}``, and
-    ``{personality_traits}``.  Any key present in the persona dict can be
-    referenced.
+    Supports both Jinja2 (``{{ name }}``, ``{% if ... %}``) and legacy
+    Python format-string (``{name}``) syntax — detected automatically by
+    :func:`is_jinja2_template`.  Returns the raw template string; callers
+    should call :func:`compile_jinja2_template` if Jinja2 is detected so
+    validation happens at load time rather than per render.
     """
     p = Path(path)
     if not p.exists():
@@ -69,14 +95,28 @@ class _DefaultDict(defaultdict):
 
 def persona_system_prompt_from_template(
     persona: dict[str, Any],
-    template: str,
+    template: str | jinja2.Template,
 ) -> str:
     """Build a system prompt by applying a template to the persona dict.
 
-    Uses Python ``str.format_map`` with a tolerant dict that leaves
-    unknown placeholders as literal ``{key}`` strings.  The
-    ``personality_traits`` field is pre-joined with ", " if it's a list.
+    Accepts either:
+
+    - A pre-compiled :class:`jinja2.Template` (preferred — compile once
+      via :func:`compile_jinja2_template` at load time for best performance).
+    - A raw ``str`` with Jinja2 syntax (``{{ name }}``, ``{% if ... %}``
+      etc.) — auto-detected and compiled inline on each call.
+    - A raw ``str`` with legacy Python ``{name}``-style placeholders —
+      rendered via ``str.format_map`` with a tolerant dict that leaves
+      unknown keys as literal ``{key}`` strings.
+
+    The ``personality_traits`` field is pre-joined with ``", "`` when using
+    the legacy format path.  Jinja2 templates receive the raw list and can
+    use ``{{ personality_traits | join(", ") }}`` for the same effect.
     """
+    if isinstance(template, jinja2.Template):
+        return template.render(**persona)
+    if is_jinja2_template(template):
+        return compile_jinja2_template(template).render(**persona)
     ctx = dict(persona)
     traits = ctx.get("personality_traits")
     if isinstance(traits, list):

@@ -63,11 +63,18 @@ class Instrument:
 
     v1, v2, and v3 YAML formats normalize to this structure.
     v1 instruments become a single round named "default".
+
+    The optional ``system_prompt_template`` field carries a Jinja2 or
+    legacy ``{name}``-style template string embedded in the instrument
+    YAML.  When present it overrides the default persona system prompt;
+    Jinja2 syntax is validated at parse time via
+    :func:`parse_instrument`.
     """
 
     version: int
     rounds: list[Round] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    system_prompt_template: str | None = None
 
     @property
     def questions(self) -> list[dict[str, Any]]:
@@ -210,16 +217,46 @@ def parse_instrument(data: dict[str, Any]) -> Instrument:
     Accepts v1 (``questions``) or v2/v3 (``rounds``). Runs the full
     DAG validation ladder before returning. Raises
     :class:`InstrumentError` on validation failure.
+
+    The optional ``system_prompt_template`` top-level key embeds a persona
+    system prompt template in the instrument.  Jinja2 syntax is validated
+    (compiled) here so errors surface at load time rather than per-turn.
     """
     version = data.get("version", 1)
 
+    spt = data.get("system_prompt_template")
+    if spt is not None:
+        if not isinstance(spt, str):
+            raise InstrumentError("'system_prompt_template' must be a string")
+        _validate_system_prompt_template(spt)
+
     if "rounds" in data:
-        return _parse_rounds(data, version)
+        instrument = _parse_rounds(data, version)
+    elif "questions" in data:
+        instrument = _parse_v1(data, version)
+    else:
+        raise InstrumentError("Instrument must have either 'questions' (v1) or 'rounds' (v2) key")
 
-    if "questions" in data:
-        return _parse_v1(data, version)
+    instrument.system_prompt_template = spt
+    return instrument
 
-    raise InstrumentError("Instrument must have either 'questions' (v1) or 'rounds' (v2) key")
+
+def _validate_system_prompt_template(template_str: str) -> None:
+    """Compile a Jinja2 system_prompt_template to validate its syntax.
+
+    Only runs for templates containing Jinja2 markers; legacy ``{name}``
+    templates are accepted without further checks.  Raises
+    :class:`InstrumentError` on Jinja2 syntax errors.
+    """
+    _JINJA2_MARKERS = ("{{", "{%", "{#")
+    if not any(m in template_str for m in _JINJA2_MARKERS):
+        return
+    try:
+        from synth_panel.prompts import compile_jinja2_template
+
+        compile_jinja2_template(template_str)
+    except Exception as exc:
+        raise InstrumentError(f"system_prompt_template Jinja2 syntax error: {exc}") from exc
 
 
 def _parse_v1(data: dict[str, Any], version: int) -> Instrument:
