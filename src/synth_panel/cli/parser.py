@@ -819,6 +819,12 @@ def build_parser() -> argparse.ArgumentParser:
         dest="yes",
         help="Non-interactive overwrite confirm (skip the y/N prompt).",
     )
+    pack_calibrate_parser.add_argument(
+        "--debug",
+        action="store_true",
+        dest="debug",
+        help="Re-raise unexpected errors with full traceback (default: print a clean message).",
+    )
 
     # instruments
     instruments_parser = subparsers.add_parser(

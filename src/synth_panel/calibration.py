@@ -68,10 +68,11 @@ def now_iso_utc() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def load_pack_yaml(path: str) -> tuple[str, dict[str, Any]]:
+def load_pack_yaml(path: str, *, min_personas: int = 1) -> tuple[str, dict[str, Any]]:
     """Read a pack YAML and return ``(raw_text, parsed_dict)``.
 
-    Raises ``ValueError`` on parse failure or non-mapping top level.
+    Raises ``ValueError`` on parse failure, non-mapping top level, or when
+    the pack contains fewer than ``min_personas`` persona entries.
     """
     with open(path, encoding="utf-8") as f:
         raw = f.read()
@@ -81,6 +82,11 @@ def load_pack_yaml(path: str) -> tuple[str, dict[str, Any]]:
         raise ValueError(f"failed to parse {path}: {exc}") from exc
     if not isinstance(data, dict):
         raise ValueError(f"pack YAML at {path} must be a mapping at top level")
+    personas = data.get("personas")
+    if not isinstance(personas, list) or len(personas) < min_personas:
+        raise ValueError(
+            f"no personas found in {path}; calibration requires at least {min_personas} persona(s)"
+        )
     return raw, data
 
 

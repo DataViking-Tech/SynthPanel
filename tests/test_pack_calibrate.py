@@ -389,8 +389,109 @@ def test_cli_pack_calibrate_missing_pack_yaml(tmp_path, capsys):
             "gss:HAPPY",
         ]
     )
+    assert rc == 2
+    assert "file not found" in capsys.readouterr().err
+
+
+def test_cli_pack_calibrate_rejects_empty_yaml(tmp_path, capsys):
+    pack = tmp_path / "empty.yaml"
+    pack.write_text("", encoding="utf-8")
+    rc = main(
+        [
+            "pack",
+            "calibrate",
+            str(pack),
+            "--against",
+            "gss:HAPPY",
+        ]
+    )
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "mapping" in err or "personas" in err
+
+
+def test_cli_pack_calibrate_rejects_zero_personas(tmp_path, capsys):
+    pack = tmp_path / "no_personas.yaml"
+    pack.write_text("name: empty pack\npersonas: []\n", encoding="utf-8")
+    rc = main(
+        [
+            "pack",
+            "calibrate",
+            str(pack),
+            "--against",
+            "gss:HAPPY",
+        ]
+    )
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "no personas" in err
+
+
+def test_cli_pack_calibrate_rejects_malformed_yaml(tmp_path, capsys):
+    pack = tmp_path / "bad.yaml"
+    pack.write_text("personas: [\n  - name: alice\n  - missing closing", encoding="utf-8")
+    rc = main(
+        [
+            "pack",
+            "calibrate",
+            str(pack),
+            "--against",
+            "gss:HAPPY",
+        ]
+    )
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "failed to parse" in err.lower() or "parse" in err.lower()
+
+
+def test_cli_pack_calibrate_unexpected_error_clean_message(tmp_path, capsys):
+    pack = _write_pack(tmp_path)
+    with patch(
+        "synth_panel.cli.commands._run_calibration_panel",
+        side_effect=KeyError("missing-field"),
+    ):
+        rc = main(
+            [
+                "pack",
+                "calibrate",
+                str(pack),
+                "--against",
+                "gss:HAPPY",
+                "--n",
+                "20",
+                "--samples-per-question",
+                "5",
+                "--yes",
+            ]
+        )
     assert rc == 1
-    assert "not found" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "unexpected failure" in err
+    assert "KeyError" in err
+
+
+def test_cli_pack_calibrate_debug_reraises_unexpected(tmp_path):
+    pack = _write_pack(tmp_path)
+    with patch(
+        "synth_panel.cli.commands._run_calibration_panel",
+        side_effect=KeyError("missing-field"),
+    ):
+        with pytest.raises(KeyError):
+            main(
+                [
+                    "pack",
+                    "calibrate",
+                    str(pack),
+                    "--against",
+                    "gss:HAPPY",
+                    "--n",
+                    "20",
+                    "--samples-per-question",
+                    "5",
+                    "--yes",
+                    "--debug",
+                ]
+            )
 
 
 def test_cli_pack_calibrate_propagates_panel_failure(tmp_path, capsys):
