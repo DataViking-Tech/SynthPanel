@@ -47,6 +47,8 @@ DEFAULT_EPSILON = 0.02
 DEFAULT_MIN_N = 50
 DEFAULT_M_CONSECUTIVE = 3
 DEFAULT_CURVE_POINTS = 20
+DEFAULT_DIVERSITY_ENTROPY_THRESHOLD = 0.35
+DEFAULT_DIVERSITY_MIN_N = 20
 
 # Structured-response key heuristics. The bundled schemas
 # (src/synth_panel/structured/schemas.py) each reserve exactly one field
@@ -338,6 +340,8 @@ class ConvergenceTracker:
         m_consecutive: int = DEFAULT_M_CONSECUTIVE,
         auto_stop: bool = False,
         log_path: str | None = None,
+        diversity_entropy_threshold: float = DEFAULT_DIVERSITY_ENTROPY_THRESHOLD,
+        diversity_min_n: int = DEFAULT_DIVERSITY_MIN_N,
     ) -> None:
         if check_every < 1:
             raise ValueError("check_every must be >= 1")
@@ -356,6 +360,8 @@ class ConvergenceTracker:
         self._m = m_consecutive
         self._auto_stop = auto_stop
         self._log_path = log_path
+        self._diversity_entropy_threshold = diversity_entropy_threshold
+        self._diversity_min_n = diversity_min_n
         self._states: dict[str, _QuestionState] = {k: _QuestionState(key=k) for k in self._keys}
         self._n = 0
         self._last_check_n = 0
@@ -524,12 +530,58 @@ class ConvergenceTracker:
                 "tracked_questions": list(self._keys),
                 "per_question": per_question,
                 "human_baseline": baseline,
+                "diversity_warnings": self._build_diversity_warnings_locked(),
             }
             return report
 
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _normalized_entropy(counts: Counter) -> float:
+        """Shannon entropy normalized to [0, 1] by the maximum possible entropy.
+
+        Returns 0.0 when all responses are identical, 1.0 when perfectly
+        uniform across all observed options. Returns 0.0 on empty counts.
+        """
+        total = sum(counts.values())
+        if total == 0:
+            return 0.0
+        n_options = len(counts)
+        if n_options <= 1:
+            return 0.0
+        h = -sum((c / total) * math.log2(c / total) for c in counts.values() if c > 0)
+        return h / math.log2(n_options)
+
+    def _build_diversity_warnings_locked(self) -> list[str]:
+        """Return informational warning strings for questions with low response diversity.
+
+        Called from within the build_report() lock. Skips questions that
+        haven't accumulated enough responses (diversity_min_n). Flags any
+        question whose normalized Shannon entropy falls below
+        diversity_entropy_threshold.
+        """
+        warnings: list[str] = []
+        for _i, key, _q in self._tracked:
+            state = self._states.get(key)
+            if state is None:
+                continue
+            counts = state.cumulative
+            n = sum(counts.values())
+            if n < self._diversity_min_n:
+                continue
+            entropy = self._normalized_entropy(counts)
+            if entropy >= self._diversity_entropy_threshold:
+                continue
+            dominant_choice, dominant_count = counts.most_common(1)[0]
+            dominant_pct = round(100 * dominant_count / n)
+            warnings.append(
+                f"low response diversity on '{key}' "
+                f"(entropy {entropy:.2f}/1.00; {dominant_pct}% chose '{dominant_choice}') "
+                f"— consider whether your persona spread is wide enough or your prompt is leading"
+            )
+        return warnings
 
     def _run_check_locked(self) -> ConvergenceCheck:
         per_q: dict[str, dict[str, float]] = {}
