@@ -26,7 +26,11 @@ class ProviderConfig:
         key = get_credential(self.api_key_env)
         if not key:
             raise LLMError(
-                f"Missing API key: set {self.api_key_env} or run `synthpanel login`",
+                (
+                f"Missing API key: set {self.api_key_env} or "
+                f"run `synthpanel login --provider {self.api_key_env.removesuffix('_API_KEY').lower()}` to store one persistently."
+                + (" Note: Claude Code OAuth tokens cannot be used as Anthropic API keys — generate a key at https://console.anthropic.com/settings/keys." if self.api_key_env == "ANTHROPIC_API_KEY" else "")
+            ),
                 LLMErrorCategory.MISSING_CREDENTIALS,
             )
         return key
