@@ -1115,4 +1115,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Checkpoint root directory (default: $SYNTHPANEL_CHECKPOINT_ROOT or ~/.synthpanel/checkpoints).",
     )
 
+    # runs diff
+    runs_diff_parser = runs_subparsers.add_parser(
+        "diff",
+        help="Compare two saved panel results statistically.",
+    )
+    runs_diff_parser.add_argument(
+        "result_a",
+        metavar="RESULT_A",
+        help="First result ID or path to result JSON file.",
+    )
+    runs_diff_parser.add_argument(
+        "result_b",
+        metavar="RESULT_B",
+        help="Second result ID or path to result JSON file.",
+    )
+
     return parser
