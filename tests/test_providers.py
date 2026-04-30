@@ -329,7 +329,7 @@ class TestParseOpenaiResponse:
             },
         }
         resp = parse_openai_response(data, "openai/gpt-4o-mini")
-        assert resp.usage.provider_reported_cost == pytest.approx(0.000123)
+        assert float(resp.usage.provider_reported_cost) == pytest.approx(0.000123)
 
     def test_openrouter_cost_details_upstream_inference_cost(self):
         """Prefer cost_details.upstream_inference_cost over absent top-level cost."""
@@ -346,7 +346,7 @@ class TestParseOpenaiResponse:
             },
         }
         resp = parse_openai_response(data, "m")
-        assert resp.usage.provider_reported_cost == pytest.approx(0.000456)
+        assert float(resp.usage.provider_reported_cost) == pytest.approx(0.000456)
 
     def test_openrouter_cost_details_prompt_plus_completion(self):
         """Fall back to prompt+completion cost sum if upstream total is missing."""
@@ -366,7 +366,7 @@ class TestParseOpenaiResponse:
             },
         }
         resp = parse_openai_response(data, "m")
-        assert resp.usage.provider_reported_cost == pytest.approx(0.0007)
+        assert float(resp.usage.provider_reported_cost) == pytest.approx(0.0007)
 
     def test_reasoning_and_cached_tokens_captured(self):
         """sp-loil: reasoning_tokens and cached_tokens subcounts land in TokenUsage."""

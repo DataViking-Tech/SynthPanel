@@ -44,8 +44,11 @@ import threading
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
+
+from synth_panel.cost import coerce_provider_reported_cost
 
 logger = logging.getLogger(__name__)
 
@@ -455,7 +458,9 @@ def _merge_usage(
         if prev is None and add is None:
             merged.pop("provider_reported_cost", None)
         else:
-            merged["provider_reported_cost"] = float(prev or 0.0) + float(add or 0.0)
+            p = coerce_provider_reported_cost(prev) if prev is not None else Decimal(0)
+            a = coerce_provider_reported_cost(add) if add is not None else Decimal(0)
+            merged["provider_reported_cost"] = float(p + a)
     return merged
 
 

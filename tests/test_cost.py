@@ -445,7 +445,7 @@ class TestTokenUsageProviderCost:
         a = TokenUsage(provider_reported_cost=0.1, reasoning_tokens=5, cached_tokens=3)
         b = TokenUsage(provider_reported_cost=0.2, reasoning_tokens=7, cached_tokens=4)
         c = a + b
-        assert c.provider_reported_cost == pytest.approx(0.3)
+        assert float(c.provider_reported_cost) == pytest.approx(0.3)
         assert c.reasoning_tokens == 12
         assert c.cached_tokens == 7
 
@@ -458,8 +458,8 @@ class TestTokenUsageProviderCost:
     def test_addition_treats_missing_as_zero_when_one_present(self):
         a = TokenUsage(provider_reported_cost=0.5)
         b = TokenUsage()
-        assert (a + b).provider_reported_cost == pytest.approx(0.5)
-        assert (b + a).provider_reported_cost == pytest.approx(0.5)
+        assert float((a + b).provider_reported_cost) == pytest.approx(0.5)
+        assert float((b + a).provider_reported_cost) == pytest.approx(0.5)
 
     def test_roundtrip_dict_preserves_provider_cost(self):
         u = TokenUsage(
@@ -471,8 +471,19 @@ class TestTokenUsageProviderCost:
         )
         assert TokenUsage.from_dict(u.to_dict()) == u
 
+    def test_provider_reported_cost_many_adds_matches_decimal_sum(self):
+        """GH #290: long chains of __add__ must not drift vs exact Decimal sum."""
+        from decimal import Decimal
 
-# --- aggregate_per_model --------------------------------------------------
+        costs = [round(0.0002 + (i % 97) * 1e-6, 6) for i in range(5000)]
+        expected = sum(Decimal(repr(c)) for c in costs)
+
+        total = TokenUsage()
+        for c in costs:
+            total = total + TokenUsage(provider_reported_cost=c)
+
+        assert total.provider_reported_cost is not None
+        assert abs(float(expected) - float(total.provider_reported_cost)) < 0.0001
 
 
 class _FakePanelist:
