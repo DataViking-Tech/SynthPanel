@@ -11,6 +11,7 @@ import sys
 from synth_panel.cli.commands import (
     handle_analyze,
     handle_cost_summary,
+    handle_doctor,
     handle_instruments_graph,
     handle_instruments_install,
     handle_instruments_list,
@@ -121,6 +122,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_logout(args, output_format)
     elif args.command == "whoami":
         return handle_whoami(args, output_format)
+    elif args.command == "doctor":
+        return handle_doctor(args, output_format)
     else:
         # No subcommand → interactive REPL
         return run_repl(args, output_format)

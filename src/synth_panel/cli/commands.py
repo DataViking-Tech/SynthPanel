@@ -4615,3 +4615,99 @@ def handle_whoami(args: argparse.Namespace, fmt: OutputFormat) -> int:
         extra={"credentials_path": str(credentials_path()), "providers": rows},
     )
     return 0
+
+
+def handle_doctor(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Preflight check for CI/scripts: sane runtime and credentials, no secret material in output."""
+    import os
+    import sys
+
+    from synth_panel import __version__
+    from synth_panel.credentials import (
+        KNOWN_CREDENTIAL_ENV_VARS,
+        PROVIDER_LABELS,
+        credentials_path,
+        has_credential,
+        load_credentials,
+    )
+
+    def _credential_row(env_var: str) -> dict[str, Any]:
+        env_set = bool(os.environ.get(env_var, "").strip())
+        disk = load_credentials()
+        stored_set = env_var in disk
+        source: str | None = None
+        if env_set:
+            source = "env"
+        elif stored_set:
+            source = "stored"
+        return {
+            "provider": PROVIDER_LABELS.get(env_var, env_var),
+            "env_var": env_var,
+            "available": has_credential(env_var),
+            "source": source,
+        }
+
+    dep_errors: list[str] = []
+    optional_notes: list[str] = []
+
+    try:
+        import httpx  # noqa: F401
+    except ImportError:
+        dep_errors.append("missing dependency: httpx")
+
+    try:
+        import yaml  # noqa: F401
+    except ImportError:
+        dep_errors.append("missing dependency: pyyaml")
+
+    try:
+        import mcp  # noqa: F401
+    except ImportError:
+        optional_notes.append("optional: mcp not installed (`pip install synthpanel[mcp]`).")
+
+    provider_rows = [_credential_row(ev) for ev in KNOWN_CREDENTIAL_ENV_VARS]
+    any_provider = any(r["available"] for r in provider_rows)
+    checks_ok = not dep_errors and any_provider
+
+    extra: dict[str, Any] = {
+        "synthpanel_version": __version__,
+        "python_version": sys.version.split()[0],
+        "credentials_path": str(credentials_path()),
+        "providers": provider_rows,
+        "dependencies_ok": not dep_errors,
+        "dependency_errors": dep_errors,
+        "optional_notes": optional_notes,
+        "credential_configured": any_provider,
+        "checks_ok": checks_ok,
+    }
+
+    rc = 0 if checks_ok else 1
+
+    if fmt is OutputFormat.TEXT:
+        print(f"synthpanel {__version__} (Python {sys.version.split()[0]})")
+        if dep_errors:
+            print("Issues:", file=sys.stderr)
+            for msg in dep_errors:
+                print(f"  - {msg}", file=sys.stderr)
+        if optional_notes:
+            for msg in optional_notes:
+                print(f"Note: {msg}")
+        print(f"Credential store: {credentials_path()}")
+        if any_provider:
+            print("Configured providers:")
+            for row in provider_rows:
+                if not row["available"]:
+                    continue
+                print(f"  [{row['source']}] {row['env_var']} — {row['provider']}")
+        else:
+            print("No LLM credentials found (env or stored). Run `synthpanel login`.", file=sys.stderr)
+        if rc != 0:
+            print("doctor: preflight failed", file=sys.stderr)
+        return rc
+
+    emit(
+        fmt,
+        message="doctor_report",
+        extra=extra,
+    )
+    return rc
