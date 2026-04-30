@@ -111,15 +111,25 @@ def load_profile_from_path(path: str) -> Profile:
     return _load_profile_from_path(p)
 
 
-def _load_profile_from_path(path: Path) -> Profile:
-    """Parse a YAML file into a Profile."""
+def _load_profile_from_path(path: Path, _chain: tuple[Path, ...] = ()) -> Profile:
+    """Parse a YAML file into a Profile, with inheritance via ``extends:``."""
     with open(path, encoding="utf-8") as f:
         data = yaml.safe_load(f)
     if data is None:
         data = {}
     if not isinstance(data, dict):
         raise ValueError(f"Profile must be a YAML mapping, got {type(data).__name__}")
-    return Profile(
+
+    extends_spec = data.pop("extends", None)
+    parent: Profile | None = None
+    if extends_spec is not None:
+        parent_path = _resolve_parent_path(str(extends_spec), path)
+        if parent_path in _chain:
+            cycle = " -> ".join(str(p) for p in (*_chain, parent_path))
+            raise ValueError(f"Profile inheritance cycle detected: {cycle}")
+        parent = _load_profile_from_path(parent_path, (*_chain, path))
+
+    own = Profile(
         name=data.get("name", path.stem),
         model=data.get("model"),
         temperature=_opt_float(data.get("temperature")),
@@ -130,6 +140,57 @@ def _load_profile_from_path(path: Path) -> Profile:
         models=data.get("models"),
         source_path=str(path),
     )
+    if parent is None:
+        return own
+    # Child fields win; None means "inherit from parent".
+    return Profile(
+        name=own.name,
+        model=own.model if own.model is not None else parent.model,
+        temperature=own.temperature if own.temperature is not None else parent.temperature,
+        top_p=own.top_p if own.top_p is not None else parent.top_p,
+        synthesis_model=own.synthesis_model if own.synthesis_model is not None else parent.synthesis_model,
+        synthesis_temperature=own.synthesis_temperature if own.synthesis_temperature is not None else parent.synthesis_temperature,
+        prompt_template=own.prompt_template if own.prompt_template is not None else parent.prompt_template,
+        models=own.models if own.models is not None else parent.models,
+        source_path=own.source_path,
+    )
+
+
+def _resolve_parent_path(extends: str, child_path: Path) -> Path:
+    """Resolve an ``extends:`` spec to an absolute path.
+
+    Accepts:
+    - Relative paths starting with ``./`` or ``../``
+    - Absolute paths
+    - Profile names (with or without ``.yaml`` extension), searched via the
+      same search path as ``load_profile_by_name``, with the child's directory
+      searched first.
+    """
+    if extends.startswith("./") or extends.startswith("../") or Path(extends).is_absolute():
+        parent_path = (child_path.parent / extends).resolve()
+        if not parent_path.exists():
+            raise FileNotFoundError(
+                f"Extended profile not found: {extends} (referenced from {child_path})"
+            )
+        return parent_path
+
+    # Name-based resolution
+    name = extends
+    if name.endswith(".yaml") or name.endswith(".yml"):
+        name = Path(name).stem
+
+    candidates = [
+        child_path.parent / f"{name}.yaml",  # same directory as child first
+        _bundled_profiles_dir() / f"{name}.yaml",
+        _cwd_profiles_dir() / f"{name}.yaml",
+        _user_profiles_dir() / f"{name}.yaml",
+    ]
+    for p in candidates:
+        if p.exists():
+            return p
+
+    searched = ", ".join(str(p) for p in candidates)
+    raise FileNotFoundError(f"Extended profile '{name}' not found. Searched: {searched}")
 
 
 def _opt_float(val: Any) -> float | None:
