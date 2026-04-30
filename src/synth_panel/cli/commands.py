@@ -4835,3 +4835,163 @@ def handle_runs_list(args: argparse.Namespace, fmt: OutputFormat) -> int:
 
     emit(fmt, message="runs_list", extra={"runs": runs, "count": len(runs)})
     return 0
+
+
+def handle_runs_diff(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Compare two saved panel results statistically."""
+    from synth_panel.diff import (
+        CategoricalQuestionDiff,
+        RunDiff,
+        TextQuestionDiff,
+        compute_diff,
+        load_result,
+    )
+
+    try:
+        result_a = load_result(args.result_a)
+    except FileNotFoundError:
+        print(f"error: result not found: {args.result_a}", file=sys.stderr)
+        return 1
+
+    try:
+        result_b = load_result(args.result_b)
+    except FileNotFoundError:
+        print(f"error: result not found: {args.result_b}", file=sys.stderr)
+        return 1
+
+    diff = compute_diff(result_a, result_b)
+    m = diff.metadata
+
+    if fmt is OutputFormat.TEXT:
+        _print_runs_diff_text(diff)
+        return 0
+
+    # JSON / NDJSON output
+    cat_out = [
+        {
+            "question_key": q.question_key,
+            "question_text": q.question_text,
+            "type": "categorical",
+            "jsd": round(q.jsd, 4),
+            "cramers_v_a": round(q.cramers_v_a, 4) if q.cramers_v_a is not None else None,
+            "cramers_v_b": round(q.cramers_v_b, 4) if q.cramers_v_b is not None else None,
+            "distribution_a": q.distribution_a,
+            "distribution_b": q.distribution_b,
+        }
+        for q in diff.categorical_questions
+    ]
+    text_out = [
+        {
+            "question_key": q.question_key,
+            "question_text": q.question_text,
+            "type": "text",
+            "top_themes_a": q.top_themes_a,
+            "top_themes_b": q.top_themes_b,
+            "new_themes": q.new_themes,
+            "dropped_themes": q.dropped_themes,
+        }
+        for q in diff.text_questions
+    ]
+    emit(
+        fmt,
+        message="runs_diff",
+        extra={
+            "result_a": m.result_a_id,
+            "result_b": m.result_b_id,
+            "metadata": {
+                "created_at_a": m.created_at_a,
+                "created_at_b": m.created_at_b,
+                "model_a": m.model_a,
+                "model_b": m.model_b,
+                "persona_count_a": m.persona_count_a,
+                "persona_count_b": m.persona_count_b,
+                "question_count_a": m.question_count_a,
+                "question_count_b": m.question_count_b,
+                "cost_a": m.cost_a,
+                "cost_b": m.cost_b,
+                "usage_a": m.usage_a,
+                "usage_b": m.usage_b,
+            },
+            "categorical_questions": cat_out,
+            "text_questions": text_out,
+        },
+    )
+    return 0
+
+
+def _print_runs_diff_text(diff: "RunDiff") -> None:
+    """Print a human-readable diff to stdout."""
+    m = diff.metadata
+
+    def _field(label: str, a: object, b: object) -> str:
+        eq = "=" if str(a) == str(b) else "→"
+        return f"  {label:<16} {str(a):<18} {eq}  {b}"
+
+    print(f"Run A: {m.result_a_id}  ({m.created_at_a})")
+    print(f"Run B: {m.result_b_id}  ({m.created_at_b})")
+    print()
+    print("── Metadata " + "─" * 40)
+    print(_field("Model", m.model_a, m.model_b))
+    print(_field("Personas", m.persona_count_a, m.persona_count_b))
+    print(_field("Questions", m.question_count_a, m.question_count_b))
+    print(_field("Cost", m.cost_a or "—", m.cost_b or "—"))
+
+    if not diff.categorical_questions and not diff.text_questions:
+        print()
+        print("(No question-level data available for comparison.)")
+        return
+
+    if diff.categorical_questions:
+        print()
+        print("── Categorical questions " + "─" * 27)
+        for q in diff.categorical_questions:
+            _print_categorical_diff(q)
+
+    if diff.text_questions:
+        print()
+        print("── Text questions " + "─" * 34)
+        for q in diff.text_questions:
+            _print_text_diff(q)
+
+
+def _pct_bar(dist: dict[str, int]) -> str:
+    total = sum(dist.values()) or 1
+    parts = [f"{k}={round(100 * v / total)}%" for k, v in sorted(dist.items())]
+    return "  ".join(parts)
+
+
+def _print_categorical_diff(q: "CategoricalQuestionDiff") -> None:
+    text = q.question_text[:72] + ("…" if len(q.question_text) > 72 else "")
+    print(f"\n  [{q.question_key}] {text}")
+
+    if q.jsd < 0.05:
+        shift = "stable"
+    elif q.jsd < 0.15:
+        shift = "small shift"
+    elif q.jsd < 0.30:
+        shift = "moderate shift"
+    else:
+        shift = "large shift"
+    print(f"    JSD: {q.jsd:.3f}  ({shift})")
+
+    if q.distribution_a:
+        print(f"    Run A: {_pct_bar(q.distribution_a)}")
+    else:
+        print("    Run A: (no data)")
+    if q.distribution_b:
+        print(f"    Run B: {_pct_bar(q.distribution_b)}")
+    else:
+        print("    Run B: (no data)")
+
+
+def _print_text_diff(q: "TextQuestionDiff") -> None:
+    text = q.question_text[:72] + ("…" if len(q.question_text) > 72 else "")
+    print(f"\n  [{q.question_key}] {text}")
+    if q.top_themes_a:
+        print(f"    Themes A: {', '.join(q.top_themes_a[:8])}")
+    if q.top_themes_b:
+        print(f"    Themes B: {', '.join(q.top_themes_b[:8])}")
+    if q.new_themes:
+        print(f"    New in B: {', '.join(q.new_themes)}")
+    if q.dropped_themes:
+        print(f"    Gone in B: {', '.join(q.dropped_themes)}")

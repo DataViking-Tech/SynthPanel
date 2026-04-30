@@ -32,6 +32,7 @@ from synth_panel.cli.commands import (
     handle_panel_synthesize,
     handle_prompt,
     handle_report,
+    handle_runs_diff,
     handle_runs_list,
     handle_runs_prune,
     handle_whoami,
@@ -132,6 +133,8 @@ def main(argv: list[str] | None = None) -> int:
             return handle_runs_prune(args, output_format)
         elif sub == "list":
             return handle_runs_list(args, output_format)
+        elif sub == "diff":
+            return handle_runs_diff(args, output_format)
         else:
             parser.parse_args(["runs", "--help"])
             return 1
