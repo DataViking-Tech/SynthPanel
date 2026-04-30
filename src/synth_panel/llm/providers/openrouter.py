@@ -32,6 +32,64 @@ OPENROUTER_CONFIG = ProviderConfig(
 )
 
 
+def _openrouter_error_from_response(resp: httpx.Response) -> LLMError:
+    """Build an LLMError from an OpenRouter non-2xx response, surfacing
+    upstream provider details when present.
+
+    OpenRouter forwards typed errors from the downstream provider in the
+    body:
+
+        {"error": {"code": 429, "message": "Rate limit exceeded ...",
+                   "type": "rate_limit_error",
+                   "metadata": {"provider_name": "anthropic", ...}}}
+
+    When ``error.type`` and/or ``error.metadata.provider_name`` are
+    present, include them in the message so callers can tell which
+    downstream provider rejected the request and pick a recovery
+    strategy (wait vs. switch model). Falls back to the generic
+    ``llm_error_from_response`` message when the body is missing or
+    unparseable.
+    """
+    base = llm_error_from_response(resp, "OpenRouter")
+
+    try:
+        body = resp.json()
+    except (json.JSONDecodeError, ValueError):
+        return base
+    if not isinstance(body, dict):
+        return base
+
+    err = body.get("error")
+    if not isinstance(err, dict):
+        return base
+
+    upstream: str | None = None
+    metadata = err.get("metadata")
+    if isinstance(metadata, dict):
+        provider_name = metadata.get("provider_name")
+        if isinstance(provider_name, str) and provider_name:
+            upstream = provider_name
+
+    error_type = err.get("type") if isinstance(err.get("type"), str) else None
+    upstream_msg = err.get("message") if isinstance(err.get("message"), str) else None
+
+    if upstream is None and error_type is None and upstream_msg is None:
+        return base
+
+    label = f"OpenRouter (downstream: {upstream})" if upstream else "OpenRouter"
+    head = f"{label} API error {resp.status_code}"
+    if error_type:
+        head += f" [{error_type}]"
+    message = f"{head}: {upstream_msg}" if upstream_msg else head
+
+    return LLMError(
+        message,
+        base.category,
+        status_code=base.status_code,
+        retry_after=base.retry_after,
+    )
+
+
 class OpenRouterProvider(LLMProvider):
     """OpenRouter provider (OpenAI-compatible chat completions)."""
 
@@ -89,7 +147,7 @@ class OpenRouterProvider(LLMProvider):
             ) from exc
 
         if resp.status_code != 200:
-            raise llm_error_from_response(resp, "OpenRouter")
+            raise _openrouter_error_from_response(resp)
 
         try:
             data = resp.json()
@@ -133,7 +191,7 @@ class OpenRouterProvider(LLMProvider):
             ) as resp:
                 if resp.status_code != 200:
                     resp.read()
-                    raise llm_error_from_response(resp, "OpenRouter")
+                    raise _openrouter_error_from_response(resp)
                 yield from parse_openai_sse_stream(resp.iter_lines())
         except httpx.HTTPError as exc:
             raise LLMError(

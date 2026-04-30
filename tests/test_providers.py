@@ -1158,6 +1158,138 @@ class TestOpenRouterProvider:
         assert result.usage.input_tokens == 0
         assert result.usage.output_tokens == 0
 
+    def test_send_429_surfaces_downstream_provider_and_type(self):
+        """sy-2185: typed error JSON exposes downstream provider + error type."""
+        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+
+        body = {
+            "error": {
+                "code": 429,
+                "message": "Rate limit exceeded for organization, please try again in 12 seconds",
+                "type": "rate_limit_error",
+                "metadata": {"provider_name": "anthropic"},
+            }
+        }
+        mock_resp = MagicMock()
+        mock_resp.status_code = 429
+        mock_resp.json.return_value = body
+        mock_resp.text = json.dumps(body)
+        mock_resp.headers = {"retry-after": "12"}
+
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}, clear=False):
+            provider = OpenRouterProvider()
+        with patch("httpx.post", return_value=mock_resp), pytest.raises(LLMError) as exc_info:
+            provider.send(_simple_request("openrouter/anthropic/claude-haiku-4-5"))
+
+        err = exc_info.value
+        assert err.category == LLMErrorCategory.RATE_LIMIT
+        assert err.status_code == 429
+        assert err.retry_after == 12.0
+        msg = str(err)
+        assert "OpenRouter" in msg
+        assert "anthropic" in msg
+        assert "rate_limit_error" in msg
+        assert "Rate limit exceeded" in msg
+
+    def test_send_429_generic_body_falls_back_gracefully(self):
+        """sy-2185: a 429 without typed-error JSON must not crash."""
+        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+
+        mock_resp = _mock_httpx_response({}, status_code=429)
+        mock_resp.headers = {}
+
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}, clear=False):
+            provider = OpenRouterProvider()
+        with patch("httpx.post", return_value=mock_resp), pytest.raises(LLMError) as exc_info:
+            provider.send(_simple_request("openrouter/anthropic/claude-haiku-4-5"))
+
+        err = exc_info.value
+        assert err.category == LLMErrorCategory.RATE_LIMIT
+        assert "OpenRouter" in str(err)
+
+    def test_send_429_malformed_body_falls_back_gracefully(self):
+        """sy-2185: non-JSON body on 429 must not crash error construction."""
+        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 429
+        mock_resp.json.side_effect = json.JSONDecodeError("bad", "", 0)
+        mock_resp.text = "<html>Service unavailable</html>"
+        mock_resp.headers = {}
+
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}, clear=False):
+            provider = OpenRouterProvider()
+        with patch("httpx.post", return_value=mock_resp), pytest.raises(LLMError) as exc_info:
+            provider.send(_simple_request("openrouter/anthropic/claude-haiku-4-5"))
+
+        err = exc_info.value
+        assert err.category == LLMErrorCategory.RATE_LIMIT
+        assert "OpenRouter" in str(err)
+
+    def test_send_500_typed_error_keeps_server_error_category(self):
+        """sy-2185: enrichment must not change the HTTP-status-derived category."""
+        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+
+        body = {
+            "error": {
+                "code": 500,
+                "message": "Upstream model crashed",
+                "type": "internal_error",
+                "metadata": {"provider_name": "groq"},
+            }
+        }
+        mock_resp = MagicMock()
+        mock_resp.status_code = 500
+        mock_resp.json.return_value = body
+        mock_resp.text = json.dumps(body)
+        mock_resp.headers = {}
+
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}, clear=False):
+            provider = OpenRouterProvider()
+        with patch("httpx.post", return_value=mock_resp), pytest.raises(LLMError) as exc_info:
+            provider.send(_simple_request("openrouter/groq/llama-3"))
+
+        err = exc_info.value
+        assert err.category == LLMErrorCategory.SERVER_ERROR
+        msg = str(err)
+        assert "groq" in msg
+        assert "internal_error" in msg
+
+    def test_stream_429_surfaces_downstream_provider(self):
+        """sy-2185: streaming path enriches errors the same as send()."""
+        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+
+        body = {
+            "error": {
+                "code": 429,
+                "message": "Slow down",
+                "type": "rate_limit_error",
+                "metadata": {"provider_name": "openai"},
+            }
+        }
+        mock_resp = MagicMock()
+        mock_resp.status_code = 429
+        mock_resp.json.return_value = body
+        mock_resp.text = json.dumps(body)
+        mock_resp.headers = {"retry-after": "5"}
+        mock_resp.read.return_value = None
+
+        mock_stream_cm = MagicMock()
+        mock_stream_cm.__enter__.return_value = mock_resp
+        mock_stream_cm.__exit__.return_value = False
+
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}, clear=False):
+            provider = OpenRouterProvider()
+        with patch("httpx.stream", return_value=mock_stream_cm), pytest.raises(LLMError) as exc_info:
+            list(provider.stream(_simple_request("openrouter/openai/gpt-4")))
+
+        err = exc_info.value
+        assert err.category == LLMErrorCategory.RATE_LIMIT
+        assert err.retry_after == 5.0
+        msg = str(err)
+        assert "openai" in msg
+        assert "rate_limit_error" in msg
+
 
 # ---------------------------------------------------------------------------
 # Tests: OpenAI-compatible provider — constructor overrides (for local models)
