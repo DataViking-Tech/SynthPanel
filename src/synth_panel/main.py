@@ -44,11 +44,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    # Configure logging from --verbose / --quiet / env var.
-    if args.verbose:
-        setup_logging("debug")
+    # Configure logging from --debug-all / --quiet / --verbose / env var.
+    if getattr(args, "debug_all", False):
+        setup_logging(debug_all=True)
     elif args.quiet:
         setup_logging("warning")
+    elif args.verbose:
+        setup_logging("debug")
     else:
         setup_logging()
 

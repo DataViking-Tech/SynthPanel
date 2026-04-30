@@ -63,7 +63,7 @@ def build_parser() -> argparse.ArgumentParser:
         "-v",
         action="store_true",
         default=False,
-        help="Enable verbose (DEBUG) logging.",
+        help="Enable DEBUG logs for synthpanel only (third-party SDK logs stay at WARNING).",
     )
     parser.add_argument(
         "--quiet",
@@ -71,6 +71,15 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=False,
         help="Suppress most output; only show warnings and errors.",
+    )
+    parser.add_argument(
+        "--debug-all",
+        action="store_true",
+        default=False,
+        help=(
+            "Enable DEBUG for synthpanel and common third-party loggers (httpx, "
+            "httpcore, urllib3, MCP/websocket libs). Overrides --quiet / verbosity caps."
+        ),
     )
 
     # Subcommands
