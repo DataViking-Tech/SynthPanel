@@ -49,6 +49,7 @@ from pathlib import Path
 from typing import Any
 
 from synth_panel.cost import coerce_provider_reported_cost
+from synth_panel.metadata_migrations import CURRENT_SCHEMA_VERSION, migrate_to_current
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,14 @@ class CheckpointDriftError(CheckpointError):
     Resuming under a changed instrument/persona/model mix would silently
     produce a mixed-config dataset — not what "resume" promises. Refuse
     rather than paper over it.
+    """
+
+
+class CheckpointSchemaTooNewError(CheckpointError):
+    """Raised when a checkpoint was written by a newer synthpanel version.
+
+    The on-disk schema_version exceeds what this installation understands.
+    The caller should tell the user to upgrade synthpanel.
     """
 
 
@@ -163,7 +172,7 @@ class PanelCheckpoint:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "version": 1,
+            "schema_version": CURRENT_SCHEMA_VERSION,
             "run_id": self.run_id,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
@@ -240,6 +249,10 @@ def load_checkpoint(run_id: str, root: Path | None = None) -> PanelCheckpoint:
         raise CheckpointFormatError(f"checkpoint at {path} is not valid JSON: {exc}") from exc
     if not isinstance(data, dict):
         raise CheckpointFormatError(f"checkpoint at {path} is not a JSON object")
+    try:
+        data = migrate_to_current(data)
+    except ValueError as exc:
+        raise CheckpointSchemaTooNewError(str(exc)) from exc
     return PanelCheckpoint.from_dict(data)
 
 
