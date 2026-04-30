@@ -2,10 +2,18 @@
 
 ## Development Setup
 
+External contributors: please **fork** the repository first, then clone your fork.
+The upstream repository is protected — direct branch pushes are not permitted.
+See [Submitting Changes](#submitting-changes) for the full PR flow.
+
 ```bash
-# Clone the repository
-git clone https://github.com/DataViking-Tech/synth-panel.git
-cd synth-panel
+# Fork via the GitHub UI or:
+gh repo fork DataViking-Tech/SynthPanel --clone
+cd SynthPanel
+
+# (Maintainers only — direct clone of upstream)
+# git clone https://github.com/DataViking-Tech/SynthPanel.git
+# cd SynthPanel
 
 # Create a virtual environment (using uv or standard venv)
 uv venv .venv && source .venv/bin/activate
@@ -97,11 +105,21 @@ Adapters are the highest-leverage contribution — one adapter brings every synt
 
 ## Submitting Changes
 
-1. Fork the repository and create a feature branch from `main`.
-2. Make your changes. Add tests for new functionality.
-3. Run the test suite: `pytest tests/`
-4. Run lint: `ruff check src/ tests/`
-5. Open a pull request against `main`.
+1. Fork the repository (`gh repo fork DataViking-Tech/SynthPanel --clone`).
+2. Create a feature branch from `main` on your fork: `git checkout -b feat/my-change`.
+3. Make your changes. Add tests for new functionality.
+4. Run the test suite: `pytest tests/`
+5. Run lint: `ruff check src/ tests/`
+6. Push to your fork and open a pull request against `DataViking-Tech/SynthPanel:main`.
+
+### What to expect on the PR
+
+`main` is protected. To merge, your PR must:
+
+- Pass all required CI: `test (3.10–3.13)`, `coverage`, `security`, `lint`, `typecheck`.
+- Receive at least one approval, including a CODEOWNERS review.
+- Have all review threads resolved.
+- Be DCO-signed (see [Sign-off](#sign-off) below).
 
 ### Commit Message Conventions
 
