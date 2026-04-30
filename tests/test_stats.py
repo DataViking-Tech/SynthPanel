@@ -527,6 +527,56 @@ class TestConvergenceReport:
         assert result.n_models == 2
         assert set(result.model_names) == {"gemini", "haiku"}
 
+    # GH-313: cross-model effect size (Cramer's V) on the model × category
+    # contingency table — independent of Krippendorff's alpha so calibrated
+    # convergence claims can be read in standard categorical-effect terms.
+
+    def test_cramers_v_zero_when_models_agree(self):
+        """All models produce identical responses → no model-effect on response."""
+        responses = {
+            "model_a": [["X"], ["X"], ["Y"], ["X"]],
+            "model_b": [["X"], ["X"], ["Y"], ["X"]],
+            "model_c": [["X"], ["X"], ["Y"], ["X"]],
+        }
+        result = convergence_report(responses, ["Q1"])
+        finding = result.findings[0]
+        assert finding.cramers_v == pytest.approx(0.0, abs=1e-9)
+        assert finding.chi2_df == 2  # (3-1)*(2-1) = 2 (3 models, 2 categories)
+
+    def test_cramers_v_one_when_models_fully_diverge(self):
+        """Each model picks a different category systematically → V → 1.0."""
+        responses = {
+            "model_a": [["X"]] * 5,
+            "model_b": [["Y"]] * 5,
+            "model_c": [["Z"]] * 5,
+        }
+        result = convergence_report(responses, ["Q1"])
+        finding = result.findings[0]
+        assert finding.cramers_v == pytest.approx(1.0, abs=1e-9)
+        assert finding.chi2_df == 4  # (3-1) * (3-1)
+
+    def test_overall_cramers_v_is_mean_of_findings(self):
+        """ConvergenceReport.overall_cramers_v averages per-finding effect sizes."""
+        responses = {
+            "model_a": [["X", "M"], ["X", "M"], ["X", "M"], ["X", "M"]],
+            "model_b": [["X", "N"], ["X", "N"], ["X", "N"], ["X", "N"]],
+        }
+        result = convergence_report(responses, ["Q1", "Q2"])
+        # Q1: both models agree → cramers_v ≈ 0; Q2: full disagreement → 1.0
+        v_per_q = [f.cramers_v for f in result.findings]
+        assert result.overall_cramers_v == pytest.approx(sum(v_per_q) / len(v_per_q))
+
+    def test_finding_interpretation_leads_with_effect_size(self):
+        """GH-313: per-finding interpretation surfaces Cramer's V before alpha."""
+        responses = {
+            "model_a": [["X"]] * 5,
+            "model_b": [["Y"]] * 5,
+        }
+        result = convergence_report(responses, ["Q1"])
+        text = result.findings[0].interpretation
+        assert "Cramer's V=" in text
+        assert text.index("Cramer's V=") < text.index("alpha=")
+
 
 # ---------------------------------------------------------------------------
 # cluster_personas (sp-5on.9)

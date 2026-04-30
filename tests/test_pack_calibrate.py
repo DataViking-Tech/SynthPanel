@@ -68,6 +68,43 @@ def test_calibration_entry_keeps_alignment_error_when_set():
     assert d["alignment_error"] == "['x'] vs ['y']"
 
 
+def test_calibration_entry_drops_none_cramers_v():
+    """GH-313: omitted effect size must not pollute the YAML wire shape."""
+    entry = CalibrationEntry(
+        dataset="gss",
+        question="HAPPY",
+        jsd=0.18,
+        n=100,
+        samples_per_question=15,
+        models=["haiku:1.0"],
+        extractor="pick_one:auto-derived",
+        panelist_cost_usd=0.5,
+        calibrated_at="2026-04-26T14:23:00Z",
+        synthpanel_version="0.11.1",
+    )
+    d = entry.to_yaml_dict()
+    assert "cramers_v" not in d
+
+
+def test_calibration_entry_emits_cramers_v_when_set():
+    """GH-313: surfaced effect size flows through to the YAML wire shape."""
+    entry = CalibrationEntry(
+        dataset="gss",
+        question="HAPPY",
+        jsd=0.04,
+        n=100,
+        samples_per_question=15,
+        models=["haiku:1.0"],
+        extractor="pick_one:auto-derived",
+        panelist_cost_usd=0.5,
+        calibrated_at="2026-04-26T14:23:00Z",
+        synthpanel_version="0.11.1",
+        cramers_v=0.123,
+    )
+    d = entry.to_yaml_dict()
+    assert d["cramers_v"] == 0.123
+
+
 def test_merge_calibration_appends_when_no_existing_match():
     existing = [
         {"dataset": "gss", "question": "HAPPY", "jsd": 0.9},
@@ -212,10 +249,12 @@ def _write_pack(tmp_path: Path) -> Path:
 def _mock_panel_run_result() -> dict:
     return {
         "jsd": 0.234567,
+        "cramers_v": 0.182345,
         "extractor": "pick_one:auto-derived",
         "models": ["haiku:1.0"],
         "panelist_cost_usd": 0.1234,
         "alignment_error": None,
+        "lead_interpretation": "Cramer's V=0.182 (small effect vs baseline). Mild deviation.",
     }
 
 
@@ -247,6 +286,40 @@ def test_cli_pack_calibrate_dry_run_does_not_write(tmp_path, capsys):
     assert "calibration:" in out
     assert "dataset: gss" in out
     assert "jsd: 0.234567" in out
+
+
+def test_cli_pack_calibrate_persists_cramers_v(tmp_path, capsys):
+    """GH-313: the panel run's cramers_v lands in the pack YAML and the success
+    line leads with effect size (large/medium/small/negligible) before JSD."""
+    pack = _write_pack(tmp_path)
+    with patch(
+        "synth_panel.cli.commands._run_calibration_panel",
+        return_value=_mock_panel_run_result(),
+    ):
+        rc = main(
+            [
+                "pack",
+                "calibrate",
+                str(pack),
+                "--against",
+                "gss:HAPPY",
+                "--n",
+                "20",
+                "--samples-per-question",
+                "5",
+                "--yes",
+            ]
+        )
+    assert rc == 0
+    parsed = yaml.safe_load(pack.read_text(encoding="utf-8"))
+    cal = parsed["calibration"][0]
+    assert cal["cramers_v"] == 0.182345
+    out = capsys.readouterr().out
+    # Effect-size readout MUST appear before the JSD scalar in the success summary.
+    assert "Cramer's V=0.182" in out
+    assert "small" in out
+    assert "JSD=" in out
+    assert out.index("Cramer's V") < out.index("JSD=")
 
 
 def test_cli_pack_calibrate_writes_in_place(tmp_path):
