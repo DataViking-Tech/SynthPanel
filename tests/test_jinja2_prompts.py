@@ -168,10 +168,7 @@ class TestInstrumentSystemPromptTemplate:
             parse_instrument(data)
 
     def test_valid_jinja2_with_conditionals_parses_ok(self):
-        spt = (
-            "You are {{ name }}, age {{ age }}."
-            "{% if background %} Background: {{ background }}.{% endif %}"
-        )
+        spt = "You are {{ name }}, age {{ age }}.{% if background %} Background: {{ background }}.{% endif %}"
         inst = parse_instrument(self._make_instrument_data(spt=spt))
         assert inst.system_prompt_template == spt
 
