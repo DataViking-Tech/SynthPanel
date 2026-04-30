@@ -42,6 +42,47 @@ PROVIDER_LABELS: dict[str, str] = {
     "OPENROUTER_API_KEY": "OpenRouter",
 }
 
+# Required prefix(es) for each provider's API keys. ``synthpanel login``
+# uses this to reject visibly-broken inputs at write time rather than
+# letting them persist and surface as opaque 401s on later calls. An
+# empty tuple means "no convention worth enforcing" — Gemini/Google keys
+# don't have a stable distinctive prefix.
+PROVIDER_KEY_PREFIXES: dict[str, tuple[str, ...]] = {
+    "ANTHROPIC_API_KEY": ("sk-ant-",),
+    "OPENAI_API_KEY": ("sk-",),
+    "OPENROUTER_API_KEY": ("sk-or-",),
+    "XAI_API_KEY": ("xai-",),
+    "GEMINI_API_KEY": (),
+    "GOOGLE_API_KEY": (),
+}
+
+
+def detect_provider_from_key(value: str) -> str | None:
+    """Return the env var whose distinctive prefix matches ``value``.
+
+    Used by ``synthpanel login`` to suggest the correct ``--provider``
+    when a user passes another provider's key by mistake (e.g. an
+    Anthropic key given to ``--provider openai``).
+
+    The bare ``sk-`` prefix is intentionally checked last: it identifies
+    OpenAI but is also a substring of ``sk-ant-`` and ``sk-or-``, so we
+    only fall back to ``OPENAI_API_KEY`` after the more-specific prefixes
+    have been ruled out. Returns ``None`` for keys without a recognised
+    prefix (e.g. Gemini keys).
+    """
+    distinctive: tuple[tuple[str, str], ...] = (
+        ("sk-ant-", "ANTHROPIC_API_KEY"),
+        ("sk-or-", "OPENROUTER_API_KEY"),
+        ("sk-proj-", "OPENAI_API_KEY"),
+        ("xai-", "XAI_API_KEY"),
+    )
+    for prefix, env_var in distinctive:
+        if value.startswith(prefix):
+            return env_var
+    if value.startswith("sk-"):
+        return "OPENAI_API_KEY"
+    return None
+
 
 def credentials_path() -> Path:
     """Return the path to the credential store.

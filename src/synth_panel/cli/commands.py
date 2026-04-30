@@ -4173,16 +4173,47 @@ def _read_api_key_interactive() -> str:
     return sys.stdin.readline().strip()
 
 
+def _provider_for_env_var(env_var: str) -> str | None:
+    """Return the canonical CLI ``--provider`` name for ``env_var``.
+
+    Used to render the "did you mean --provider X?" hint when a key
+    matches a different provider's distinctive prefix. Returns the first
+    matching alias when more than one CLI name maps to the same env var
+    (e.g. both ``gemini`` and ``google`` map to ``GOOGLE_API_KEY``).
+    """
+    for name, var in _PROVIDER_ENV_VAR.items():
+        if var == env_var:
+            return name
+    return None
+
+
+def _article(label: str) -> str:
+    """Return ``a`` or ``an`` for the given provider label.
+
+    Treats labels starting with a vowel — and ``xAI``, since the ``x`` is
+    pronounced ``ex`` — as taking ``an``. Used so login error messages
+    read as ``an Anthropic API key`` rather than ``a Anthropic API key``.
+    """
+    first = label[:1].lower()
+    return "an" if first in "aeiou" or first == "x" else "a"
+
+
 def handle_login(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """Store an API key for the selected provider.
 
     Reads the key from ``--api-key`` or stdin (hidden on TTY) and writes
     it to the on-disk credential store. Validates that the provider
-    name maps to a recognised env var so typos don't silently persist.
+    name maps to a recognised env var so typos don't silently persist,
+    and that the key's prefix matches the provider's convention so an
+    obvious mismatch (e.g. an OpenAI ``sk-proj-`` key passed to
+    ``--provider anthropic``) fails loudly at ``login`` time rather than
+    much later as an opaque 401 from the API (sy-bybx).
     """
     from synth_panel.credentials import (
         KNOWN_CREDENTIAL_ENV_VARS,
+        PROVIDER_KEY_PREFIXES,
         PROVIDER_LABELS,
+        detect_provider_from_key,
         save_credential,
     )
 
@@ -4207,8 +4238,40 @@ def handle_login(args: argparse.Namespace, fmt: OutputFormat) -> int:
             emit(fmt, message=msg, extra={"error": "empty_key"})
         return 2
 
-    path = save_credential(env_var, key)
     label = PROVIDER_LABELS.get(env_var, provider)
+    required = PROVIDER_KEY_PREFIXES.get(env_var, ())
+    detected = detect_provider_from_key(key)
+    prefix_mismatch = bool(required) and not any(key.startswith(p) for p in required)
+    cross_provider = detected is not None and detected != env_var
+
+    if prefix_mismatch or cross_provider:
+        if prefix_mismatch:
+            expected = " or ".join(repr(p) for p in required)
+            msg = f"that doesn't look like {_article(label)} {label} API key (expected {expected} prefix)."
+        else:
+            detected_label = PROVIDER_LABELS.get(detected, detected) if detected else "another provider's"
+            msg = f"that key looks like {_article(detected_label)} {detected_label} API key, not {_article(label)} {label} key."
+        if cross_provider:
+            hint_provider = _provider_for_env_var(detected) if detected else None
+            if hint_provider:
+                msg += f"\nhint: did you mean --provider {hint_provider}?"
+        if fmt is OutputFormat.TEXT:
+            print(f"error: {msg}", file=sys.stderr)
+        else:
+            emit(
+                fmt,
+                message="invalid_key_prefix",
+                extra={
+                    "error": "invalid_key_prefix",
+                    "provider": provider,
+                    "env_var": env_var,
+                    "expected_prefixes": list(required),
+                    "detected_env_var": detected,
+                },
+            )
+        return 2
+
+    path = save_credential(env_var, key)
     if fmt is OutputFormat.TEXT:
         print(f"Stored {label} key ({env_var}) in {path}")
     else:

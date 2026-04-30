@@ -10,8 +10,10 @@ from pathlib import Path
 import pytest
 
 from synth_panel.credentials import (
+    PROVIDER_KEY_PREFIXES,
     credentials_path,
     delete_credential,
+    detect_provider_from_key,
     get_credential,
     has_credential,
     load_credentials,
@@ -182,6 +184,42 @@ class TestProviderIntegration:
         err = exc_info.value
         assert getattr(err, "category", None) == LLMErrorCategory.MISSING_CREDENTIALS
         assert "synthpanel login" in str(err)
+
+
+class TestProviderKeyPrefixes:
+    """Prefix table + key detection for cross-provider mistake catch (sy-bybx)."""
+
+    def test_table_covers_every_known_env_var(self):
+        from synth_panel.credentials import KNOWN_CREDENTIAL_ENV_VARS
+
+        # Each known credential has an entry — even if the entry is `()`
+        # to mean "no prefix convention". Missing entries would silently
+        # disable validation for that provider.
+        for env_var in KNOWN_CREDENTIAL_ENV_VARS:
+            assert env_var in PROVIDER_KEY_PREFIXES
+
+    def test_detects_anthropic_key(self):
+        assert detect_provider_from_key("sk-ant-foo") == "ANTHROPIC_API_KEY"
+
+    def test_detects_openrouter_key(self):
+        assert detect_provider_from_key("sk-or-bar") == "OPENROUTER_API_KEY"
+
+    def test_detects_openai_project_key(self):
+        assert detect_provider_from_key("sk-proj-baz") == "OPENAI_API_KEY"
+
+    def test_detects_xai_key(self):
+        assert detect_provider_from_key("xai-key") == "XAI_API_KEY"
+
+    def test_falls_back_to_openai_for_bare_sk_prefix(self):
+        # ``sk-`` is OpenAI's generic prefix, but it's also a substring of
+        # other providers' distinctive prefixes — make sure we resolve it
+        # to OpenAI only when nothing more specific matches.
+        assert detect_provider_from_key("sk-something") == "OPENAI_API_KEY"
+
+    def test_returns_none_for_unrecognised_format(self):
+        assert detect_provider_from_key("AIzaSyGeminiStyle") is None
+        assert detect_provider_from_key("totally-bogus") is None
+        assert detect_provider_from_key("") is None
 
 
 class TestClientErrorMessage:

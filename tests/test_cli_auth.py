@@ -39,9 +39,9 @@ class TestParser:
 
 class TestLogin:
     def test_login_stores_key_from_flag(self, capsys):
-        rc = main(["login", "--provider", "anthropic", "--api-key", "sk-cli"])
+        rc = main(["login", "--provider", "anthropic", "--api-key", "sk-ant-cli"])
         assert rc == 0
-        assert load_credentials() == {"ANTHROPIC_API_KEY": "sk-cli"}
+        assert load_credentials() == {"ANTHROPIC_API_KEY": "sk-ant-cli"}
         assert "Stored" in capsys.readouterr().out
 
     def test_login_reads_key_from_piped_stdin(self, capsys):
@@ -57,11 +57,93 @@ class TestLogin:
         assert load_credentials() == {}
 
     def test_login_emits_json_when_requested(self, capsys):
-        rc = main(["--output-format", "json", "login", "--provider", "xai", "--api-key", "xk"])
+        rc = main(["--output-format", "json", "login", "--provider", "xai", "--api-key", "xai-k"])
         assert rc == 0
         payload = json.loads(capsys.readouterr().out)
         assert payload["message"] == "credential_stored"
         assert payload["env_var"] == "XAI_API_KEY"
+
+
+class TestLoginPrefixValidation:
+    """Reject visibly-broken keys at login time (sy-bybx)."""
+
+    def test_strips_surrounding_whitespace(self, capsys):
+        rc = main(["login", "--provider", "anthropic", "--api-key", "  sk-ant-foo  "])
+        assert rc == 0
+        assert load_credentials() == {"ANTHROPIC_API_KEY": "sk-ant-foo"}
+
+    def test_rejects_anthropic_key_without_sk_ant_prefix(self, capsys):
+        rc = main(["login", "--provider", "anthropic", "--api-key", "sk-proj-mismatch"])
+        assert rc == 2
+        assert load_credentials() == {}
+        err = capsys.readouterr().err
+        assert "sk-ant-" in err
+        assert "Anthropic" in err
+        # Bug example: the hint should suggest --provider openai
+        assert "--provider openai" in err
+
+    def test_rejects_openrouter_key_for_openai_provider(self, capsys):
+        rc = main(["login", "--provider", "openai", "--api-key", "sk-or-mistake"])
+        assert rc == 2
+        assert load_credentials() == {}
+        err = capsys.readouterr().err
+        assert "--provider openrouter" in err
+
+    def test_rejects_anthropic_key_for_openai_provider(self, capsys):
+        rc = main(["login", "--provider", "openai", "--api-key", "sk-ant-mistake"])
+        assert rc == 2
+        assert load_credentials() == {}
+        err = capsys.readouterr().err
+        assert "--provider anthropic" in err
+
+    def test_rejects_xai_key_for_anthropic_provider(self, capsys):
+        rc = main(["login", "--provider", "anthropic", "--api-key", "xai-mistake"])
+        assert rc == 2
+        assert load_credentials() == {}
+        err = capsys.readouterr().err
+        assert "sk-ant-" in err
+        assert "--provider xai" in err
+
+    def test_rejects_garbage_with_no_recognised_prefix(self, capsys):
+        rc = main(["login", "--provider", "anthropic", "--api-key", "totally-bogus"])
+        assert rc == 2
+        assert load_credentials() == {}
+        err = capsys.readouterr().err
+        assert "sk-ant-" in err
+
+    def test_accepts_sk_proj_for_openai(self, capsys):
+        rc = main(["login", "--provider", "openai", "--api-key", "sk-proj-fine"])
+        assert rc == 0
+        assert load_credentials() == {"OPENAI_API_KEY": "sk-proj-fine"}
+
+    def test_accepts_loose_format_for_gemini(self, capsys):
+        rc = main(["login", "--provider", "gemini", "--api-key", "AIzaWhatever"])
+        assert rc == 0
+        assert load_credentials() == {"GEMINI_API_KEY": "AIzaWhatever"}
+
+    def test_accepts_loose_format_for_google(self, capsys):
+        rc = main(["login", "--provider", "google", "--api-key", "AIzaWhatever"])
+        assert rc == 0
+        assert load_credentials() == {"GOOGLE_API_KEY": "AIzaWhatever"}
+
+    def test_invalid_prefix_emits_structured_json(self, capsys):
+        rc = main(
+            [
+                "--output-format",
+                "json",
+                "login",
+                "--provider",
+                "anthropic",
+                "--api-key",
+                "sk-proj-mismatch",
+            ]
+        )
+        assert rc == 2
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["message"] == "invalid_key_prefix"
+        assert payload["env_var"] == "ANTHROPIC_API_KEY"
+        assert payload["expected_prefixes"] == ["sk-ant-"]
+        assert payload["detected_env_var"] == "OPENAI_API_KEY"
 
 
 class TestLogout:
