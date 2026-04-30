@@ -3299,7 +3299,6 @@ def handle_pack_inspect(args: argparse.Namespace, fmt: OutputFormat) -> int:
     pid = pack.get("id", args.pack_id)
 
     if fmt is not OutputFormat.TEXT:
-        export_body = {k: v for k, v in pack.items() if k != "id"}
         emit(
             fmt,
             message="Pack inspect",
