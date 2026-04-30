@@ -10,8 +10,8 @@ from pathlib import Path
 import pytest
 
 from synth_panel.credentials import (
-    CredentialIntegrityError,
     PROVIDER_KEY_PREFIXES,
+    CredentialIntegrityError,
     credentials_path,
     delete_credential,
     detect_provider_from_key,
