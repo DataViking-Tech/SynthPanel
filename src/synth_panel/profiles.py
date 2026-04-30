@@ -149,7 +149,9 @@ def _load_profile_from_path(path: Path, _chain: tuple[Path, ...] = ()) -> Profil
         temperature=own.temperature if own.temperature is not None else parent.temperature,
         top_p=own.top_p if own.top_p is not None else parent.top_p,
         synthesis_model=own.synthesis_model if own.synthesis_model is not None else parent.synthesis_model,
-        synthesis_temperature=own.synthesis_temperature if own.synthesis_temperature is not None else parent.synthesis_temperature,
+        synthesis_temperature=own.synthesis_temperature
+        if own.synthesis_temperature is not None
+        else parent.synthesis_temperature,
         prompt_template=own.prompt_template if own.prompt_template is not None else parent.prompt_template,
         models=own.models if own.models is not None else parent.models,
         source_path=own.source_path,
@@ -169,9 +171,7 @@ def _resolve_parent_path(extends: str, child_path: Path) -> Path:
     if extends.startswith("./") or extends.startswith("../") or Path(extends).is_absolute():
         parent_path = (child_path.parent / extends).resolve()
         if not parent_path.exists():
-            raise FileNotFoundError(
-                f"Extended profile not found: {extends} (referenced from {child_path})"
-            )
+            raise FileNotFoundError(f"Extended profile not found: {extends} (referenced from {child_path})")
         return parent_path
 
     # Name-based resolution

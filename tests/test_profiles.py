@@ -126,17 +126,13 @@ class TestLoadFromPath:
 
 class TestProfileInheritance:
     def test_extends_inherits_parent_fields(self, tmp_path):
-        (tmp_path / "base.yaml").write_text(
-            "name: base\nmodel: haiku\ntemperature: 0.7\ntop_p: 0.9\n"
-        )
-        (tmp_path / "child.yaml").write_text(
-            "name: child\nextends: base\ntemperature: 1.0\n"
-        )
+        (tmp_path / "base.yaml").write_text("name: base\nmodel: haiku\ntemperature: 0.7\ntop_p: 0.9\n")
+        (tmp_path / "child.yaml").write_text("name: child\nextends: base\ntemperature: 1.0\n")
         p = load_profile_from_path(str(tmp_path / "child.yaml"))
         assert p.name == "child"
-        assert p.model == "haiku"          # inherited
-        assert p.temperature == 1.0        # overridden
-        assert p.top_p == 0.9             # inherited
+        assert p.model == "haiku"  # inherited
+        assert p.temperature == 1.0  # overridden
+        assert p.top_p == 0.9  # inherited
 
     def test_extends_relative_path(self, tmp_path):
         (tmp_path / "base.yaml").write_text("name: base\nmodel: opus\n")
@@ -151,9 +147,7 @@ class TestProfileInheritance:
 
     def test_extends_null_child_inherits_parent(self, tmp_path):
         (tmp_path / "base.yaml").write_text("name: base\nmodel: haiku\ntemperature: 0.7\n")
-        (tmp_path / "child.yaml").write_text(
-            "name: child\nextends: base\nmodel: null\ntemperature: null\n"
-        )
+        (tmp_path / "child.yaml").write_text("name: child\nextends: base\nmodel: null\ntemperature: null\n")
         p = load_profile_from_path(str(tmp_path / "child.yaml"))
         # null in child means "inherit from parent"
         assert p.model == "haiku"
@@ -166,22 +160,17 @@ class TestProfileInheritance:
             load_profile_from_path(str(tmp_path / "a.yaml"))
 
     def test_extends_three_level_chain(self, tmp_path):
-        (tmp_path / "grandparent.yaml").write_text(
-            "name: grandparent\nmodel: haiku\ntemperature: 0.5\ntop_p: 0.8\n"
-        )
-        (tmp_path / "parent.yaml").write_text(
-            "name: parent\nextends: grandparent\ntemperature: 0.7\n"
-        )
-        (tmp_path / "child.yaml").write_text(
-            "name: child\nextends: parent\ntop_p: 0.95\n"
-        )
+        (tmp_path / "grandparent.yaml").write_text("name: grandparent\nmodel: haiku\ntemperature: 0.5\ntop_p: 0.8\n")
+        (tmp_path / "parent.yaml").write_text("name: parent\nextends: grandparent\ntemperature: 0.7\n")
+        (tmp_path / "child.yaml").write_text("name: child\nextends: parent\ntop_p: 0.95\n")
         p = load_profile_from_path(str(tmp_path / "child.yaml"))
-        assert p.model == "haiku"       # from grandparent
-        assert p.temperature == 0.7    # from parent
-        assert p.top_p == 0.95         # own
+        assert p.model == "haiku"  # from grandparent
+        assert p.temperature == 0.7  # from parent
+        assert p.top_p == 0.95  # own
 
     def test_extends_all_fields_inherited(self, tmp_path):
-        (tmp_path / "base.yaml").write_text(textwrap.dedent("""\
+        (tmp_path / "base.yaml").write_text(
+            textwrap.dedent("""\
             name: base
             model: haiku
             temperature: 0.7
@@ -190,7 +179,8 @@ class TestProfileInheritance:
             synthesis_temperature: 0.3
             prompt_template: base-template
             models: haiku:0.5,gemini:0.5
-        """))
+        """)
+        )
         (tmp_path / "child.yaml").write_text("name: child\nextends: base\n")
         p = load_profile_from_path(str(tmp_path / "child.yaml"))
         assert p.model == "haiku"
@@ -202,12 +192,10 @@ class TestProfileInheritance:
         assert p.models == "haiku:0.5,gemini:0.5"
 
     def test_extends_bundled_by_name(self, tmp_path):
-        (tmp_path / "child.yaml").write_text(
-            "name: child\nextends: consumer\ntemperature: 0.9\n"
-        )
+        (tmp_path / "child.yaml").write_text("name: child\nextends: consumer\ntemperature: 0.9\n")
         p = load_profile_from_path(str(tmp_path / "child.yaml"))
-        assert p.model == "haiku"      # from bundled consumer
-        assert p.temperature == 0.9   # overridden
+        assert p.model == "haiku"  # from bundled consumer
+        assert p.temperature == 0.9  # overridden
 
     def test_extends_source_path_is_child(self, tmp_path):
         (tmp_path / "base.yaml").write_text("name: base\nmodel: haiku\n")
