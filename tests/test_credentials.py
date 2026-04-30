@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from synth_panel.credentials import (
+    CredentialIntegrityError,
     PROVIDER_KEY_PREFIXES,
     credentials_path,
     delete_credential,
@@ -143,6 +144,79 @@ class TestGetCredential:
         assert has_credential("ANTHROPIC_API_KEY") is False
         save_credential("ANTHROPIC_API_KEY", "sk-x")
         assert has_credential("ANTHROPIC_API_KEY") is True
+
+
+class TestSha256Sidecar:
+    def test_save_writes_sidecar(self):
+        path = save_credential("ANTHROPIC_API_KEY", "sk-x")
+        sidecar = path.parent / (path.name + ".sha256")
+        assert sidecar.exists()
+        assert len(sidecar.read_text().strip()) == 64  # hex sha256
+
+    def test_load_passes_when_sidecar_matches(self):
+        save_credential("ANTHROPIC_API_KEY", "sk-x")
+        assert load_credentials() == {"ANTHROPIC_API_KEY": "sk-x"}
+
+    def test_load_raises_on_sidecar_mismatch(self):
+        path = save_credential("ANTHROPIC_API_KEY", "sk-x")
+        path.write_text('{"ANTHROPIC_API_KEY": "tampered"}\n', encoding="utf-8")
+        with pytest.raises(CredentialIntegrityError, match="synthpanel login"):
+            load_credentials()
+
+    def test_migration_generates_sidecar_on_first_read(self, monkeypatch, tmp_path):
+        creds = tmp_path / "credentials.json"
+        creds.write_text('{"ANTHROPIC_API_KEY": "sk-legacy"}\n', encoding="utf-8")
+        monkeypatch.setenv("SYNTHPANEL_CREDENTIALS_PATH", str(creds))
+        result = load_credentials()
+        assert result == {"ANTHROPIC_API_KEY": "sk-legacy"}
+        sidecar = tmp_path / "credentials.json.sha256"
+        assert sidecar.exists()
+
+    def test_migration_sidecar_matches_content(self, monkeypatch, tmp_path):
+        import hashlib
+
+        content = '{"ANTHROPIC_API_KEY": "sk-legacy"}\n'
+        creds = tmp_path / "credentials.json"
+        creds.write_text(content, encoding="utf-8")
+        monkeypatch.setenv("SYNTHPANEL_CREDENTIALS_PATH", str(creds))
+        load_credentials()
+        sidecar = tmp_path / "credentials.json.sha256"
+        expected = hashlib.sha256(content.encode()).hexdigest()
+        assert sidecar.read_text().strip() == expected
+
+    def test_save_login_recovers_from_tampered_file(self):
+        path = save_credential("ANTHROPIC_API_KEY", "sk-original")
+        path.write_text('{"ANTHROPIC_API_KEY": "tampered"}\n', encoding="utf-8")
+        # login should succeed despite mismatch (starts fresh)
+        new_path = save_credential("ANTHROPIC_API_KEY", "sk-new")
+        assert load_credentials() == {"ANTHROPIC_API_KEY": "sk-new"}
+        assert new_path == path
+
+    def test_delete_updates_sidecar_when_entries_remain(self):
+        import hashlib
+
+        save_credential("ANTHROPIC_API_KEY", "sk-a")
+        save_credential("OPENAI_API_KEY", "sk-b")
+        delete_credential("ANTHROPIC_API_KEY")
+        path = credentials_path()
+        sidecar = path.parent / (path.name + ".sha256")
+        content = path.read_text(encoding="utf-8")
+        expected = hashlib.sha256(content.encode()).hexdigest()
+        assert sidecar.read_text().strip() == expected
+
+    def test_delete_removes_sidecar_when_file_deleted(self):
+        save_credential("ANTHROPIC_API_KEY", "sk-only")
+        path = credentials_path()
+        sidecar = path.parent / (path.name + ".sha256")
+        delete_credential("ANTHROPIC_API_KEY")
+        assert not path.exists()
+        assert not sidecar.exists()
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX permissions")
+    def test_sidecar_file_is_mode_0600(self):
+        path = save_credential("ANTHROPIC_API_KEY", "sk-x")
+        sidecar = path.parent / (path.name + ".sha256")
+        assert stat.S_IMODE(sidecar.stat().st_mode) == 0o600
 
 
 class TestProviderIntegration:
