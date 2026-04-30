@@ -32,6 +32,8 @@ from synth_panel.cli.commands import (
     handle_panel_synthesize,
     handle_prompt,
     handle_report,
+    handle_runs_list,
+    handle_runs_prune,
     handle_whoami,
 )
 from synth_panel.cli.output import OutputFormat
@@ -124,6 +126,15 @@ def main(argv: list[str] | None = None) -> int:
         return handle_whoami(args, output_format)
     elif args.command == "doctor":
         return handle_doctor(args, output_format)
+    elif args.command == "runs":
+        sub = getattr(args, "runs_command", None)
+        if sub == "prune":
+            return handle_runs_prune(args, output_format)
+        elif sub == "list":
+            return handle_runs_list(args, output_format)
+        else:
+            parser.parse_args(["runs", "--help"])
+            return 1
     else:
         # No subcommand → interactive REPL
         return run_repl(args, output_format)

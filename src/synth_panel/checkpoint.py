@@ -43,7 +43,7 @@ import tempfile
 import threading
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -489,3 +489,161 @@ def ensure_config_matches(
             f"fingerprint {current_fp[:12]}... — rerun without --resume or "
             f"restore the original config to continue"
         )
+
+
+# ---------------------------------------------------------------------------
+# Run listing and pruning
+# ---------------------------------------------------------------------------
+
+_DURATION_RE = re.compile(r"^(\d+(?:\.\d+)?)(w|d|h|m)$")
+
+
+def parse_duration(value: str) -> timedelta:
+    """Parse a human duration string into a :class:`~datetime.timedelta`.
+
+    Supported units: ``w`` (weeks), ``d`` (days), ``h`` (hours), ``m`` (minutes).
+    Examples: ``7d``, ``2w``, ``24h``, ``90m``.
+    """
+    m = _DURATION_RE.match(value.strip())
+    if not m:
+        raise ValueError(f"invalid duration {value!r}: expected NNd, NNh, NNw, or NNm (e.g. '7d', '2w', '24h')")
+    n = float(m.group(1))
+    unit = m.group(2)
+    if unit == "w":
+        return timedelta(weeks=n)
+    if unit == "d":
+        return timedelta(days=n)
+    if unit == "h":
+        return timedelta(hours=n)
+    return timedelta(minutes=n)
+
+
+def _is_in_progress(checkpoint: PanelCheckpoint) -> bool:
+    """Return True if the checkpoint appears to be from an actively-running session.
+
+    A run with remaining personas and no abort reason was either still running
+    or crashed without signal handling. We treat both as in-progress to avoid
+    destroying resumable checkpoints.
+    """
+    return bool(checkpoint.remaining) and checkpoint.abort_reason is None
+
+
+def list_runs(root: Path | None = None) -> list[dict[str, Any]]:
+    """Return metadata for all checkpoint runs found under *root*.
+
+    Each entry is a dict with keys: ``run_id``, ``created_at``, ``updated_at``,
+    ``completed``, ``remaining``, ``in_progress``, ``abort_reason``, ``directory``.
+    Malformed entries include a ``malformed: True`` key instead of checkpoint fields.
+    """
+    r = Path(root) if root is not None else default_checkpoint_root()
+    if not r.exists():
+        return []
+    runs: list[dict[str, Any]] = []
+    for entry in sorted(r.iterdir()):
+        if not entry.is_dir():
+            continue
+        state = _state_path(entry)
+        if not state.exists():
+            continue
+        try:
+            data = json.loads(state.read_text(encoding="utf-8"))
+            ckpt = PanelCheckpoint.from_dict(data)
+            runs.append(
+                {
+                    "run_id": ckpt.run_id,
+                    "created_at": ckpt.created_at,
+                    "updated_at": ckpt.updated_at,
+                    "completed": len(ckpt.completed),
+                    "remaining": len(ckpt.remaining),
+                    "in_progress": _is_in_progress(ckpt),
+                    "abort_reason": ckpt.abort_reason,
+                    "directory": str(entry),
+                }
+            )
+        except (CheckpointFormatError, json.JSONDecodeError, KeyError, ValueError):
+            runs.append(
+                {
+                    "run_id": entry.name,
+                    "directory": str(entry),
+                    "malformed": True,
+                }
+            )
+    return runs
+
+
+def prune_runs(
+    root: Path | None = None,
+    older_than: timedelta | None = None,
+    keep: int | None = None,
+    dry_run: bool = False,
+) -> list[str]:
+    """Delete stale checkpoint run directories; return list of pruned run IDs.
+
+    Rules applied in order:
+    - In-progress runs (remaining personas, no abort reason) are *never* pruned.
+    - ``older_than``: prune runs whose ``updated_at`` is older than this duration.
+    - ``keep``: prune runs beyond the *keep* most-recently-updated non-in-progress runs.
+    - When both flags are given, a run is pruned if it matches *either* condition.
+    - At least one of ``older_than`` or ``keep`` must be provided.
+
+    With ``dry_run=True`` the returned list shows what *would* be pruned without
+    touching the filesystem.
+    """
+    if older_than is None and keep is None:
+        raise ValueError("at least one of older_than or keep must be specified")
+
+    r = Path(root) if root is not None else default_checkpoint_root()
+    if not r.exists():
+        return []
+
+    now = datetime.now(timezone.utc)
+
+    # Build list of (updated_at_dt | None, directory, run_id, in_progress)
+    candidates: list[tuple[datetime | None, Path, str, bool]] = []
+    for entry in r.iterdir():
+        if not entry.is_dir():
+            continue
+        state = _state_path(entry)
+        if not state.exists():
+            continue
+        try:
+            data = json.loads(state.read_text(encoding="utf-8"))
+            ckpt = PanelCheckpoint.from_dict(data)
+            in_progress = _is_in_progress(ckpt)
+            try:
+                updated_dt: datetime | None = datetime.fromisoformat(ckpt.updated_at)
+                if updated_dt.tzinfo is None:
+                    updated_dt = updated_dt.replace(tzinfo=timezone.utc)
+            except (ValueError, TypeError):
+                updated_dt = None
+            candidates.append((updated_dt, entry, ckpt.run_id, in_progress))
+        except (CheckpointFormatError, json.JSONDecodeError, KeyError, ValueError):
+            # Malformed directory — treat as prunable (no in-progress risk)
+            candidates.append((None, entry, entry.name, False))
+
+    # Sort newest-first (runs without a timestamp sort after all dated runs)
+    candidates.sort(key=lambda x: (x[0] is None, x[0] or datetime.min.replace(tzinfo=timezone.utc)), reverse=True)
+
+    pruned: list[str] = []
+    non_inprogress_seen = 0
+
+    for updated_dt, entry, run_id, in_progress in candidates:
+        if in_progress:
+            continue
+
+        should_prune = False
+
+        if keep is not None and non_inprogress_seen >= keep:
+            should_prune = True
+
+        if older_than is not None and updated_dt is not None and (now - updated_dt) > older_than:
+            should_prune = True
+
+        non_inprogress_seen += 1
+
+        if should_prune:
+            pruned.append(run_id)
+            if not dry_run:
+                shutil.rmtree(str(entry), ignore_errors=True)
+
+    return pruned
