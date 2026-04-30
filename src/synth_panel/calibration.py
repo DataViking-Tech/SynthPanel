@@ -84,9 +84,7 @@ def load_pack_yaml(path: str, *, min_personas: int = 1) -> tuple[str, dict[str, 
         raise ValueError(f"pack YAML at {path} must be a mapping at top level")
     personas = data.get("personas")
     if not isinstance(personas, list) or len(personas) < min_personas:
-        raise ValueError(
-            f"no personas found in {path}; calibration requires at least {min_personas} persona(s)"
-        )
+        raise ValueError(f"no personas found in {path}; calibration requires at least {min_personas} persona(s)")
     return raw, data
 
 
