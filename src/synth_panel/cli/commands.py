@@ -4667,6 +4667,7 @@ def handle_doctor(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """Preflight check for CI/scripts: sane runtime and credentials, no secret material in output."""
     import os
     import sys
+    from pathlib import Path
 
     from synth_panel import __version__
     from synth_panel.credentials import (
@@ -4677,6 +4678,32 @@ def handle_doctor(args: argparse.Namespace, fmt: OutputFormat) -> int:
         load_credentials,
     )
 
+    verbose = bool(getattr(args, "verbose", False))
+
+    # --- Python runtime
+    py_version_str = sys.version.split()[0]
+    py_ok = sys.version_info[:2] >= (3, 10)
+
+    # --- Required + optional dependencies
+    dep_errors: list[str] = []
+    optional_notes: list[str] = []
+    try:
+        import httpx  # noqa: F401
+    except ImportError:
+        dep_errors.append("missing dependency: httpx")
+    try:
+        import yaml  # noqa: F401
+    except ImportError:
+        dep_errors.append("missing dependency: pyyaml")
+    try:
+        import mcp  # noqa: F401
+
+        mcp_installed = True
+    except ImportError:
+        mcp_installed = False
+        optional_notes.append("optional: mcp not installed (`pip install synthpanel[mcp]`).")
+
+    # --- Provider credentials (per-provider, env-vs-stored, never values)
     def _credential_row(env_var: str) -> dict[str, Any]:
         env_set = bool(os.environ.get(env_var, "").strip())
         disk = load_credentials()
@@ -4693,62 +4720,162 @@ def handle_doctor(args: argparse.Namespace, fmt: OutputFormat) -> int:
             "source": source,
         }
 
-    dep_errors: list[str] = []
-    optional_notes: list[str] = []
-
-    try:
-        import httpx  # noqa: F401
-    except ImportError:
-        dep_errors.append("missing dependency: httpx")
-
-    try:
-        import yaml  # noqa: F401
-    except ImportError:
-        dep_errors.append("missing dependency: pyyaml")
-
-    try:
-        import mcp  # noqa: F401
-    except ImportError:
-        optional_notes.append("optional: mcp not installed (`pip install synthpanel[mcp]`).")
-
     provider_rows = [_credential_row(ev) for ev in KNOWN_CREDENTIAL_ENV_VARS]
     any_provider = any(r["available"] for r in provider_rows)
-    checks_ok = not dep_errors and any_provider
+
+    # --- Checkpoint root (writable + existing-run count). Non-destructive:
+    # walk up to the first existing ancestor and probe os.access for write.
+    ckpt_root = default_checkpoint_root()
+    ckpt_writable = False
+    ckpt_existing_runs: int | None = None
+    ckpt_error: str | None = None
+    if ckpt_root.exists():
+        ckpt_writable = os.access(ckpt_root, os.W_OK)
+        try:
+            ckpt_existing_runs = sum(1 for p in ckpt_root.iterdir() if p.is_dir() and not p.name.startswith("."))
+        except OSError as exc:
+            ckpt_error = str(exc)
+    else:
+        # Find the first existing ancestor; doctor must not create directories
+        # as a side effect (CI cleanliness, repeatable runs).
+        probe = ckpt_root
+        while not probe.exists() and probe.parent != probe:
+            probe = probe.parent
+        ckpt_writable = os.access(probe, os.W_OK)
+        ckpt_existing_runs = 0
+
+    # --- Pack registry (bundled persona + instrument packs load OK)
+    bundled_persona_count = 0
+    bundled_instrument_count = 0
+    pack_load_errors: list[str] = []
+    try:
+        from synth_panel.mcp.data import (
+            _bundled_instrument_packs,
+            _bundled_packs,
+        )
+
+        bundled_persona_count = len(_bundled_packs())
+        bundled_instrument_count = len(_bundled_instrument_packs())
+        if bundled_persona_count == 0:
+            pack_load_errors.append("no bundled persona packs loaded")
+        if bundled_instrument_count == 0:
+            pack_load_errors.append("no bundled instrument packs loaded")
+    except Exception as exc:
+        pack_load_errors.append(f"pack registry load failed: {exc}")
+    packs_ok = not pack_load_errors
+
+    checks_ok = py_ok and not dep_errors and any_provider and ckpt_writable and packs_ok
 
     extra: dict[str, Any] = {
         "synthpanel_version": __version__,
-        "python_version": sys.version.split()[0],
+        "python_version": py_version_str,
+        "python_ok": py_ok,
         "credentials_path": str(credentials_path()),
         "providers": provider_rows,
         "dependencies_ok": not dep_errors,
         "dependency_errors": dep_errors,
         "optional_notes": optional_notes,
+        "mcp_installed": mcp_installed,
         "credential_configured": any_provider,
+        "checkpoint_root": str(ckpt_root),
+        "checkpoint_root_writable": ckpt_writable,
+        "checkpoint_existing_runs": ckpt_existing_runs,
+        "checkpoint_error": ckpt_error,
+        "bundled_persona_packs": bundled_persona_count,
+        "bundled_instrument_packs": bundled_instrument_count,
+        "pack_load_errors": pack_load_errors,
+        "packs_ok": packs_ok,
         "checks_ok": checks_ok,
     }
 
     rc = 0 if checks_ok else 1
 
     if fmt is OutputFormat.TEXT:
-        print(f"synthpanel {__version__} (Python {sys.version.split()[0]})")
+        # Unicode glyphs match the GH-310 spec example. UTF-8 is Python's
+        # default stdout encoding on Linux/Mac and on Windows since 3.6.
+        ok_mark = "✓"
+        bad_mark = "✗"
+        warn_mark = "!"
+
+        # Header line: synthpanel + python
+        print(f"synthpanel {__version__}")
+        py_marker = ok_mark if py_ok else bad_mark
+        py_suffix = "(>= 3.10)" if py_ok else "(need >= 3.10)"
+        py_stream = sys.stdout if py_ok else sys.stderr
+        print(f"  {py_marker} python: {py_version_str} {py_suffix}", file=py_stream)
+
+        # Required deps
         if dep_errors:
-            print("Issues:", file=sys.stderr)
             for msg in dep_errors:
-                print(f"  - {msg}", file=sys.stderr)
-        if optional_notes:
-            for msg in optional_notes:
-                print(f"Note: {msg}")
-        print(f"Credential store: {credentials_path()}")
-        if any_provider:
-            print("Configured providers:")
-            for row in provider_rows:
-                if not row["available"]:
-                    continue
-                print(f"  [{row['source']}] {row['env_var']} — {row['provider']}")
+                print(f"  {bad_mark} {msg}", file=sys.stderr)
         else:
-            print("No LLM credentials found (env or stored). Run `synthpanel login`.", file=sys.stderr)
-        if rc != 0:
-            print("doctor: preflight failed", file=sys.stderr)
+            print(f"  {ok_mark} required deps: httpx, pyyaml")
+
+        # Optional: mcp
+        if mcp_installed:
+            print(f"  {ok_mark} optional: mcp installed")
+        else:
+            print(f"  {warn_mark} optional: mcp not installed (`pip install synthpanel[mcp]`)")
+
+        # Credentials (one line per provider with a key)
+        if any_provider:
+            for row in provider_rows:
+                if row["available"]:
+                    print(f"  {ok_mark} {row['env_var']}: {row['source']} ({row['provider']})")
+                elif verbose:
+                    print(f"  {warn_mark} {row['env_var']}: not set ({row['provider']})")
+            if verbose:
+                print(f"     credential store: {credentials_path()}")
+        else:
+            print(
+                f"  {bad_mark} No LLM credentials found (env or stored). Run `synthpanel login`.",
+                file=sys.stderr,
+            )
+
+        # Checkpoint root
+        display = str(ckpt_root)
+        home = str(Path.home())
+        if not verbose and display.startswith(home):
+            display = "~" + display[len(home) :]
+        if ckpt_writable:
+            runs_label = ""
+            if ckpt_existing_runs is not None:
+                noun = "run" if ckpt_existing_runs == 1 else "runs"
+                runs_label = f", {ckpt_existing_runs} existing {noun}"
+            print(f"  {ok_mark} checkpoint root: {display} (writable{runs_label})")
+        else:
+            err_msg = f" — {ckpt_error}" if ckpt_error else ""
+            print(
+                f"  {bad_mark} checkpoint root: {display} not writable{err_msg}",
+                file=sys.stderr,
+            )
+
+        # Pack registry
+        if packs_ok:
+            print(
+                f"  {ok_mark} packs: {bundled_persona_count} persona, {bundled_instrument_count} instrument (bundled)"
+            )
+        else:
+            for msg in pack_load_errors:
+                print(f"  {bad_mark} {msg}", file=sys.stderr)
+
+        # Tally
+        n_err = (
+            (0 if py_ok else 1)
+            + len(dep_errors)
+            + (0 if any_provider else 1)
+            + (0 if ckpt_writable else 1)
+            + len(pack_load_errors)
+        )
+        n_warn = len(optional_notes)
+        if rc == 0:
+            tail = f"{n_warn} warning{'s' if n_warn != 1 else ''}, 0 errors." if n_warn else "0 errors."
+            print(tail)
+        else:
+            print(
+                f"{n_err} error{'s' if n_err != 1 else ''}, {n_warn} warning{'s' if n_warn != 1 else ''}.",
+                file=sys.stderr,
+            )
         return rc
 
     emit(
