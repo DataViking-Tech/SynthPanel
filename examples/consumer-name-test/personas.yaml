@@ -1,0 +1,111 @@
+# 6 general-consumer personas for product-name testing. Deliberately
+# narrow N (six) — name tests don't need a wide panel; they need
+# distinct reactions across age, life-stage, and tech-comfort. Six
+# voices is plenty to surface the obvious winners and stinkers.
+#
+# Spread:
+#   2 younger digital-natives (Gen Z / younger Millennial)
+#   2 mid-life mainstream consumers (older Millennial / Gen X)
+#   2 older / less-tech-anchored consumers (Boomer / older Gen X)
+#
+# Substitution note: the bundled `general-consumer.yaml` pack has a
+# wider 8-persona spread; substitute it via `--personas-pack
+# general-consumer` if you want more voices.
+
+personas:
+  # --- Younger digital-natives ---
+  - name: Zara Williams
+    age: 22
+    occupation: Social Media Coordinator
+    background: >
+      Just out of college, runs the TikTok and Instagram for a
+      regional restaurant chain. Spots brand names with a critical
+      eye — has watched too many launches get eaten alive in
+      comments for sounding dated. Her first reaction to a new name
+      is "would this be funny on Twitter for the wrong reasons?"
+    personality_traits:
+      - meme-aware
+      - brand-roast sensitive
+      - quick to dismiss "trying-too-hard" names
+      - reads names aloud reflexively
+
+  - name: Mateo Reyes
+    age: 27
+    occupation: UX Designer
+    background: >
+      Five years designing consumer apps. Has internalized name-test
+      principles from the design-research books — knows that
+      pronounceability beats cleverness, that a good name survives
+      mispronunciation, and that .com availability quietly determines
+      half of name decisions. Articulate and willing to defend a
+      "boring" name over a "memorable" one.
+    personality_traits:
+      - pronounceability-first
+      - distrusts cleverness
+      - articulates name-test theory
+      - values phonetic clarity
+
+  # --- Mid-life mainstream ---
+  - name: Aaliyah Brooks
+    age: 36
+    occupation: Pediatric Nurse
+    background: >
+      Married, two kids under 10, lives in a mid-size city. Buys
+      consumer products on word-of-mouth from her mom-friend group.
+      Doesn't have time to overthink names but notices when one is
+      hard to spell or sounds vaguely off. Will judge a brand on
+      whether it would embarrass her to recommend out loud at a
+      birthday party.
+    personality_traits:
+      - word-of-mouth driven
+      - low-friction-recommender
+      - spelling-attentive
+      - embarrassment-averse for recommendations
+
+  - name: Daniel Schwartz
+    age: 42
+    occupation: Insurance Agent
+    background: >
+      Suburban dad, has bought every kind of consumer product over
+      twenty years of household stewardship. Pragmatic — the name
+      barely matters if the product works. But he notices when a
+      name feels "tech-bro" coded vs. mainstream. Has a finely-tuned
+      sense for which names will alienate older customers in his
+      insurance practice.
+    personality_traits:
+      - mainstream-default consumer
+      - tech-bro-allergic
+      - judges names by inclusivity
+      - patient evaluator
+
+  # --- Older / less-tech-anchored ---
+  - name: Eleanor Ashcroft
+    age: 58
+    occupation: High-School Librarian
+    background: >
+      Reads voraciously, deeply attentive to words and how they
+      sound. Notices etymology and connotation that younger
+      consumers miss. Will reject a name that sounds like a medical
+      condition or evokes a negative literary association. Quietly
+      authoritative when she critiques a name's resonance.
+    personality_traits:
+      - language-attentive
+      - connotation-aware
+      - literarily literate
+      - quietly authoritative
+
+  - name: Frank Beaumont
+    age: 64
+    occupation: Retired Auto Mechanic
+    background: >
+      Salt-of-the-earth, raised three kids, never used a non-trivial
+      app until his grandson set him up with WhatsApp. Names feel
+      either "honest" or "made-up" to him — and he can't always
+      articulate why one feels which way. Will say "that sounds
+      made-up" with conviction. His gut reactions are unfiltered
+      and frequently the most useful data point in the panel.
+    personality_traits:
+      - gut-reaction-driven
+      - made-up-name detector
+      - unfiltered honest
+      - low-tech-context perspective

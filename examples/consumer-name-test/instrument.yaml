@@ -1,0 +1,74 @@
+# consumer-name-test: v1 flat instrument for testing 5 product-name
+# candidates with general consumers. Uses an `enum` forced-choice
+# question to make panelists commit to a winner, plus open-ended
+# follow-ups to surface the *why* behind each pick.
+#
+# This is the simplest instrument shape (v1, single round, flat list)
+# because name-tests benefit from being short — every additional
+# round dilutes the gut-reaction signal that's the main point.
+#
+# Substitute the {name_*} placeholders with your real candidates
+# before running, or pass them via the panel's prompt-context
+# substitution (see CLI docs).
+
+instrument:
+  version: 1
+  questions:
+    - text: >
+        Here are 5 candidate names for {product_category}:
+          A) {name_a}
+          B) {name_b}
+          C) {name_c}
+          D) {name_d}
+          E) {name_e}
+        Read them out loud once. Now — without overthinking —
+        which one is your gut favorite, and which one made you
+        pause or wince?
+      response_schema:
+        type: text
+      follow_ups:
+        - "Was the favorite an instant pick, or did it grow on you?"
+        - "What specifically made the loser miss?"
+
+    - text: >
+        Of the five names, which ONE would you actually pick if
+        you had to launch the product tomorrow?
+      response_schema:
+        type: enum
+        options:
+          - "{name_a}"
+          - "{name_b}"
+          - "{name_c}"
+          - "{name_d}"
+          - "{name_e}"
+
+    - text: >
+        Walk me through the decision you just made. What tipped
+        the scales? Was it sound, meaning, look-on-the-page,
+        or something harder to name?
+      response_schema:
+        type: text
+      follow_ups:
+        - "Would your pick survive being told to a friend over the phone?"
+
+    - text: >
+        On a 1–5 scale, how confident are you in your choice?
+        1 = "I'd flip a coin tomorrow," 5 = "this is the one."
+      response_schema:
+        type: scale
+        min: 1
+        max: 5
+
+    - text: >
+        Imagine you're seeing the name everywhere — billboards,
+        ads, in your podcast feed. Which of the five would wear
+        in best over a year, and which would start to grate?
+      response_schema:
+        type: text
+
+    - text: >
+        Final question: which name would you be embarrassed to
+        recommend out loud to a friend? Be honest — even if it's
+        your second-favorite. Why?
+      response_schema:
+        type: text

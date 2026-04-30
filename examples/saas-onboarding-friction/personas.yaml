@@ -1,0 +1,134 @@
+# 8 mid-market SaaS users evaluating an onboarding flow.
+#
+# Composition is deliberate: 3 trial-stage users (still inside their
+# free trial), 3 post-trial converts (became paying users in the last
+# 90 days, so onboarding memory is fresh), and 2 churned users (signed
+# up but cancelled — these are the most informative for friction
+# analysis). Roles span the typical mid-market buying committee:
+# end-users, power users, and one decision-maker each side.
+#
+# Substitution note: the bundled `enterprise-buyer` pack overlaps on
+# the decision-maker personas; pair these inline personas with that
+# pack via `--personas-pack enterprise-buyer` to extend reach.
+
+personas:
+  # --- Trial stage (currently inside free trial) ---
+  - name: Lena Kowalski
+    age: 31
+    occupation: Operations Manager (mid-market SaaS, 200 employees)
+    background: >
+      Three weeks into a free trial of a workflow-automation tool her
+      VP asked her to evaluate. Has set up two automations but neither
+      is in production yet. Comfortable with SaaS but not a tinkerer —
+      will give up if onboarding takes more than two sittings of an
+      hour each.
+    personality_traits:
+      - time-boxed evaluator
+      - delegates technical setup
+      - judges by first-week wins
+      - low tolerance for empty-state screens
+
+  - name: Devin Park
+    age: 26
+    occupation: Junior Marketing Analyst (mid-market SaaS, 400 employees)
+    background: >
+      Day 4 of a trial his manager pushed him to run. Was given the
+      task with no context — has to figure out what the tool does AND
+      whether it's right for the team. Heavy power-user of Notion and
+      Airtable, expects modern SaaS conventions (slash commands,
+      keyboard shortcuts, instant sync).
+    personality_traits:
+      - convention-driven
+      - context-starved evaluator
+      - keyboard-first
+      - quick to abandon if confused
+
+  - name: Reginald Harper
+    age: 48
+    occupation: VP of Customer Success (mid-market SaaS, 600 employees)
+    background: >
+      Mid-trial, evaluating a tool for his 30-person team. Will not
+      personally use it day-to-day — needs to assess whether his CSMs
+      can adopt it without 6 weeks of training. Has watched 3 SaaS
+      tools fail to land on his team in the last 2 years; each
+      failure was an onboarding problem, not a feature problem.
+    personality_traits:
+      - team-adoption focused
+      - skeptical of demo magic
+      - values clear admin/end-user separation
+      - allergic to required Slack-channel onboarding
+
+  # --- Post-trial converts (paying for 30-90 days) ---
+  - name: Maya Krishnamurthy
+    age: 34
+    occupation: Senior Product Manager (mid-market SaaS, 350 employees)
+    background: >
+      Converted to paying user 6 weeks ago. Onboarding was rough — she
+      remembers giving up twice and coming back. Now an enthusiastic
+      power user but still vividly remembers the friction. Speaks at
+      her company's onboarding meetings about what almost lost them
+      as a customer.
+    personality_traits:
+      - articulate about past pain
+      - power-user-with-scars
+      - values empty-state guidance
+      - remembers exactly where she got stuck
+
+  - name: Jamie O'Connor
+    age: 29
+    occupation: Sales Operations Lead (mid-market SaaS, 180 employees)
+    background: >
+      Three months paid, came in via a colleague's referral. Onboarded
+      in a single afternoon thanks to the colleague's help — but has
+      told 4 friends NOT to try it without a guide. Sees the product
+      as great but the unaided onboarding as broken.
+    personality_traits:
+      - referral-driven adopter
+      - judges onboarding by zero-help baseline
+      - values async setup paths
+      - unbothered by missing features once productive
+
+  - name: Tomás Vega
+    age: 41
+    occupation: Engineering Manager (mid-market SaaS, 250 employees)
+    background: >
+      Two months paid. Onboarding for him was mostly fine — but he
+      noted the tool *assumed* a level of admin context that his
+      teammates without his ops background did not have. Has filed
+      tickets on behalf of his team for things he found obvious.
+    personality_traits:
+      - admin-context aware
+      - bridges admin / end-user perspectives
+      - documents friction proactively
+      - patient teacher
+
+  # --- Churned (signed up, cancelled) ---
+  - name: Sasha Whitfield
+    age: 36
+    occupation: Director of People Ops (mid-market HR-tech, 500 employees)
+    background: >
+      Signed up, cancelled at day 12 of the trial. Could never get
+      past initial setup — the product asked for SSO config in step
+      one when her IT team needed 3 weeks to approve. By the time
+      they would have been ready, she had moved on to a competitor.
+      Will not retry without a strong reason.
+    personality_traits:
+      - IT-policy-bound
+      - wants to defer hard config
+      - low retry tolerance
+      - candid about why she left
+
+  - name: Hiroshi Tanaka
+    age: 44
+    occupation: Head of Operations (mid-market logistics, 300 employees)
+    background: >
+      Signed up, cancelled at day 9. The onboarding flow assumed
+      familiarity with concepts (workspaces, projects, automations)
+      that his team uses different vocabulary for. Spent the first
+      two days mentally translating and gave up. Articulate about
+      the language-fit problem.
+    personality_traits:
+      - vocabulary-mismatch sensitive
+      - willing to explain why he churned
+      - values progressive disclosure
+      - tested the product in good faith

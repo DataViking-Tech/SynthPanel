@@ -1,0 +1,206 @@
+# 12 developers spanning junior to staff, deliberately weighted to
+# cover the realistic procurement spread for a mid-market devtool:
+#
+#   3 junior  (free-tier-driven, very cost-sensitive)
+#   3 mid     (small-team approval, starts evaluating paid tiers)
+#   3 senior  (advocates internally for tools, has a budget)
+#   3 staff   (sets the company-wide standard, evaluates enterprise)
+#
+# This composition lets you compare willingness-to-pay across
+# experience levels without one cohort dominating. Roles are
+# diversified across stack (frontend, backend, platform, ML, devops)
+# so the pricing reactions aren't biased by a single specialty.
+#
+# Substitution note: the bundled `developer.yaml` pack covers similar
+# ground with 16 personas; use it via `--personas-pack developer` if
+# you want a wider sample.
+
+personas:
+  # --- Junior (0-3 years, free-tier-driven) ---
+  - name: Anders Lindgren
+    age: 23
+    occupation: Junior Frontend Developer
+    background: >
+      Fourteen months out of a CS degree. Works at a 40-person agency
+      shipping React apps for clients. Pays for nothing himself —
+      every tool he uses is on the company plan or a free tier. Will
+      argue passionately to his lead about why a paid tier is worth
+      it but doesn't have purchase authority.
+    personality_traits:
+      - free-tier-anchored
+      - convinces but doesn't buy
+      - underestimates internal ROI math
+      - quick to abandon paid trials
+
+  - name: Bo Tran
+    age: 24
+    occupation: Junior Backend Developer
+    background: >
+      First job at a Series A startup, 18 months in. Notices when his
+      company spends on tools but has no visibility into total
+      cost-of-tooling. Personal projects on free tiers only;
+      professional projects use whatever the team chose before he
+      arrived. Forms strong opinions about what tools "should" cost.
+    personality_traits:
+      - opinionated about pricing fairness
+      - non-buyer with strong views
+      - influenced by HN takes
+      - suspicious of usage-based pricing
+
+  - name: Camille Beaufort
+    age: 25
+    occupation: Junior Mobile Developer
+    background: >
+      Two years building cross-platform apps at an indie game studio.
+      Pays out-of-pocket for one paid tool (her IDE) and resents
+      every renewal. Has internalized that "real developers pay for
+      their tools" but still defaults to free alternatives unless
+      someone shows her the math.
+    personality_traits:
+      - reluctant payer
+      - default-to-free
+      - persuadable with concrete ROI
+      - values one-time over subscriptions
+
+  # --- Mid-level (3-7 years, small-team buyer) ---
+  - name: Diego Marchetti
+    age: 28
+    occupation: Backend Engineer
+    background: >
+      Five years at a 200-person fintech. Tech lead on a small team
+      and has a $200/month per-developer budget for tools — though
+      anything above $50/seat triggers an approval request to his
+      manager. Compares prices reflexively. Knows the price of every
+      tool his team uses to the dollar.
+    personality_traits:
+      - budget-aware buyer
+      - per-seat pricing literate
+      - approval-threshold conscious
+      - tracks vendor renewals
+
+  - name: Elena Voskoboynikov
+    age: 30
+    occupation: Frontend Engineer
+    background: >
+      Six years at a 350-person ecommerce company. Has team-level
+      purchasing power for any tool under $1k/year. Burned recently
+      by a tool that started at $20/seat and grew to $80/seat after
+      acquisition; now reads ToS for pricing change clauses before
+      any commitment.
+    personality_traits:
+      - post-acquisition-scarred
+      - reads pricing fine print
+      - values pricing predictability
+      - allergic to vague "contact us" tiers
+
+  - name: Faisal Ahmed
+    age: 31
+    occupation: DevOps Engineer
+    background: >
+      Seven years across two startups, currently at a 180-person
+      Series C. Bridges between engineering and finance — runs the
+      monthly tooling cost review. Sees the full picture of what his
+      company pays for dev tools and has strong opinions about which
+      tiers are worth the upcharge.
+    personality_traits:
+      - finance-fluent engineer
+      - tier-bloat skeptical
+      - values tier consolidation
+      - calls out pricing theater
+
+  # --- Senior (7-12 years, internal advocate, has budget) ---
+  - name: Grace Mwangi
+    age: 33
+    occupation: Senior Backend Engineer
+    background: >
+      Nine years across four companies, currently at a 600-person
+      Series D. Champions tools internally — has driven the adoption
+      of three paid SaaS dev tools in two years. Knows how to sell
+      a tool to her management chain and what objections to expect.
+      Cares about the support story almost as much as the price.
+    personality_traits:
+      - internal advocate
+      - sells-up the chain
+      - values support quality
+      - patient with onboarding cost
+
+  - name: Henrik Bergström
+    age: 35
+    occupation: Senior Platform Engineer
+    background: >
+      Ten years building developer infrastructure. Has procurement
+      sign-off authority up to $20k/year per tool. Strongly prefers
+      transparent, public pricing — refuses to engage with sales-led
+      tools unless there's no alternative. Has walked away from
+      better products because the pricing process was opaque.
+    personality_traits:
+      - procurement-authority
+      - public-pricing absolutist
+      - sales-call averse
+      - values buy-without-talking
+
+  - name: Indira Kapoor
+    age: 36
+    occupation: Senior ML Engineer
+    background: >
+      Twelve years across research and production ML. Currently at a
+      400-person AI infra company. Comfortable with usage-based
+      pricing because her workloads spike unpredictably; less
+      comfortable with per-seat when her team is asymmetric power-
+      users. Pushes back hard on enterprise tiers that gate basic
+      features (SSO, audit logs) behind 5x prices.
+    personality_traits:
+      - usage-based-pricing-friendly
+      - SSO-tax skeptical
+      - asymmetric-team aware
+      - values feature/tier alignment
+
+  # --- Staff (12+ years, sets company standard, evaluates enterprise) ---
+  - name: Jonathan Pierce
+    age: 41
+    occupation: Staff Engineer
+    background: >
+      Eighteen years at three large companies. Currently sets the
+      company-wide standard for dev tools at a 2,000-person SaaS.
+      Buys at the enterprise tier as a default — not because he
+      loves it, but because legal and compliance demand SOC 2,
+      audit logs, SSO, and dedicated support. Negotiates list price
+      down 30-50% on every contract.
+    personality_traits:
+      - enterprise-default buyer
+      - negotiates list price
+      - compliance-bound
+      - skeptical of "Contact Sales"
+
+  - name: Keiko Yoshida
+    age: 44
+    occupation: Distinguished Engineer
+    background: >
+      Twenty-two years in industry. Architects the internal developer
+      platform at a 5,000-person org. Procures at the enterprise
+      tier across the org but distinguishes between tools that
+      EARN the upcharge (real support, multi-region SSO, dedicated
+      security review) and tools that price-gouge for boilerplate
+      compliance features. Will champion midmarket-priced tools
+      when their feature set is honest.
+    personality_traits:
+      - org-platform owner
+      - distinguishes earned vs. extracted upcharges
+      - champions honest pricing
+      - rejects compliance-tax pricing
+
+  - name: Liam O'Sullivan
+    age: 38
+    occupation: Staff Site Reliability Engineer
+    background: >
+      Sixteen years on production systems. Currently at a 1,200-person
+      fintech. Has procurement authority for monitoring and reliability
+      tooling up to $100k/year per tool. Hates the "starter tier kills
+      you when you grow" pattern and walks customers (informally) to
+      tools with linear or sub-linear growth curves. Will pay premium
+      for predictability.
+    personality_traits:
+      - predictability-premium-payer
+      - growth-curve aware
+      - knows the gotcha tiers
+      - values capacity-aware billing

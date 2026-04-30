@@ -1,0 +1,149 @@
+# devtools-pricing: v3 branching instrument that takes developers
+# through 4 candidate pricing tiers for a hypothetical devtool, then
+# branches based on which tier the panel anchors on.
+#
+# Tier structure used in the prompts (substitute for your real tiers):
+#
+#   Tier 0 — Free        (single user, basic features, community support)
+#   Tier 1 — Pro         ($20/seat, team features, email support)
+#   Tier 2 — Team        ($60/seat, advanced features, SSO, priority support)
+#   Tier 3 — Enterprise  (Contact, audit logs, dedicated CSM, on-prem option)
+#
+# Routing: the synthesizer should emit one of these canonical theme
+# tags from the discovery round so route_when fires reliably:
+#
+#   - "wtp_free"       (panel anchors on free tier)
+#   - "wtp_pro"        (panel anchors on $20/seat range)
+#   - "wtp_team"       (panel anchors on $60/seat range)
+#   - "wtp_enterprise" (panel willing to engage with sales-led tier)
+#   - "objection"      (strong pricing objection regardless of tier)
+#
+# The wrap_up round always runs to capture final synthesis. See the
+# README "Theme Matching" section for the R3 caveat on substring
+# predicates.
+
+instrument:
+  version: 3
+  rounds:
+    - name: discovery
+      questions:
+        - text: >
+            You're evaluating a developer tool for {use_case}. The
+            vendor offers four tiers: Free (1 user, basic), Pro
+            ($20/seat, teams), Team ($60/seat, SSO + advanced), and
+            Enterprise (custom, audit + on-prem). Which tier do you
+            picture yourself or your team landing on, and why?
+        - text: >
+            Walk me through the pricing decision in your head right
+            now. What would tip you up a tier, and what would knock
+            you down a tier?
+      route_when:
+        - if:
+            field: themes
+            op: contains
+            value: wtp_enterprise
+          goto: probe_enterprise
+        - if:
+            field: themes
+            op: contains
+            value: wtp_team
+          goto: probe_team_tier
+        - if:
+            field: themes
+            op: contains
+            value: wtp_pro
+          goto: probe_pro_tier
+        - if:
+            field: themes
+            op: contains
+            value: objection
+          goto: probe_objections
+        - else: probe_pro_tier
+
+    - name: probe_pro_tier
+      questions:
+        - text: >
+            At $20/seat for a team of, say, 8 — that's $1,920/year.
+            Walk me through how you'd justify that internally. Who
+            signs off, and what evidence do they want?
+        - text: >
+            What single feature in the Pro tier (vs Free) would have
+            to be there for the upgrade to feel obvious, not
+            negotiated?
+        - text: >
+            On a 1–5 scale, how likely are you to convert from Free
+            to Pro within 90 days at $20/seat? 1 = very unlikely,
+            5 = already drafting the request.
+          response_schema:
+            type: scale
+            min: 1
+            max: 5
+      route_when:
+        - else: wrap_up
+
+    - name: probe_team_tier
+      questions:
+        - text: >
+            At $60/seat, you're 3x the Pro tier. Tell me what's in
+            the Team tier that earns the 3x — and what feels like
+            "compliance-tax" pricing that should be in Pro.
+        - text: >
+            Be specific: SSO, audit logs, advanced permissions —
+            which of these belongs at $60 and which feels gated
+            for the wrong reason?
+        - text: >
+            On a 1–5 scale, how often have you walked away from a
+            tool whose Team tier hid SSO behind a $60+ wall?
+            1 = never, 5 = it's a reflex.
+          response_schema:
+            type: scale
+            min: 1
+            max: 5
+      route_when:
+        - else: wrap_up
+
+    - name: probe_enterprise
+      questions:
+        - text: >
+            Enterprise pricing is "Contact Sales." Tell me, candidly,
+            how you feel about that — both as a buyer and as the
+            person who has to take the call.
+        - text: >
+            What public number would you need to see — list price
+            for, say, 50 seats with audit + SSO — for you to
+            seriously short-list this tool without picking up the
+            phone?
+        - text: >
+            On a 1–5 scale, how often do you walk away from
+            Enterprise-tier tools because the sales process is
+            opaque? 1 = never, 5 = my default.
+          response_schema:
+            type: scale
+            min: 1
+            max: 5
+      route_when:
+        - else: wrap_up
+
+    - name: probe_objections
+      questions:
+        - text: >
+            Your strongest pricing objection — say it cleanly, without
+            softening it. What about this pricing structure feels
+            wrong, manipulative, or extracting?
+        - text: >
+            What pricing change — not feature change — would flip
+            your objection into "okay, I'd buy this"?
+      route_when:
+        - else: wrap_up
+
+    - name: wrap_up
+      questions:
+        - text: >
+            Final word — at what point in the next 12 months would
+            you actually pay for this tool? "When my team grows past
+            4," "when the free tier hits a hard cap," "never," —
+            be specific.
+        - text: >
+            If you had to recommend ONE pricing change to the
+            vendor that would get them more money from you, what
+            would it be? Why?
