@@ -10,7 +10,6 @@ import pytest
 from synth_panel.diff import compute_diff, load_result
 from synth_panel.main import main
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

@@ -69,6 +69,7 @@ from synth_panel.cost import (
     lookup_pricing,
 )
 from synth_panel.credentials import has_credential
+from synth_panel.diff import CategoricalQuestionDiff, RunDiff, TextQuestionDiff
 from synth_panel.instrument import Instrument, InstrumentError, parse_instrument
 from synth_panel.llm.client import LLMClient
 from synth_panel.metadata import PanelTimer, build_metadata
@@ -1725,9 +1726,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     else:
         # Show a live progress bar when the user is watching a TTY in text mode.
         _show_progress = fmt is OutputFormat.TEXT and sys.stdout.isatty() and bool(active_personas)
-        progress: PanelProgressBar | None = (
-            PanelProgressBar(len(active_personas), model) if _show_progress else None
-        )
+        progress: PanelProgressBar | None = PanelProgressBar(len(active_personas), model) if _show_progress else None
 
         def _on_complete(pr: PanelistResult) -> None:
             if checkpoint_writer is not None:
@@ -4840,9 +4839,6 @@ def handle_runs_list(args: argparse.Namespace, fmt: OutputFormat) -> int:
 def handle_runs_diff(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """Compare two saved panel results statistically."""
     from synth_panel.diff import (
-        CategoricalQuestionDiff,
-        RunDiff,
-        TextQuestionDiff,
         compute_diff,
         load_result,
     )
@@ -4919,13 +4915,13 @@ def handle_runs_diff(args: argparse.Namespace, fmt: OutputFormat) -> int:
     return 0
 
 
-def _print_runs_diff_text(diff: "RunDiff") -> None:
+def _print_runs_diff_text(diff: RunDiff) -> None:
     """Print a human-readable diff to stdout."""
     m = diff.metadata
 
     def _field(label: str, a: object, b: object) -> str:
         eq = "=" if str(a) == str(b) else "→"
-        return f"  {label:<16} {str(a):<18} {eq}  {b}"
+        return f"  {label:<16} {a!s:<18} {eq}  {b}"
 
     print(f"Run A: {m.result_a_id}  ({m.created_at_a})")
     print(f"Run B: {m.result_b_id}  ({m.created_at_b})")
@@ -4960,7 +4956,7 @@ def _pct_bar(dist: dict[str, int]) -> str:
     return "  ".join(parts)
 
 
-def _print_categorical_diff(q: "CategoricalQuestionDiff") -> None:
+def _print_categorical_diff(q: CategoricalQuestionDiff) -> None:
     text = q.question_text[:72] + ("…" if len(q.question_text) > 72 else "")
     print(f"\n  [{q.question_key}] {text}")
 
@@ -4984,7 +4980,7 @@ def _print_categorical_diff(q: "CategoricalQuestionDiff") -> None:
         print("    Run B: (no data)")
 
 
-def _print_text_diff(q: "TextQuestionDiff") -> None:
+def _print_text_diff(q: TextQuestionDiff) -> None:
     text = q.question_text[:72] + ("…" if len(q.question_text) > 72 else "")
     print(f"\n  [{q.question_key}] {text}")
     if q.top_themes_a:
