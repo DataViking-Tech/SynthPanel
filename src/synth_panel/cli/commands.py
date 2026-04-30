@@ -2226,6 +2226,10 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         # SynthBench submission block can reuse it.
         if convergence_report is not None:
             extra["convergence"] = convergence_report
+            dw = convergence_report.get("diversity_warnings") or []
+            if dw:
+                warnings_list = extra.setdefault("warnings", [])
+                warnings_list.extend(dw)
         # Include blend distributions when --blend is active
         if blend_result:
             extra["blend"] = {

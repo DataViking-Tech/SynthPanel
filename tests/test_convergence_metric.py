@@ -16,6 +16,8 @@ from typing import Any
 import pytest
 
 from synth_panel.convergence import (
+    DEFAULT_DIVERSITY_ENTROPY_THRESHOLD,
+    DEFAULT_DIVERSITY_MIN_N,
     DEFAULT_EPSILON,
     ConvergenceTracker,
     SynthbenchUnavailableError,
@@ -503,3 +505,74 @@ def test_compute_calibration_jsd_wraps_local_implementation():
     assert compute_calibration_jsd({"a": 1.0}, {"b": 1.0}) == pytest.approx(1.0)
     # Empty model distribution → 0.0 (no panelist signal yet).
     assert compute_calibration_jsd({}, {"a": 1.0}) == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Diversity warning tests (GH-291)
+# ---------------------------------------------------------------------------
+
+
+def _make_tracker(key: str = "q1", **kwargs: Any) -> ConvergenceTracker:
+    questions = [_pick_one_question(key)]
+    tracked = identify_tracked_questions(questions)
+    return ConvergenceTracker(tracked, check_every=5, epsilon=0.02, min_n=0, m_consecutive=2, **kwargs)
+
+
+def _feed(tracker: ConvergenceTracker, key: str, distribution: dict[str, int]) -> None:
+    """Feed synthetic responses into the tracker according to distribution counts."""
+    for choice, count in distribution.items():
+        for _ in range(count):
+            tracker.record({key: choice})
+
+
+def test_diversity_warning_low_entropy():
+    """90% concentration on one choice should produce a diversity warning."""
+    tracker = _make_tracker(diversity_min_n=20)
+    _feed(tracker, "q1", {"Foo": 27, "Bar": 1, "Baz": 1, "Qux": 1})
+    report = tracker.build_report()
+    warnings = report["diversity_warnings"]
+    assert len(warnings) == 1
+    assert "q1" in warnings[0]
+    assert "90%" in warnings[0]
+    assert "Foo" in warnings[0]
+
+
+def test_diversity_no_warning_high_entropy():
+    """Near-uniform distribution across 4 options should not trigger a warning."""
+    tracker = _make_tracker(diversity_min_n=20)
+    _feed(tracker, "q1", {"A": 10, "B": 10, "C": 10, "D": 10})
+    report = tracker.build_report()
+    assert report["diversity_warnings"] == []
+
+
+def test_diversity_no_warning_below_min_n():
+    """Fewer responses than diversity_min_n should never produce a warning."""
+    tracker = _make_tracker(diversity_min_n=20)
+    # Feed only 10 responses, all identical — would warn if min_n weren't checked.
+    _feed(tracker, "q1", {"OnlyOne": 10})
+    report = tracker.build_report()
+    assert report["diversity_warnings"] == []
+
+
+def test_diversity_custom_threshold_fires_on_moderate_concentration():
+    """A raised threshold (0.8) should flag moderately-concentrated distributions."""
+    tracker = _make_tracker(diversity_min_n=10, diversity_entropy_threshold=0.8)
+    # 60/40 split — entropy ~0.97 bits / 1.0 = ~0.97 normalized. Still above 0.8.
+    # Use a more concentrated split: 80/20 across 4 options.
+    _feed(tracker, "q1", {"A": 16, "B": 2, "C": 1, "D": 1})
+    report = tracker.build_report()
+    assert len(report["diversity_warnings"]) == 1
+
+
+def test_diversity_warnings_key_always_present():
+    """build_report() always includes 'diversity_warnings', even when nothing fires."""
+    tracker = _make_tracker(diversity_min_n=20)
+    report = tracker.build_report()
+    assert "diversity_warnings" in report
+    assert isinstance(report["diversity_warnings"], list)
+
+
+def test_diversity_defaults_exported():
+    """The default constants must be importable and have sane values."""
+    assert 0 < DEFAULT_DIVERSITY_ENTROPY_THRESHOLD < 1
+    assert DEFAULT_DIVERSITY_MIN_N > 0
