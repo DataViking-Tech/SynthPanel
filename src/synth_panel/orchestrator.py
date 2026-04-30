@@ -476,6 +476,14 @@ def _run_panelist(
                     sentiment_cache=sentiment_cache,
                     sentiment_cache_lock=sentiment_cache_lock,
                 ):
+                    responses.append(
+                        {
+                            "question": fu["text"],
+                            "response": None,
+                            "follow_up": True,
+                            "skipped": True,
+                        }
+                    )
                     continue
                 try:
                     fu_summary = runtime.run_turn(fu["text"])

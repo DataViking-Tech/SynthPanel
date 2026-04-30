@@ -1045,7 +1045,7 @@ class TestConditionalFollowUps:
         assert results[0].responses[1].get("follow_up") is True
 
     def test_condition_never_skipped(self):
-        """Follow-up with condition: never is always skipped."""
+        """Follow-up with condition: never records a skipped sentinel."""
         responses = [_make_text_response("Main answer")]
         client = _make_mock_client(responses)
         personas = [{"name": "Alice"}]
@@ -1065,7 +1065,11 @@ class TestConditionalFollowUps:
             question_prompt_fn=_simple_question_prompt,
         )
 
-        assert len(results[0].responses) == 1
+        assert len(results[0].responses) == 2
+        assert results[0].responses[1]["skipped"] is True
+        assert results[0].responses[1]["follow_up"] is True
+        assert results[0].responses[1]["response"] is None
+        assert results[0].responses[1]["question"] == "This should not fire"
 
     def test_response_contains_fires_on_match(self):
         """Follow-up fires when response contains the keyword."""
@@ -1097,7 +1101,7 @@ class TestConditionalFollowUps:
         assert results[0].responses[1]["question"] == "Why do you agree?"
 
     def test_response_contains_skipped_on_no_match(self):
-        """Follow-up skipped when response does not contain the keyword."""
+        """Follow-up skipped when response does not contain the keyword — sentinel recorded."""
         responses = [_make_text_response("No, I disagree")]
         client = _make_mock_client(responses)
         personas = [{"name": "Alice"}]
@@ -1119,7 +1123,9 @@ class TestConditionalFollowUps:
             question_prompt_fn=_simple_question_prompt,
         )
 
-        assert len(results[0].responses) == 1
+        assert len(results[0].responses) == 2
+        assert results[0].responses[1]["skipped"] is True
+        assert results[0].responses[1]["follow_up"] is True
 
     def test_dict_follow_up_without_condition_defaults_always(self):
         """Dict follow-up missing condition key defaults to always."""
@@ -1189,14 +1195,24 @@ class TestConditionalFollowUps:
         )
 
         resp = results[0].responses
-        # Q1 main + 2 follow-ups (always + tools match) + Q2 main = 4
-        assert len(resp) == 4
+        # Q1 main + 2 answered + 2 skipped sentinels + Q2 main + 1 skipped sentinel = 7
+        assert len(resp) == 7
         assert resp[0]["question"] == "What's your testing workflow?"
         assert resp[1]["question"] == "What frameworks?"
         assert resp[1].get("follow_up") is True
+        assert resp[1].get("skipped") is not True
         assert resp[2]["question"] == "Which tools?"
         assert resp[2].get("follow_up") is True
-        assert resp[3]["question"] == "Is there waste in your process?"
+        assert resp[2].get("skipped") is not True
+        assert resp[3]["question"] == "What do you hate?"
+        assert resp[3].get("follow_up") is True
+        assert resp[3].get("skipped") is True
+        assert resp[4]["question"] == "This never fires"
+        assert resp[4].get("skipped") is True
+        assert resp[5]["question"] == "Is there waste in your process?"
+        assert resp[5].get("follow_up") is not True
+        assert resp[6]["question"] == "Skipped always"
+        assert resp[6].get("skipped") is True
 
     def test_structured_mode_with_conditional_follow_ups(self):
         """Follow-ups use text mode and evaluate conditions against serialized structured response."""
@@ -1234,7 +1250,120 @@ class TestConditionalFollowUps:
         responses = results[0].responses
         assert responses[0].get("structured") is True
         # Structured response serialized contains "positive" → first follow-up fires
-        # "terrible" is not in the serialized response → second follow-up skipped
-        assert len(responses) == 2
+        # "terrible" is not in the serialized response → second follow-up skipped (sentinel)
+        assert len(responses) == 3
         assert responses[1].get("follow_up") is True
         assert responses[1]["question"] == "Why positive?"
+        assert responses[2].get("skipped") is True
+        assert responses[2]["question"] == "Why negative?"
+
+
+# ---------------------------------------------------------------------------
+# Skipped follow-up sentinel — skip counting and failure stats
+# ---------------------------------------------------------------------------
+
+
+class TestSkippedFollowUpSentinel:
+    def test_skipped_sentinel_has_required_fields(self):
+        """Skipped sentinel has follow_up=True, skipped=True, response=None."""
+        client = _make_mock_client([_make_text_response("No")])
+        personas = [{"name": "Alice"}]
+        questions = [
+            {
+                "text": "Do you agree?",
+                "follow_ups": [{"text": "Why?", "condition": "response_contains: yes"}],
+            }
+        ]
+
+        results, _registry, _sessions = run_panel_parallel(
+            client=client,
+            personas=personas,
+            questions=questions,
+            model="sonnet",
+            system_prompt_fn=_simple_system_prompt,
+            question_prompt_fn=_simple_question_prompt,
+        )
+
+        resp = results[0].responses
+        assert len(resp) == 2
+        sentinel = resp[1]
+        assert sentinel["follow_up"] is True
+        assert sentinel["skipped"] is True
+        assert sentinel["response"] is None
+        assert sentinel["question"] == "Why?"
+
+    def test_multiple_skips_all_have_sentinels(self):
+        """Each skipped follow-up gets its own sentinel in order."""
+        client = _make_mock_client([_make_text_response("Main answer")])
+        personas = [{"name": "Alice"}]
+        questions = [
+            {
+                "text": "Q",
+                "follow_ups": [
+                    {"text": "FU1", "condition": "never"},
+                    {"text": "FU2", "condition": "never"},
+                ],
+            }
+        ]
+
+        results, _registry, _sessions = run_panel_parallel(
+            client=client,
+            personas=personas,
+            questions=questions,
+            model="sonnet",
+            system_prompt_fn=_simple_system_prompt,
+            question_prompt_fn=_simple_question_prompt,
+        )
+
+        resp = results[0].responses
+        assert len(resp) == 3  # main + 2 skipped sentinels
+        assert resp[1]["question"] == "FU1"
+        assert resp[1]["skipped"] is True
+        assert resp[2]["question"] == "FU2"
+        assert resp[2]["skipped"] is True
+
+    def test_skipped_sentinel_preserves_positional_alignment(self):
+        """With skipped sentinels, two personas with different conditions keep
+        responses aligned positionally."""
+        # Persona Alice says "yes" → follow-up fires
+        # Persona Bob says "no" → follow-up is skipped (sentinel recorded)
+        responses = [
+            _make_text_response("yes I agree"),  # Alice main
+            _make_text_response("elaboration"),  # Alice follow-up
+            _make_text_response("no I disagree"),  # Bob main
+            # Bob's follow-up is skipped → sentinel, no LLM call
+        ]
+        client = _make_mock_client(responses)
+        personas = [{"name": "Alice"}, {"name": "Bob"}]
+        questions = [
+            {
+                "text": "Do you agree?",
+                "follow_ups": [{"text": "Why?", "condition": "response_contains: yes"}],
+            }
+        ]
+
+        results, _registry, _sessions = run_panel_parallel(
+            client=client,
+            personas=personas,
+            questions=questions,
+            model="sonnet",
+            system_prompt_fn=_simple_system_prompt,
+            question_prompt_fn=_simple_question_prompt,
+        )
+
+        alice = next(r for r in results if r.persona_name == "Alice")
+        bob = next(r for r in results if r.persona_name == "Bob")
+
+        # Both have the same response list length
+        assert len(alice.responses) == 2
+        assert len(bob.responses) == 2
+
+        # Position 0: main question for both
+        assert alice.responses[0].get("follow_up") is not True
+        assert bob.responses[0].get("follow_up") is not True
+
+        # Position 1: follow-up (answered for Alice, skipped for Bob)
+        assert alice.responses[1]["follow_up"] is True
+        assert alice.responses[1].get("skipped") is not True
+        assert bob.responses[1]["follow_up"] is True
+        assert bob.responses[1]["skipped"] is True

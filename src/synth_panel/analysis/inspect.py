@@ -71,6 +71,7 @@ class FailureStats:
     failure_rate: float
     failed_panelists: int
     errored_personas: list[str]
+    skipped_follow_ups: int = 0
 
 
 @dataclass
@@ -149,6 +150,7 @@ class InspectReport:
                 "failure_rate": self.failure_stats.failure_rate,
                 "failed_panelists": self.failure_stats.failed_panelists,
                 "errored_personas": list(self.failure_stats.errored_personas),
+                "skipped_follow_ups": self.failure_stats.skipped_follow_ups,
             },
             "has_rounds_shape": self.has_rounds_shape,
             "extraction_present": self.extraction_present,
@@ -338,11 +340,13 @@ def _collect_failure_stats(
             failure_rate=float(fs.get("failure_rate", 0.0) or 0.0),
             failed_panelists=int(fs.get("failed_panelists", 0) or 0),
             errored_personas=list(fs.get("errored_personas") or []),
+            skipped_follow_ups=int(fs.get("skipped_follow_ups", 0) or 0),
         )
 
     total = 0
     errored = 0
     failed_panelists = 0
+    skipped = 0
     bad_personas: set[str] = set()
     for p in panelists:
         name = str(p.get("persona", "unknown"))
@@ -356,6 +360,8 @@ def _collect_failure_stats(
         bad = 0
         for resp in p.get("responses") or []:
             if not isinstance(resp, dict) or resp.get("follow_up"):
+                if isinstance(resp, dict) and resp.get("skipped"):
+                    skipped += 1
                 continue
             seen += 1
             if resp.get("error"):
@@ -375,6 +381,7 @@ def _collect_failure_stats(
         failure_rate=rate,
         failed_panelists=failed_panelists,
         errored_personas=sorted(bad_personas),
+        skipped_follow_ups=skipped,
     )
 
 

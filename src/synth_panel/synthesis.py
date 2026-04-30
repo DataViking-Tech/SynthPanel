@@ -208,6 +208,8 @@ def _format_panelist_data(
         name = result.persona_name
         parts.append(f"\n### {name}")
         for resp in result.responses:
+            if resp.get("skipped"):
+                continue
             q_text = resp.get("question", "")
             answer = resp.get("response", "")
             is_follow_up = resp.get("follow_up", False)

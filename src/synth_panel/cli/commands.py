@@ -2096,6 +2096,8 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             if r.get("error"):
                 print(f"  ERROR: {r['error']}")
             for resp in r["responses"]:
+                if resp.get("skipped"):
+                    continue
                 prefix = "  [follow-up] " if resp.get("follow_up") else "  "
                 print(f"{prefix}Q: {resp['question']}")
                 print(f"{prefix}A: {resp['response']}")
@@ -2504,6 +2506,7 @@ def _analyze_failures(
     errored_pairs = 0
     failed_panelists = 0
     errored_personas: set[str] = set()
+    total_skipped_follow_ups = 0
 
     for pr in panelist_results:
         if getattr(pr, "error", None):
@@ -2521,6 +2524,10 @@ def _analyze_failures(
             if isinstance(resp, dict) and resp.get("follow_up"):
                 # Follow-ups are not counted as primary QA pairs — they
                 # are second-order and would double-count toward the rate.
+                # Skipped-by-condition follow-ups are excluded from the
+                # error denominator and tracked separately.
+                if resp.get("skipped"):
+                    total_skipped_follow_ups += 1
                 continue
             pair_count += 1
             if isinstance(resp, dict) and resp.get("error"):
@@ -2544,6 +2551,7 @@ def _analyze_failures(
         "failure_rate": failure_rate,
         "failed_panelists": failed_panelists,
         "errored_personas": sorted(errored_personas),
+        "skipped_follow_ups": total_skipped_follow_ups,
     }
 
 

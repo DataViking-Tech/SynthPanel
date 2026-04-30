@@ -189,13 +189,18 @@ def robustness_report(
         for group in scorable:
             if qi >= len(group.original.responses):
                 continue
+            orig_resp = group.original.responses[qi]
+            if orig_resp.get("skipped"):
+                continue
 
-            ref = extract(group.original.responses[qi])
+            ref = extract(orig_resp)
 
             k = 0
             agreements = 0
             for v in group.variants:
                 if qi >= len(v.responses):
+                    continue
+                if v.responses[qi].get("skipped"):
                     continue
                 k += 1
                 if extract(v.responses[qi]) == ref:
