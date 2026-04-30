@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from decimal import Decimal
 from enum import Enum
 from typing import Any, Literal
+
+from synth_panel.cost import coerce_provider_reported_cost
 
 # ---------------------------------------------------------------------------
 # Content blocks
@@ -73,9 +76,9 @@ class InputMessage:
 class TokenUsage:
     """Token consumption counters for a single LLM call.
 
-    ``provider_reported_cost`` is the authoritative USD cost as billed by
-    the upstream provider (e.g. OpenRouter's ``usage.cost``). When present,
-    downstream cost resolution prefers it over the local pricing table.
+    ``provider_reported_cost`` is stored as :class:`decimal.Decimal` after
+    ingest so multi-turn accumulation matches billing; API inputs may still
+    be floats.
 
     ``reasoning_tokens`` / ``cached_tokens`` are informational sub-counts
     already included in ``output_tokens`` / ``input_tokens`` respectively.
@@ -87,7 +90,7 @@ class TokenUsage:
     output_tokens: int = 0
     cache_write_tokens: int = 0
     cache_read_tokens: int = 0
-    provider_reported_cost: float | None = None
+    provider_reported_cost: Decimal | None = None
     reasoning_tokens: int = 0
     cached_tokens: int = 0
 
@@ -95,11 +98,18 @@ class TokenUsage:
     def total_tokens(self) -> int:
         return self.input_tokens + self.output_tokens + self.cache_write_tokens + self.cache_read_tokens
 
+    def __post_init__(self) -> None:
+        coerced = coerce_provider_reported_cost(self.provider_reported_cost)
+        if coerced is not self.provider_reported_cost:
+            object.__setattr__(self, "provider_reported_cost", coerced)
+
     def __add__(self, other: TokenUsage) -> TokenUsage:
         if self.provider_reported_cost is None and other.provider_reported_cost is None:
-            summed_cost: float | None = None
+            summed_cost: Decimal | None = None
         else:
-            summed_cost = (self.provider_reported_cost or 0.0) + (other.provider_reported_cost or 0.0)
+            a = self.provider_reported_cost or Decimal(0)
+            b = other.provider_reported_cost or Decimal(0)
+            summed_cost = a + b
         return TokenUsage(
             input_tokens=self.input_tokens + other.input_tokens,
             output_tokens=self.output_tokens + other.output_tokens,

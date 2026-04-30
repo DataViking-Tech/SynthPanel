@@ -11,18 +11,39 @@ import re
 import threading
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from decimal import Decimal
 
 logger = logging.getLogger(__name__)
+
+
+def coerce_provider_reported_cost(v: float | Decimal | str | int | None) -> Decimal | None:
+    """Normalize JSON/API cost values to ``Decimal`` for exact accumulation.
+
+    Floats round-trip via ``repr`` so single-turn ``from_dict(to_dict())`` stays
+    stable. ``None`` means absent cost (not zero).
+    """
+    if v is None:
+        return None
+    if isinstance(v, Decimal):
+        return v
+    if isinstance(v, bool):
+        raise TypeError("provider_reported_cost must not be a bool")
+    if isinstance(v, int):
+        return Decimal(v)
+    if isinstance(v, float):
+        return Decimal(repr(v))
+    if isinstance(v, str):
+        return Decimal(v)
+    raise TypeError(f"unsupported provider_reported_cost type: {type(v)!r}")
 
 
 @dataclass(frozen=True)
 class TokenUsage:
     """Immutable snapshot of token counts for a single LLM turn.
 
-    ``provider_reported_cost`` is the authoritative USD cost as billed by
-    the upstream provider (e.g. OpenRouter's ``usage.cost``). When present,
-    ``resolve_cost`` prefers it over the local pricing table; the local
-    table becomes a divergence sanity-check rather than a billing source.
+    ``provider_reported_cost`` is accumulated in :class:`decimal.Decimal`
+    internally so long runs reconcile with provider invoices; JSON and APIs
+    still use binary floats, normalized on ingest via :func:`coerce_provider_reported_cost`.
 
     ``reasoning_tokens`` / ``cached_tokens`` are informational sub-counts
     already included in ``output_tokens`` / ``input_tokens`` respectively.
@@ -32,7 +53,7 @@ class TokenUsage:
     output_tokens: int = 0
     cache_creation_input_tokens: int = 0
     cache_read_input_tokens: int = 0
-    provider_reported_cost: float | None = None
+    provider_reported_cost: Decimal | None = None
     reasoning_tokens: int = 0
     cached_tokens: int = 0
 
@@ -40,11 +61,18 @@ class TokenUsage:
     def total_tokens(self) -> int:
         return self.input_tokens + self.output_tokens + self.cache_creation_input_tokens + self.cache_read_input_tokens
 
+    def __post_init__(self) -> None:
+        coerced = coerce_provider_reported_cost(self.provider_reported_cost)
+        if coerced is not self.provider_reported_cost:
+            object.__setattr__(self, "provider_reported_cost", coerced)
+
     def __add__(self, other: TokenUsage) -> TokenUsage:
         if self.provider_reported_cost is None and other.provider_reported_cost is None:
-            summed_cost: float | None = None
+            summed_cost: Decimal | None = None
         else:
-            summed_cost = (self.provider_reported_cost or 0.0) + (other.provider_reported_cost or 0.0)
+            a = self.provider_reported_cost or Decimal(0)
+            b = other.provider_reported_cost or Decimal(0)
+            summed_cost = a + b
         return TokenUsage(
             input_tokens=self.input_tokens + other.input_tokens,
             output_tokens=self.output_tokens + other.output_tokens,
@@ -63,7 +91,7 @@ class TokenUsage:
             "cache_read_input_tokens": self.cache_read_input_tokens,
         }
         if self.provider_reported_cost is not None:
-            d["provider_reported_cost"] = self.provider_reported_cost
+            d["provider_reported_cost"] = float(self.provider_reported_cost)
         if self.reasoning_tokens:
             d["reasoning_tokens"] = self.reasoning_tokens
         if self.cached_tokens:
