@@ -838,6 +838,7 @@ class TestBuildEnsembleOutput:
             "total_usage",
             "warnings",
             "cost_is_estimated",
+            "ensemble_incidents",
             "metadata",
         }
 
@@ -848,6 +849,7 @@ class TestBuildEnsembleOutput:
 
         out = build_ensemble_output(self._fixture())
         assert out["warnings"] == []
+        assert out["ensemble_incidents"] == []
         assert out["cost_is_estimated"] is False
 
     def test_unpriced_model_surfaces_fallback_warning(self):
@@ -967,6 +969,115 @@ class TestBuildEnsembleOutput:
         meta_cost = out["metadata"]["cost"]
         summed = sum(e["cost_usd"] for e in meta_cost["per_model"].values())
         assert summed == pytest.approx(meta_cost["total_cost_usd"])
+
+    def test_partial_ensemble_question_failure_incidents_and_warnings(self):
+        """GH #312 / sp-4y5.5: per-question errors surface as ensemble_incidents."""
+        from synth_panel.cost import CostEstimate, TokenUsage
+        from synth_panel.ensemble import EnsembleResult, ModelRunResult, build_ensemble_output
+
+        usage = TokenUsage(input_tokens=10, output_tokens=5)
+        cost = CostEstimate(input_cost=0.001, output_cost=0.001)
+        bad_mr = ModelRunResult(
+            model="slow-model",
+            panelist_results=[
+                PanelistResult(
+                    persona_name="Alice",
+                    responses=[
+                        {"question": "Q1", "response": "ok", "error": False},
+                        {
+                            "question": "Q2",
+                            "response": "[error: LLMError rate_limit retries exhausted]",
+                            "error": True,
+                        },
+                    ],
+                    usage=usage,
+                    model="slow-model",
+                )
+            ],
+            usage=usage,
+            cost=cost,
+            sessions={},
+        )
+        ok_mr = ModelRunResult(
+            model="fast-model",
+            panelist_results=[
+                PanelistResult(
+                    persona_name="Alice",
+                    responses=[
+                        {"question": "Q1", "response": "ok", "error": False},
+                        {"question": "Q2", "response": "ok2", "error": False},
+                    ],
+                    usage=usage,
+                    model="fast-model",
+                )
+            ],
+            usage=usage,
+            cost=cost,
+            sessions={},
+        )
+        ens = EnsembleResult(
+            model_results=[bad_mr, ok_mr],
+            models=["slow-model", "fast-model"],
+            total_usage=usage + usage,
+            total_cost=cost + cost,
+            per_model_cost={
+                "slow-model": cost.format_usd(),
+                "fast-model": cost.format_usd(),
+            },
+            per_model_usage={
+                "slow-model": usage.to_dict(),
+                "fast-model": usage.to_dict(),
+            },
+            persona_count=1,
+            question_count=2,
+        )
+        out = build_ensemble_output(ens)
+        inc = out["ensemble_incidents"]
+        assert len(inc) == 1
+        assert inc[0]["model"] == "slow-model"
+        assert inc[0]["kind"] == "question_failure"
+        assert inc[0]["question_index"] == 1
+        assert inc[0]["rate_limit_suspected"] is True
+        assert len(out["warnings"]) >= 2
+        assert any("Ensemble partial failure" in w for w in out["warnings"])
+        assert any("rate-limit-related" in w for w in out["warnings"])
+
+    def test_panelist_level_failure_incident(self):
+        """Whole-panelist failures are recorded once per persona/model."""
+        from synth_panel.cost import CostEstimate, TokenUsage
+        from synth_panel.ensemble import EnsembleResult, ModelRunResult, build_ensemble_output
+
+        usage = TokenUsage()
+        cost = CostEstimate()
+        mr = ModelRunResult(
+            model="haiku",
+            panelist_results=[
+                PanelistResult(
+                    persona_name="Bob",
+                    responses=[],
+                    usage=usage,
+                    error="provider blew up",
+                    model="haiku",
+                )
+            ],
+            usage=usage,
+            cost=cost,
+            sessions={},
+        )
+        ens = EnsembleResult(
+            model_results=[mr],
+            models=["haiku"],
+            total_usage=usage,
+            total_cost=cost,
+            per_model_cost={"haiku": cost.format_usd()},
+            per_model_usage={"haiku": usage.to_dict()},
+            persona_count=1,
+            question_count=3,
+        )
+        out = build_ensemble_output(ens)
+        assert len(out["ensemble_incidents"]) == 1
+        assert out["ensemble_incidents"][0]["kind"] == "panelist_failure"
+        assert out["ensemble_incidents"][0]["persona"] == "Bob"
 
 
 # ---------------------------------------------------------------------------
