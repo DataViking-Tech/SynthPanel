@@ -68,6 +68,8 @@ from synth_panel.persistence import Session
 from synth_panel.perturbation import generate_panel_variants
 from synth_panel.prompts import (
     build_question_prompt,
+    compile_jinja2_template,
+    is_jinja2_template,
     load_prompt_template,
     persona_system_prompt,
     persona_system_prompt_from_template,
@@ -1072,21 +1074,54 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             print(f"Error loading extract-schema: {exc}", file=sys.stderr)
             return 1
 
-    # Load optional prompt template (--prompt-template)
+    # Load optional prompt template (--prompt-template).
+    # Compile Jinja2 templates once here (load time) so per-persona
+    # rendering only calls .render() on the pre-compiled object.
     prompt_template_path = getattr(args, "prompt_template", None)
-    prompt_template: str | None = None
+    _compiled_prompt_template = None
+    _raw_prompt_template: str | None = None
     if prompt_template_path:
         try:
-            prompt_template = load_prompt_template(prompt_template_path)
+            _raw_prompt_template = load_prompt_template(prompt_template_path)
         except FileNotFoundError as exc:
             print(f"Error loading prompt template: {exc}", file=sys.stderr)
             return 1
+        if is_jinja2_template(_raw_prompt_template):
+            import jinja2 as _jinja2
 
-    # Build the system prompt function
-    if prompt_template is not None:
+            try:
+                _compiled_prompt_template = compile_jinja2_template(_raw_prompt_template)
+            except _jinja2.TemplateSyntaxError as exc:
+                print(f"Error in Jinja2 prompt template: {exc}", file=sys.stderr)
+                return 1
+
+    # Build the system prompt function.
+    # Resolution order: --prompt-template > instrument.system_prompt_template > default
+    if _compiled_prompt_template is not None:
+        _pt = _compiled_prompt_template
 
         def system_prompt_fn(persona: dict) -> str:
-            return persona_system_prompt_from_template(persona, prompt_template)  # type: ignore[arg-type]
+            return persona_system_prompt_from_template(persona, _pt)
+
+    elif _raw_prompt_template is not None:
+        _pt_str = _raw_prompt_template
+
+        def system_prompt_fn(persona: dict) -> str:
+            return persona_system_prompt_from_template(persona, _pt_str)
+
+    elif instrument.system_prompt_template is not None:
+        _inst_spt = instrument.system_prompt_template
+        if is_jinja2_template(_inst_spt):
+            _inst_compiled = compile_jinja2_template(_inst_spt)
+
+            def system_prompt_fn(persona: dict) -> str:
+                return persona_system_prompt_from_template(persona, _inst_compiled)
+
+        else:
+
+            def system_prompt_fn(persona: dict) -> str:
+                return persona_system_prompt_from_template(persona, _inst_spt)
+
     else:
         system_prompt_fn = persona_system_prompt
 
