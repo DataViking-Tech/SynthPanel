@@ -2096,6 +2096,11 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             if r.get("error"):
                 print(f"  ERROR: {r['error']}")
             for resp in r["responses"]:
+                if resp.get("skipped_by_condition"):
+                    print(f"  [follow-up] Q: {resp['question']}")
+                    print("  [follow-up] A: (skipped — condition not met)")
+                    print()
+                    continue
                 prefix = "  [follow-up] " if resp.get("follow_up") else "  "
                 print(f"{prefix}Q: {resp['question']}")
                 print(f"{prefix}A: {resp['response']}")
@@ -2165,6 +2170,9 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 "cost line reflects that no tokens were billed)",
                 file=sys.stderr,
             )
+        skipped_fu = failure_stats.get("skipped_follow_ups", 0)
+        if skipped_fu:
+            print(f"  ({skipped_fu} follow-up(s) skipped by condition)")
         if banner:
             # Repeat the banner at the bottom so a scrolled terminal still
             # surfaces it — this is the critical fix for sp-2hg.
@@ -2495,15 +2503,21 @@ def _analyze_failures(
       - an individual response dict was flagged ``error: True`` (the
         orchestrator sets this when a per-question call raises).
 
+    Follow-ups skipped by condition (``skipped_by_condition: True``) are
+    excluded from both the numerator and denominator — they are intentional
+    non-answers, not failures.
+
     Returns a dict with ``total_pairs``, ``errored_pairs``,
     ``failure_rate`` (0-1), ``failed_panelists`` (panelist-level
-    failures) and ``errored_personas`` (names of affected personas).
+    failures), ``errored_personas`` (names of affected personas), and
+    ``skipped_follow_ups`` (total follow-ups skipped by condition).
     """
     total_questions = len(questions) if questions else 0
     total_pairs = 0
     errored_pairs = 0
     failed_panelists = 0
     errored_personas: set[str] = set()
+    skipped_follow_ups = 0
 
     for pr in panelist_results:
         if getattr(pr, "error", None):
@@ -2521,6 +2535,8 @@ def _analyze_failures(
             if isinstance(resp, dict) and resp.get("follow_up"):
                 # Follow-ups are not counted as primary QA pairs — they
                 # are second-order and would double-count toward the rate.
+                if resp.get("skipped_by_condition"):
+                    skipped_follow_ups += 1
                 continue
             pair_count += 1
             if isinstance(resp, dict) and resp.get("error"):
@@ -2544,6 +2560,7 @@ def _analyze_failures(
         "failure_rate": failure_rate,
         "failed_panelists": failed_panelists,
         "errored_personas": sorted(errored_personas),
+        "skipped_follow_ups": skipped_follow_ups,
     }
 
 

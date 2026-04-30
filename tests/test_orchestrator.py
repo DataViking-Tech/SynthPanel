@@ -1065,7 +1065,11 @@ class TestConditionalFollowUps:
             question_prompt_fn=_simple_question_prompt,
         )
 
-        assert len(results[0].responses) == 1
+        assert len(results[0].responses) == 2
+        stub = results[0].responses[1]
+        assert stub.get("skipped_by_condition") is True
+        assert stub.get("follow_up") is True
+        assert stub["response"] is None
 
     def test_response_contains_fires_on_match(self):
         """Follow-up fires when response contains the keyword."""
@@ -1119,7 +1123,11 @@ class TestConditionalFollowUps:
             question_prompt_fn=_simple_question_prompt,
         )
 
-        assert len(results[0].responses) == 1
+        assert len(results[0].responses) == 2
+        stub = results[0].responses[1]
+        assert stub.get("skipped_by_condition") is True
+        assert stub.get("follow_up") is True
+        assert stub["response"] is None
 
     def test_dict_follow_up_without_condition_defaults_always(self):
         """Dict follow-up missing condition key defaults to always."""
@@ -1189,14 +1197,17 @@ class TestConditionalFollowUps:
         )
 
         resp = results[0].responses
-        # Q1 main + 2 follow-ups (always + tools match) + Q2 main = 4
-        assert len(resp) == 4
+        # Q1 main + 2 answered follow-ups + 2 skipped stubs + Q2 main + 1 skipped stub = 7
+        assert len(resp) == 7
         assert resp[0]["question"] == "What's your testing workflow?"
         assert resp[1]["question"] == "What frameworks?"
         assert resp[1].get("follow_up") is True
         assert resp[2]["question"] == "Which tools?"
         assert resp[2].get("follow_up") is True
-        assert resp[3]["question"] == "Is there waste in your process?"
+        assert resp[3].get("skipped_by_condition") is True
+        assert resp[4].get("skipped_by_condition") is True
+        assert resp[5]["question"] == "Is there waste in your process?"
+        assert resp[6].get("skipped_by_condition") is True
 
     def test_structured_mode_with_conditional_follow_ups(self):
         """Follow-ups use text mode and evaluate conditions against serialized structured response."""
@@ -1234,7 +1245,9 @@ class TestConditionalFollowUps:
         responses = results[0].responses
         assert responses[0].get("structured") is True
         # Structured response serialized contains "positive" → first follow-up fires
-        # "terrible" is not in the serialized response → second follow-up skipped
-        assert len(responses) == 2
+        # "terrible" is not in the serialized response → second follow-up skipped (stub)
+        assert len(responses) == 3
         assert responses[1].get("follow_up") is True
         assert responses[1]["question"] == "Why positive?"
+        assert responses[2].get("skipped_by_condition") is True
+        assert responses[2]["question"] == "Why negative?"

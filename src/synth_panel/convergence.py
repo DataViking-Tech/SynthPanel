@@ -132,10 +132,7 @@ def _lead_interpretation_for_uniform_skew(
     signal for panel operators.
     """
     if chi2_warning:
-        reliability = (
-            f"p={p_value:.4g} (approximate - {chi2_warning.rstrip('.')}); "
-            "treat effect size as directional."
-        )
+        reliability = f"p={p_value:.4g} (approximate - {chi2_warning.rstrip('.')}); treat effect size as directional."
     else:
         reliability = f"p={p_value:.4g} vs discrete uniform over {n_categories} categories (n={total_n})."
 
