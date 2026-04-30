@@ -11,6 +11,14 @@
         "baseline_spec": "gss:HAPPY",
         "extractor": "pick_one:auto-derived",
         "auto_derived": true
+      },
+      "skew_vs_uniform": {
+        "chi2": 3.8,
+        "chi2_warning": "Some expected count(s) < 5 (min=3.3). Chi-squared approximation may be unreliable.",
+        "cramers_v": 0.43589,
+        "df": 2,
+        "lead_interpretation": "Cramer's V=0.436 (medium effect vs uniform). Moderate concentration - one or a few options dominate. Pair with diversity warnings and question wording to rule out a leading prompt. p=0.1496 (approximate - Some expected count(s) < 5 (min=3.3). Chi-squared approximation may be unreliable); treat effect size as directional.",
+        "p_value": 0.149569
       }
     },
     "color": {
@@ -24,6 +32,13 @@
         "extractor": "pick_one:auto-derived",
         "auto_derived": true,
         "alignment_error": "['blue', 'red'] vs ['Not too happy', 'Pretty happy', 'Very happy']"
+      },
+      "skew_vs_uniform": {
+        "chi2": 1.6,
+        "cramers_v": 0.4,
+        "df": 1,
+        "lead_interpretation": "Cramer's V=0.400 (medium effect vs uniform). Moderate concentration - one or a few options dominate. Pair with diversity warnings and question wording to rule out a leading prompt. p=0.2059 vs discrete uniform over 2 categories (n=10).",
+        "p_value": 0.205903
       }
     }
   }
