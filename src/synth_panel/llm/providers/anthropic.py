@@ -75,14 +75,20 @@ def _build_content_blocks(blocks: list[ContentBlock]) -> list[dict[str, Any]]:
 
 def _build_messages(request: CompletionRequest) -> list[dict[str, Any]]:
     """Convert InputMessages to Anthropic API format."""
+    last_user_idx = -1
+    for i, msg in enumerate(request.messages):
+        if msg.role == "user":
+            last_user_idx = i
+
     result = []
-    for msg in request.messages:
-        result.append(
-            {
-                "role": msg.role,
-                "content": _build_content_blocks(msg.content),
-            }
-        )
+    for i, msg in enumerate(request.messages):
+        content = _build_content_blocks(msg.content)
+        if i == last_user_idx and content:
+            for j in range(len(content) - 1, -1, -1):
+                if content[j].get("type") == "text":
+                    content[j] = {**content[j], "cache_control": {"type": "ephemeral"}}
+                    break
+        result.append({"role": msg.role, "content": content})
     return result
 
 
@@ -158,7 +164,7 @@ class AnthropicProvider(LLMProvider):
             "messages": _build_messages(request),
         }
         if request.system:
-            body["system"] = request.system
+            body["system"] = [{"type": "text", "text": request.system, "cache_control": {"type": "ephemeral"}}]
         tools = _build_tools(request)
         if tools is not None:
             body["tools"] = tools
