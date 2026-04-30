@@ -36,7 +36,12 @@ from synth_panel.checkpoint import (
     load_checkpoint,
     new_run_id,
 )
-from synth_panel.cli.output import OutputFormat, emit
+from synth_panel.cli.output import (
+    OutputFormat,
+    emit,
+    format_prose_for_inspect,
+    terminal_columns,
+)
 from synth_panel.convergence import (
     DEFAULT_CHECK_EVERY,
     DEFAULT_EPSILON,
@@ -3265,6 +3270,117 @@ def handle_pack_show(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """
     args.output = None
     return handle_pack_export(args, fmt)
+
+
+def handle_pack_inspect(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Human-readable pack summary with wrapped long fields (GH #311).
+
+    Text mode word-wraps long prose to the terminal width unless
+    ``--full`` is set (preserves newlines, no wrapping). JSON/NDJSON
+    emit the raw pack payload plus ``full`` under ``inspect``.
+    """
+    from synth_panel.mcp.data import get_persona_pack
+
+    try:
+        pack = get_persona_pack(args.pack_id)
+    except FileNotFoundError as exc:
+        msg = f"Error: {exc}"
+        if fmt is OutputFormat.TEXT:
+            print(msg, file=sys.stderr)
+        else:
+            emit(fmt, message=msg, extra={"error": "not_found", "pack_id": args.pack_id})
+        return 1
+
+    full = bool(getattr(args, "full", False))
+    personas = pack.get("personas")
+    if not isinstance(personas, list):
+        personas = []
+
+    pid = pack.get("id", args.pack_id)
+
+    if fmt is not OutputFormat.TEXT:
+        export_body = {k: v for k, v in pack.items() if k != "id"}
+        emit(
+            fmt,
+            message="Pack inspect",
+            extra={
+                "inspect": {
+                    "pack_id": pid,
+                    "full": full,
+                    "name": pack.get("name", ""),
+                    "version": pack.get("version", ""),
+                    "author": pack.get("author", ""),
+                    "description": pack.get("description", ""),
+                    "persona_count": len(personas),
+                    "personas": personas,
+                }
+            },
+        )
+        return 0
+
+    wrap_w = terminal_columns()
+    lines: list[str] = []
+    lines.append(f"Pack: {pid}")
+    lines.append(f"  Name: {pack.get('name', '')}")
+    lines.append(f"  Version: {pack.get('version', '')}")
+    lines.append(f"  Author: {pack.get('author', '')}")
+    lines.append("  Description:")
+    lines.extend(
+        format_prose_for_inspect(
+            str(pack.get("description") or ""),
+            wrap_width=wrap_w,
+            full=full,
+        )
+    )
+    lines.append(f"  Personas: {len(personas)}")
+    for i, persona in enumerate(personas, start=1):
+        if not isinstance(persona, dict):
+            lines.append("")
+            lines.append(f"  [{i}] (invalid persona entry — expected mapping)")
+            continue
+        lines.append("")
+        lines.append(f"  [{i}] {persona.get('name', '(unnamed)')}")
+        age = persona.get("age")
+        if age is not None:
+            lines.append(f"      Age: {age}")
+        occ = persona.get("occupation")
+        if occ:
+            lines.append("      Occupation:")
+            lines.extend(
+                format_prose_for_inspect(
+                    str(occ),
+                    wrap_width=wrap_w,
+                    full=full,
+                    indent="        ",
+                )
+            )
+        lines.append("      Background:")
+        lines.extend(
+            format_prose_for_inspect(
+                str(persona.get("background") or ""),
+                wrap_width=wrap_w,
+                full=full,
+                indent="        ",
+            )
+        )
+        traits = persona.get("personality_traits")
+        if traits is not None:
+            if isinstance(traits, list):
+                tstr = ", ".join(str(t) for t in traits if t is not None)
+            else:
+                tstr = str(traits)
+            lines.append("      Traits:")
+            lines.extend(
+                format_prose_for_inspect(
+                    tstr,
+                    wrap_width=wrap_w,
+                    full=full,
+                    indent="        ",
+                )
+            )
+
+    print("\n".join(lines))
+    return 0
 
 
 def handle_pack_generate(args: argparse.Namespace, fmt: OutputFormat) -> int:

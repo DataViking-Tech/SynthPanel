@@ -650,7 +650,7 @@ def build_parser() -> argparse.ArgumentParser:
     # pack
     pack_parser = subparsers.add_parser(
         "pack",
-        help="Persona pack management: list, import, export, show.",
+        help="Persona pack management: list, import, export, show, inspect, …",
     )
     pack_subparsers = pack_parser.add_subparsers(dest="pack_command")
 
@@ -744,6 +744,22 @@ def build_parser() -> argparse.ArgumentParser:
         "pack_id",
         metavar="PACK_ID",
         help="ID of the persona pack to show.",
+    )
+
+    # pack inspect (GH #311): human-readable summary; wraps long prose by default
+    pack_inspect_parser = pack_subparsers.add_parser(
+        "inspect",
+        help="Print a persona pack summary (wraps long fields; use --full for raw text).",
+    )
+    pack_inspect_parser.add_argument(
+        "pack_id",
+        metavar="PACK_ID",
+        help="ID of the persona pack to inspect.",
+    )
+    pack_inspect_parser.add_argument(
+        "--full",
+        action="store_true",
+        help="Show complete long fields without terminal wrapping (preserves newlines).",
     )
 
     # pack generate (sp-5on.18: LLM-based persona generation)

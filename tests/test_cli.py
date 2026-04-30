@@ -2172,6 +2172,71 @@ class TestPackCommands:
         code = main(["pack", "show", "nope"])
         assert code == 1
 
+    def test_pack_inspect_wraps_long_prose(self, capsys, monkeypatch):
+        """GH #311: long description / persona fields wrap to terminal width."""
+        from synth_panel.cli import commands as cli_commands
+        from synth_panel.mcp.data import save_persona_pack
+
+        monkeypatch.setattr(cli_commands, "terminal_columns", lambda fallback=80: 36)
+        long_bg = "word " * 20
+        save_persona_pack(
+            "Wrap Pack",
+            [
+                {
+                    "name": "Pat",
+                    "age": 41,
+                    "occupation": "Senior " + "Engineer " * 8,
+                    "background": long_bg,
+                    "personality_traits": ["analytical", "precise"],
+                }
+            ],
+            pack_id="wrap-pack",
+        )
+        code = main(["pack", "inspect", "wrap-pack"])
+        assert code == 0
+        out = capsys.readouterr().out
+        # Wrapped output should not be one giant line for the pack body.
+        assert out.count("\n") > 12
+        assert "Pat" in out
+        assert "Occupation:" in out
+
+    def test_pack_inspect_full_preserves_newlines(self, capsys):
+        """--full keeps paragraph breaks in persona background."""
+        from synth_panel.mcp.data import save_persona_pack
+
+        save_persona_pack(
+            "Full Pack",
+            [
+                {
+                    "name": "Quinn",
+                    "background": "First line.\n\nSecond paragraph here.",
+                }
+            ],
+            pack_id="full-pack",
+        )
+        code = main(["pack", "inspect", "full-pack", "--full"])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "First line." in out
+        assert "Second paragraph here." in out
+        # Blank line between paragraphs should appear in output.
+        assert "\n\n" in out
+
+    def test_pack_inspect_json_includes_full_flag(self, capsys):
+        from synth_panel.mcp.data import save_persona_pack
+
+        save_persona_pack("J", [{"name": "Y"}], pack_id="jpack")
+        code = main(["--output-format", "json", "pack", "inspect", "jpack", "--full"])
+        assert code == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["message"] == "Pack inspect"
+        assert payload["inspect"]["full"] is True
+        assert payload["inspect"]["pack_id"] == "jpack"
+
+    def test_pack_inspect_not_found(self, capsys):
+        code = main(["pack", "inspect", "missing-pack-id"])
+        assert code == 1
+
     def test_pack_list_json(self, capsys):
         from synth_panel.mcp.data import save_persona_pack
 
