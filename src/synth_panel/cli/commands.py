@@ -45,6 +45,7 @@ from synth_panel.cli.output import (
     format_prose_for_inspect,
     terminal_columns,
 )
+from synth_panel.cli.progress import PanelProgressBar
 from synth_panel.convergence import (
     DEFAULT_CHECK_EVERY,
     DEFAULT_EPSILON,
@@ -1722,12 +1723,16 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         # Flatten all panelist results across models for output + synthesis
         panelist_results = [pr for mr in ensemble.model_results for pr in mr.panelist_results]
     else:
+        # Show a live progress bar when the user is watching a TTY in text mode.
+        _show_progress = fmt is OutputFormat.TEXT and sys.stdout.isatty() and bool(active_personas)
+        progress: PanelProgressBar | None = PanelProgressBar(len(active_personas), model) if _show_progress else None
 
         def _on_complete(pr: PanelistResult) -> None:
-            if checkpoint_writer is None:
-                return
-            record = _panelist_result_to_ckpt_dict(pr, model)
-            checkpoint_writer.record_completed(record, pr.usage.to_dict())
+            if checkpoint_writer is not None:
+                record = _panelist_result_to_ckpt_dict(pr, model)
+                checkpoint_writer.record_completed(record, pr.usage.to_dict())
+            if progress is not None:
+                progress.update(pr.usage)
 
         # sp-utnk: instantiate the gate against the panelists actually being
         # dispatched in this invocation. On a fresh run this is all personas;
@@ -1751,7 +1756,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 persona_models=persona_models,
                 max_workers=max_concurrent,
                 convergence_tracker=convergence_tracker,
-                on_panelist_complete=_on_complete if checkpoint_writer else None,
+                on_panelist_complete=_on_complete if (checkpoint_writer is not None or progress is not None) else None,
                 cost_gate=cost_gate,
             )
         except RunAbortedError as abort_exc:
@@ -1769,6 +1774,8 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 file=sys.stderr,
             )
         finally:
+            if progress is not None:
+                progress.close()
             if checkpoint_writer is not None:
                 try:
                     checkpoint_writer.flush(force=True)
