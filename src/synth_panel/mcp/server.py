@@ -822,6 +822,9 @@ async def run_prompt(
             max_tokens=4096,
             temperature=temperature,
         )
+        # sp-k2ed4a: surface host-side truncation so callers see why a
+        # prompt response is short, not just a generic empty result.
+        warnings = [sample["warning"]] if sample.get("truncated") and sample.get("warning") else []
         return json.dumps(
             {
                 "response": sample["text"],
@@ -830,6 +833,7 @@ async def run_prompt(
                 "usage": None,
                 "cost": None,
                 "hint": decision.hint,
+                "warnings": warnings,
             },
             indent=2,
         )
@@ -1439,6 +1443,10 @@ async def _run_panel_sampling(
     question_texts = [str(q["text"]) for q in questions]
     joined_questions = "\n\n".join(f"Q{i + 1}: {t}" for i, t in enumerate(question_texts))
 
+    # sp-k2ed4a: collect host-side truncation warnings so the run summary
+    # can flag turns that were silently cut off by the host's max_tokens
+    # ceiling (otherwise indistinguishable from generic schema-fail).
+    sampling_warnings: list[str] = []
     for i, persona in enumerate(personas):
         system_prompt = persona_system_prompt(persona)
         user_prompt = (
@@ -1453,6 +1461,9 @@ async def _run_panel_sampling(
             temperature=temperature,
         )
         host_model = sample["model"]
+        if sample.get("truncated") and sample.get("warning"):
+            persona_name = persona.get("name", f"persona_{i}")
+            sampling_warnings.append(f"panelist '{persona_name}': {sample['warning']}")
         # Surface the full answer string against every question so the
         # output matches BYOK shape: one response entry per question.
         responses = [{"question": q_text, "answer": sample["text"]} for q_text in question_texts]
@@ -1483,6 +1494,8 @@ async def _run_panel_sampling(
             max_tokens=SAMPLING_MAX_TOKENS_DEFAULT,
             temperature=temperature,
         )
+        if synth.get("truncated") and synth.get("warning"):
+            sampling_warnings.append(f"synthesis: {synth['warning']}")
         synthesis_block = {
             "summary": synth["text"],
             "model": synth["model"],
@@ -1505,7 +1518,7 @@ async def _run_panel_sampling(
         ],
         "synthesis": synthesis_block,
         "path": [],
-        "warnings": [],
+        "warnings": sampling_warnings,
         "usage": None,
         "cost": None,
         "metadata": None,
@@ -1538,6 +1551,7 @@ async def _run_quick_poll_sampling(
     await ctx.report_progress(0, len(personas))
     panelist_entries: list[dict[str, Any]] = []
     host_model: str | None = None
+    sampling_warnings: list[str] = []
     for i, persona in enumerate(personas):
         system_prompt = persona_system_prompt(persona)
         user_prompt = build_question_prompt({"text": question})
@@ -1549,6 +1563,9 @@ async def _run_quick_poll_sampling(
             temperature=temperature,
         )
         host_model = sample["model"]
+        if sample.get("truncated") and sample.get("warning"):
+            persona_name = persona.get("name", f"persona_{i}")
+            sampling_warnings.append(f"panelist '{persona_name}': {sample['warning']}")
         panelist_entries.append(
             {
                 "persona": persona,
@@ -1578,6 +1595,8 @@ async def _run_quick_poll_sampling(
             max_tokens=2048,
             temperature=temperature,
         )
+        if synth.get("truncated") and synth.get("warning"):
+            sampling_warnings.append(f"synthesis: {synth['warning']}")
         synthesis_block = {
             "summary": synth["text"],
             "model": synth["model"],
@@ -1600,7 +1619,7 @@ async def _run_quick_poll_sampling(
         ],
         "synthesis": synthesis_block,
         "path": [],
-        "warnings": [],
+        "warnings": sampling_warnings,
         "usage": None,
         "cost": None,
         "metadata": None,

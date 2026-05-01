@@ -16,6 +16,7 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ### Changed (loudness)
 - (sp-g59o) Detection: warn loudly when synthesis output appears unstructured (likely model schema-adherence flake). Triggered when every list field — themes, agreements, disagreements, surprises — is empty while the recommendation slot carries >600 chars of prose. Surfaces as a `synth_panel.synthesis` `logger.warning`, on `SynthesisResult.warnings`, and propagated up to `PanelResult.warnings`. Schema-honoring runs are unchanged. Observed at ~25% on `gemini-flash-lite` synthesis; detection is provider-agnostic.
+- (sp-k2ed4a) MCP sampling truncation surfacing: `synth_panel.mcp.sampling.sample_text` now detects host-side `stopReason="maxTokens"` truncation, logs a `logger.warning`, and returns `truncated`/`requested_max_tokens`/`warning` fields. The sampling paths in `run_prompt`, `run_panel`, and `run_quick_poll` propagate truncated turns into the response `warnings` list with persona/synthesis labels, so a failed structured-output parse can be attributed to the host clipping output rather than the model ignoring the schema. No protocol-level startup check is possible — MCP capability negotiation does not expose the host's max_tokens cap — so per-turn detection is the loud surface.
 
 ## [0.12.0] - 2026-04-26
 

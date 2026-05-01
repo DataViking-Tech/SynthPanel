@@ -226,7 +226,12 @@ class TestDecideMode:
 # ---------------------------------------------------------------------------
 
 
-def _make_sampling_ctx(supports: bool, *, sample_text: str = "sampled!"):
+def _make_sampling_ctx(
+    supports: bool,
+    *,
+    sample_text: str = "sampled!",
+    stop_reason: str = "endTurn",
+):
     """Build a MagicMock Context that the tool can invoke without
     hitting the FastMCP test harness's Context auto-injection path."""
     ctx = MagicMock()
@@ -241,7 +246,7 @@ def _make_sampling_ctx(supports: bool, *, sample_text: str = "sampled!"):
         msg.content = text_block
         msg.model = "host-agent-model"
         msg.role = "assistant"
-        msg.stopReason = "endTurn"
+        msg.stopReason = stop_reason
         return msg
 
     ctx.session.create_message = AsyncMock(side_effect=_create_message)
@@ -525,3 +530,211 @@ class TestRunPanelSampling:
         assert "error" in data
         assert "ANTHROPIC_API_KEY" in data["error"]
         ctx.session.create_message.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# sp-k2ed4a — host-side max_tokens truncation detection
+# ---------------------------------------------------------------------------
+
+
+class TestSampleTextTruncationDetection:
+    """Unit tests for the new truncation flag on ``sample_text``."""
+
+    @pytest.mark.asyncio
+    async def test_max_tokens_stop_reason_flags_truncation(self):
+        from synth_panel.mcp.sampling import sample_text
+
+        ctx = _make_sampling_ctx(
+            supports=True,
+            sample_text='{"summary":"partial',
+            stop_reason="maxTokens",
+        )
+        result = await sample_text(ctx, prompt="hi", max_tokens=256)
+
+        assert result["truncated"] is True
+        assert result["stop_reason"] == "maxTokens"
+        assert result["requested_max_tokens"] == 256
+        assert result["warning"] is not None
+        assert "256" in result["warning"]
+        assert "host-agent-model" in result["warning"]
+
+    @pytest.mark.asyncio
+    async def test_end_turn_stop_reason_does_not_flag_truncation(self):
+        from synth_panel.mcp.sampling import sample_text
+
+        ctx = _make_sampling_ctx(supports=True, sample_text="full reply", stop_reason="endTurn")
+        result = await sample_text(ctx, prompt="hi", max_tokens=4096)
+
+        assert result["truncated"] is False
+        assert result["warning"] is None
+        assert result["requested_max_tokens"] == 4096
+
+    @pytest.mark.asyncio
+    async def test_other_stop_reasons_do_not_flag_truncation(self):
+        # ``stopSequence`` and ``toolUse`` are well-formed terminations —
+        # only ``maxTokens`` indicates host-side cap truncation.
+        from synth_panel.mcp.sampling import sample_text
+
+        for reason in ("stopSequence", "toolUse"):
+            ctx = _make_sampling_ctx(supports=True, stop_reason=reason)
+            result = await sample_text(ctx, prompt="hi", max_tokens=2048)
+            assert result["truncated"] is False, reason
+            assert result["warning"] is None, reason
+
+    @pytest.mark.asyncio
+    async def test_truncation_logs_warning(self, caplog):
+        import logging
+
+        from synth_panel.mcp.sampling import sample_text
+
+        ctx = _make_sampling_ctx(
+            supports=True,
+            sample_text="cut off",
+            stop_reason="maxTokens",
+        )
+        with caplog.at_level(logging.WARNING, logger="synth_panel.mcp.sampling"):
+            await sample_text(ctx, prompt="hi", max_tokens=512)
+
+        assert any(
+            "MCP sampling truncated" in r.message and "requested_max_tokens=512" in r.message for r in caplog.records
+        )
+
+
+class TestRunPromptTruncationWarnings:
+    """sp-k2ed4a integration: ``run_prompt`` surfaces truncation warnings."""
+
+    @pytest.mark.asyncio
+    async def test_truncation_in_sampling_branch_surfaces_warning(self):
+        from synth_panel.mcp.server import run_prompt
+
+        ctx = _make_sampling_ctx(
+            supports=True,
+            sample_text="partial json",
+            stop_reason="maxTokens",
+        )
+        raw = await run_prompt(prompt="anything", ctx=ctx)
+        data = json.loads(raw)
+
+        assert data["mode"] == "sampling"
+        assert data["warnings"]  # non-empty
+        assert "truncated" in data["warnings"][0].lower()
+
+    @pytest.mark.asyncio
+    async def test_no_truncation_yields_empty_warnings_list(self):
+        from synth_panel.mcp.server import run_prompt
+
+        ctx = _make_sampling_ctx(supports=True, sample_text="ok", stop_reason="endTurn")
+        raw = await run_prompt(prompt="anything", ctx=ctx)
+        data = json.loads(raw)
+
+        assert data["mode"] == "sampling"
+        assert data["warnings"] == []
+
+
+class TestRunPanelSamplingTruncationWarnings:
+    """sp-k2ed4a integration: panel sampling propagates per-turn truncation."""
+
+    @pytest.mark.asyncio
+    async def test_panelist_truncation_appears_in_warnings(self):
+        from synth_panel.mcp.server import run_panel
+
+        ctx = _make_sampling_ctx(
+            supports=True,
+            sample_text="cut off",
+            stop_reason="maxTokens",
+        )
+        raw = await run_panel(
+            questions=[{"text": "What do you think?"}],
+            personas=[{"name": "Alice"}, {"name": "Bob"}],
+            synthesis=False,
+            ctx=ctx,
+        )
+        data = json.loads(raw)
+
+        assert data["mode"] == "sampling"
+        # One warning per panelist when every turn was truncated.
+        assert len(data["warnings"]) == 2
+        assert all("truncated" in w.lower() for w in data["warnings"])
+        # Persona name is included so operators can pinpoint the turn.
+        assert any("Alice" in w for w in data["warnings"])
+        assert any("Bob" in w for w in data["warnings"])
+
+    @pytest.mark.asyncio
+    async def test_synthesis_truncation_labelled_separately(self):
+        from synth_panel.mcp.server import run_panel
+
+        ctx = _make_sampling_ctx(
+            supports=True,
+            sample_text="part",
+            stop_reason="maxTokens",
+        )
+        raw = await run_panel(
+            questions=[{"text": "Q1?"}],
+            personas=[{"name": "Alice"}],
+            synthesis=True,
+            ctx=ctx,
+        )
+        data = json.loads(raw)
+
+        # 1 panelist + 1 synthesis = 2 warnings, with the synthesis
+        # turn distinguishable by the "synthesis:" prefix.
+        assert len(data["warnings"]) == 2
+        assert any(w.startswith("synthesis:") for w in data["warnings"])
+        assert any(w.startswith("panelist") for w in data["warnings"])
+
+    @pytest.mark.asyncio
+    async def test_clean_run_yields_empty_warnings(self):
+        from synth_panel.mcp.server import run_panel
+
+        ctx = _make_sampling_ctx(supports=True, sample_text="full reply", stop_reason="endTurn")
+        raw = await run_panel(
+            questions=[{"text": "Q1?"}],
+            personas=[{"name": "Alice"}],
+            synthesis=True,
+            ctx=ctx,
+        )
+        data = json.loads(raw)
+
+        assert data["warnings"] == []
+
+
+class TestRunQuickPollSamplingTruncationWarnings:
+    @pytest.mark.asyncio
+    async def test_quick_poll_truncation_surfaces_warnings(self):
+        from synth_panel.mcp.server import run_quick_poll
+
+        ctx = _make_sampling_ctx(
+            supports=True,
+            sample_text="cut",
+            stop_reason="maxTokens",
+        )
+        raw = await run_quick_poll(
+            question="Sky blue?",
+            personas=[{"name": "Alice"}],
+            ctx=ctx,
+        )
+        data = json.loads(raw)
+
+        # 1 panelist + 1 synthesis = 2 truncated turns surfaced.
+        assert data["mode"] == "sampling"
+        assert len(data["warnings"]) == 2
+        assert any(w.startswith("panelist 'Alice'") for w in data["warnings"])
+        assert any(w.startswith("synthesis:") for w in data["warnings"])
+
+
+class TestBuildTruncationWarning:
+    def test_includes_max_tokens_and_model(self):
+        from synth_panel.mcp.sampling import build_truncation_warning
+
+        msg = build_truncation_warning(max_tokens=512, model="claude-opus-4-6")
+        assert "512" in msg
+        assert "claude-opus-4-6" in msg
+        # Operator-actionable hint to set BYOK key for longer schemas.
+        assert "ANTHROPIC_API_KEY" in msg
+
+    def test_no_model_omits_model_part(self):
+        from synth_panel.mcp.sampling import build_truncation_warning
+
+        msg = build_truncation_warning(max_tokens=2048, model=None)
+        assert "2048" in msg
+        assert "(host model:" not in msg
