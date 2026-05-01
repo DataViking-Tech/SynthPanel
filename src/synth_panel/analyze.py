@@ -12,6 +12,9 @@ Plus a warnings section that flags statistical concerns.
 from __future__ import annotations
 
 import contextlib as _contextlib
+import csv
+import io
+import json as _json
 import math
 from dataclasses import dataclass
 from typing import Any
@@ -543,3 +546,299 @@ def format_csv(result: AnalysisResult) -> str:
             lines.append(f"convergence,{f.question_index},{f.alpha:.4f},{f.level.value},{f.top_choice_agreement}")
 
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Responses CSV (raw spreadsheet export, sp-tzavk0 / GH #297)
+# ---------------------------------------------------------------------------
+
+# One row per (panelist, question) pair. This is a flat, spreadsheet-friendly
+# export — distinct from ``format_csv`` above, which serializes per-question
+# analytical statistics. Power users still reach for the JSON output for
+# programmatic access; this format exists so a researcher can drop responses
+# into Excel / Google Sheets for ad-hoc coding and pivot tables.
+
+DEFAULT_RESPONSE_CSV_COLUMNS: tuple[str, ...] = (
+    "persona_id",
+    "persona_name",
+    "question_id",
+    "question_text",
+    "response",
+    "response_type",
+    "cost",
+)
+
+_RESPONSE_CSV_COLUMNS: frozenset[str] = frozenset(DEFAULT_RESPONSE_CSV_COLUMNS) | frozenset(
+    {
+        "model",
+        "variant_of",
+        "input_tokens",
+        "output_tokens",
+        "error",
+    }
+)
+
+# Map instrument response_schema.type → human-readable label used in the
+# ``response_type`` column. Anything else (or missing schema) becomes
+# "free-text", matching the issue's "free-text / likert / multiple-choice"
+# vocabulary.
+_RESPONSE_TYPE_LABELS: dict[str, str] = {
+    "text": "free-text",
+    "scale": "likert",
+    "enum": "multiple-choice",
+    "tagged_themes": "tagged-themes",
+}
+
+# Cells beginning with these characters can be interpreted as formulas by
+# Excel / Google Sheets / Numbers. Prefix with a single quote to neutralize
+# the formula trigger; the leading quote is stripped on import in most
+# spreadsheet apps but the cell is rendered as plain text.
+_CSV_FORMULA_TRIGGERS: tuple[str, ...] = ("=", "+", "-", "@")
+_CSV_CONTROL_TRIGGERS: tuple[str, ...] = ("\t", "\r")
+
+
+def _csv_safe_cell(value: Any) -> str:
+    """Escape a cell value to neutralize spreadsheet formula injection.
+
+    Per OWASP CSV-injection guidance, we prefix any cell beginning with a
+    formula-trigger character (``=``, ``+``, ``-``, ``@``) or a control
+    character (``\\t``, ``\\r``) with a single quote. The Python ``csv``
+    module handles quoting of embedded commas, newlines, and double quotes
+    via ``QUOTE_MINIMAL``; this helper only adds the formula-injection
+    safeguard on top.
+    """
+    if value is None:
+        return ""
+    s = value if isinstance(value, str) else str(value)
+    if not s:
+        return s
+    if s[0] in _CSV_FORMULA_TRIGGERS or s[0] in _CSV_CONTROL_TRIGGERS:
+        return "'" + s
+    return s
+
+
+def _render_response_cell(response_entry: dict[str, Any]) -> str:
+    """Render the ``response`` column for one response.
+
+    Strings pass through verbatim. Structured payloads (dict/list responses
+    or an ``extraction`` payload) are JSON-serialized so the cell carries
+    the full value. For Likert/multiple-choice schemas the extraction often
+    holds the canonical category — we still emit the JSON form so the cell
+    is unambiguous; researchers who want only the chosen value can pull
+    from JSON and re-export.
+    """
+    if not isinstance(response_entry, dict):
+        return ""
+    if response_entry.get("error"):
+        return ""
+    raw = response_entry.get("response")
+    if isinstance(raw, str):
+        return raw
+    if isinstance(raw, (dict, list)):
+        return _json.dumps(raw, ensure_ascii=False, sort_keys=True)
+    if raw is not None:
+        return str(raw)
+    extraction = response_entry.get("extraction")
+    if isinstance(extraction, (dict, list)):
+        return _json.dumps(extraction, ensure_ascii=False, sort_keys=True)
+    return ""
+
+
+def _question_type_label(question_def: dict[str, Any] | None) -> str:
+    """Return the human-readable response_type label for a question."""
+    if not isinstance(question_def, dict):
+        return "free-text"
+    rs = question_def.get("response_schema")
+    if not isinstance(rs, dict):
+        return "free-text"
+    t = rs.get("type")
+    if isinstance(t, str):
+        return _RESPONSE_TYPE_LABELS.get(t, "free-text")
+    return "free-text"
+
+
+def _question_text(question_def: dict[str, Any] | None, fallback: str) -> str:
+    """Pull the question text from a saved question def, falling back."""
+    if isinstance(question_def, dict):
+        text = question_def.get("text") or question_def.get("question")
+        if isinstance(text, str) and text:
+            return text
+    return fallback
+
+
+def _resolve_questions_for_csv(
+    result_data: dict[str, Any],
+) -> list[dict[str, Any] | None]:
+    """Build a per-question definition list keyed by question index.
+
+    Saved results may or may not include the original ``questions`` block.
+    When present we use it (so we can read ``response_schema``). Otherwise
+    we fall back to the question texts on the first panelist's responses
+    so the CSV still emits a ``question_text`` column even for older runs.
+    """
+    saved_questions = result_data.get("questions")
+    if isinstance(saved_questions, list) and saved_questions:
+        return [q if isinstance(q, dict) else None for q in saved_questions]
+
+    panelists = result_data.get("results") or []
+    if not panelists:
+        return []
+    first_responses = panelists[0].get("responses") or []
+    return [
+        {"text": r.get("question", "")} if isinstance(r, dict) else None
+        for r in first_responses
+    ]
+
+
+def _per_response_cost_usd(
+    response_entry: dict[str, Any],
+    model: str | None,
+) -> str:
+    """Compute the per-turn cost for one response, formatted as ``$0.0001``.
+
+    Returns an empty string on missing usage data so the cell stays blank
+    rather than showing ``$0.0000`` for unmeasured turns. Pricing is
+    resolved through the standard precedence (provider-reported > local
+    table) via :func:`synth_panel.cost.resolve_cost`.
+    """
+    if not isinstance(response_entry, dict):
+        return ""
+    usage_dict = response_entry.get("usage")
+    if not isinstance(usage_dict, dict) or not usage_dict:
+        return ""
+    from synth_panel.cost import TokenUsage, resolve_cost
+
+    try:
+        usage = TokenUsage.from_dict(usage_dict)
+    except (TypeError, ValueError, KeyError):
+        return ""
+    estimate = resolve_cost(usage, model)
+    return estimate.format_usd()
+
+
+def _row_value(
+    column: str,
+    *,
+    panelist: dict[str, Any],
+    panelist_index: int,
+    question_index: int,
+    question_def: dict[str, Any] | None,
+    response_entry: dict[str, Any],
+    fallback_model: str | None,
+) -> str:
+    """Build the string value for one (column, panelist, question) cell."""
+    if column == "persona_id":
+        return f"p{panelist_index}"
+    if column == "persona_name":
+        return str(panelist.get("persona") or "")
+    if column == "question_id":
+        return f"q{question_index}"
+    if column == "question_text":
+        fallback_q = ""
+        if isinstance(response_entry, dict):
+            fallback_q = str(response_entry.get("question") or "")
+        return _question_text(question_def, fallback_q)
+    if column == "response":
+        return _render_response_cell(response_entry)
+    if column == "response_type":
+        return _question_type_label(question_def)
+    if column == "cost":
+        model = panelist.get("model") or fallback_model
+        return _per_response_cost_usd(response_entry, model)
+    if column == "model":
+        return str(panelist.get("model") or fallback_model or "")
+    if column == "variant_of":
+        return str(panelist.get("_variant_of") or "")
+    if column == "input_tokens":
+        usage = response_entry.get("usage") if isinstance(response_entry, dict) else None
+        if isinstance(usage, dict) and usage.get("input_tokens") is not None:
+            return str(usage["input_tokens"])
+        return ""
+    if column == "output_tokens":
+        usage = response_entry.get("usage") if isinstance(response_entry, dict) else None
+        if isinstance(usage, dict) and usage.get("output_tokens") is not None:
+            return str(usage["output_tokens"])
+        return ""
+    if column == "error":
+        if isinstance(response_entry, dict):
+            err = response_entry.get("error")
+            if err:
+                return str(err)
+        return ""
+    raise ValueError(f"Unknown response CSV column: {column!r}")
+
+
+def parse_response_csv_columns(spec: str | None) -> list[str]:
+    """Parse the user-supplied ``--columns`` value into a column list.
+
+    ``None`` or empty input returns the default column list. Whitespace
+    around individual column names is tolerated. Unknown columns raise
+    ``ValueError`` with a message listing the supported names.
+    """
+    if spec is None:
+        return list(DEFAULT_RESPONSE_CSV_COLUMNS)
+    raw = [c.strip() for c in spec.split(",")]
+    cols = [c for c in raw if c]
+    if not cols:
+        return list(DEFAULT_RESPONSE_CSV_COLUMNS)
+    unknown = [c for c in cols if c not in _RESPONSE_CSV_COLUMNS]
+    if unknown:
+        supported = ", ".join(sorted(_RESPONSE_CSV_COLUMNS))
+        raise ValueError(
+            f"Unknown column(s): {', '.join(unknown)}. Supported: {supported}"
+        )
+    return cols
+
+
+def format_csv_responses(
+    result_data: dict[str, Any],
+    columns: list[str] | None = None,
+) -> str:
+    """Format raw panel responses as a flat CSV (one row per response).
+
+    Each row corresponds to one panelist's answer to one question. The
+    output uses ``csv.QUOTE_MINIMAL`` (CRLF line endings per RFC 4180) so
+    embedded commas, double quotes, and newlines round-trip cleanly
+    through ``csv.DictReader``. Cell values that begin with a formula
+    trigger (``=``, ``+``, ``-``, ``@``) or a control character are
+    prefixed with a single quote to neutralize spreadsheet formula
+    injection (CWE-1236).
+    """
+    cols = list(columns) if columns else list(DEFAULT_RESPONSE_CSV_COLUMNS)
+
+    buf = io.StringIO()
+    writer = csv.writer(buf, lineterminator="\r\n", quoting=csv.QUOTE_MINIMAL)
+    writer.writerow(cols)
+
+    panelists = result_data.get("results") or []
+    if not panelists:
+        return buf.getvalue()
+
+    questions = _resolve_questions_for_csv(result_data)
+    fallback_model = result_data.get("model")
+
+    for p_idx, panelist in enumerate(panelists):
+        if not isinstance(panelist, dict):
+            continue
+        responses = panelist.get("responses") or []
+        for q_idx, response_entry in enumerate(responses):
+            if not isinstance(response_entry, dict):
+                continue
+            q_def = questions[q_idx] if q_idx < len(questions) else None
+            row = [
+                _csv_safe_cell(
+                    _row_value(
+                        col,
+                        panelist=panelist,
+                        panelist_index=p_idx,
+                        question_index=q_idx,
+                        question_def=q_def,
+                        response_entry=response_entry,
+                        fallback_model=fallback_model,
+                    )
+                )
+                for col in cols
+            ]
+            writer.writerow(row)
+
+    return buf.getvalue()

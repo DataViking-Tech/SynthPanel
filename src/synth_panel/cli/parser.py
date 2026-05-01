@@ -994,9 +994,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     analyze_parser.add_argument(
         "--output",
-        choices=["text", "json", "csv"],
+        choices=["text", "json", "csv", "responses-csv"],
         default="text",
-        help="Output format (default: text).",
+        help=(
+            "Output format (default: text). 'csv' emits an analytical "
+            "summary (frequency tables, chi-squared, convergence). "
+            "'responses-csv' emits one row per panelist response — "
+            "spreadsheet-friendly raw export (see --columns)."
+        ),
+    )
+    analyze_parser.add_argument(
+        "--columns",
+        default=None,
+        metavar="COL[,COL...]",
+        help=(
+            "Comma-separated column list for --output responses-csv "
+            "(default: persona_id,persona_name,question_id,question_text,"
+            "response,response_type,cost). Extra columns: model, "
+            "variant_of, input_tokens, output_tokens, error."
+        ),
     )
 
     # report (sp-viz-layer T4): render a saved panel result as Markdown.

@@ -6,11 +6,14 @@ import json
 import tempfile
 
 from synth_panel.analyze import (
+    DEFAULT_RESPONSE_CSV_COLUMNS,
     AnalysisResult,
     analysis_to_dict,
     analyze_panel_result,
     format_csv,
+    format_csv_responses,
     format_text,
+    parse_response_csv_columns,
 )
 from synth_panel.main import main
 
@@ -407,3 +410,379 @@ class TestCLI:
         captured = capsys.readouterr()
         assert exit_code == 1
         assert "not found" in captured.err
+
+
+# ---------------------------------------------------------------------------
+# Responses CSV (raw export, sp-tzavk0 / GH #297)
+# ---------------------------------------------------------------------------
+
+
+def _make_csv_panel_result(
+    *,
+    n_personas: int = 3,
+    response_overrides: list[list[str]] | None = None,
+    persona_overrides: list[str] | None = None,
+    questions: list[dict] | None = None,
+    include_questions_block: bool = True,
+) -> dict:
+    """Build a panel result tailored for responses-CSV testing."""
+    if questions is None:
+        questions = [
+            {"text": "What frustrates you about your workflow?"},
+            {"text": "Pick one option.", "response_schema": {"type": "enum", "options": ["A", "B"]}},
+        ]
+    n_questions = len(questions)
+    persona_names = (
+        list(persona_overrides)
+        if persona_overrides is not None
+        else [f"Persona_{i}" for i in range(n_personas)]
+    )
+    if response_overrides is None:
+        response_overrides = [
+            [f"persona {i}, q{q}" for q in range(n_questions)]
+            for i in range(n_personas)
+        ]
+
+    results = []
+    for i, name in enumerate(persona_names):
+        responses = []
+        for qi in range(n_questions):
+            responses.append(
+                {
+                    "question": questions[qi].get("text", ""),
+                    "response": response_overrides[i][qi],
+                    "usage": {"input_tokens": 60, "output_tokens": 24},
+                }
+            )
+        results.append(
+            {
+                "persona": name,
+                "model": "claude-sonnet-4-6",
+                "responses": responses,
+            }
+        )
+
+    data: dict = {
+        "id": "result-csv-001",
+        "model": "claude-sonnet-4-6",
+        "persona_count": n_personas,
+        "question_count": n_questions,
+        "total_usage": {"input_tokens": 180, "output_tokens": 72},
+        "total_cost": "$0.0036",
+        "results": results,
+    }
+    if include_questions_block:
+        data["questions"] = questions
+    return data
+
+
+class TestResponsesCSV:
+    def test_default_columns(self):
+        cols = parse_response_csv_columns(None)
+        assert cols == list(DEFAULT_RESPONSE_CSV_COLUMNS)
+        assert "persona_id" in cols
+        assert "response_type" in cols
+
+    def test_parse_columns_custom_subset(self):
+        cols = parse_response_csv_columns("persona_name, response, cost")
+        assert cols == ["persona_name", "response", "cost"]
+
+    def test_parse_columns_unknown_raises(self):
+        import pytest
+
+        with pytest.raises(ValueError, match="Unknown column"):
+            parse_response_csv_columns("persona_name,bogus_column")
+
+    def test_parse_columns_blank_returns_default(self):
+        cols = parse_response_csv_columns("   ")
+        assert cols == list(DEFAULT_RESPONSE_CSV_COLUMNS)
+
+    def test_round_trip_via_dict_reader(self):
+        import csv as _csv
+        import io as _io
+
+        data = _make_csv_panel_result()
+        text = format_csv_responses(data)
+
+        reader = _csv.DictReader(_io.StringIO(text))
+        rows = list(reader)
+
+        # 3 personas × 2 questions = 6 rows
+        assert len(rows) == 6
+        assert reader.fieldnames == list(DEFAULT_RESPONSE_CSV_COLUMNS)
+
+        first = rows[0]
+        assert first["persona_id"] == "p0"
+        assert first["persona_name"] == "Persona_0"
+        assert first["question_id"] == "q0"
+        assert first["question_text"] == "What frustrates you about your workflow?"
+        assert first["response"] == "persona 0, q0"
+        assert first["response_type"] == "free-text"
+        assert first["cost"].startswith("$")
+
+        # Per-question response_type honors response_schema (q1 is enum).
+        q1_row = rows[1]
+        assert q1_row["response_type"] == "multiple-choice"
+
+    def test_response_types_map_correctly(self):
+        questions = [
+            {"text": "Free text?"},
+            {"text": "Pick one.", "response_schema": {"type": "enum", "options": ["A", "B"]}},
+            {"text": "Rate.", "response_schema": {"type": "scale", "min": 1, "max": 5}},
+            {
+                "text": "Tag themes.",
+                "response_schema": {"type": "tagged_themes", "taxonomy": ["price", "ux"]},
+            },
+            {"text": "Default text.", "response_schema": {"type": "text"}},
+        ]
+        data = _make_csv_panel_result(
+            n_personas=1,
+            questions=questions,
+            response_overrides=[["a", "A", "3", "price", "x"]],
+        )
+        import csv as _csv
+        import io as _io
+
+        text = format_csv_responses(data)
+        rows = list(_csv.DictReader(_io.StringIO(text)))
+        assert [r["response_type"] for r in rows] == [
+            "free-text",
+            "multiple-choice",
+            "likert",
+            "tagged-themes",
+            "free-text",
+        ]
+
+    def test_csv_injection_safety_persona_name(self):
+        import csv as _csv
+        import io as _io
+
+        # Personas whose names look like spreadsheet formulas must be neutralized.
+        data = _make_csv_panel_result(
+            n_personas=4,
+            persona_overrides=["=cmd|'/c calc'!A1", "+evil()", "-bad", "@import"],
+        )
+        text = format_csv_responses(data)
+        rows = list(_csv.DictReader(_io.StringIO(text)))
+        # Each malicious cell must start with a single quote so spreadsheet
+        # apps treat it as plain text rather than a formula.
+        names = [r["persona_name"] for r in rows[::2]]  # one row per persona (q0)
+        assert names[0] == "'=cmd|'/c calc'!A1"
+        assert names[1] == "'+evil()"
+        assert names[2] == "'-bad"
+        assert names[3] == "'@import"
+
+    def test_csv_injection_safety_response_cell(self):
+        import csv as _csv
+        import io as _io
+
+        data = _make_csv_panel_result(
+            n_personas=1,
+            response_overrides=[["=HYPERLINK(\"http://evil\",\"x\")", "ok"]],
+        )
+        text = format_csv_responses(data)
+        rows = list(_csv.DictReader(_io.StringIO(text)))
+        assert rows[0]["response"].startswith("'=HYPERLINK")
+        assert rows[1]["response"] == "ok"
+
+    def test_embedded_newlines_quoted(self):
+        import csv as _csv
+        import io as _io
+
+        multiline = "line one\nline two, with comma\nline three"
+        data = _make_csv_panel_result(
+            n_personas=1,
+            response_overrides=[[multiline, "ok"]],
+        )
+        text = format_csv_responses(data)
+        rows = list(_csv.DictReader(_io.StringIO(text)))
+        assert rows[0]["response"] == multiline
+
+    def test_embedded_double_quotes_round_trip(self):
+        import csv as _csv
+        import io as _io
+
+        quoted = 'They said "hello, world" — twice.'
+        data = _make_csv_panel_result(
+            n_personas=1,
+            response_overrides=[[quoted, "ok"]],
+        )
+        text = format_csv_responses(data)
+        rows = list(_csv.DictReader(_io.StringIO(text)))
+        assert rows[0]["response"] == quoted
+
+    def test_columns_subset_filters_output(self):
+        import csv as _csv
+        import io as _io
+
+        data = _make_csv_panel_result(n_personas=2)
+        text = format_csv_responses(data, columns=["persona_name", "response"])
+        reader = _csv.DictReader(_io.StringIO(text))
+        assert reader.fieldnames == ["persona_name", "response"]
+        rows = list(reader)
+        assert len(rows) == 4  # 2 personas × 2 questions
+        for r in rows:
+            assert set(r.keys()) == {"persona_name", "response"}
+
+    def test_extra_columns(self):
+        import csv as _csv
+        import io as _io
+
+        data = _make_csv_panel_result(n_personas=1)
+        text = format_csv_responses(
+            data,
+            columns=["persona_name", "model", "input_tokens", "output_tokens"],
+        )
+        rows = list(_csv.DictReader(_io.StringIO(text)))
+        assert rows[0]["model"] == "claude-sonnet-4-6"
+        assert rows[0]["input_tokens"] == "60"
+        assert rows[0]["output_tokens"] == "24"
+
+    def test_skips_panelist_with_no_responses(self):
+        import csv as _csv
+        import io as _io
+
+        data = _make_csv_panel_result(n_personas=2)
+        # Wipe one panelist's responses; output should still parse cleanly.
+        data["results"][0]["responses"] = []
+        text = format_csv_responses(data)
+        rows = list(_csv.DictReader(_io.StringIO(text)))
+        assert len(rows) == 2  # only the second panelist contributes 2 rows
+        assert all(r["persona_name"] == "Persona_1" for r in rows)
+
+    def test_error_response_renders_blank(self):
+        import csv as _csv
+        import io as _io
+
+        data = _make_csv_panel_result(n_personas=1)
+        data["results"][0]["responses"][0]["error"] = "rate limit"
+        data["results"][0]["responses"][0]["response"] = ""
+        text = format_csv_responses(
+            data,
+            columns=["persona_name", "response", "error"],
+        )
+        rows = list(_csv.DictReader(_io.StringIO(text)))
+        assert rows[0]["response"] == ""
+        assert rows[0]["error"] == "rate limit"
+
+    def test_uses_response_question_text_when_questions_block_absent(self):
+        import csv as _csv
+        import io as _io
+
+        data = _make_csv_panel_result(n_personas=1, include_questions_block=False)
+        # Without a top-level questions block we still emit the question_text
+        # from each panelist's per-response ``question`` field.
+        text = format_csv_responses(data)
+        rows = list(_csv.DictReader(_io.StringIO(text)))
+        assert rows[0]["question_text"] == "What frustrates you about your workflow?"
+        # response_type defaults to free-text when no schema is available.
+        assert rows[0]["response_type"] == "free-text"
+
+    def test_structured_response_serialized_as_json(self):
+        import csv as _csv
+        import io as _io
+        import json as _json2
+
+        data = _make_csv_panel_result(n_personas=1)
+        # Replace the q0 response with a structured payload; the cell should
+        # contain a JSON serialization that parses back round-trip.
+        data["results"][0]["responses"][0]["response"] = {"choice": "A", "score": 4}
+        text = format_csv_responses(data)
+        rows = list(_csv.DictReader(_io.StringIO(text)))
+        parsed = _json2.loads(rows[0]["response"])
+        assert parsed == {"choice": "A", "score": 4}
+
+    def test_uses_crlf_line_terminator(self):
+        # RFC 4180 specifies CRLF for CSV records. Round-trip safety checks
+        # already cover parsing, but downstream tools (e.g. Excel on Windows)
+        # are pickier about strict CRLF — pin the terminator explicitly.
+        data = _make_csv_panel_result(n_personas=1)
+        text = format_csv_responses(data)
+        # Expect every record (header + at least one data row) to end with
+        # \r\n. Splitting on \r\n should yield records back; any naked \n in
+        # the middle of records is fine (they belong to embedded newlines).
+        lines = text.split("\r\n")
+        # Trailing CRLF means the last element is empty.
+        assert lines[-1] == ""
+        # Header is the first element and contains no embedded \n.
+        assert "persona_id" in lines[0]
+        assert "\n" not in lines[0]
+
+
+class TestResponsesCSVCli:
+    def test_parser_accepts_responses_csv(self):
+        from synth_panel.cli.parser import build_parser
+
+        parser = build_parser()
+        args = parser.parse_args(
+            [
+                "analyze",
+                "result-123",
+                "--output",
+                "responses-csv",
+                "--columns",
+                "persona_name,response",
+            ]
+        )
+        assert args.output == "responses-csv"
+        assert args.columns == "persona_name,response"
+
+    def test_cli_responses_csv_output(self, capsys):
+        import csv as _csv
+        import io as _io
+
+        data = _make_csv_panel_result(n_personas=2)
+        with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as f:
+            json.dump(data, f)
+            f.flush()
+            exit_code = main(["analyze", f.name, "--output", "responses-csv"])
+
+        captured = capsys.readouterr()
+        assert exit_code == 0
+        rows = list(_csv.DictReader(_io.StringIO(captured.out)))
+        assert len(rows) == 4  # 2 personas × 2 questions
+        assert rows[0]["persona_name"] == "Persona_0"
+
+    def test_cli_responses_csv_columns_filter(self, capsys):
+        import csv as _csv
+        import io as _io
+
+        data = _make_csv_panel_result(n_personas=1)
+        with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as f:
+            json.dump(data, f)
+            f.flush()
+            exit_code = main(
+                [
+                    "analyze",
+                    f.name,
+                    "--output",
+                    "responses-csv",
+                    "--columns",
+                    "persona_name,response",
+                ]
+            )
+
+        captured = capsys.readouterr()
+        assert exit_code == 0
+        reader = _csv.DictReader(_io.StringIO(captured.out))
+        assert reader.fieldnames == ["persona_name", "response"]
+
+    def test_cli_responses_csv_unknown_column(self, capsys):
+        data = _make_csv_panel_result(n_personas=1)
+        with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as f:
+            json.dump(data, f)
+            f.flush()
+            exit_code = main(
+                [
+                    "analyze",
+                    f.name,
+                    "--output",
+                    "responses-csv",
+                    "--columns",
+                    "persona_name,bogus",
+                ]
+            )
+
+        captured = capsys.readouterr()
+        assert exit_code == 1
+        assert "Unknown column" in captured.err

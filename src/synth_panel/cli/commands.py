@@ -4689,7 +4689,9 @@ def handle_analyze(args: argparse.Namespace, fmt: OutputFormat) -> int:
         analysis_to_dict,
         analyze_panel_result,
         format_csv,
+        format_csv_responses,
         format_text,
+        parse_response_csv_columns,
     )
 
     result_ref = args.result
@@ -4708,6 +4710,16 @@ def handle_analyze(args: argparse.Namespace, fmt: OutputFormat) -> int:
         except FileNotFoundError:
             print(f"Error: panel result not found: {result_ref}", file=sys.stderr)
             return 1
+
+    if output_mode == "responses-csv":
+        try:
+            cols = parse_response_csv_columns(getattr(args, "columns", None))
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        # ``end=""`` because the writer already emits CRLFs after every row.
+        print(format_csv_responses(data, cols), end="")
+        return 0
 
     analysis = analyze_panel_result(data)
 
