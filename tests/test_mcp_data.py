@@ -47,7 +47,7 @@ class TestPersonaPacks:
         names = {p["id"] for p in builtin}
         # sp-6wbm added four scale-up packs (job-seekers, recruiters-talent,
         # product-research, ai-eval-buyers) to lift the 24-persona ceiling
-        # imposed by the original five packs.
+        # imposed by the original five packs. sp-b8y47x added students.
         assert names == {
             "developer",
             "enterprise-buyer",
@@ -58,8 +58,9 @@ class TestPersonaPacks:
             "recruiters-talent",
             "product-research",
             "ai-eval-buyers",
+            "students",
         }
-        assert len(builtin) == 9
+        assert len(builtin) == 10
 
     def test_sp_6wbm_scaleup_packs_load(self):
         """sp-6wbm: each new scale-up pack loads, has a non-empty

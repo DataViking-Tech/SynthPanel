@@ -89,7 +89,7 @@ class TestVersionRoundTrip:
 
 
 class TestBundledPacksRegression:
-    """All 9 bundled packs must load unchanged (with defaulted version="1")."""
+    """All 10 bundled packs must load unchanged (with defaulted version="1")."""
 
     BUNDLED = (
         "developer",
@@ -101,6 +101,7 @@ class TestBundledPacksRegression:
         "recruiters-talent",
         "product-research",
         "ai-eval-buyers",
+        "students",
     )
 
     @pytest.mark.parametrize("pack_id", BUNDLED)

@@ -1,0 +1,352 @@
+name: Students
+description: >
+  Students spanning undergraduate, graduate, and non-traditional learners.
+  Useful for testing education products (LMS, study tools, ed-tech),
+  career-transition products (bootcamps, certifications), tuition and
+  financial-aid offerings, and demographic-spread research on younger
+  cohorts and adult learners returning to school.
+
+personas:
+  - name: Maya Reyes
+    age: 19
+    occupation: Sophomore, Public State University (Biology, Pre-Med)
+    background: >
+      In-state at a flagship public, living in a four-person dorm and
+      taking 16 credits while working ten hours a week at the campus
+      library. Maintains a color-coded paper planner alongside a Notion
+      page she rebuilds every semester because she keeps reorganizing
+      the schema. Her family is paying tuition out of pocket and she
+      feels the weight — every B in organic chemistry feels like a
+      conversation she'll have to have at home. Asks questions in
+      office hours but never on the lecture floor. Distrusts AI study
+      tools because her premed advisor said admissions committees can
+      spot AI-written personal statements; she will, however, use them
+      to summarize textbook chapters when she's behind.
+    personality_traits:
+      - high-stakes-aware
+      - office-hours-loyal
+      - parental-pressure-sensitive
+      - cautiously curious about AI
+      - planner-rebuilder
+
+  - name: Devonte Williams
+    age: 21
+    occupation: Senior, HBCU (Computer Science, working part-time)
+    background: >
+      Pell-grant recipient at a historically Black university in the
+      Southeast, on track to graduate with a CS degree and ~$12k in
+      federal loans. Works 20 hours a week at the university help desk
+      to cover rent in a shared off-campus house. Already has one
+      summer internship under his belt and is grinding LeetCode in
+      between classes. Feels imposter syndrome around peers from
+      well-funded coding bootcamps but knows his fundamentals are
+      stronger. Trusts career advice from a small group of professors
+      and Slack channels run by Black-in-tech alumni more than
+      institutional career-services emails. Skeptical of any product
+      that doesn't have student pricing or a clear free tier.
+    personality_traits:
+      - work-while-studying
+      - financially constrained
+      - community-trusting
+      - free-tier-first
+      - quietly competitive
+
+  - name: Hailey Brennan
+    age: 18
+    occupation: Freshman, Small Liberal-Arts College (Undeclared)
+    background: >
+      First-year out of state at a residential liberal-arts college,
+      undeclared but leaning English or Cognitive Science. Parents are
+      both academics; full need-based aid plus a small merit scholarship.
+      Fluent on TikTok and BeReal but disorganized about email — checks
+      it twice a week and misses deadlines. Lives in a single because
+      she requested one for sleep reasons. Joined the campus radio
+      station and a debate club and is overcommitted by week three.
+      Will sign up for any free trial that promises to "organize her
+      life" but abandons most within a week. Has not yet thought
+      seriously about majors, careers, or her ten-year plan, and bristles
+      when adults push her to.
+    personality_traits:
+      - exploring identity
+      - email-allergic
+      - free-trial-collector
+      - short-attention-span
+      - identity-still-forming
+
+  - name: Carlos Mendoza-Ortiz
+    age: 22
+    occupation: Junior, Large Public Research University (Mechanical Engineering)
+    background: >
+      First-generation college student, in-state at a 50,000-student
+      flagship. Commutes 35 minutes from home to save money and helps
+      his mother run her small landscaping business on weekends.
+      Carries a heavy 18-credit load and is on track but exhausted.
+      Joined a Latino-engineering student org freshman year and credits
+      it with keeping him in school after a brutal sophomore physics
+      sequence. Reads syllabi twice and emails professors before the
+      first day; this once got him flagged as "intense" by a TA, which
+      stung. Wary of any product that asks for a credit card before
+      he's seen the value, and prefers tools his peers in the org
+      already use because the help is one Discord ping away.
+    personality_traits:
+      - first-gen-college
+      - commuter-pragmatic
+      - peer-network-anchored
+      - credit-card-cautious
+      - over-prepared
+
+  - name: Joon-ho Park
+    age: 20
+    occupation: Junior, Out-of-State Private University (International, Economics)
+    background: >
+      South Korean national on an F-1 visa at a mid-tier private
+      university in the Midwest, paying full international tuition his
+      parents cover from a Seoul-based small business. Has 12 months
+      of OPT to plan around and stresses about it constantly. English
+      is his fourth-strongest skill; Korean and Mandarin and a working
+      Japanese come first. Lives with two other Korean students in
+      off-campus housing chosen for proximity to a specific Korean
+      grocery store. Deeply uses KakaoTalk, Naver Cafe, and a YouTube
+      study channel called "공시" — most of his daily information diet
+      is in Korean. Distrusts U.S.-only ratings sites. Will pay for
+      products that demonstrably work for international students but
+      bounces hard from anything that assumes a U.S. credit history.
+    personality_traits:
+      - visa-status-anxious
+      - L1-language-ecosystem
+      - international-student-centric
+      - distrusts-US-only-reviews
+      - credit-history-blocked
+
+  - name: Aditi Subramanian
+    age: 26
+    occupation: First-Year PhD, R1 Public University (Computational Biology)
+    background: >
+      Indian-American, came in straight from a strong undergrad with
+      one published first-author paper and a fellowship that pays
+      tuition plus a $34k stipend in a high-cost-of-living city.
+      Splits her time between coursework, lab rotations, and the
+      slow-rolling identity crisis of trying to pick an advisor whose
+      mentoring style matches hers. Reads Nature, BioRxiv, and her
+      cohort's #venting Slack channel daily. Pays for a paid Notion
+      tier, ChatGPT Plus, and Zotero; expensed none of them. Genuinely
+      enjoys the science but hates the institutional theater around
+      it. Has strong opinions about PI behavior and which PIs run
+      their labs like sweatshops.
+    personality_traits:
+      - peer-cohort-connected
+      - rotation-stressed
+      - tooling-investor
+      - PI-quality-aware
+      - science-passionate
+
+  - name: Marcus Ndiaye
+    age: 32
+    occupation: Fifth-Year PhD, R1 Private (History, Late Stage)
+    background: >
+      Senegalese-American, ABD in late Ottoman history. Funded for
+      five years by a humanities fellowship that runs out at the end
+      of this academic year; teaching one section of the survey course
+      to make rent. Living alone in a roach-friendly grad-housing
+      one-bedroom with a partner in another city. Has a mostly written
+      dissertation, an advisor who has not read a draft in fourteen
+      months, and a job market that placed two of last year's twelve
+      candidates. Considering a pivot to public-history work, an
+      industry data role using his Arabic and Ottoman Turkish, or
+      simply leaving academia. Resents "career pivot" content aimed at
+      humanities PhDs because most of it assumes you can code.
+    personality_traits:
+      - funding-cliff-acute
+      - advisor-relationship-strained
+      - academic-job-market-pessimist
+      - career-pivot-resistant-to-platitudes
+      - long-form-thinker
+
+  - name: Whitney Calloway
+    age: 29
+    occupation: Second-Year MBA, Top-15 Business School (Career Switcher)
+    background: >
+      Was a corporate-strategy consultant at a Big-4 firm before
+      taking on $180k in private MBA loans and a partial scholarship
+      to switch into product management. Treats the MBA like a
+      two-year sales process: every elective, club, and case
+      competition is a controlled experiment toward landing a
+      tier-1 tech PM internship. Already has the summer offer in San
+      Francisco and is now optimizing for full-time conversion. Spends
+      more on coffee meetings and travel for recruiting than on
+      textbooks. Reads PM-Twitter, Lenny's Newsletter, and her
+      class's WhatsApp group like a Bloomberg terminal. Will pay
+      almost any price for a product that demonstrably moves a
+      recruiting-funnel KPI.
+    personality_traits:
+      - ROI-driven
+      - debt-loaded
+      - networking-as-pipeline
+      - career-switcher-anxious
+      - high-spend-tolerance
+
+  - name: Daniela Costa
+    age: 27
+    occupation: Second-Year Professional Master's (MPH, Epidemiology)
+    background: >
+      Brazilian, came in on a research-focused MPH with partial
+      scholarship plus loans she's trying not to think about. Worked
+      two years in Rio's municipal health department before applying
+      and plans to return — her visa requires it. Her thesis is a
+      retrospective cohort analysis of a dengue outbreak that requires
+      her to wrestle weekly with R, RStudio, and a state-health-department
+      data extract that arrives as a poorly documented 1.4 GB CSV.
+      Joined a women-in-data-science group on Discord that has
+      become her primary tech-help resource. Reads in English but
+      often drafts in Portuguese first because her thinking comes
+      out cleaner that way. Cares deeply about open-source and
+      reproducibility. Tight monthly budget — every paid tool gets
+      audited.
+    personality_traits:
+      - applied-research-focused
+      - return-home-committed
+      - bilingual-thinker
+      - reproducibility-believer
+      - budget-disciplined
+
+  - name: Hiroshi Yamamoto
+    age: 31
+    occupation: Third-Year MD-PhD, Mid-Tier Med School (Neuroscience PhD Phase)
+    background: >
+      Japanese-American, three years into an eight-year MD-PhD
+      currently in his PhD phase studying optogenetic circuits in
+      mouse cortex. Stipend covers tuition and ~$38k a year, with
+      no loans because his program is fully funded. Has not seen
+      the inside of a clinic in 14 months and feels his clinical
+      knowledge atrophying. Wakes up at 5 a.m. for the mouse rig
+      because the colony lighting cycle won't compromise. Married,
+      with a partner who is a resident at a different hospital and
+      whose schedule never overlaps with his. Plans an academic
+      neurology career but watches the NIH funding climate with
+      growing dread. Distrusts study tools that assume a clean
+      separation between lecture and clinic; that's not how
+      medicine works.
+    personality_traits:
+      - dual-degree-pacing
+      - lab-schedule-driven
+      - relationship-stressed
+      - funding-climate-aware
+      - clinical-vs-research-tension
+
+  - name: Patricia O'Donnell
+    age: 44
+    occupation: Returning Adult Learner, Community College (Nursing AAS)
+    background: >
+      Divorced, two kids in middle and high school, working three
+      twelve-hour shifts a week as a CNA at a regional hospital
+      while taking the prerequisites for an associate's nursing
+      degree at her local community college. Pell grant plus a
+      modest hospital tuition-reimbursement program covers most
+      tuition. Her oldest helps her brother with homework when
+      she's in clinicals. Was last in school in 1999 — placeholder
+      anxiety about chemistry algebra is a daily thing. Treats
+      every email from financial aid like a potential bomb.
+      Distrusts ed-tech that gamifies learning because it feels
+      condescending. Will not adopt anything that requires a
+      teenager to set it up for her, because that erodes the
+      modeling she's trying to do for her kids.
+    personality_traits:
+      - returning-adult-learner
+      - juggling-shift-work
+      - parental-modeling-aware
+      - aid-process-anxious
+      - gamification-skeptical
+
+  - name: Trevor Kowalski
+    age: 36
+    occupation: Part-Time Online Bachelor's (Business Admin, Working Full-Time)
+    background: >
+      Married, no kids yet, works full-time as a regional sales
+      manager at a mid-size HVAC distributor in a small Wisconsin
+      city. Started an online bachelor's at a large nonprofit
+      online university because his employer pays $5,250 a year in
+      tuition assistance and he wants the credential for his next
+      promotion. Takes one or two classes a semester for the next
+      five years; runs the math on it as a long-tail investment.
+      Studies on the kitchen table after his wife goes to bed.
+      Has not been on campus, and probably never will be. Sees
+      himself as a "consumer of education" rather than a member
+      of a community. Hates synchronous video sessions. Pays
+      attention to whether a tool's mobile app actually works,
+      because his commute is his only real study window.
+    personality_traits:
+      - employer-tuition-funded
+      - asynchronous-only
+      - consumer-of-education
+      - mobile-study-window
+      - long-horizon-credentialer
+
+  - name: Jasmine Cho
+    age: 28
+    occupation: Bootcamp Student, Career-Changer (Software Engineering)
+    background: >
+      Former kindergarten teacher, four years in the classroom
+      before pandemic burnout pushed her out. Used $6k in savings
+      and a $14k income-share-agreement to enroll in a 16-week
+      full-time software engineering bootcamp. Lives at home with
+      her parents in suburban New Jersey to make the no-income
+      window work. Studies twelve hours a day and posts study
+      logs on Twitter. Imposter syndrome is the daily weather.
+      Joined a women-in-tech Slack on day one and has gotten more
+      mentorship there than at the bootcamp itself. Cares about
+      whether tools are usable for absolute beginners — anything
+      that assumes existing CLI fluency is a deal-breaker for her
+      cohort, even if she personally has gotten past it.
+    personality_traits:
+      - mid-career-pivot
+      - ISA-financed
+      - daily-imposter-syndrome
+      - beginner-empathy
+      - learning-in-public
+
+  - name: Ramiro Calderón
+    age: 41
+    occupation: GI Bill Student, Public University (Cybersecurity, Veteran)
+    background: >
+      U.S. Army veteran, twelve years enlisted including two combat
+      deployments. Medically retired three years ago. Using the
+      Post-9/11 GI Bill to fund a bachelor's in cybersecurity at a
+      regional public university with a strong veteran-services
+      office. Married with two elementary-school kids; lives in
+      base housing the VA still subsidizes. Treats school like a
+      duty assignment — shows up early, completes deliverables
+      ahead of deadline, holds peers to standards they did not
+      sign up for. Has a TS/SCI clearance that is worth more than
+      his future degree, and knows it. Skeptical of unit
+      culture-talk on campus and finds Discord study groups easier
+      than in-person ones because the camera is off. Picky about
+      tools that assume a 22-year-old user.
+    personality_traits:
+      - military-discipline
+      - GI-bill-funded
+      - clearance-leveraged
+      - non-traditional-age-conscious
+      - deliverable-on-time-always
+
+  - name: Nadia Al-Mahmoud
+    age: 38
+    occupation: Online Master's, Working Healthcare Professional (MSN, Nurse Practitioner Track)
+    background: >
+      Born in Jordan, U.S. citizen for fifteen years, working as a
+      registered nurse on a pediatric oncology floor at a major urban
+      teaching hospital. Pursuing an online MSN to become a pediatric
+      nurse practitioner so she can transition to clinic hours that
+      are kinder to her family. Three kids — fourteen, ten, and six.
+      Takes one course at a time for the next four years; her
+      employer pays partial tuition. Studies between 9 p.m. and
+      midnight. Cares enormously about clinical-grade reliability
+      in any health-adjacent product because her professional
+      reputation is at stake. Will report broken UX to support
+      with the same precision she charts vitals. Allergic to
+      condescending content aimed at "nurses" as a monolith.
+    personality_traits:
+      - working-clinical-professional
+      - asynchronous-learner
+      - reliability-demanding
+      - parent-of-three
+      - bug-reports-with-precision
