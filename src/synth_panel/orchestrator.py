@@ -25,6 +25,7 @@ from synth_panel.llm.client import LLMClient
 from synth_panel.llm.models import InputMessage, TextBlock
 from synth_panel.llm.models import TokenUsage as LLMTokenUsage
 from synth_panel.persistence import Session
+from synth_panel.question_budget import QuestionFailureBudget
 from synth_panel.routing import route_round
 from synth_panel.runtime import AgentRuntime, TurnSummary
 from synth_panel.structured.output import StructuredOutputConfig, StructuredOutputEngine
@@ -402,6 +403,7 @@ def _run_panelist(
     extract_schema: dict[str, Any] | None = None,
     temperature: float | None = None,
     top_p: float | None = None,
+    question_budget: QuestionFailureBudget | None = None,
 ) -> tuple[PanelistResult, Session]:
     """Execute a single panelist's full interview. Runs in a worker thread.
 
@@ -466,8 +468,23 @@ def _run_panelist(
             extract_engine = StructuredOutputEngine(client)
             extract_config = StructuredOutputConfig(schema=extract_schema)
 
-        for question in questions:
+        for qi, question in enumerate(questions):
             question_text = question_prompt_fn(question)
+
+            # sp-xw2z6o: per-question failure budget. If a prior panelist
+            # tripped this question's budget, skip it cheaply instead of
+            # re-failing. We still record an entry so per-panelist response
+            # arrays stay aligned with the authored question list.
+            if question_budget is not None and question_budget.is_disabled(qi):
+                responses.append(
+                    {
+                        "question": question_text,
+                        "response": None,
+                        "skipped_by_budget": True,
+                        "question_index": qi,
+                    }
+                )
+                continue
 
             try:
                 if structured_engine and structured_config:
@@ -544,6 +561,14 @@ def _run_panelist(
                         "error": True,
                     }
                 )
+                # sp-xw2z6o: record this failure against the per-question
+                # budget so subsequent panelists short-circuit once the
+                # threshold is crossed.
+                if question_budget is not None:
+                    try:
+                        question_budget.record_failure(qi, question_text=question_text)
+                    except Exception:  # pragma: no cover - defensive
+                        logger.warning("question_budget.record_failure raised; ignoring", exc_info=True)
 
             # Handle conditional follow-ups (text mode only)
             raw_follow_ups = question.get("follow_ups", []) if isinstance(question, dict) else []
@@ -665,6 +690,7 @@ def run_panel_parallel(
     convergence_tracker: ConvergenceTracker | None = None,
     on_panelist_complete: Callable[[PanelistResult], None] | None = None,
     cost_gate: CostGate | None = None,
+    question_budget: QuestionFailureBudget | None = None,
 ) -> tuple[list[PanelistResult], WorkerRegistry, dict[str, Session]]:
     """Run all panelists in parallel and return ordered results.
 
@@ -707,6 +733,12 @@ def run_panel_parallel(
             and only finished panelists are returned. The caller is expected
             to inspect ``cost_gate.should_halt()`` on return and surface a
             partial, ``run_invalid`` result.
+        question_budget: Optional :class:`QuestionFailureBudget` (sp-xw2z6o).
+            Tracks per-question failure counts; when a question's failure
+            count crosses the configured threshold, subsequent panelists
+            skip that question (each emits a ``skipped_by_budget`` response
+            entry) instead of re-failing it. The run still completes —
+            only the offending question is short-circuited.
 
     Returns:
         Tuple of (ordered results matching persona order, registry,
@@ -783,6 +815,7 @@ def run_panel_parallel(
                 extract_schema,
                 temperature,
                 top_p,
+                question_budget,
             )
             future_to_index[future] = idx
 

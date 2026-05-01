@@ -92,6 +92,7 @@ from synth_panel.prompts import (
     persona_system_prompt,
     persona_system_prompt_from_template,
 )
+from synth_panel.question_budget import QuestionFailureBudget
 from synth_panel.runtime import AgentRuntime
 from synth_panel.synthesis import (
     STRATEGY_MAP_REDUCE,
@@ -1357,6 +1358,41 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         )
         return 1
 
+    # sp-xw2z6o: optional per-question failure budget. Accepts an integer
+    # count (>= 1) or a fractional (0, 1) value; reject everything else
+    # parse-time so a typo'd "0" or "1.5" is loud instead of silently
+    # disabling the feature.
+    question_budget_value: int | float | None = None
+    raw_qfb = getattr(args, "question_failure_budget", None)
+    if raw_qfb is not None:
+        try:
+            parsed_float = float(raw_qfb)
+        except (TypeError, ValueError):
+            print(
+                f"Error: --question-failure-budget must be an integer (>= 1) or a fraction in (0, 1), got {raw_qfb!r}.",
+                file=sys.stderr,
+            )
+            return 1
+        # Integer-form when the float lands exactly on a whole number
+        # (e.g. "2", "2.0"). Otherwise treat as a fractional threshold.
+        if parsed_float.is_integer():
+            parsed_int = int(parsed_float)
+            if parsed_int < 1:
+                print(
+                    f"Error: --question-failure-budget integer must be >= 1, got {raw_qfb!r}.",
+                    file=sys.stderr,
+                )
+                return 1
+            question_budget_value = parsed_int
+        else:
+            if parsed_float <= 0 or parsed_float >= 1:
+                print(
+                    f"Error: --question-failure-budget fraction must be in (0, 1), got {raw_qfb!r}.",
+                    file=sys.stderr,
+                )
+                return 1
+            question_budget_value = parsed_float
+
     # ── Ensemble mode: run with each model, compare across models ────────
     if ensemble_mode:
         from synth_panel.ensemble import build_ensemble_output, ensemble_run
@@ -1762,6 +1798,16 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         if max_cost_usd is not None and active_personas:
             cost_gate = CostGate(max_cost_usd=max_cost_usd, total_panelists=len(active_personas))
 
+        # sp-xw2z6o: per-question failure budget. Sized against the panelists
+        # being dispatched (same as the cost gate) so the fractional form
+        # tracks the actual run, not the resumed historical total.
+        question_budget: QuestionFailureBudget | None = None
+        if question_budget_value is not None and active_personas:
+            question_budget = QuestionFailureBudget(
+                budget=question_budget_value,
+                total_panelists=len(active_personas),
+            )
+
         try:
             panelist_results, _registry, _sessions = run_panel_parallel(
                 client=client,
@@ -1779,6 +1825,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 convergence_tracker=convergence_tracker,
                 on_panelist_complete=_on_complete if (checkpoint_writer is not None or progress is not None) else None,
                 cost_gate=cost_gate,
+                question_budget=question_budget,
             )
         except RunAbortedError as abort_exc:
             # sp-56pb: SIGINT path. Surface whatever panelists finished
@@ -2127,6 +2174,25 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         )
         banner = f"{banner}\n{cost_banner}" if banner else cost_banner
 
+    # sp-xw2z6o: surface mid-run question disables. The run still completed
+    # (these are not panel-invalidating events on their own), but the
+    # operator must see which questions were short-circuited so they can
+    # diagnose the prompt or schema issue.
+    if question_budget is not None and question_budget.disabled_questions():
+        budget_lines = ["⚠️  Disabled mid-run by --question-failure-budget:"]
+        for entry in question_budget.disabled_details():
+            qi = entry["question_index"]
+            qtext = entry.get("question_text") or f"<question #{qi}>"
+            qtext_short = qtext if len(qtext) <= 80 else qtext[:77] + "..."
+            failures = entry["failures_at_disable"]
+            total = entry["total_panelists"]
+            budget_lines.append(
+                f"  Q{qi + 1}: {qtext_short!r} — {failures}/{total} panelists "
+                f"failed before threshold ({entry['threshold_count']}) reached"
+            )
+        budget_banner = "\n".join(budget_lines)
+        banner = f"{banner}\n{budget_banner}" if banner else budget_banner
+
     # ── sp-ezz: pre-build the convergence report + snapshot raw model
     # distributions BEFORE the text/json branch split, so a single block
     # at the bottom of the function can submit to SynthBench regardless
@@ -2170,6 +2236,11 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 if resp.get("skipped_by_condition"):
                     print(f"  [follow-up] Q: {resp['question']}")
                     print("  [follow-up] A: (skipped — condition not met)")
+                    print()
+                    continue
+                if resp.get("skipped_by_budget"):
+                    print(f"  Q: {resp['question']}")
+                    print("  A: (skipped — disabled mid-run by --question-failure-budget)")
                     print()
                     continue
                 prefix = "  [follow-up] " if resp.get("follow_up") else "  "
@@ -2349,6 +2420,25 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             extra["halted_at_panelist"] = cost_gate.completed
             extra["cost_gate"] = cost_gate.snapshot()
             extra["abort_reason"] = "cost_exceeded"
+        # sp-xw2z6o: surface per-question disables for CI/MCP consumers.
+        # Always include the snapshot when the budget was active (even with
+        # no disables) so dashboards can distinguish "feature off" from
+        # "feature on, no disables" without sniffing CLI args.
+        if question_budget is not None:
+            extra["question_failure_budget"] = question_budget.snapshot()
+            disabled_indices = question_budget.disabled_questions()
+            if disabled_indices:
+                extra["disabled_questions"] = [
+                    {
+                        "question_index": entry["question_index"],
+                        "question_text": entry.get("question_text"),
+                        "failures_at_disable": entry["failures_at_disable"],
+                        "threshold_count": entry["threshold_count"],
+                        "threshold_fraction": entry.get("threshold_fraction"),
+                        "total_panelists": entry["total_panelists"],
+                    }
+                    for entry in question_budget.disabled_details()
+                ]
         if total_failure is not None:
             # sp-efip: carry the structured total-failure diagnostic so
             # CI/MCP consumers can detect the "every panelist failed"
@@ -2578,10 +2668,18 @@ def _analyze_failures(
     excluded from both the numerator and denominator — they are intentional
     non-answers, not failures.
 
+    Primary questions skipped by the per-question failure budget
+    (``skipped_by_budget: True``, sp-xw2z6o) are also excluded — they are
+    short-circuits triggered by the budget feature, not missing answers,
+    so they must not inflate ``failure_rate`` or appear as 0% response
+    rate downstream.
+
     Returns a dict with ``total_pairs``, ``errored_pairs``,
     ``failure_rate`` (0-1), ``failed_panelists`` (panelist-level
-    failures), ``errored_personas`` (names of affected personas), and
-    ``skipped_follow_ups`` (total follow-ups skipped by condition).
+    failures), ``errored_personas`` (names of affected personas),
+    ``skipped_follow_ups`` (total follow-ups skipped by condition), and
+    ``skipped_by_budget`` (primary questions short-circuited by the
+    per-question failure budget).
     """
     total_questions = len(questions) if questions else 0
     total_pairs = 0
@@ -2589,6 +2687,7 @@ def _analyze_failures(
     failed_panelists = 0
     errored_personas: set[str] = set()
     skipped_follow_ups = 0
+    skipped_by_budget = 0
 
     for pr in panelist_results:
         if getattr(pr, "error", None):
@@ -2602,6 +2701,7 @@ def _analyze_failures(
 
         pair_count = 0
         err_count = 0
+        budget_skipped_for_panelist = 0
         for resp in getattr(pr, "responses", []) or []:
             if isinstance(resp, dict) and resp.get("follow_up"):
                 # Follow-ups are not counted as primary QA pairs — they
@@ -2609,16 +2709,29 @@ def _analyze_failures(
                 if resp.get("skipped_by_condition"):
                     skipped_follow_ups += 1
                 continue
+            # sp-xw2z6o: budget-skipped primary questions don't count as
+            # failed pairs OR as missing pairs. They're an intentional
+            # mid-run short-circuit; surface separately and exclude from
+            # the failure-rate denominator.
+            if isinstance(resp, dict) and resp.get("skipped_by_budget"):
+                skipped_by_budget += 1
+                budget_skipped_for_panelist += 1
+                continue
             pair_count += 1
             if isinstance(resp, dict) and resp.get("error"):
                 err_count += 1
         # If the panelist never produced any primary responses (e.g. a
         # structured-output path that bailed before recording), treat the
-        # shortfall as errored against the authored question count.
-        if total_questions and pair_count < total_questions:
-            shortfall = total_questions - pair_count
-            err_count += shortfall
-            pair_count += shortfall
+        # shortfall as errored against the authored question count. The
+        # shortfall is computed against the questions that were *not*
+        # skipped by budget — a budget skip is an intentional non-answer,
+        # not a missing one, so it must not feed the shortfall counter.
+        if total_questions:
+            authored_for_panelist = total_questions - budget_skipped_for_panelist
+            if pair_count < authored_for_panelist:
+                shortfall = authored_for_panelist - pair_count
+                err_count += shortfall
+                pair_count += shortfall
         total_pairs += pair_count
         errored_pairs += err_count
         if err_count > 0:
@@ -2632,6 +2745,7 @@ def _analyze_failures(
         "failed_panelists": failed_panelists,
         "errored_personas": sorted(errored_personas),
         "skipped_follow_ups": skipped_follow_ups,
+        "skipped_by_budget": skipped_by_budget,
     }
 
 
