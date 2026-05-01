@@ -7,7 +7,11 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass
 
-from synth_panel.credentials import get_credential, has_credential
+from synth_panel.credentials import (
+    get_credential,
+    has_credential,
+    missing_api_key_message,
+)
 from synth_panel.llm.errors import LLMError, LLMErrorCategory
 from synth_panel.llm.models import CompletionRequest, CompletionResponse, StreamEvent
 
@@ -26,7 +30,7 @@ class ProviderConfig:
         key = get_credential(self.api_key_env)
         if not key:
             raise LLMError(
-                f"Missing API key: set {self.api_key_env} or run `synthpanel login`",
+                missing_api_key_message(self.api_key_env),
                 LLMErrorCategory.MISSING_CREDENTIALS,
             )
         return key

@@ -11,7 +11,7 @@ from collections.abc import Iterator
 
 import httpx
 
-from synth_panel.credentials import get_credential
+from synth_panel.credentials import get_credential, missing_api_key_message
 from synth_panel.llm.errors import LLMError, LLMErrorCategory, llm_error_from_response
 from synth_panel.llm.models import (
     CompletionRequest,
@@ -44,7 +44,7 @@ class GeminiProvider(LLMProvider):
         key = get_credential("GEMINI_API_KEY") or get_credential("GOOGLE_API_KEY")
         if not key:
             raise LLMError(
-                "Missing API key: set GEMINI_API_KEY / GOOGLE_API_KEY or run `synthpanel login --provider gemini`",
+                missing_api_key_message("GEMINI_API_KEY", alt_env_vars=("GOOGLE_API_KEY",)),
                 LLMErrorCategory.MISSING_CREDENTIALS,
             )
         self._api_key = key

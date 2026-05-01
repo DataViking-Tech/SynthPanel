@@ -62,6 +62,59 @@ PROVIDER_KEY_PREFIXES: dict[str, tuple[str, ...]] = {
     "GOOGLE_API_KEY": (),
 }
 
+# CLI ``--provider`` name for each known env var. Inverse of
+# ``cli/commands.py:_PROVIDER_ENV_VAR``; kept here so non-CLI call sites
+# (provider error messages, etc.) can render the suggested
+# ``synthpanel login --provider <name>`` hint without importing CLI code.
+PROVIDER_CLI_NAMES: dict[str, str] = {
+    "ANTHROPIC_API_KEY": "anthropic",
+    "OPENAI_API_KEY": "openai",
+    "GEMINI_API_KEY": "gemini",
+    "GOOGLE_API_KEY": "google",
+    "XAI_API_KEY": "xai",
+    "OPENROUTER_API_KEY": "openrouter",
+}
+
+
+def missing_api_key_message(env_var: str, *, alt_env_vars: tuple[str, ...] = ()) -> str:
+    """Return a 'Missing API key' error message for ``env_var``.
+
+    Tells the caller which env var was checked, suggests both the
+    persistent (``synthpanel login --provider <name>``) and one-shot
+    (``export <ENV_VAR>=...``) options, and — for Anthropic specifically
+    — calls out the Claude Code OAuth footgun documented in this
+    module's top-level docstring (sp-stkj2w).
+
+    ``alt_env_vars`` lists alternate env vars the same provider also
+    accepts (e.g. Gemini reads both ``GEMINI_API_KEY`` and
+    ``GOOGLE_API_KEY``); they are joined with the primary in the
+    "set X or Y" portion of the message.
+    """
+    label = PROVIDER_LABELS.get(env_var, env_var)
+    cli_name = PROVIDER_CLI_NAMES.get(env_var)
+    env_vars = (env_var,) + tuple(alt_env_vars)
+    env_var_list = " or ".join(env_vars)
+
+    if cli_name:
+        msg = (
+            f"Missing API key for {label}: set {env_var_list}, "
+            f"or run `synthpanel login --provider {cli_name}` to persist a key on disk."
+        )
+    else:
+        msg = (
+            f"Missing API key: set {env_var_list}, "
+            f"or run `synthpanel login` to persist a key on disk."
+        )
+
+    if env_var == "ANTHROPIC_API_KEY":
+        msg += (
+            " Note: Claude Code's OAuth tokens are NOT reusable as Anthropic "
+            "API keys (different auth scheme); get a key from "
+            "https://console.anthropic.com/."
+        )
+
+    return msg
+
 
 def detect_provider_from_key(value: str) -> str | None:
     """Return the env var whose distinctive prefix matches ``value``.

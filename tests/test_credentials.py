@@ -10,6 +10,8 @@ from pathlib import Path
 import pytest
 
 from synth_panel.credentials import (
+    KNOWN_CREDENTIAL_ENV_VARS,
+    PROVIDER_CLI_NAMES,
     PROVIDER_KEY_PREFIXES,
     CredentialIntegrityError,
     credentials_path,
@@ -18,6 +20,7 @@ from synth_panel.credentials import (
     get_credential,
     has_credential,
     load_credentials,
+    missing_api_key_message,
     save_credential,
 )
 
@@ -322,3 +325,102 @@ class TestClientErrorMessage:
             client.send(req)
         assert exc_info.value.category == LLMErrorCategory.MISSING_CREDENTIALS
         assert "synthpanel login" in str(exc_info.value)
+
+
+class TestMissingApiKeyMessage:
+    """Per-provider 'Missing API key' message points users at `synthpanel login` (sp-stkj2w)."""
+
+    def test_provider_cli_names_cover_every_known_env_var(self):
+        # If a new credential env var is added without a CLI name,
+        # ``missing_api_key_message`` would silently degrade to a generic
+        # message for that provider — the assert here keeps the table honest.
+        for env_var in KNOWN_CREDENTIAL_ENV_VARS:
+            assert env_var in PROVIDER_CLI_NAMES, env_var
+
+    def test_anthropic_message_names_env_var_login_and_export_paths(self):
+        msg = missing_api_key_message("ANTHROPIC_API_KEY")
+        assert "ANTHROPIC_API_KEY" in msg
+        assert "synthpanel login --provider anthropic" in msg
+        assert "Anthropic" in msg
+
+    def test_anthropic_message_warns_about_claude_code_oauth_footgun(self):
+        # The footgun documented in credentials.py: Claude Code's OAuth
+        # tokens live in the keychain under a different auth scheme and
+        # are not reusable as Anthropic API keys. Surface that explicitly
+        # so users don't paste the wrong thing.
+        msg = missing_api_key_message("ANTHROPIC_API_KEY")
+        assert "Claude Code" in msg
+        assert "OAuth" in msg
+        assert "NOT reusable" in msg
+        assert "console.anthropic.com" in msg
+
+    def test_openai_message_names_provider_and_skips_oauth_note(self):
+        msg = missing_api_key_message("OPENAI_API_KEY")
+        assert "OPENAI_API_KEY" in msg
+        assert "synthpanel login --provider openai" in msg
+        # OAuth footgun is Anthropic-specific; don't pollute other providers.
+        assert "Claude Code" not in msg
+        assert "OAuth" not in msg
+
+    def test_xai_message_uses_xai_provider_name(self):
+        msg = missing_api_key_message("XAI_API_KEY")
+        assert "XAI_API_KEY" in msg
+        assert "synthpanel login --provider xai" in msg
+
+    def test_openrouter_message_uses_openrouter_provider_name(self):
+        msg = missing_api_key_message("OPENROUTER_API_KEY")
+        assert "OPENROUTER_API_KEY" in msg
+        assert "synthpanel login --provider openrouter" in msg
+
+    def test_gemini_message_lists_both_env_vars(self):
+        # Gemini accepts either GEMINI_API_KEY or GOOGLE_API_KEY; the
+        # error must surface both so users aren't left guessing which
+        # one to set.
+        msg = missing_api_key_message("GEMINI_API_KEY", alt_env_vars=("GOOGLE_API_KEY",))
+        assert "GEMINI_API_KEY" in msg
+        assert "GOOGLE_API_KEY" in msg
+        assert "synthpanel login --provider gemini" in msg
+
+
+class TestProviderMissingKeyErrors:
+    """End-to-end: each provider raises the new helper's message (sp-stkj2w)."""
+
+    def test_anthropic_provider_error_includes_login_and_oauth_note(self, monkeypatch):
+        from synth_panel.llm.errors import LLMError, LLMErrorCategory
+        from synth_panel.llm.providers.anthropic import AnthropicProvider
+
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        with pytest.raises(LLMError) as exc_info:
+            AnthropicProvider()
+        msg = str(exc_info.value)
+        assert exc_info.value.category == LLMErrorCategory.MISSING_CREDENTIALS
+        assert "synthpanel login --provider anthropic" in msg
+        assert "ANTHROPIC_API_KEY" in msg
+        assert "Claude Code" in msg
+
+    def test_openai_provider_error_includes_provider_hint(self, monkeypatch):
+        from synth_panel.llm.errors import LLMError, LLMErrorCategory
+        from synth_panel.llm.providers.openai_compat import OpenAICompatibleProvider
+
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        with pytest.raises(LLMError) as exc_info:
+            OpenAICompatibleProvider()
+        msg = str(exc_info.value)
+        assert exc_info.value.category == LLMErrorCategory.MISSING_CREDENTIALS
+        assert "synthpanel login --provider openai" in msg
+        # No Anthropic-only OAuth note for non-Anthropic providers.
+        assert "Claude Code" not in msg
+
+    def test_gemini_provider_error_lists_both_env_vars(self, monkeypatch):
+        from synth_panel.llm.errors import LLMError, LLMErrorCategory
+        from synth_panel.llm.providers.gemini import GeminiProvider
+
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+        with pytest.raises(LLMError) as exc_info:
+            GeminiProvider()
+        msg = str(exc_info.value)
+        assert exc_info.value.category == LLMErrorCategory.MISSING_CREDENTIALS
+        assert "GEMINI_API_KEY" in msg
+        assert "GOOGLE_API_KEY" in msg
+        assert "synthpanel login --provider gemini" in msg
