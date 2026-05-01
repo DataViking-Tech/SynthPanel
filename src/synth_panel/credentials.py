@@ -92,7 +92,7 @@ def missing_api_key_message(env_var: str, *, alt_env_vars: tuple[str, ...] = ())
     """
     label = PROVIDER_LABELS.get(env_var, env_var)
     cli_name = PROVIDER_CLI_NAMES.get(env_var)
-    env_vars = (env_var,) + tuple(alt_env_vars)
+    env_vars = (env_var, *alt_env_vars)
     env_var_list = " or ".join(env_vars)
 
     if cli_name:
