@@ -141,6 +141,71 @@ All panel runs (`run_panel`, `run_quick_poll`, `extend_panel`) return a uniform 
 
 For v1/v2 instruments and raw `questions` input, `path` is empty or linear and `warnings` is typically empty — the shape is uniform across versions.
 
+## Model Resolution Order
+
+Two questions are answered at the start of every MCP tool call: **which
+execution mode** (sampling vs BYOK) and, in BYOK, **which default
+model**. Both are deterministic and observable from the response payload
+(`mode` and `model` fields).
+
+Source of truth: `decide_mode()` in `src/synth_panel/mcp/sampling.py`
+and `_resolve_mcp_default_model()` in `src/synth_panel/mcp/server.py`.
+
+### Stage 1 — execution mode
+
+| Host advertises `sampling`? | Provider key available? | `use_sampling` arg | Mode |
+|------|------|------|------|
+| yes | no  | (auto)  | **sampling** |
+| yes | yes | (auto)  | **BYOK** — local key wins |
+| yes | (any) | `true`  | **sampling** — even when a key is set |
+| yes | (any) | `false` | **BYOK** — never sample |
+| no  | no  | (auto)  | **error** — set a key OR use a sampling-capable client |
+| no  | yes | (auto)  | **BYOK** |
+| no  | (any) | `true`  | **error** — host did not advertise `sampling` |
+| no  | (any) | `false` | **BYOK** — falls through to a missing-creds error if no key is set |
+
+"Provider key available" means any of `ANTHROPIC_API_KEY`,
+`OPENAI_API_KEY`, `XAI_API_KEY`, `GOOGLE_API_KEY`, `GEMINI_API_KEY`, or
+`OPENROUTER_API_KEY` — checked first against the process environment,
+then against the on-disk credential store written by `synthpanel login`
+(so MCP-launched subprocesses recognise keys the CLI can see).
+
+The auto rule "local key wins over sampling" exists so users who *have*
+configured BYOK keep BYOK's full feature set (cross-provider ensembles,
+structured-output extraction, deterministic model versioning, per-call
+cost telemetry). Pass `use_sampling=true` to force the host's model
+even with a key configured.
+
+### Stage 2 — default model (BYOK only)
+
+When `model` is omitted, the server picks a cheap-and-fast default
+based on which credential is present. The preference chain is walked in
+order; the first match wins:
+
+| Order | Credential | Default alias |
+|-------|------------|---------------|
+| 1 | `ANTHROPIC_API_KEY` | `haiku` |
+| 2 | `OPENAI_API_KEY` | `gpt-4o-mini` |
+| 3 | `GEMINI_API_KEY` | `gemini-2.5-flash` |
+| 4 | `GOOGLE_API_KEY` | `gemini-2.5-flash` |
+| 5 | `XAI_API_KEY` | `grok-3` |
+| 6 | `OPENROUTER_API_KEY` | `openrouter/auto` |
+| (none) | — | `haiku` (terminal fallback; the LLM client surfaces the missing-creds error) |
+
+Pass `model=` explicitly to override (e.g. `"opus"`, `"gpt-4o"`,
+`"gemini-2.5-pro"`). The CLI's weighted-spec syntax
+(`haiku:0.25,gpt-4o-mini:0.25`) is **not** supported on the MCP surface
+— pass plain aliases. In sampling mode the `model` argument is ignored;
+the host agent picks its own model, and the actual model used is
+reported back in the response's `model` field.
+
+### Tool coverage
+
+`run_prompt` and `run_quick_poll` go through both stages and accept
+`use_sampling`. `run_panel`, `extend_panel`, and the pack/result
+management tools always use BYOK and skip Stage 1 — heavier workflows
+benefit from direct provider access and structured outputs.
+
 ## Sampling Mode
 
 MCP has a spec-level feature called
@@ -151,21 +216,8 @@ first-run UX: if you haven't set a provider API key and your client
 advertises `sampling`, the `run_prompt` and `run_quick_poll` tools
 borrow the client's own LLM access instead of failing.
 
-### When sampling kicks in
-
-| Client supports sampling? | Provider key set? | `use_sampling` flag | Mode |
-|---------------------------|-------------------|---------------------|------|
-| yes                       | no                | (auto)              | **sampling** |
-| yes                       | yes               | (auto)              | BYOK |
-| yes                       | (any)             | `true`              | **sampling** |
-| yes                       | (any)             | `false`             | BYOK |
-| no                        | no                | (auto)              | **friendly error** |
-| no                        | yes               | (auto)              | BYOK |
-| no                        | (any)             | `true`              | **error** — client lacks sampling |
-
-The auto logic only routes to sampling when it's *necessary* for a
-first-run experience (no keys set) — existing BYOK users see no change
-in behaviour.
+See [Model Resolution Order](#model-resolution-order) for the full
+configuration → mode matrix.
 
 ### Tradeoffs
 

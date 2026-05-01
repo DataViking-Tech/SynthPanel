@@ -11,7 +11,7 @@ Site: <https://synthpanel.dev> · Benchmark: <https://synthbench.org>
 
 Open-source synthetic focus groups. Any LLM. Your terminal or your agent's tool call.
 
-**Zero-config inside any MCP host that speaks sampling** (Claude Desktop, Claude Code, Cursor, Windsurf) — drop the config in and run a panel with **no API key set**. The host runs the model on your behalf, using its own subscription. Bring your own provider key (Claude, GPT, Gemini, Grok, local) when you want reproducibility, ensembles, or larger panels. Personas and instruments are plain YAML; every response is schema-validated with per-turn cost telemetry. Runs from your terminal, a pipeline, or an AI agent's MCP tool call.
+**Zero-config inside any MCP host that speaks sampling** (Claude Desktop, Claude Code, Cursor, Windsurf) — drop the config in and run a panel with **no API key set**. The host runs the model on your behalf, using its own subscription. [Bring your own provider key](docs/mcp.md#model-resolution-order) (Claude, GPT, Gemini, Grok, local) when you want reproducibility, ensembles, or larger panels. Personas and instruments are plain YAML; every response is schema-validated with per-turn cost telemetry. Runs from your terminal, a pipeline, or an AI agent's MCP tool call.
 
 ```bash
 pip install synthpanel
@@ -228,8 +228,9 @@ setup:
 Sampling mode is great for first-touch UX and quick exploratory polls.
 For cross-provider ensembles, larger panels, and reproducible model
 versioning, set a provider key in `env` to graduate to BYOK. See
-[docs/mcp.md#sampling-mode](docs/mcp.md#sampling-mode) for the full
-matrix of when sampling kicks in and what it costs.
+[docs/mcp.md#model-resolution-order](docs/mcp.md#model-resolution-order)
+for the full matrix of when sampling kicks in and which default model
+each provider key picks.
 
 ### Tools (12)
 
