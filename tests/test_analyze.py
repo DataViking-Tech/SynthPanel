@@ -433,15 +433,10 @@ def _make_csv_panel_result(
         ]
     n_questions = len(questions)
     persona_names = (
-        list(persona_overrides)
-        if persona_overrides is not None
-        else [f"Persona_{i}" for i in range(n_personas)]
+        list(persona_overrides) if persona_overrides is not None else [f"Persona_{i}" for i in range(n_personas)]
     )
     if response_overrides is None:
-        response_overrides = [
-            [f"persona {i}, q{q}" for q in range(n_questions)]
-            for i in range(n_personas)
-        ]
+        response_overrides = [[f"persona {i}, q{q}" for q in range(n_questions)] for i in range(n_personas)]
 
     results = []
     for i, name in enumerate(persona_names):
@@ -578,7 +573,7 @@ class TestResponsesCSV:
 
         data = _make_csv_panel_result(
             n_personas=1,
-            response_overrides=[["=HYPERLINK(\"http://evil\",\"x\")", "ok"]],
+            response_overrides=[['=HYPERLINK("http://evil","x")', "ok"]],
         )
         text = format_csv_responses(data)
         rows = list(_csv.DictReader(_io.StringIO(text)))

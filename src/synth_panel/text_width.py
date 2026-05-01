@@ -31,8 +31,8 @@ _WIDE_EMOJI_RANGES: tuple[tuple[int, int], ...] = (
     (0x1F900, 0x1F9FF),  # Supplemental Symbols and Pictographs
     (0x1FA00, 0x1FA6F),  # Chess Symbols
     (0x1FA70, 0x1FAFF),  # Symbols and Pictographs Extended-A
-    (0x2600, 0x26FF),    # Miscellaneous Symbols (☀ ☁ ⚡ etc.)
-    (0x2700, 0x27BF),    # Dingbats (✂ ✈ ❤ etc.)
+    (0x2600, 0x26FF),  # Miscellaneous Symbols (☀ ☁ ⚡ etc.)
+    (0x2700, 0x27BF),  # Dingbats (✂ ✈ ❤ etc.)
 )
 
 

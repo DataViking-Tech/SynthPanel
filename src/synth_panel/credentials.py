@@ -101,10 +101,7 @@ def missing_api_key_message(env_var: str, *, alt_env_vars: tuple[str, ...] = ())
             f"or run `synthpanel login --provider {cli_name}` to persist a key on disk."
         )
     else:
-        msg = (
-            f"Missing API key: set {env_var_list}, "
-            f"or run `synthpanel login` to persist a key on disk."
-        )
+        msg = f"Missing API key: set {env_var_list}, or run `synthpanel login` to persist a key on disk."
 
     if env_var == "ANTHROPIC_API_KEY":
         msg += (
