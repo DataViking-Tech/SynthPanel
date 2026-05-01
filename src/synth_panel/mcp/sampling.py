@@ -27,8 +27,11 @@ Tool handlers call :func:`sample_text` once the decision is made.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # Sampling mode guardrails — keep invocations light so we don't blast
 # the host agent's context window. Heavy research panels still require
@@ -37,13 +40,23 @@ SAMPLING_MAX_PERSONAS = 3
 SAMPLING_MAX_QUESTIONS = 5
 SAMPLING_MAX_TOKENS_DEFAULT = 2048
 
+# sp-k2ed4a: canonical MCP stop_reason value indicating the host's token
+# ceiling cut the response off mid-stream. Hosts (Claude Desktop, Cursor,
+# Windsurf...) commonly cap output more aggressively than the request,
+# silently truncating the JSON a structured-output engine then fails to
+# parse. We surface this as a warning so callers can distinguish "host
+# clipped me" from generic schema-fail.
+SAMPLING_STOP_REASON_TRUNCATED = "maxTokens"
+
 __all__ = [
     "SAMPLING_CRED_ENV_VARS",
     "SAMPLING_FIRST_RUN_HINT",
     "SAMPLING_MAX_PERSONAS",
     "SAMPLING_MAX_QUESTIONS",
     "SAMPLING_MAX_TOKENS_DEFAULT",
+    "SAMPLING_STOP_REASON_TRUNCATED",
     "SamplingDecision",
+    "build_truncation_warning",
     "client_supports_sampling",
     "decide_mode",
     "has_byok_credentials",
@@ -213,6 +226,27 @@ def decide_mode(
     )
 
 
+def build_truncation_warning(*, max_tokens: int, model: str | None) -> str:
+    """Build a user-facing message describing host-side token-cap truncation.
+
+    Surfaced in panel/quick-poll ``warnings`` lists so MCP/CLI consumers
+    can distinguish a host max_tokens cap from a generic schema-fail when
+    a structured-output post-parse fallback fires. ``model`` is whatever
+    the host reported running (e.g. ``"claude-opus-4-6"``); ``None`` when
+    the host did not name a model.
+    """
+    model_part = f" (host model: {model})" if model else ""
+    return (
+        f"MCP host truncated sampling output at the {max_tokens}-token "
+        f"ceiling{model_part} — the response may be incomplete and any "
+        "structured-output parse failure on this turn is likely caused by "
+        "truncation rather than the model ignoring the schema. Hosts may "
+        "cap output more aggressively than requested; for longer schemas, "
+        "set a provider key (e.g. ANTHROPIC_API_KEY) to use BYOK with a "
+        "higher token budget."
+    )
+
+
 async def sample_text(
     ctx: Any,
     *,
@@ -223,11 +257,21 @@ async def sample_text(
 ) -> dict[str, Any]:
     """Run one sampling round via ``ctx.session.create_message``.
 
-    Returns a dict with keys ``text``, ``model``, ``stop_reason``, and
-    ``role``. The model string is whatever the host agent chose to run
-    (e.g. ``"claude-opus-4-6"`` when invoked from Claude Desktop). We
+    Returns a dict with keys ``text``, ``model``, ``stop_reason``,
+    ``role``, ``truncated``, ``requested_max_tokens``, and ``warning``.
+    The model string is whatever the host agent chose to run (e.g.
+    ``"claude-opus-4-6"`` when invoked from Claude Desktop). We
     normalise content blocks to a single joined string so downstream
     consumers don't have to special-case multi-block responses.
+
+    Truncation detection (sp-k2ed4a): when the host reports
+    ``stopReason == "maxTokens"`` the response was cut short by the
+    host's output cap. This commonly happens because hosts (Claude
+    Desktop, Cursor, Windsurf...) impose their own ceiling that ignores
+    or undershoots ``max_tokens``. We log a warning, set ``truncated``,
+    and surface a ready-to-display ``warning`` string so callers can
+    propagate the signal into their ``warnings`` payload instead of
+    chalking the partial JSON up to a generic schema-fail.
     """
     from mcp.types import SamplingMessage, TextContent
 
@@ -245,11 +289,26 @@ async def sample_text(
     )
 
     text = _extract_text(result.content)
+    stop_reason = getattr(result, "stopReason", None)
+    truncated = stop_reason == SAMPLING_STOP_REASON_TRUNCATED
+    warning: str | None = None
+    if truncated:
+        warning = build_truncation_warning(max_tokens=max_tokens, model=result.model)
+        logger.warning(
+            "MCP sampling truncated: stopReason=%s requested_max_tokens=%d model=%s output_chars=%d",
+            stop_reason,
+            max_tokens,
+            result.model,
+            len(text),
+        )
     return {
         "text": text,
         "model": result.model,
-        "stop_reason": getattr(result, "stopReason", None),
+        "stop_reason": stop_reason,
         "role": result.role,
+        "truncated": truncated,
+        "requested_max_tokens": max_tokens,
+        "warning": warning,
     }
 
 
