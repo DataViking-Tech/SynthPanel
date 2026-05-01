@@ -41,6 +41,11 @@ Prefer a zero-config first run? Skip the `env` block entirely — see
 
 This adds the `/focus-group` skill plus the `/synthpanel-poll` slash command to your Claude Code session. The plugin auto-discovers the bundled `commands/` and `skills/` directories.
 
+Prefer to install without the plugin, or use a different host? See
+[Agent Skills & Slash Commands](agent-skills.md) for manual copy
+steps and guidance for hosts that don't speak Claude Code's
+slash-command convention.
+
 ### Manual Install (Claude Code without plugin)
 
 If you configured the MCP server manually (without `/plugin install`) you can still get all commands and skills by running:

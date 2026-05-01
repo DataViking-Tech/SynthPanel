@@ -18,6 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 PLUGIN_MANIFEST = REPO_ROOT / ".claude-plugin" / "plugin.json"
 COMMANDS_DIR = REPO_ROOT / "commands"
 SKILLS_DIR = REPO_ROOT / "skills"
+AGENT_SKILLS_DOC = REPO_ROOT / "docs" / "agent-skills.md"
 
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
 
@@ -73,3 +74,33 @@ def test_plugin_manifest_skills_all_exist(skill_rel_path: str) -> None:
     manifest = json.loads(PLUGIN_MANIFEST.read_text(encoding="utf-8"))
     assert skill_rel_path in manifest["skills"], f"plugin.json must list {skill_rel_path} in its skills array"
     assert (REPO_ROOT / skill_rel_path).is_file(), f"{skill_rel_path} is listed in plugin.json but does not exist"
+
+
+def test_agent_skills_doc_exists() -> None:
+    """The install-path doc must ship — pip-installed users have no
+    other discoverable way to learn how to copy ``commands/`` and
+    ``skills/`` into ``~/.claude/`` (sp-700cf4).
+    """
+    assert AGENT_SKILLS_DOC.is_file(), f"missing {AGENT_SKILLS_DOC}"
+
+
+@pytest.mark.parametrize(
+    "artifact",
+    [
+        "synthpanel-poll",
+        "focus-group",
+        "name-test",
+        "concept-test",
+        "survey-prescreen",
+        "pricing-probe",
+    ],
+)
+def test_agent_skills_doc_references_all_artifacts(artifact: str) -> None:
+    """Every shipped command/skill must be named in the install doc.
+
+    The acceptance criterion on sp-700cf4 is that the doc covers all
+    six artifacts; if a future change adds a skill without updating
+    the doc, this test catches it.
+    """
+    text = AGENT_SKILLS_DOC.read_text(encoding="utf-8")
+    assert artifact in text, f"docs/agent-skills.md must mention '{artifact}' (the file or skill named on disk)"
