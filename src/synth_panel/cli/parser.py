@@ -468,6 +468,20 @@ def build_parser() -> argparse.ArgumentParser:
             "statistically inconsistent — use only when you accept that."
         ),
     )
+    # GH-299: collision guard for fresh checkpointed runs
+    panel_run_parser.add_argument(
+        "--force-overwrite",
+        action="store_true",
+        default=False,
+        dest="force_overwrite",
+        help=(
+            "When starting a fresh checkpointed run whose run id "
+            "already has on-disk state, replace it instead of refusing. "
+            "Without this flag, a colliding run id is rejected so the "
+            "previous run's progress isn't silently lost. To resume "
+            "rather than overwrite, use --resume <run-id> instead."
+        ),
+    )
     # sp-utnk: mid-run cost gate (projected-total ceiling)
     panel_run_parser.add_argument(
         "--max-cost",

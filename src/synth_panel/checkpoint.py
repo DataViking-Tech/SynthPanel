@@ -48,6 +48,11 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+try:
+    import fcntl  # POSIX-only; Windows falls back to existence-only collision check.
+except ImportError:  # pragma: no cover - Windows path
+    fcntl = None  # type: ignore[assignment]
+
 from synth_panel.cost import coerce_provider_reported_cost
 from synth_panel.metadata_migrations import CURRENT_SCHEMA_VERSION, migrate_to_current
 
@@ -92,6 +97,26 @@ class CheckpointSchemaTooNewError(CheckpointError):
     """
 
 
+class CheckpointCollisionError(CheckpointError):
+    """Raised when a fresh run targets a run id whose checkpoint already exists.
+
+    Without this guard, a second invocation that lands on the same ``run_id``
+    (either by user choice or by a ``new_run_id`` collision) silently
+    overwrites the first run's state, destroying its progress. Callers can
+    bypass with ``force_overwrite=True`` or resume by passing the existing
+    run id to ``--resume``.
+    """
+
+
+class CheckpointLockError(CheckpointError):
+    """Raised when another process already holds the checkpoint directory lock.
+
+    Two simultaneous fresh starts could otherwise both pass the existence
+    check and race to write state.json. The lock makes that race impossible
+    across processes (and across writers in the same process).
+    """
+
+
 # ---------------------------------------------------------------------------
 # Paths and run ids
 # ---------------------------------------------------------------------------
@@ -126,6 +151,44 @@ def checkpoint_dir_for(run_id: str, root: Path | None = None) -> Path:
 
 def _state_path(directory: Path) -> Path:
     return Path(directory) / "state.json"
+
+
+def _lock_path(directory: Path) -> Path:
+    return Path(directory) / ".lock"
+
+
+def _acquire_dir_lock(directory: Path) -> int | None:
+    """Acquire an exclusive non-blocking lock on the checkpoint directory.
+
+    Returns an open fd whose lifetime owns the lock; the caller MUST keep
+    the fd open and pass it to :func:`_release_dir_lock` when done. Returns
+    ``None`` on platforms without ``fcntl`` (Windows), where collision
+    detection falls back to existence-only checks.
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    if fcntl is None:  # pragma: no cover - Windows path
+        return None
+    path = _lock_path(directory)
+    fd = os.open(str(path), os.O_RDWR | os.O_CREAT, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except (BlockingIOError, OSError) as exc:
+        os.close(fd)
+        raise CheckpointLockError(
+            f"another process holds the checkpoint lock at {path}; "
+            f"refusing to start a concurrent run on the same run id"
+        ) from exc
+    return fd
+
+
+def _release_dir_lock(fd: int | None) -> None:
+    if fd is None:
+        return
+    if fcntl is not None:  # pragma: no branch - covered by the import-time fallback
+        with contextlib.suppress(OSError):
+            fcntl.flock(fd, fcntl.LOCK_UN)
+    with contextlib.suppress(OSError):
+        os.close(fd)
 
 
 # ---------------------------------------------------------------------------
@@ -298,6 +361,8 @@ class CheckpointWriter:
         preloaded_completed: list[dict[str, Any]] | None = None,
         preloaded_usage: dict[str, Any] | None = None,
         cli_args: dict[str, Any] | None = None,
+        resume_existing: bool = False,
+        force_overwrite: bool = False,
     ) -> None:
         _validate_run_id(run_id)
         if every < 1:
@@ -319,6 +384,25 @@ class CheckpointWriter:
         self._prev_sigint: Any = None
         self._prev_sigterm: Any = None
         self._handlers_installed = False
+        self._lock_fd: int | None = None
+        self._closed = False
+
+        # Acquire the directory lock first so the collision check below is
+        # race-free against concurrent fresh starts targeting the same id.
+        self._lock_fd = _acquire_dir_lock(self.directory)
+        try:
+            state_path = _state_path(self.directory)
+            if state_path.exists() and not resume_existing and not force_overwrite:
+                raise CheckpointCollisionError(
+                    f"checkpoint already exists at {state_path} "
+                    f"(run_id={run_id!r}); pass force_overwrite=True to "
+                    f"replace it, or resume the existing run via "
+                    f"--resume {run_id}"
+                )
+        except BaseException:
+            _release_dir_lock(self._lock_fd)
+            self._lock_fd = None
+            raise
 
     # -- Signal handling -----------------------------------------------------
 
@@ -349,6 +433,23 @@ class CheckpointWriter:
             signal.signal(signal.SIGINT, self._prev_sigint)
             signal.signal(signal.SIGTERM, self._prev_sigterm)
         self._handlers_installed = False
+
+    def close(self) -> None:
+        """Release the directory lock. Idempotent.
+
+        Callers should invoke this in a ``finally`` block (paired with the
+        usual ``flush()`` + ``remove_signal_handlers()``) so a crashed run
+        doesn't strand the lock for the lifetime of the process.
+        """
+        if self._closed:
+            return
+        _release_dir_lock(self._lock_fd)
+        self._lock_fd = None
+        self._closed = True
+
+    def __del__(self) -> None:  # pragma: no cover - best-effort fallback
+        with contextlib.suppress(Exception):
+            self.close()
 
     def _signal_handler(self, signum: int, frame: Any) -> None:
         name = signal.Signals(signum).name if signum in (signal.SIGINT, signal.SIGTERM) else str(signum)
