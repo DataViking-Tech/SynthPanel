@@ -307,3 +307,127 @@ class TestGuards:
         assert hasattr(mod, "synthpanel_toolkit")
         assert hasattr(mod, "ComposioNotInstalledError")
         assert mod.TOOLKIT_SLUG == "SYNTHPANEL"
+
+
+# ---------------------------------------------------------------------------
+# Upstream-shape canary
+# ---------------------------------------------------------------------------
+
+
+class TestUpstreamShapeCanary:
+    """End-to-end translation test that mirrors how Composio actually
+    invokes a custom toolkit at runtime.
+
+    Composio's tool router takes the agent-supplied JSON arguments,
+    validates them against the pydantic input schema, then calls the
+    registered tool function with the materialised pydantic model. The
+    function's return value is serialised back to JSON for the LLM.
+
+    If this test fails after a `composio` SDK bump, the upstream API
+    surface has likely drifted — check Composio's changelog and the
+    troubleshooting checklist in ``docs/composio-submission.md`` before
+    relaxing the version pin in ``pyproject.toml``.
+    """
+
+    def test_composio_shaped_invocation_round_trip(self, stub_client):
+        from synth_panel.integrations.composio import synthpanel_toolkit
+
+        tk = synthpanel_toolkit(stub_client)
+
+        # Composio constructs the pydantic input from a dict, then calls
+        # the registered tool. Build that exact shape per tool and assert
+        # the SDK delegation receives the translated kwargs.
+        invocations: dict[str, dict[str, Any]] = {
+            "quick_poll": {
+                "input": {
+                    "question": "How would you describe the value here?",
+                    "pack_id": "general-consumer",
+                    "personas": None,
+                    "model": "haiku",
+                    "synthesis": True,
+                },
+                "sdk_target": "synth_panel.sdk.quick_poll",
+                "expected_kwargs": {
+                    "question": "How would you describe the value here?",
+                    "pack_id": "general-consumer",
+                    "personas": None,
+                    "model": "haiku",
+                    "synthesis": True,
+                },
+                "fake_payload": {"result_id": "r-quick", "question": "How would you describe the value here?"},
+            },
+            "run_panel": {
+                "input": {
+                    "instrument_pack": "pricing-discovery",
+                    "instrument": None,
+                    "questions": None,
+                    "pack_id": "smb-owners",
+                    "personas": None,
+                    "model": None,
+                    "synthesis": True,
+                },
+                "sdk_target": "synth_panel.sdk.run_panel",
+                "expected_kwargs": {
+                    "instrument_pack": "pricing-discovery",
+                    "instrument": None,
+                    "questions": None,
+                    "pack_id": "smb-owners",
+                    "personas": None,
+                    "model": None,
+                    "synthesis": True,
+                },
+                "fake_payload": {"result_id": "r-panel", "rounds": []},
+            },
+            "list_personas": {
+                "input": {},
+                "sdk_target": "synth_panel.sdk.list_personas",
+                "expected_kwargs": {},
+                "fake_payload": [{"id": "general-consumer", "persona_count": 5, "builtin": True}],
+            },
+            "list_instruments": {
+                "input": {},
+                "sdk_target": "synth_panel.sdk.list_instruments",
+                "expected_kwargs": {},
+                "fake_payload": [{"id": "pricing-discovery", "version": "3"}],
+            },
+            "get_panel_result": {
+                "input": {"result_id": "r-saved-1"},
+                "sdk_target": "synth_panel.sdk.get_panel_result",
+                "expected_kwargs": {"_positional": ("r-saved-1",)},
+                "fake_payload": {"result_id": "r-saved-1", "synthesis": {"recommendation": "ok"}},
+            },
+        }
+
+        for tool in tk.tools:
+            spec = invocations[tool.name]
+            # 1. Composio side: validate the agent's JSON against our schema.
+            input_cls = tool.func.__annotations__["request"]
+            request = input_cls(**spec["input"])
+
+            # 2. Set up the SDK mock. Tools that return a result object call
+            # `.to_dict()`; tools that return a list (list_personas/list_instruments)
+            # do not. Mirror that here.
+            payload = spec["fake_payload"]
+            return_value = payload if isinstance(payload, list) else _FakePoll(payload)
+
+            with patch(spec["sdk_target"], return_value=return_value) as mocked:
+                output = tool.func(request, ctx=None)
+
+            # 3. Verify the translation: kwargs (or positional) are exactly
+            # what the SDK is supposed to receive.
+            expected = spec["expected_kwargs"]
+            if "_positional" in expected:
+                mocked.assert_called_once_with(*expected["_positional"])
+            else:
+                mocked.assert_called_once_with(**expected)
+
+            # 4. Verify the response shape Composio hands back to the LLM
+            # is JSON-serialisable (dict/list of primitives only).
+            assert isinstance(output, (dict, list))
+            if isinstance(output, dict):
+                # list_* tools wrap into {"packs": [...]}; result-bearing tools
+                # return the dict from `.to_dict()` directly.
+                if tool.name.startswith("list_"):
+                    assert output == {"packs": payload}
+                else:
+                    assert output == payload
