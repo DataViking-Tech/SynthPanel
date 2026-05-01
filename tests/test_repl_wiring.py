@@ -189,6 +189,62 @@ class TestReplWiring:
         # Verify the runtime was called (compacted_count is internal to state)
         mock_runtime.run_turn.assert_called_once()
 
+    @patch("synth_panel.cli.repl.AgentRuntime")
+    @patch("synth_panel.cli.repl.LLMClient")
+    @patch("synth_panel.cli.repl.input", side_effect=[KeyboardInterrupt, "after", EOFError])
+    def test_ctrl_c_at_prompt_continues_loop(self, mock_input, mock_client_cls, mock_runtime_cls, capsys):
+        """Ctrl+C at the prompt should redraw, not exit the REPL."""
+        mock_runtime = MagicMock()
+        mock_runtime.run_turn.return_value = _make_turn_summary("Reply")
+        mock_runtime_cls.return_value = mock_runtime
+
+        import argparse
+
+        args = argparse.Namespace(model="sonnet")
+        code = run_repl(args, OutputFormat.TEXT)
+
+        assert code == 0
+        # The "after" input must have been processed despite the earlier Ctrl+C
+        mock_runtime.run_turn.assert_called_once_with("after")
+
+    @patch("synth_panel.cli.repl.AgentRuntime")
+    @patch("synth_panel.cli.repl.LLMClient")
+    @patch("synth_panel.cli.repl.input", side_effect=["test", "after", EOFError])
+    def test_ctrl_c_during_llm_call_continues_loop(self, mock_input, mock_client_cls, mock_runtime_cls, capsys):
+        """Ctrl+C during run_turn should be caught and the REPL should keep going."""
+        mock_runtime = MagicMock()
+        mock_runtime.run_turn.side_effect = [KeyboardInterrupt, _make_turn_summary("Reply")]
+        mock_runtime_cls.return_value = mock_runtime
+
+        import argparse
+
+        args = argparse.Namespace(model="sonnet")
+        code = run_repl(args, OutputFormat.TEXT)
+
+        assert code == 0
+        assert mock_runtime.run_turn.call_count == 2
+        out = capsys.readouterr().out
+        assert "^C interrupted" in out
+
+    @patch("synth_panel.cli.repl.AgentRuntime")
+    @patch("synth_panel.cli.repl.LLMClient")
+    @patch("synth_panel.cli.repl.dispatch_slash", side_effect=KeyboardInterrupt)
+    @patch("synth_panel.cli.repl.input", side_effect=["/status", EOFError])
+    def test_ctrl_c_during_slash_command_continues_loop(
+        self, mock_input, mock_dispatch, mock_client_cls, mock_runtime_cls, capsys
+    ):
+        """Ctrl+C during a slash command should be caught and the REPL should keep going."""
+        mock_runtime_cls.return_value = MagicMock()
+
+        import argparse
+
+        args = argparse.Namespace(model="sonnet")
+        code = run_repl(args, OutputFormat.TEXT)
+
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "^C interrupted" in out
+
 
 # ---------------------------------------------------------------------------
 # /compact slash command tests

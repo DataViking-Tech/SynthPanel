@@ -81,22 +81,31 @@ def run_repl(args: argparse.Namespace, fmt: OutputFormat) -> int:
     while True:
         try:
             line = input(PROMPT_CHAR)
-        except (EOFError, KeyboardInterrupt):
+        except EOFError:
             print()
             break
+        except KeyboardInterrupt:
+            print()
+            continue
 
         line = line.strip()
         if not line:
             continue
 
         if line.startswith("/"):
-            dispatch_slash(line, state, fmt)
+            try:
+                dispatch_slash(line, state, fmt)
+            except KeyboardInterrupt:
+                emit(fmt, message="^C interrupted")
             continue
 
         # Regular input → send to agent runtime
         state.turn_count += 1
         try:
             summary = runtime.run_turn(line)
+        except KeyboardInterrupt:
+            emit(fmt, message="^C interrupted")
+            continue
         except Exception as exc:
             emit(fmt, message=f"Error: {exc}")
             continue
