@@ -484,6 +484,24 @@ def build_parser() -> argparse.ArgumentParser:
             "cost_exceeded: true. Exit code 2. Default: off."
         ),
     )
+    # sp-xw2z6o: per-question failure budget — short-circuit questions
+    # whose failure count crosses a threshold mid-run. Accepts an integer
+    # count (>= 1) or a fraction in (0, 1).
+    panel_run_parser.add_argument(
+        "--question-failure-budget",
+        default=None,
+        metavar="N|0.X",
+        dest="question_failure_budget",
+        help=(
+            "Disable a question mid-run after its failures cross a threshold, "
+            "so a single bad question (broken schema, format the model rejects) "
+            "doesn't poison an entire panel. Pass an integer (e.g. '2' = give up "
+            "after 2 panelists fail this question) or a fraction in (0, 1) "
+            "(e.g. '0.25' = give up when >= 25%% of panelists fail this "
+            "question). Subsequent panelists skip the disabled question and the "
+            "run still completes. Default: off."
+        ),
+    )
     # sp-yaru: convergence telemetry for large panels
     panel_run_parser.add_argument(
         "--convergence-check-every",

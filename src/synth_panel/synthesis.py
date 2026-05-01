@@ -208,7 +208,7 @@ def _format_panelist_data(
         name = result.persona_name
         parts.append(f"\n### {name}")
         for resp in result.responses:
-            if resp.get("skipped_by_condition"):
+            if resp.get("skipped_by_condition") or resp.get("skipped_by_budget"):
                 continue
             q_text = resp.get("question", "")
             answer = resp.get("response", "")
@@ -564,7 +564,7 @@ def _filter_panelist_to_question(
 
     kept: list[dict[str, Any]] = []
     for resp in pr.responses:
-        if resp.get("skipped_by_condition"):
+        if resp.get("skipped_by_condition") or resp.get("skipped_by_budget"):
             continue
         q = resp.get("question", "")
         if q == question_text:
