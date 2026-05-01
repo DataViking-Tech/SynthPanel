@@ -38,6 +38,14 @@ class CalibrationEntry:
     A pack's ``calibration:`` field is a list of these. Re-running
     calibration against the same ``(dataset, question)`` pair replaces
     the prior entry rather than appending a duplicate (newest wins).
+
+    GH-313: ``cramers_v`` surfaces the categorical effect size for the
+    panel-vs-baseline comparison. Effect size leads p-values for
+    interpretation: it answers "how different are these distributions?"
+    in standard Cohen-style buckets (negligible <0.1, small 0.1-0.3,
+    medium 0.3-0.5, large >=0.5). See ``docs/calibration.md`` for the
+    full readout. The field is optional for backward compatibility with
+    pre-GH-313 pack YAMLs that have only ``jsd``.
     """
 
     dataset: str
@@ -52,6 +60,7 @@ class CalibrationEntry:
     synthpanel_version: str
     methodology_url: str = "https://synthpanel.dev/docs/calibration"
     alignment_error: str | None = field(default=None)
+    cramers_v: float | None = field(default=None)
 
     def to_yaml_dict(self) -> dict[str, Any]:
         """Render as an ordered plain dict suitable for YAML emission."""
@@ -60,6 +69,10 @@ class CalibrationEntry:
         # example for the happy path.
         if d.get("alignment_error") is None:
             d.pop("alignment_error", None)
+        # Drop None cramers_v so older pack YAMLs without an effect size
+        # don't grow a noisy null when re-emitted.
+        if d.get("cramers_v") is None:
+            d.pop("cramers_v", None)
         return d
 
 

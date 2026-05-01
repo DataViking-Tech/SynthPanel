@@ -799,7 +799,16 @@ class ModelDistribution:
 
 @dataclass(frozen=True)
 class FindingConvergence:
-    """Convergence assessment for a single finding/question."""
+    """Convergence assessment for a single finding/question.
+
+    GH-313: ``cramers_v`` measures the strength of association between
+    *model* and *response category* in the MxC contingency table. Closer
+    to 1 means model choice strongly predicts the response (poor
+    convergence in effect-size terms); closer to 0 means responses are
+    essentially independent of which model produced them (strong
+    convergence). It complements Krippendorff's ``alpha`` (rater
+    reliability) with a categorical effect size readers already know.
+    """
 
     question_index: int
     question_text: str
@@ -809,6 +818,9 @@ class FindingConvergence:
     top_choice_agreement: bool  # Do all models agree on the top choice?
     divergent_models: list[str]  # Models whose top choice differs from majority
     interpretation: str  # Human-readable summary
+    cramers_v: float = 0.0  # Effect size for model x category contingency
+    chi2: float = 0.0  # Chi-squared statistic backing cramers_v
+    chi2_df: int = 0  # Degrees of freedom: (M-1)*(C-1)
 
 
 @dataclass(frozen=True)
@@ -822,6 +834,7 @@ class ConvergenceReport:
     n_divergent: int  # Findings with alpha < 0.40
     n_models: int
     model_names: list[str]
+    overall_cramers_v: float = 0.0  # Mean Cramer's V across findings (GH-313)
 
 
 def _classify_alpha(alpha: float) -> ConvergenceLevel:
@@ -834,6 +847,84 @@ def _classify_alpha(alpha: float) -> ConvergenceLevel:
         return ConvergenceLevel.WEAK
     else:
         return ConvergenceLevel.NONE
+
+
+def _classify_cramers_v_effect(v: float) -> str:
+    """Cohen-style effect-size label for Cramer's V (GH-313)."""
+    if v < 0.1:
+        return "negligible"
+    if v < 0.3:
+        return "small"
+    if v < 0.5:
+        return "medium"
+    return "large"
+
+
+def _model_category_cramers_v(
+    rows_by_model: list[list[str]],
+) -> tuple[float, float, int]:
+    """Cramer's V for a model x category contingency table (GH-313).
+
+    ``rows_by_model[i]`` is the flat list of categorical responses produced by
+    model *i*. The function builds an MxC contingency table (M = number of
+    models, C = number of distinct categories observed across all rows),
+    computes Pearson's chi-squared via expected = row_total x col_total / N,
+    and returns ``(cramers_v, chi2, df)``.
+
+    Returns ``(0.0, 0.0, 0)`` when fewer than two models are supplied, fewer
+    than two distinct categories are observed, or the total count is zero
+    (those cases have no defined effect size). Reads cleanly even with
+    empty rows: empty rows contribute zero observations and the function
+    treats the remaining models as the active set.
+    """
+    n_rows = len(rows_by_model)
+    if n_rows < 2:
+        return 0.0, 0.0, 0
+
+    categories: list[str] = sorted({c for row in rows_by_model for c in row})
+    n_cols = len(categories)
+    if n_cols < 2:
+        return 0.0, 0.0, 0
+    cat_index = {c: j for j, c in enumerate(categories)}
+
+    table: list[list[int]] = [[0] * n_cols for _ in range(n_rows)]
+    for i, row in enumerate(rows_by_model):
+        for value in row:
+            j = cat_index.get(value)
+            if j is not None:
+                table[i][j] += 1
+
+    row_totals = [sum(table[i]) for i in range(n_rows)]
+    col_totals = [sum(table[i][j] for i in range(n_rows)) for j in range(n_cols)]
+    n_total = sum(row_totals)
+    if n_total <= 0:
+        return 0.0, 0.0, 0
+
+    chi2 = 0.0
+    for i in range(n_rows):
+        if row_totals[i] == 0:
+            continue
+        for j in range(n_cols):
+            if col_totals[j] == 0:
+                continue
+            expected = (row_totals[i] * col_totals[j]) / n_total
+            if expected <= 0:
+                continue
+            diff = table[i][j] - expected
+            chi2 += diff * diff / expected
+
+    df = (n_rows - 1) * (n_cols - 1)
+    if df <= 0 or n_total <= 0:
+        return 0.0, chi2, df
+
+    denom = n_total * min(n_rows - 1, n_cols - 1)
+    if denom <= 0:
+        return 0.0, chi2, df
+
+    v = math.sqrt(chi2 / denom)
+    # Clamp for numerical safety — V is bounded in [0, 1] in theory.
+    v = max(0.0, min(1.0, v))
+    return v, chi2, df
 
 
 def convergence_report(
@@ -911,6 +1002,10 @@ def convergence_report(
         # Classify
         level = _classify_alpha(alpha_q)
 
+        # GH-313: cross-model effect size — does model choice predict the
+        # response category? Built from the same MxN matrix used for alpha.
+        cramers_v_q, chi2_q, df_q = _model_category_cramers_v(reliability_data)
+
         # Per-model distributions
         per_model: list[ModelDistribution] = []
         model_top_choices: dict[str, str] = {}
@@ -938,24 +1033,29 @@ def convergence_report(
         divergent = [m for m in model_names if model_top_choices[m] != majority_top]
         top_choice_agreement = len(divergent) == 0
 
-        # Interpretation
+        # Interpretation — leads with effect size (Cramer's V) per GH-313 so the
+        # reader's first impression is "how strongly does model predict
+        # response?" rather than the more abstract Krippendorff's alpha.
+        effect_label = _classify_cramers_v_effect(cramers_v_q)
+        effect_lead = f"Cramer's V={cramers_v_q:.3f} ({effect_label} effect)"
         if level == ConvergenceLevel.STRONG:
             interpretation = (
-                f"Strong convergence (alpha={alpha_q:.2f}). All models agree: {majority_top} is the top choice."
+                f"Strong convergence — {effect_lead}; alpha={alpha_q:.2f}. "
+                f"All models agree: {majority_top} is the top choice."
             )
         elif level == ConvergenceLevel.MODERATE:
             interpretation = (
-                f"Moderate convergence (alpha={alpha_q:.2f}). "
+                f"Moderate convergence — {effect_lead}; alpha={alpha_q:.2f}. "
                 f"Models mostly agree on {majority_top} but with some variation."
             )
         elif level == ConvergenceLevel.WEAK:
             interpretation = (
-                f"Weak convergence (alpha={alpha_q:.2f}). "
+                f"Weak convergence — {effect_lead}; alpha={alpha_q:.2f}. "
                 f"Interpret with caution. {divergent} disagree with the majority."
             )
         else:
             interpretation = (
-                f"No convergence (alpha={alpha_q:.2f}). "
+                f"No convergence — {effect_lead}; alpha={alpha_q:.2f}. "
                 f"Model choice dominates this finding. {divergent} diverge. Not reliable."
             )
 
@@ -969,12 +1069,16 @@ def convergence_report(
                 top_choice_agreement=top_choice_agreement,
                 divergent_models=divergent,
                 interpretation=interpretation,
+                cramers_v=cramers_v_q,
+                chi2=chi2_q,
+                chi2_df=df_q,
             )
         )
 
     # Overall metrics
     overall_alpha = sum(f.alpha for f in findings) / len(findings)
     overall_level = _classify_alpha(overall_alpha)
+    overall_cramers_v = sum(f.cramers_v for f in findings) / len(findings)
     n_convergent = sum(1 for f in findings if f.alpha >= 0.60)
     n_divergent = sum(1 for f in findings if f.alpha < 0.40)
 
@@ -986,6 +1090,7 @@ def convergence_report(
         n_divergent=n_divergent,
         n_models=n_models,
         model_names=model_names,
+        overall_cramers_v=overall_cramers_v,
     )
 
 

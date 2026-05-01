@@ -365,12 +365,27 @@ def test_build_report_attaches_calibration_subobject_with_provenance():
     )
 
     calib = report["per_question"]["happy"]["calibration"]
-    assert set(calib.keys()) == {"jsd", "baseline_spec", "extractor", "auto_derived"}
+    # GH-313: cramers_v effect size + chi-squared provenance attached
+    # alongside the original sp-bldz fields. Schema is additive — order is
+    # not pinned but all keys must be present.
+    assert set(calib.keys()) == {
+        "jsd",
+        "baseline_spec",
+        "extractor",
+        "auto_derived",
+        "cramers_v",
+        "chi2_df",
+        "chi2_p_value",
+        "chi2_warning",
+        "lead_interpretation",
+    }
     assert 0.0 <= calib["jsd"] <= 1.0
     assert calib["jsd"] == 0.008454  # rounded to 6 dp per wire format
     assert calib["baseline_spec"] == "gss:HAPPY"
     assert calib["extractor"] == "pick_one:auto-derived"
     assert calib["auto_derived"] is True
+    assert 0.0 <= calib["cramers_v"] <= 1.0
+    assert calib["lead_interpretation"].startswith("Cramer's V=")
     # human_baseline still spliced in verbatim.
     assert report["human_baseline"] is baseline
 
@@ -533,6 +548,114 @@ def test_compute_calibration_jsd_wraps_local_implementation():
     assert compute_calibration_jsd({"a": 1.0}, {"b": 1.0}) == pytest.approx(1.0)
     # Empty model distribution → 0.0 (no panelist signal yet).
     assert compute_calibration_jsd({}, {"a": 1.0}) == 0.0
+
+
+# ---------------------------------------------------------------------------
+# GH-313: compute_calibration_cramers_v
+# ---------------------------------------------------------------------------
+
+
+def test_compute_calibration_cramers_v_exact_match_yields_zero():
+    """Model dist matches baseline proportions exactly → Cramer's V is 0."""
+    from synth_panel.convergence import compute_calibration_cramers_v
+
+    v, df, p, warn = compute_calibration_cramers_v(
+        {"a": 5, "b": 3, "c": 2},
+        {"a": 0.5, "b": 0.3, "c": 0.2},
+    )
+    assert v == pytest.approx(0.0, abs=1e-9)
+    assert df == 2
+    assert p == pytest.approx(1.0, abs=1e-9)
+    # Expected counts (5, 3, 2) include a value < 5, so a small-counts warning fires.
+    assert warn is not None
+
+
+def test_compute_calibration_cramers_v_small_deviation():
+    """Mild deviation from baseline → small effect size in [0.1, 0.3)."""
+    from synth_panel.convergence import compute_calibration_cramers_v
+
+    v, df, _p, _warn = compute_calibration_cramers_v(
+        {"a": 6, "b": 3, "c": 1},
+        {"a": 0.5, "b": 0.4, "c": 0.1},
+    )
+    assert df == 2
+    assert 0.1 <= v < 0.3
+
+
+def test_compute_calibration_cramers_v_clamped_to_one():
+    """Smoothed expected counts can blow up chi-squared past 1.0; result is clamped."""
+    from synth_panel.convergence import compute_calibration_cramers_v
+
+    v, _df, _p, _warn = compute_calibration_cramers_v(
+        {"red": 7, "blue": 3},
+        {"never": 0.3, "sometimes": 0.3, "often": 0.4},
+    )
+    assert 0.0 <= v <= 1.0
+
+
+def test_compute_calibration_cramers_v_rejects_empty_inputs():
+    """Empty model or empty baseline → zero effect, no chi-squared computed."""
+    from synth_panel.convergence import compute_calibration_cramers_v
+
+    v, df, p, warn = compute_calibration_cramers_v({}, {"a": 1.0})
+    assert (v, df, p, warn) == (0.0, 0, 1.0, None)
+    v, df, p, warn = compute_calibration_cramers_v({"a": 5}, {})
+    assert (v, df, p, warn) == (0.0, 0, 1.0, None)
+
+
+def test_build_report_calibration_disjoint_pegs_cramers_v_to_one():
+    """Disjoint supports: cramers_v mirrors the JSD upper bound (1.0)."""
+    questions = [_pick_one_question("color")]
+    tracked = identify_tracked_questions(questions)
+    tracker = ConvergenceTracker(tracked, check_every=100, min_n=0, m_consecutive=2)
+    for _ in range(5):
+        tracker.record({"color": "red"})
+    for _ in range(5):
+        tracker.record({"color": "blue"})
+
+    baseline = {
+        "human_distribution": {
+            "Very happy": 0.5,
+            "Pretty happy": 0.3,
+            "Not too happy": 0.2,
+        }
+    }
+    report = tracker.build_report(
+        baseline=baseline,
+        calibration_spec="gss:HAPPY",
+        extractor_label="pick_one:auto-derived",
+        auto_derived=True,
+    )
+    calib = report["per_question"]["color"]["calibration"]
+    assert calib["cramers_v"] == 1.0
+    assert "lead_interpretation" in calib
+    assert "disjoint" in calib["lead_interpretation"]
+
+
+def test_build_report_calibration_lead_interpretation_uses_cohen_buckets():
+    """Effect size string surfaces a recognisable Cohen-style label."""
+    questions = [_pick_one_question("happy")]
+    tracked = identify_tracked_questions(questions)
+    tracker = ConvergenceTracker(tracked, check_every=100, min_n=0, m_consecutive=2)
+    # Strong skew vs baseline (model concentrates on "Very happy", baseline spreads).
+    for _ in range(20):
+        tracker.record({"happy": "Very happy"})
+    baseline = {
+        "human_distribution": {
+            "Very happy": 0.3,
+            "Pretty happy": 0.4,
+            "Not too happy": 0.3,
+        }
+    }
+    report = tracker.build_report(
+        baseline=baseline,
+        calibration_spec="gss:HAPPY",
+        extractor_label="pick_one",
+        auto_derived=False,
+    )
+    calib = report["per_question"]["happy"]["calibration"]
+    assert calib["cramers_v"] > 0.5
+    assert "large effect" in calib["lead_interpretation"]
 
 
 # ---------------------------------------------------------------------------

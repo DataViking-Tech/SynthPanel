@@ -114,6 +114,99 @@ def compute_calibration_jsd(
     return jensen_shannon_divergence(model_dist, human_dist)
 
 
+# Smoothing constant for chi-squared expected counts on categories the baseline
+# does not cover. Avoids divide-by-zero while keeping the contribution small
+# enough that "model invented a brand-new category" still surfaces as deviation.
+_CALIBRATION_EXPECTED_FLOOR = 0.5
+
+
+def compute_calibration_cramers_v(
+    model_counts: dict[str, int],
+    human_dist: dict[str, float],
+) -> tuple[float, int, float, str | None]:
+    """Cramer's V for a model panel distribution vs a human baseline (GH-313).
+
+    Treats ``human_dist`` as expected proportions, scales by the model's total
+    n, and returns ``(cramers_v, df, p_value, warning)`` from a chi-squared
+    goodness-of-fit test over the UNION of supports. A small smoothing constant
+    (:data:`_CALIBRATION_EXPECTED_FLOOR`) is applied where the baseline has no
+    mass for an observed category, so categories present only in the model
+    surface as deviation rather than triggering a divide-by-zero.
+
+    Returns ``(0.0, 0, 1.0, None)`` when the model has no observations or the
+    human distribution does not normalize. Callers handle the disjoint-support
+    case (``alignment_error``) before calling.
+    """
+    n_total = sum(model_counts.values())
+    if n_total <= 0:
+        return 0.0, 0, 1.0, None
+    h_total = sum(human_dist.values())
+    if h_total <= 0:
+        return 0.0, 0, 1.0, None
+
+    normalized_h = {k: v / h_total for k, v in human_dist.items()}
+    all_keys = set(model_counts) | set(normalized_h)
+    if not all_keys:
+        return 0.0, 0, 1.0, None
+
+    observed: dict[str, int] = {k: int(model_counts.get(k, 0)) for k in all_keys}
+    expected: dict[str, float] = {}
+    for k in all_keys:
+        scaled = normalized_h.get(k, 0.0) * n_total
+        expected[k] = max(_CALIBRATION_EXPECTED_FLOOR, scaled)
+
+    result = chi_squared_test(observed, expected)
+    # Clamp to [0, 1]. GOF Cramer's V is theoretically bounded in this range
+    # but the expected-count smoothing for categories the baseline does not
+    # cover can inflate chi-squared past the bound; clamping keeps the wire
+    # value interpretable as a Cohen-style effect size.
+    v = max(0.0, min(1.0, result.cramers_v))
+    return v, result.df, result.p_value, result.warning
+
+
+def _lead_interpretation_for_calibration(
+    cramers_v: float,
+    *,
+    p_value: float,
+    n_categories: int,
+    total_n: int,
+    chi2_warning: str | None,
+) -> str:
+    """Effect-size readout for Cramer's V vs a human baseline (GH-313).
+
+    Uses Cohen-style thresholds for Cramer's *V* on categorical data
+    (negligible <0.1, small 0.1-0.3, medium 0.3-0.5, large >=0.5). For
+    calibration the framing is "how far is the synthetic panel from the
+    human baseline" rather than the leading-prompt framing used by
+    :func:`_lead_interpretation_for_uniform_skew`.
+    """
+    if chi2_warning:
+        reliability = f"p={p_value:.4g} (approximate - {chi2_warning.rstrip('.')}); treat effect size as directional."
+    else:
+        reliability = f"p={p_value:.4g} vs baseline over {n_categories} categories (n={total_n})."
+
+    if cramers_v < 0.1:
+        bucket = "negligible"
+        gist = "Panel distribution closely matches the human baseline."
+    elif cramers_v < 0.3:
+        bucket = "small"
+        gist = "Mild deviation from baseline - panel proportions track the human shape with minor drift."
+    elif cramers_v < 0.5:
+        bucket = "medium"
+        gist = (
+            "Moderate deviation from baseline - panel emphasizes some options "
+            "more (or less) than the human distribution."
+        )
+    else:
+        bucket = "large"
+        gist = (
+            "Strong deviation from baseline - panel distribution differs "
+            "substantially from human responses; investigate persona spread or prompt wording."
+        )
+
+    return f"Cramer's V={cramers_v:.3f} ({bucket} effect vs baseline). {gist} {reliability}"
+
+
 def _lead_interpretation_for_uniform_skew(
     cramers_v: float,
     *,
@@ -563,9 +656,39 @@ class ConvergenceTracker:
                     # divergence". This is a wire-format field per P-gate.
                     model_keys = set(model_dist)
                     baseline_keys = set(human_dist)
-                    if model_keys and baseline_keys and not (model_keys & baseline_keys):
+                    disjoint = bool(model_keys and baseline_keys and not (model_keys & baseline_keys))
+                    if disjoint:
                         calibration["jsd"] = 1.0
                         calibration["alignment_error"] = f"{sorted(model_keys)} vs {sorted(baseline_keys)}"
+                    # GH-313: surface Cramer's V effect size alongside JSD so
+                    # operators can read "how different is this panel from the
+                    # human baseline" in standard categorical-effect terms.
+                    # Disjoint supports pin V to 1.0 (mirrors JSD) since the
+                    # supports cannot be sensibly compared via chi-squared.
+                    model_counts = {k: int(v) for k, v in state.cumulative.items()}
+                    n_obs_calib = sum(model_counts.values())
+                    if disjoint:
+                        calibration["cramers_v"] = 1.0
+                        calibration["lead_interpretation"] = (
+                            "Cramer's V=1.000 (large effect vs baseline). "
+                            "Panel and baseline use disjoint category vocabularies; "
+                            "see alignment_error before drawing conclusions."
+                        )
+                    elif n_obs_calib > 0 and human_dist:
+                        v, df_v, p_v, warn_v = compute_calibration_cramers_v(model_counts, human_dist)
+                        n_cats = len(set(model_counts) | set(human_dist))
+                        calibration["cramers_v"] = round(v, 6)
+                        calibration["chi2_df"] = df_v
+                        calibration["chi2_p_value"] = round(p_v, 6)
+                        if warn_v:
+                            calibration["chi2_warning"] = warn_v
+                        calibration["lead_interpretation"] = _lead_interpretation_for_calibration(
+                            v,
+                            p_value=p_v,
+                            n_categories=n_cats,
+                            total_n=n_obs_calib,
+                            chi2_warning=warn_v,
+                        )
                     entry["calibration"] = calibration
                 observed = dict(state.cumulative)
                 n_obs = sum(observed.values())

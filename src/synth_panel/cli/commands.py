@@ -3636,12 +3636,24 @@ def _run_calibration_panel(
             cost_section.get("usd") or cost_section.get("total_usd") or cost_section.get("cost_usd") or 0.0
         )
 
+    cramers_v_raw = calib.get("cramers_v")
+    cramers_v: float | None
+    if cramers_v_raw is None:
+        cramers_v = None
+    else:
+        try:
+            cramers_v = float(cramers_v_raw)
+        except (TypeError, ValueError):
+            cramers_v = None
+
     return {
         "jsd": float(calib["jsd"]),
+        "cramers_v": cramers_v,
         "extractor": calib.get("extractor") or "pick_one:auto-derived",
         "models": _split_models_arg(models) if models else _default_models_list(payload),
         "panelist_cost_usd": panelist_cost_usd,
         "alignment_error": calib.get("alignment_error"),
+        "lead_interpretation": calib.get("lead_interpretation"),
     }
 
 
@@ -3650,6 +3662,17 @@ def _split_models_arg(models: str | None) -> list[str]:
     if not models:
         return []
     return [m.strip() for m in models.split(",") if m.strip()]
+
+
+def _calibration_effect_bucket(v: float) -> str:
+    """Cohen-style label for a Cramer's V effect size (GH-313)."""
+    if v < 0.1:
+        return "negligible"
+    if v < 0.3:
+        return "small"
+    if v < 0.5:
+        return "medium"
+    return "large"
 
 
 def _default_models_list(payload: dict[str, Any]) -> list[str]:
@@ -3723,6 +3746,7 @@ def handle_pack_calibrate(args: argparse.Namespace, fmt: OutputFormat) -> int:
             return 1
 
         # ── Build the calibration entry ──────────────────────────────────
+        run_cramers_v = run_result.get("cramers_v")
         entry = calib_mod.CalibrationEntry(
             dataset=dataset,
             question=question,
@@ -3735,6 +3759,7 @@ def handle_pack_calibrate(args: argparse.Namespace, fmt: OutputFormat) -> int:
             calibrated_at=calib_mod.now_iso_utc(),
             synthpanel_version=str(__version__),
             alignment_error=run_result.get("alignment_error"),
+            cramers_v=round(float(run_cramers_v), 6) if run_cramers_v is not None else None,
         )
         new_dict = entry.to_yaml_dict()
         new_yaml = calib_mod.update_pack_calibration_text(raw_text, parsed, new_dict)
@@ -3777,7 +3802,23 @@ def handle_pack_calibrate(args: argparse.Namespace, fmt: OutputFormat) -> int:
             return 1
 
         if fmt is OutputFormat.TEXT:
-            print(f"Wrote calibration entry ({dataset}:{question}, JSD {entry.jsd}) → {output_path}")
+            # GH-313: lead with effect size (Cramer's V) so the reader's first
+            # impression is "how different are these distributions?" rather
+            # than "what's the JSD scalar?". JSD is retained as the secondary
+            # check on distributional shape.
+            lead = run_result.get("lead_interpretation")
+            if entry.cramers_v is not None:
+                effect_label = _calibration_effect_bucket(entry.cramers_v)
+                summary = (
+                    f"Wrote calibration entry ({dataset}:{question}): "
+                    f"Cramer's V={entry.cramers_v:.3f} ({effect_label}); "
+                    f"JSD={entry.jsd} → {output_path}"
+                )
+            else:
+                summary = f"Wrote calibration entry ({dataset}:{question}, JSD {entry.jsd}) → {output_path}"
+            print(summary)
+            if isinstance(lead, str) and lead:
+                print(f"  {lead}")
         else:
             emit(
                 fmt,
