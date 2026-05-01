@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from synth_panel.llm.aliases import resolve_alias
+from synth_panel.text_width import pad
 
 _SYNTH_SUMMARY_PEEK = 300
 
@@ -499,7 +500,7 @@ def format_inspect_text(report: InspectReport) -> str:
         lines.append("  (no panelists recorded)")
     else:
         for p in report.personas:
-            parts = [f"  {p.name:<30}"]
+            parts = [f"  {pad(p.name, 30)}"]
             if p.model:
                 parts.append(f"model={p.model}")
             parts.append(f"responses={p.response_count}")

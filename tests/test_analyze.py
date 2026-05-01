@@ -258,6 +258,46 @@ class TestTextFormat:
         assert "Chi-squared" in text
         assert "Cramer's V" in text
 
+    def test_frequency_table_alignment_with_non_ascii_categories(self):
+        """Frequency-table rows must align in rendered cells when categories
+        contain CJK / accented Latin / emoji.
+
+        Regression: SP#298 — naive ``f"{cat:<30}"`` counted code points,
+        so a row with ``"王芳"`` (4 cells but 2 codepoints) shifted right
+        of an ASCII row, breaking column alignment.
+        """
+        import re
+
+        from synth_panel.text_width import display_width
+
+        data = _make_panel_result(n_personas=6)
+        non_ascii_choices = ["José", "王芳", "Naoko 🌸", "agree"]
+        for i, entry in enumerate(data["results"]):
+            for r in entry["responses"]:
+                r["response"] = non_ascii_choices[i % len(non_ascii_choices)]
+
+        result = analyze_panel_result(data)
+        text = format_text(result)
+
+        # Frequency-table data rows match: two-space indent, then category,
+        # then count, prop and CI. We anchor on the CI bracket so Borda
+        # lines (4-space indent, "name: score") don't match.
+        row_re = re.compile(r"^  .*?(\d+)\s+(\d+\.\d{2})\s+\[\d")
+        rows = [ln for ln in text.splitlines() if row_re.match(ln)]
+        assert rows, "expected at least one frequency-table row"
+
+        # The count column is right-justified to width 5. Measure the
+        # rendered width of the prefix up to and including the count —
+        # for every aligned row this is the same (2 indent + 30 cat + 1
+        # space + 5 count = 38 cells).
+        widths = set()
+        for row in rows:
+            m = row_re.match(row)
+            widths.add(display_width(row[: m.end(1)]))
+
+        assert len(widths) == 1, f"frequency table misaligned, prefix widths: {widths}"
+        assert next(iter(widths)) == 38, f"expected 38-cell prefix, got {widths}"
+
 
 # ---------------------------------------------------------------------------
 # CSV formatting tests

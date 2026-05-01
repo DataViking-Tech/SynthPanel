@@ -256,6 +256,29 @@ def test_format_inspect_text_includes_all_sections():
     assert "themes contains price" in text
 
 
+def test_per_persona_summary_aligns_non_ascii_names():
+    """Persona names with CJK / accents / emoji must align in the summary.
+
+    Regression: SP#298 — naive ``f"{name:<30}"`` counted code points, so
+    a row with ``"王芳"`` shifted ``model=...`` left of an ASCII row.
+    """
+    from synth_panel.text_width import display_width
+
+    data = _flat_result(n_errors=0)
+    data["results"][0]["persona"] = "Naoko 🌸"
+    data["results"][1]["persona"] = "José Martínez"
+    data["results"][2]["persona"] = "王芳"
+
+    text = format_inspect_text(build_inspect_report(data))
+
+    # Each per-persona line is "  <name padded>  model=...  responses=...  errors=...".
+    # The "model=" token should appear at the same display offset on every row.
+    rows = [ln for ln in text.splitlines() if "model=haiku" in ln]
+    assert len(rows) == 3
+    offsets = {display_width(row[: row.index("model=")]) for row in rows}
+    assert len(offsets) == 1, f"per-persona rows misaligned: {offsets}"
+
+
 def test_cli_inspect_with_path(capsys):
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "saved.json"

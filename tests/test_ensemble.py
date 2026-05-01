@@ -334,6 +334,25 @@ class TestFormatAssignmentBreakdown:
 
         assert format_assignment_breakdown({}) == ""
 
+    def test_aligns_arrows_with_non_ascii_names(self):
+        """The ``→`` arrow must line up across rows when persona names
+        contain emoji / CJK / accented Latin (SP#298 regression)."""
+        from synth_panel.cli.commands import format_assignment_breakdown
+        from synth_panel.text_width import display_width
+
+        text = format_assignment_breakdown(
+            {
+                "Sarah Chen": "haiku",
+                "Naoko 🌸": "haiku",
+                "王芳": "gemini",
+                "José Martínez": "gemini",
+            }
+        )
+        rows = [ln for ln in text.splitlines() if " → " in ln]
+        assert len(rows) == 4
+        offsets = {display_width(row[: row.index(" → ")]) for row in rows}
+        assert len(offsets) == 1, f"arrow column misaligned: {offsets}"
+
 
 # ---------------------------------------------------------------------------
 # Tests: CLI parser --models

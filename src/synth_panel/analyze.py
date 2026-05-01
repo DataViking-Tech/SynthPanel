@@ -28,6 +28,7 @@ from synth_panel.stats import (
     frequency_table,
     kendall_w,
 )
+from synth_panel.text_width import pad, truncate
 
 # ---------------------------------------------------------------------------
 # Result data structures
@@ -413,12 +414,12 @@ def format_text(result: AnalysisResult) -> str:
         lines.append("")
 
         # Frequency table
-        lines.append(f"  {'Category':<30} {'Count':>5} {'Prop':>6} {'95% CI':>16}")
+        lines.append(f"  {pad('Category', 30)} {'Count':>5} {'Prop':>6} {'95% CI':>16}")
         lines.append(f"  {'-' * 30} {'-' * 5} {'-' * 6} {'-' * 16}")
         for row in qa.frequency.rows:
-            cat = row.category[:30]
+            cat = truncate(row.category, 30)
             ci = f"[{row.ci_lower:.2f}, {row.ci_upper:.2f}]"
-            lines.append(f"  {cat:<30} {row.count:>5} {row.proportion:>6.2f} {ci:>16}")
+            lines.append(f"  {pad(cat, 30)} {row.count:>5} {row.proportion:>6.2f} {ci:>16}")
 
         # Borda scores
         if qa.borda:

@@ -105,6 +105,7 @@ from synth_panel.synthesis import (
     synthesize_panel_mapreduce,
 )
 from synth_panel.templates import find_unresolved_in_questions
+from synth_panel.text_width import display_width, pad
 
 logger = logging.getLogger(__name__)
 
@@ -427,10 +428,10 @@ def format_assignment_breakdown(persona_models: dict[str, str]) -> str:
     """
     if not persona_models:
         return ""
-    name_width = max(len(n) for n in persona_models)
+    name_width = max(display_width(n) for n in persona_models)
     lines = ["Model assignment:"]
     for name, mdl in persona_models.items():
-        lines.append(f"  {name.ljust(name_width)} → {mdl}")
+        lines.append(f"  {pad(name, name_width)} → {mdl}")
     counts: dict[str, int] = {}
     for mdl in persona_models.values():
         counts[mdl] = counts.get(mdl, 0) + 1
