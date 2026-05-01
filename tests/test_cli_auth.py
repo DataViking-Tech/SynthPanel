@@ -250,6 +250,105 @@ class TestDoctor:
         dumped = json.dumps(payload)
         assert "xai-json-secret-banned" not in dumped
 
+    def test_doctor_json_includes_runtime_and_pack_surfaces(self, capsys, monkeypatch, tmp_path):
+        """All major surfaces (python, checkpoint root, packs) appear in JSON report."""
+        for env in (
+            "ANTHROPIC_API_KEY",
+            "OPENAI_API_KEY",
+            "GEMINI_API_KEY",
+            "GOOGLE_API_KEY",
+            "XAI_API_KEY",
+            "OPENROUTER_API_KEY",
+        ):
+            monkeypatch.delenv(env, raising=False)
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-runtime-key")
+        monkeypatch.setenv("SYNTHPANEL_CHECKPOINT_ROOT", str(tmp_path / "ckpts"))
+        rc = main(["--output-format", "json", "doctor"])
+        assert rc == 0
+        payload = json.loads(capsys.readouterr().out)
+        # Python surface
+        assert payload["python_ok"] is True
+        assert payload["python_version"]
+        # Checkpoint surface (parent of tmp_path is writable so non-existent dir is OK)
+        assert payload["checkpoint_root"].endswith("ckpts")
+        assert payload["checkpoint_root_writable"] is True
+        assert payload["checkpoint_existing_runs"] == 0
+        # Pack surface — bundled packs always ship with the package
+        assert payload["bundled_persona_packs"] >= 1
+        assert payload["bundled_instrument_packs"] >= 1
+        assert payload["packs_ok"] is True
+        assert payload["pack_load_errors"] == []
+
+    def test_doctor_does_not_create_checkpoint_root(self, monkeypatch, tmp_path):
+        """Doctor probes writability without materializing the checkpoint dir."""
+        for env in (
+            "ANTHROPIC_API_KEY",
+            "OPENAI_API_KEY",
+            "GEMINI_API_KEY",
+            "GOOGLE_API_KEY",
+            "XAI_API_KEY",
+            "OPENROUTER_API_KEY",
+        ):
+            monkeypatch.delenv(env, raising=False)
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+        ckpt = tmp_path / "should-not-exist" / "checkpoints"
+        monkeypatch.setenv("SYNTHPANEL_CHECKPOINT_ROOT", str(ckpt))
+        rc = main(["--output-format", "json", "doctor"])
+        assert rc == 0
+        # The doctor must not have created the missing checkpoint directory.
+        assert not ckpt.exists()
+        assert not ckpt.parent.exists()
+
+    def test_doctor_text_uses_checkmarks(self, capsys, monkeypatch, tmp_path):
+        """Default text output uses ✓/✗ markers per the GH-310 spec."""
+        for env in (
+            "ANTHROPIC_API_KEY",
+            "OPENAI_API_KEY",
+            "GEMINI_API_KEY",
+            "GOOGLE_API_KEY",
+            "XAI_API_KEY",
+            "OPENROUTER_API_KEY",
+        ):
+            monkeypatch.delenv(env, raising=False)
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-marker-test")
+        monkeypatch.setenv("SYNTHPANEL_CHECKPOINT_ROOT", str(tmp_path))
+        rc = main(["doctor"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "✓" in out
+        assert "python:" in out
+        assert "checkpoint root:" in out
+        assert "packs:" in out
+
+    def test_doctor_verbose_lists_unset_providers(self, capsys, monkeypatch, tmp_path):
+        """--verbose lists every known provider env var, set or not."""
+        for env in (
+            "ANTHROPIC_API_KEY",
+            "OPENAI_API_KEY",
+            "GEMINI_API_KEY",
+            "GOOGLE_API_KEY",
+            "XAI_API_KEY",
+            "OPENROUTER_API_KEY",
+        ):
+            monkeypatch.delenv(env, raising=False)
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-verbose-test")
+        monkeypatch.setenv("SYNTHPANEL_CHECKPOINT_ROOT", str(tmp_path))
+        rc = main(["--verbose", "doctor"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        # Every recognised env var should appear in verbose output
+        for env_var in (
+            "ANTHROPIC_API_KEY",
+            "OPENAI_API_KEY",
+            "GEMINI_API_KEY",
+            "GOOGLE_API_KEY",
+            "XAI_API_KEY",
+            "OPENROUTER_API_KEY",
+        ):
+            assert env_var in out
+        # Verbose should also reveal the credential-store path
+        assert "credential store:" in out
+
 
 class TestWhoami:
     def test_whoami_reports_no_credentials(self, capsys, monkeypatch):
