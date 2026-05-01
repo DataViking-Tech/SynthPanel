@@ -32,6 +32,7 @@ __all__ = [
     "KendallWResult",
     "KrippendorffResult",
     "ModelDistribution",
+    "OneWayANOVAResult",
     "bootstrap_ci",
     "borda_count",
     "chi_squared_test",
@@ -40,6 +41,7 @@ __all__ = [
     "frequency_table",
     "kendall_w",
     "krippendorff_alpha",
+    "one_way_anova",
     "proportion_stat",
     "robustness_score",
     "silhouette_score",
@@ -151,6 +153,89 @@ def _chi2_sf(x: float, df: int) -> float:
     # Clamp to [0, 1] for numerical safety
     p_lower = max(0.0, min(1.0, p_lower))
     return 1.0 - p_lower
+
+
+def _betai_reg(x: float, a: float, b: float) -> float:
+    """Regularized incomplete beta function I_x(a, b).
+
+    Used to compute survival functions for the F and Student's t
+    distributions. Adapted from Numerical Recipes §6.4 — selects the
+    series that converges fastest for the given x and falls back to
+    the symmetry I_x(a,b) = 1 - I_{1-x}(b,a) when x is in the upper tail.
+    """
+    if x < 0.0 or x > 1.0:
+        raise ValueError(f"x must be in [0, 1], got {x}")
+    if x == 0.0:
+        return 0.0
+    if x == 1.0:
+        return 1.0
+    log_bt = math.lgamma(a + b) - math.lgamma(a) - math.lgamma(b) + a * math.log(x) + b * math.log(1.0 - x)
+    bt = math.exp(log_bt)
+    # Choose the side that converges faster. The cutoff is the standard
+    # one from NR; without it the continued fraction can stall in the
+    # tail.
+    if x < (a + 1.0) / (a + b + 2.0):
+        return bt * _betacf(x, a, b) / a
+    return 1.0 - bt * _betacf(1.0 - x, b, a) / b
+
+
+def _betacf(x: float, a: float, b: float) -> float:
+    """Continued-fraction evaluation feeding :func:`_betai_reg`.
+
+    Modified Lentz's method per Numerical Recipes §5.2.
+    """
+    max_iter = 200
+    eps = 3e-16
+    fpmin = 1e-300
+    qab = a + b
+    qap = a + 1.0
+    qam = a - 1.0
+    c = 1.0
+    d = 1.0 - qab * x / qap
+    if abs(d) < fpmin:
+        d = fpmin
+    d = 1.0 / d
+    h = d
+    for m in range(1, max_iter + 1):
+        m2 = 2 * m
+        aa = m * (b - m) * x / ((qam + m2) * (a + m2))
+        d = 1.0 + aa * d
+        if abs(d) < fpmin:
+            d = fpmin
+        c = 1.0 + aa / c
+        if abs(c) < fpmin:
+            c = fpmin
+        d = 1.0 / d
+        h *= d * c
+        aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2))
+        d = 1.0 + aa * d
+        if abs(d) < fpmin:
+            d = fpmin
+        c = 1.0 + aa / c
+        if abs(c) < fpmin:
+            c = fpmin
+        d = 1.0 / d
+        delta = d * c
+        h *= delta
+        if abs(delta - 1.0) < eps:
+            return h
+    # Convergence failure — fall back to last estimate. With max_iter=200
+    # this is essentially unreachable for the (a, b) ranges we use.
+    return h
+
+
+def _f_sf(f: float, df1: int, df2: int) -> float:
+    """Survival function (1 - CDF) of the F distribution.
+
+    Adequate for the dfs we hit in subgroup analyses (k-1 vs N-k where
+    N <= a few hundred).
+    """
+    if f <= 0:
+        return 1.0
+    if df1 <= 0 or df2 <= 0:
+        return 1.0
+    x = df2 / (df2 + df1 * f)
+    return _betai_reg(x, df2 / 2.0, df1 / 2.0)
 
 
 # ---------------------------------------------------------------------------
@@ -352,6 +437,167 @@ def chi_squared_test(
         expected=dict(expected),
         observed=dict(observed),
         cramers_v=v,
+        warning=warning,
+    )
+
+
+# ---------------------------------------------------------------------------
+# one_way_anova
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class OneWayANOVAResult:
+    """Result of a one-way (between-groups) ANOVA on numeric data.
+
+    ``eta_squared`` is the proportion of variance explained by the
+    grouping (effect size); ``f_statistic`` and ``p_value`` quantify
+    statistical reliability and are reported as secondary metrics —
+    callers should suppress them for tiny groups (see ``insufficient_data``).
+    """
+
+    f_statistic: float
+    df_between: int
+    df_within: int
+    p_value: float
+    eta_squared: float
+    n_total: int
+    group_count: int
+    grand_mean: float
+    group_means: dict[str, float]
+    group_sizes: dict[str, int]
+    insufficient_data: bool
+    warning: str | None
+
+
+def one_way_anova(groups: dict[str, list[float]]) -> OneWayANOVAResult:
+    """One-way between-groups ANOVA over numeric responses.
+
+    Args:
+        groups: ``label -> values`` mapping. Empty groups are skipped.
+
+    Returns:
+        :class:`OneWayANOVAResult` with effect size (η²), F statistic,
+        p-value, and per-group means/sizes. ``insufficient_data`` is
+        True when fewer than 2 non-empty groups remain or every group
+        has size 1 — in that case ``f_statistic`` and ``p_value`` are
+        set to ``nan`` / ``1.0`` and should be hidden by the renderer.
+
+    Raises:
+        ValueError: If any value cannot be coerced to a finite float.
+    """
+    # Drop empty groups but preserve insertion order so the bucket
+    # ordering chosen by the caller (e.g. age bands in age order) is
+    # what comes back out.
+    cleaned: dict[str, list[float]] = {}
+    for label, values in groups.items():
+        coerced: list[float] = []
+        for v in values:
+            try:
+                fv = float(v)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"non-numeric value {v!r} in group {label!r}") from exc
+            if not math.isfinite(fv):
+                raise ValueError(f"non-finite value {fv} in group {label!r}")
+            coerced.append(fv)
+        if coerced:
+            cleaned[label] = coerced
+
+    n_total = sum(len(v) for v in cleaned.values())
+    k = len(cleaned)
+    group_means = {label: (sum(values) / len(values)) for label, values in cleaned.items()}
+    group_sizes = {label: len(values) for label, values in cleaned.items()}
+
+    if n_total == 0 or k < 2:
+        return OneWayANOVAResult(
+            f_statistic=float("nan"),
+            df_between=0,
+            df_within=0,
+            p_value=1.0,
+            eta_squared=0.0,
+            n_total=n_total,
+            group_count=k,
+            grand_mean=0.0,
+            group_means=group_means,
+            group_sizes=group_sizes,
+            insufficient_data=True,
+            warning="Need at least 2 non-empty groups to compute ANOVA.",
+        )
+
+    grand_mean = sum(sum(v) for v in cleaned.values()) / n_total
+
+    ss_between = sum(len(values) * (group_means[label] - grand_mean) ** 2 for label, values in cleaned.items())
+    ss_within = sum(sum((v - group_means[label]) ** 2 for v in values) for label, values in cleaned.items())
+    ss_total = ss_between + ss_within
+
+    df_between = k - 1
+    df_within = n_total - k
+
+    eta_squared = (ss_between / ss_total) if ss_total > 0 else 0.0
+
+    if df_within <= 0:
+        # Every group is size 1 — F is undefined. Effect size is well
+        # defined (η²=1 if any between-variation exists) but p-value
+        # cannot be computed.
+        return OneWayANOVAResult(
+            f_statistic=float("nan"),
+            df_between=df_between,
+            df_within=df_within,
+            p_value=1.0,
+            eta_squared=eta_squared,
+            n_total=n_total,
+            group_count=k,
+            grand_mean=grand_mean,
+            group_means=group_means,
+            group_sizes=group_sizes,
+            insufficient_data=True,
+            warning="Every group has n=1; F-test undefined.",
+        )
+
+    if ss_within == 0:
+        # All within-group values identical — F diverges. Treat as
+        # extreme evidence of difference but flag it explicitly.
+        return OneWayANOVAResult(
+            f_statistic=float("inf"),
+            df_between=df_between,
+            df_within=df_within,
+            p_value=0.0,
+            eta_squared=eta_squared,
+            n_total=n_total,
+            group_count=k,
+            grand_mean=grand_mean,
+            group_means=group_means,
+            group_sizes=group_sizes,
+            insufficient_data=False,
+            warning="Zero within-group variance; F is degenerate.",
+        )
+
+    ms_between = ss_between / df_between
+    ms_within = ss_within / df_within
+    f_stat = ms_between / ms_within
+    p_value = _f_sf(f_stat, df_between, df_within)
+
+    # Caution flag: any group with n < 3 makes the F approximation
+    # unreliable but we still compute it.
+    sparse_groups = [label for label, n in group_sizes.items() if n < 3]
+    warning: str | None = None
+    if sparse_groups:
+        warning = (
+            f"Subgroup(s) with n<3 ({', '.join(sparse_groups)}); F-test approximation may be unreliable."
+        )
+
+    return OneWayANOVAResult(
+        f_statistic=f_stat,
+        df_between=df_between,
+        df_within=df_within,
+        p_value=p_value,
+        eta_squared=eta_squared,
+        n_total=n_total,
+        group_count=k,
+        grand_mean=grand_mean,
+        group_means=group_means,
+        group_sizes=group_sizes,
+        insufficient_data=False,
         warning=warning,
     )
 

@@ -982,17 +982,29 @@ def build_parser() -> argparse.ArgumentParser:
         help="DAG output format (default: text).",
     )
 
-    # analyze
+    # analyze (parent — has 'summary' default and 'subgroup' subcommand)
+    #
+    # The flat ``synthpanel analyze RESULT_ID`` form is preserved by the
+    # main() pre-parser, which rewrites legacy invocations to
+    # ``analyze summary RESULT_ID``. Adding new subcommands therefore
+    # only requires extending ``ANALYZE_SUBCOMMANDS`` in main.py.
     analyze_parser = subparsers.add_parser(
         "analyze",
-        help="Analyze a saved panel result (descriptive, inferential, cross-model, clusters).",
+        help="Analyze a saved panel result (descriptive, inferential, subgroup, …).",
     )
-    analyze_parser.add_argument(
+    analyze_subparsers = analyze_parser.add_subparsers(dest="analyze_command")
+
+    # analyze summary (legacy default — keeps the original CLI shape)
+    analyze_summary_parser = analyze_subparsers.add_parser(
+        "summary",
+        help="Default panel analysis (frequency, chi-squared, convergence, clusters).",
+    )
+    analyze_summary_parser.add_argument(
         "result",
         metavar="RESULT_ID",
         help="Panel result ID (from 'synthpanel panel run') or path to a result JSON file.",
     )
-    analyze_parser.add_argument(
+    analyze_summary_parser.add_argument(
         "--output",
         choices=["text", "json", "csv", "responses-csv"],
         default="text",
@@ -1003,7 +1015,7 @@ def build_parser() -> argparse.ArgumentParser:
             "spreadsheet-friendly raw export (see --columns)."
         ),
     )
-    analyze_parser.add_argument(
+    analyze_summary_parser.add_argument(
         "--columns",
         default=None,
         metavar="COL[,COL...]",
@@ -1012,6 +1024,55 @@ def build_parser() -> argparse.ArgumentParser:
             "(default: persona_id,persona_name,question_id,question_text,"
             "response,response_type,cost). Extra columns: model, "
             "variant_of, input_tokens, output_tokens, error."
+        ),
+    )
+
+    # analyze subgroup (sp-9293sj / GH #341)
+    analyze_subgroup_parser = analyze_subparsers.add_parser(
+        "subgroup",
+        help="Compare responses across persona segments (by age_decade, role, …).",
+    )
+    analyze_subgroup_parser.add_argument(
+        "result",
+        metavar="RESULT_ID",
+        help="Panel result ID or path to a result JSON file.",
+    )
+    analyze_subgroup_parser.add_argument(
+        "--by",
+        required=True,
+        metavar="FIELD",
+        help=(
+            "Persona field to group by. Supports virtual auto-bin "
+            "fields: 'age_decade' (20s, 30s, …) and 'age_decade_5y' "
+            "(20-24, 25-29, …). Direct fields like 'role', 'gender', "
+            "or any custom persona key also work."
+        ),
+    )
+    analyze_subgroup_parser.add_argument(
+        "--min-subgroup-n",
+        type=int,
+        default=3,
+        metavar="N",
+        help=(
+            "Subgroups smaller than N still appear in output but get "
+            "a caution warning beside their significance test "
+            "(default: 3)."
+        ),
+    )
+    analyze_subgroup_parser.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format (default: text). 'json' is suitable for piping.",
+    )
+    analyze_subgroup_parser.add_argument(
+        "--personas",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Optional path to the personas YAML used in the run. "
+            "Only needed for older results saved before persona "
+            "attributes were inlined; modern saves embed personas."
         ),
     )
 

@@ -10,6 +10,7 @@ import sys
 
 from synth_panel.cli.commands import (
     handle_analyze,
+    handle_analyze_subgroup,
     handle_cost_summary,
     handle_doctor,
     handle_instruments_graph,
@@ -44,8 +45,43 @@ from synth_panel.cli.repl import run_repl
 from synth_panel.logging_config import setup_logging
 
 
+# Subcommand names recognised under ``synthpanel analyze``. Used by
+# :func:`_rewrite_legacy_analyze` to distinguish modern subcommand
+# invocations from the legacy flat form ``analyze RESULT_ID``.
+_ANALYZE_SUBCOMMANDS = frozenset({"summary", "subgroup"})
+
+
+def _rewrite_legacy_analyze(argv: list[str]) -> list[str]:
+    """Rewrite ``analyze RESULT_ID …`` into ``analyze summary RESULT_ID …``.
+
+    Adding subparsers under ``analyze`` would otherwise break the
+    pre-existing flat invocation that scripts and docs already rely on.
+    Inject a virtual ``summary`` subcommand when:
+
+    * ``analyze`` is the top-level command, AND
+    * the next token is a positional (does not start with ``-``), AND
+    * that token is not one of the recognised subcommands.
+
+    The rewrite leaves help (``analyze --help``), bare ``analyze``,
+    and modern invocations (``analyze subgroup …``) untouched.
+    """
+    if not argv or argv[0] != "analyze":
+        return argv
+    if len(argv) < 2:
+        return argv
+    nxt = argv[1]
+    if nxt.startswith("-"):
+        return argv
+    if nxt in _ANALYZE_SUBCOMMANDS:
+        return argv
+    return [argv[0], "summary", *argv[1:]]
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point. Returns exit code."""
+    if argv is None:
+        argv = sys.argv[1:]
+    argv = _rewrite_legacy_analyze(list(argv))
     parser = build_parser()
     args = parser.parse_args(argv)
 
@@ -117,7 +153,21 @@ def main(argv: list[str] | None = None) -> int:
             parser.parse_args(["cost", "--help"])
             return 1
     elif args.command == "analyze":
-        return handle_analyze(args, output_format)
+        sub = getattr(args, "analyze_command", None)
+        if sub == "subgroup":
+            return handle_analyze_subgroup(args, output_format)
+        if sub == "summary" or sub is None:
+            # ``sub is None`` only when the user typed bare ``analyze``;
+            # _rewrite_legacy_analyze rewrites the flat-form positional
+            # case before argparse sees it.
+            if sub is None:
+                parser.parse_args(["analyze", "--help"])
+                return 1
+            return handle_analyze(args, output_format)
+        # Future-proofing: a registered subcommand without a dispatch
+        # branch should fail loudly rather than silently fall through.
+        parser.parse_args(["analyze", "--help"])
+        return 1
     elif args.command == "report":
         return handle_report(args, output_format)
     elif args.command == "mcp-serve":

@@ -657,6 +657,7 @@ def quick_poll(
         total_cost=total_cost.format_usd(),
         persona_count=len(merged),
         question_count=1,
+        personas=merged,
     )
 
     return PollResult(
@@ -842,6 +843,7 @@ def run_panel(
             total_cost=total_cost.format_usd(),
             persona_count=len(merged),
             question_count=total_question_count,
+            personas=merged,
         )
         return _build_panel_result_from_multi_round(
             result_id,
@@ -931,6 +933,7 @@ def run_panel(
         persona_count=len(merged),
         question_count=len(normalised_questions),
         variant_count=variant_count,
+        personas=merged,
     )
 
     synth_model_for_warning = synthesis_dict.get("model") if synthesis_dict else None

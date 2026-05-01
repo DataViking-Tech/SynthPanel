@@ -2685,6 +2685,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             question_count=len(questions),
             instrument_name=inst_name,
             models=all_models,
+            personas=personas,
         )
         print(f"Result saved: {result_id}", file=sys.stderr)
 
@@ -4795,6 +4796,112 @@ def handle_analyze(args: argparse.Namespace, fmt: OutputFormat) -> int:
         print(format_text(analysis))
 
     return 0
+
+
+def handle_analyze_subgroup(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Run subgroup analysis (sp-9293sj / GH #341).
+
+    Groups panel responses by a persona attribute (or virtual
+    auto-binned attribute like ``age_decade``) and reports per-question
+    effect sizes (η² for scale, Cramer's V for categorical) with
+    F-test / chi-squared p-values as secondary metrics.
+
+    Result loading and persona attribute resolution mirror
+    :func:`handle_analyze` so paths, IDs, and ``--personas`` overrides
+    behave the same. ``--personas`` is a fallback for older results
+    that pre-date the inline persona save: we load the YAML and merge
+    its personas into the panel data dict before handing it to
+    :func:`analyze_subgroup`.
+    """
+    import json as _json
+
+    from synth_panel.analysis import analyze_subgroup, format_subgroup_text
+    from synth_panel.analysis.subgroup import UnknownPersonaFieldError
+
+    result_ref = args.result
+
+    path = Path(result_ref)
+    if path.exists() and path.suffix == ".json":
+        data = _json.loads(path.read_text(encoding="utf-8"))
+        data.setdefault("id", path.stem)
+    else:
+        from synth_panel.mcp.data import get_panel_result
+
+        try:
+            data = get_panel_result(result_ref)
+        except FileNotFoundError:
+            print(f"Error: panel result not found: {result_ref}", file=sys.stderr)
+            return 1
+
+    # Optional --personas fallback for pre-inline-personas saves: load
+    # the YAML and slot it into the result dict so analyze_subgroup
+    # picks it up via the normal resolution path.
+    personas_path = getattr(args, "personas", None)
+    if personas_path and not data.get("personas"):
+        try:
+            data["personas"] = _load_personas_for_subgroup(personas_path)
+        except FileNotFoundError:
+            print(f"Error: personas file not found: {personas_path}", file=sys.stderr)
+            return 1
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+
+    try:
+        report = analyze_subgroup(
+            data,
+            by=args.by,
+            min_subgroup_n=getattr(args, "min_subgroup_n", 3),
+        )
+    except UnknownPersonaFieldError as exc:
+        # Help the user spot the most common cause: an old result
+        # without inlined personas. The analyze_subgroup error message
+        # is already specific about the field; we just nudge towards
+        # --personas.
+        print(f"Error: {exc}", file=sys.stderr)
+        if not data.get("personas"):
+            print(
+                "Hint: this result was saved without persona attributes. "
+                "Pass --personas <path/to/personas.yaml> to attach them.",
+                file=sys.stderr,
+            )
+        return 1
+
+    output_format = getattr(args, "format", "text")
+    if output_format == "json":
+        print(_json.dumps(report, indent=2))
+    else:
+        print(format_subgroup_text(report), end="")
+    return 0
+
+
+def _load_personas_for_subgroup(path: str) -> list[dict[str, Any]]:
+    """Load a personas YAML for the ``analyze subgroup --personas`` fallback.
+
+    Accepts the same YAML shapes as ``synthpanel panel run --personas``:
+    either a top-level ``personas`` list or a bare list of persona
+    dicts. The fallback only needs the persona attribute dicts (name +
+    fields used for grouping); models, llm_overrides, and other
+    runtime-only fields are passed through unchanged because
+    ``analyze_subgroup`` ignores them.
+    """
+    import yaml
+
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(path)
+    data = yaml.safe_load(p.read_text(encoding="utf-8"))
+    if isinstance(data, dict) and "personas" in data:
+        personas = data["personas"]
+    elif isinstance(data, list):
+        personas = data
+    else:
+        raise ValueError(
+            f"Invalid personas file: expected a 'personas' key or a list, got {type(data).__name__}"
+        )
+    if not isinstance(personas, list):
+        raise ValueError(f"'personas' must be a list, got {type(personas).__name__}")
+    return [p for p in personas if isinstance(p, dict)]
 
 
 def handle_report(args: argparse.Namespace, fmt: OutputFormat) -> int:

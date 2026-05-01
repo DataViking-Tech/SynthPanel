@@ -348,11 +348,16 @@ class TestCSVFormat:
 
 class TestCLI:
     def test_parser_accepts_analyze(self):
+        # ``analyze`` is now a parent parser with a ``summary``
+        # default subcommand. Direct parser usage must include the
+        # subcommand; the legacy ``analyze RESULT_ID`` form is rewritten
+        # by ``main()`` before parsing (covered by the CLI tests below).
         from synth_panel.cli.parser import build_parser
 
         parser = build_parser()
-        args = parser.parse_args(["analyze", "result-123"])
+        args = parser.parse_args(["analyze", "summary", "result-123"])
         assert args.command == "analyze"
+        assert args.analyze_command == "summary"
         assert args.result == "result-123"
         assert args.output == "text"
 
@@ -360,14 +365,14 @@ class TestCLI:
         from synth_panel.cli.parser import build_parser
 
         parser = build_parser()
-        args = parser.parse_args(["analyze", "result-123", "--output", "json"])
+        args = parser.parse_args(["analyze", "summary", "result-123", "--output", "json"])
         assert args.output == "json"
 
     def test_parser_analyze_csv(self):
         from synth_panel.cli.parser import build_parser
 
         parser = build_parser()
-        args = parser.parse_args(["analyze", "result-123", "--output", "csv"])
+        args = parser.parse_args(["analyze", "summary", "result-123", "--output", "csv"])
         assert args.output == "csv"
 
     def test_cli_analyze_file(self, capsys):
@@ -712,6 +717,7 @@ class TestResponsesCSVCli:
         args = parser.parse_args(
             [
                 "analyze",
+                "summary",
                 "result-123",
                 "--output",
                 "responses-csv",

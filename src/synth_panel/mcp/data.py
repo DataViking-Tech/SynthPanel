@@ -549,6 +549,7 @@ def save_panel_result(
     questions: list[dict[str, Any]] | None = None,
     variants_config: dict[str, Any] | None = None,
     models: list[str] | None = None,
+    personas: list[dict[str, Any]] | None = None,
 ) -> str:
     """Save panel results and return the result ID.
 
@@ -559,6 +560,10 @@ def save_panel_result(
       ``extraction_schema``.
     * ``variants_config``: variant generation config (``n``, ``seed``).
     * ``models``: list of all model identifiers used in the run.
+    * ``personas``: full persona dicts (with attributes like ``age``,
+      ``occupation``) used in the run. Saved so ``analyze subgroup``
+      can group responses by persona attribute without re-loading the
+      original YAML.
 
     Per-result entries in *results* may contain ``_variant_of`` and
     ``_model`` fields; per-response dicts may contain an ``extraction``
@@ -585,5 +590,7 @@ def save_panel_result(
         data["variants_config"] = variants_config
     if models is not None:
         data["models"] = models
+    if personas is not None:
+        data["personas"] = personas
     p.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     return rid
