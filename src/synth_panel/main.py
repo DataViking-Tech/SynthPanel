@@ -20,6 +20,7 @@ from synth_panel.cli.commands import (
     handle_logout,
     handle_mcp_serve,
     handle_pack_calibrate,
+    handle_pack_diff,
     handle_pack_export,
     handle_pack_generate,
     handle_pack_import,
@@ -90,6 +91,8 @@ def main(argv: list[str] | None = None) -> int:
             return handle_pack_search(args, output_format)
         elif sub == "calibrate":
             return handle_pack_calibrate(args, output_format)
+        elif sub == "diff":
+            return handle_pack_diff(args, output_format)
         else:
             parser.parse_args(["pack", "--help"])
             return 1

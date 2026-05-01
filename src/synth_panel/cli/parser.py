@@ -809,6 +809,29 @@ def build_parser() -> argparse.ArgumentParser:
         help="Custom pack ID (default: auto-generated).",
     )
 
+    # pack diff (GH #308): compare two persona packs side-by-side
+    pack_diff_parser = pack_subparsers.add_parser(
+        "diff",
+        help="Compare two persona packs side-by-side (added/removed/changed personas, composition deltas).",
+    )
+    pack_diff_parser.add_argument(
+        "pack_a",
+        metavar="PACK_A",
+        help="First pack: built-in name, user-saved pack ID, or path to a YAML file.",
+    )
+    pack_diff_parser.add_argument(
+        "pack_b",
+        metavar="PACK_B",
+        help="Second pack: built-in name, user-saved pack ID, or path to a YAML file.",
+    )
+    pack_diff_parser.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        dest="diff_format",
+        help="Output format (default: text). Use 'json' for CI-friendly machine output.",
+    )
+
     # pack calibrate (sp-sghl): calibrate a pack against a SynthBench baseline
     # and write the resulting JSD into the pack manifest.
     pack_calibrate_parser = pack_subparsers.add_parser(
