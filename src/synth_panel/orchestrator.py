@@ -74,6 +74,66 @@ def _convert_llm_usage(llm_usage: LLMTokenUsage) -> TokenUsage:
 
 
 # ---------------------------------------------------------------------------
+# Per-persona LLM overrides (sp-4loufu)
+# ---------------------------------------------------------------------------
+
+
+# Keys recognised inside a persona's ``llm_overrides`` block. ``model`` is
+# resolved separately (it routes through ``persona_models``); the remaining
+# three flow into ``CompletionRequest`` for that persona's calls.
+_LLM_OVERRIDE_KEYS: tuple[str, ...] = ("temperature", "top_p", "max_tokens", "model")
+
+
+def validate_llm_overrides(overrides: dict[str, Any], *, persona_name: str = "") -> None:
+    """Validate a single persona's ``llm_overrides`` block.
+
+    Raises :class:`ValueError` with a persona-tagged message on any
+    obviously-wrong value (e.g. ``temperature: 5.0``). Unknown keys are
+    rejected so a YAML typo (``temperatur:``) doesn't silently fall
+    back to the run-level default.
+    """
+    if not isinstance(overrides, dict):
+        raise ValueError(f"persona {persona_name!r} llm_overrides must be a mapping, got {type(overrides).__name__}")
+    for key in overrides:
+        if key not in _LLM_OVERRIDE_KEYS:
+            allowed = ", ".join(_LLM_OVERRIDE_KEYS)
+            raise ValueError(f"persona {persona_name!r} llm_overrides has unknown key {key!r}; allowed: {allowed}")
+    if "temperature" in overrides:
+        t = overrides["temperature"]
+        if not isinstance(t, (int, float)) or isinstance(t, bool):
+            raise ValueError(f"persona {persona_name!r} llm_overrides.temperature must be a number, got {t!r}")
+        if not 0.0 <= float(t) <= 2.0:
+            raise ValueError(f"persona {persona_name!r} llm_overrides.temperature {t} is out of range [0.0, 2.0]")
+    if "top_p" in overrides:
+        p = overrides["top_p"]
+        if not isinstance(p, (int, float)) or isinstance(p, bool):
+            raise ValueError(f"persona {persona_name!r} llm_overrides.top_p must be a number, got {p!r}")
+        if not 0.0 <= float(p) <= 1.0:
+            raise ValueError(f"persona {persona_name!r} llm_overrides.top_p {p} is out of range [0.0, 1.0]")
+    if "max_tokens" in overrides:
+        m = overrides["max_tokens"]
+        if not isinstance(m, int) or isinstance(m, bool) or m < 1:
+            raise ValueError(f"persona {persona_name!r} llm_overrides.max_tokens must be a positive integer, got {m!r}")
+    if "model" in overrides:
+        mdl = overrides["model"]
+        if not isinstance(mdl, str) or not mdl.strip():
+            raise ValueError(f"persona {persona_name!r} llm_overrides.model must be a non-empty string, got {mdl!r}")
+
+
+def get_persona_llm_overrides(persona: dict[str, Any]) -> dict[str, Any]:
+    """Return the ``llm_overrides`` block for *persona* (validated, possibly empty).
+
+    Centralises the lookup so callers don't disagree on the key name or
+    on what counts as a valid override value.
+    """
+    raw = persona.get("llm_overrides") or {}
+    if not raw:
+        return {}
+    validate_llm_overrides(raw, persona_name=persona.get("name", "Anonymous"))
+    return dict(raw)
+
+
+# ---------------------------------------------------------------------------
 # Worker status lifecycle
 # ---------------------------------------------------------------------------
 
@@ -346,12 +406,30 @@ def _run_panelist(
     """Execute a single panelist's full interview. Runs in a worker thread.
 
     Manages the worker lifecycle: spawning → ready → running → finished/failed.
+
+    Per-persona ``llm_overrides`` (sp-4loufu) take precedence over the
+    run-level ``temperature``/``top_p`` arguments and bump the default
+    ``max_tokens`` away from the runtime's 4096. They've already been
+    validated by :func:`get_persona_llm_overrides` in the caller, but
+    we re-read the dict here so a single thread sees a coherent view.
     """
     name = persona.get("name", "Anonymous")
+    overrides = persona.get("llm_overrides") or {}
+    eff_temperature = overrides.get("temperature", temperature)
+    eff_top_p = overrides.get("top_p", top_p)
+    eff_max_tokens = overrides.get("max_tokens", 4096)
     tracker = UsageTracker()
     responses: list[dict[str, Any]] = []
     t0 = _time.monotonic()
-    logger.info("panelist %s starting (model=%s, questions=%d)", name, model, len(questions))
+    logger.info(
+        "panelist %s starting (model=%s, questions=%d, temperature=%s, top_p=%s, max_tokens=%s)",
+        name,
+        model,
+        len(questions),
+        eff_temperature,
+        eff_top_p,
+        eff_max_tokens,
+    )
 
     try:
         # Transition: spawning → ready_for_prompt
@@ -369,8 +447,9 @@ def _run_panelist(
             session=session,
             system_prompt=system_prompt,
             model=model,
-            temperature=temperature,
-            top_p=top_p,
+            max_tokens=eff_max_tokens,
+            temperature=eff_temperature,
+            top_p=eff_top_p,
         )
 
         # Set up structured output engine if schema provided
@@ -401,10 +480,12 @@ def _run_panelist(
                     messages = [InputMessage(role="user", content=[TextBlock(text=question_text)])]
                     result = structured_engine.extract(
                         model=model,
-                        max_tokens=4096,
+                        max_tokens=eff_max_tokens,
                         messages=messages,
                         config=structured_config,
                         system=system_prompt,
+                        temperature=eff_temperature,
+                        top_p=eff_top_p,
                     )
                     tracker.record_turn(_convert_llm_usage(result.response.usage))
                     responses.append(
@@ -440,10 +521,12 @@ def _run_panelist(
                             ]
                             extract_result = extract_engine.extract(
                                 model=model,
-                                max_tokens=4096,
+                                max_tokens=eff_max_tokens,
                                 messages=extract_messages,
                                 config=extract_config,
                                 system=system_prompt,
+                                temperature=eff_temperature,
+                                top_p=eff_top_p,
                             )
                             tracker.record_turn(_convert_llm_usage(extract_result.response.usage))
                             resp_dict["extraction"] = extract_result.data
@@ -629,6 +712,13 @@ def run_panel_parallel(
         Tuple of (ordered results matching persona order, registry,
         sessions dict mapping persona names to their sessions).
     """
+    # sp-4loufu: validate per-persona ``llm_overrides`` before any worker
+    # spawns so a malformed YAML block fails the run loudly rather than
+    # silently dropping the override mid-execution.
+    for p in personas:
+        if isinstance(p, dict) and p.get("llm_overrides"):
+            validate_llm_overrides(p["llm_overrides"], persona_name=p.get("name", "Anonymous"))
+
     registry = WorkerRegistry()
     effective_workers = max_workers or len(personas)
     sentiment_cache: dict[str, str] = {}
@@ -669,7 +759,12 @@ def run_panel_parallel(
         for idx, (persona, worker_id) in enumerate(zip(personas, worker_ids)):
             name = persona.get("name", "Anonymous")
             existing_session = (sessions or {}).get(name)
-            # Resolve per-persona model: persona_models mapping > global default
+            # Resolve per-persona model: persona_models mapping > global default.
+            # ``llm_overrides.model`` (sp-4loufu) is folded into
+            # ``persona_models`` by the CLI/SDK before this point — the
+            # orchestrator does not read it directly so behaviour stays
+            # consistent with the legacy top-level ``model:`` field
+            # (which is also CLI/SDK-extracted, not orchestrator-resolved).
             effective_model = (persona_models or {}).get(name, model)
             future = executor.submit(
                 _run_panelist,
