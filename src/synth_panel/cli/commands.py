@@ -330,8 +330,12 @@ def assign_models_to_personas(
     result: dict[str, str] = {}
     for p in personas:
         name = p.get("name", "Anonymous")
-        if p.get("model"):
-            result[name] = p["model"]
+        # sp-4loufu: accept ``llm_overrides.model`` as an equivalent to
+        # the legacy top-level ``model`` field. Top-level wins so
+        # existing YAML keeps its behaviour.
+        explicit_model = p.get("model") or (p.get("llm_overrides") or {}).get("model")
+        if explicit_model:
+            result[name] = explicit_model
         else:
             needs_assignment.append(name)
 
@@ -1259,8 +1263,16 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         if not has_model:
             model = model_spec[0][0]
     elif not has_models:
-        # Even without --models, respect per-persona YAML model overrides
-        yaml_overrides = {p.get("name", "Anonymous"): p["model"] for p in personas if p.get("model")}
+        # Even without --models, respect per-persona YAML model overrides.
+        # Recognise both the legacy top-level ``model`` field and the
+        # newer ``llm_overrides.model`` (sp-4loufu); top-level wins on
+        # collision so existing personas keep their behaviour.
+        yaml_overrides: dict[str, str] = {}
+        for p in personas:
+            name = p.get("name", "Anonymous")
+            mdl = p.get("model") or (p.get("llm_overrides") or {}).get("model")
+            if mdl:
+                yaml_overrides[name] = mdl
         if yaml_overrides:
             persona_models = yaml_overrides
 

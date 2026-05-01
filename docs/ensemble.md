@@ -118,6 +118,40 @@ personas:
 This is also the only way to set per-persona models via the MCP server
 (`persona_models` argument on `run_panel`).
 
+### Per-persona `llm_overrides:` (sp-4loufu)
+
+For finer-grained control, a persona can carry an `llm_overrides:`
+block that varies sampling parameters — `temperature`, `top_p`,
+`max_tokens` — and optionally `model` away from the run-level
+defaults:
+
+```yaml
+personas:
+  - name: Alice
+    llm_overrides:
+      temperature: 0.3      # deliberate, stable answers
+      top_p: 0.95
+  - name: Bob
+    llm_overrides:
+      temperature: 0.9      # varied, exploratory
+      max_tokens: 1024
+  - name: Carol             # no overrides → uses --temperature default
+```
+
+Run-level `--temperature` / `--top_p` remain the fleet default; only
+the personas with an explicit override diverge. Values are validated
+before the run starts (`temperature` in `[0, 2]`, `top_p` in `[0, 1]`,
+`max_tokens` a positive integer, no unknown keys) so a typo or
+out-of-range value fails loudly instead of silently dropping.
+
+`llm_overrides.model` works the same as the legacy top-level
+`model:` — it routes the persona to a specific model when no
+`--models` flag is given (or when `--models` uses a weighted spec).
+When both are present, top-level `model:` wins so existing YAML keeps
+its behaviour. Like the legacy field, neither override is applied in
+ensemble mode (`--models a,b` with no weights), where every persona
+runs against every model by design.
+
 ### Weights vs. ensemble — how the CLI tells them apart
 
 A spec with **any** `:` is weighted. A spec with **no** `:` is
