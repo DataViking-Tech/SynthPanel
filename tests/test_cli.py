@@ -3304,9 +3304,7 @@ class TestPanelRunDryRun:
 
     @patch("synth_panel.cli.commands.run_panel_parallel")
     @patch("synth_panel.cli.commands.LLMClient")
-    def test_dry_run_text_shows_panel_composition_and_cost(
-        self, mock_client_cls, mock_run_panel, capsys, tmp_path
-    ):
+    def test_dry_run_text_shows_panel_composition_and_cost(self, mock_client_cls, mock_run_panel, capsys, tmp_path):
         """Text preview prints LLM call count, cost estimate, and validation."""
         personas_file = tmp_path / "personas.yaml"
         personas_file.write_text("personas:\n  - name: Alice\n  - name: Bob\n  - name: Carol\n")
@@ -3338,9 +3336,7 @@ class TestPanelRunDryRun:
 
     @patch("synth_panel.cli.commands.run_panel_parallel")
     @patch("synth_panel.cli.commands.LLMClient")
-    def test_dry_run_json_includes_cost_and_validation(
-        self, mock_client_cls, mock_run_panel, capsys, tmp_path
-    ):
+    def test_dry_run_json_includes_cost_and_validation(self, mock_client_cls, mock_run_panel, capsys, tmp_path):
         """JSON payload exposes llm_calls, cost, and validation fields."""
         personas_file = tmp_path / "personas.yaml"
         personas_file.write_text("personas:\n  - name: Alice\n  - name: Bob\n")
@@ -3373,9 +3369,7 @@ class TestPanelRunDryRun:
 
     @patch("synth_panel.cli.commands.run_panel_parallel")
     @patch("synth_panel.cli.commands.LLMClient")
-    def test_dry_run_unknown_model_flags_estimated_pricing(
-        self, mock_client_cls, mock_run_panel, capsys, tmp_path
-    ):
+    def test_dry_run_unknown_model_flags_estimated_pricing(self, mock_client_cls, mock_run_panel, capsys, tmp_path):
         """Models not in the pricing table fall back to DEFAULT_PRICING."""
         personas_file = tmp_path / "personas.yaml"
         personas_file.write_text("personas:\n  - name: Alice\n")

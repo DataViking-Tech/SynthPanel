@@ -863,8 +863,7 @@ def _emit_dry_run_preview(
             file=sys.stderr,
         )
         print(
-            f"Estimated output tokens: ~{estimated_output_tokens:,} "
-            f"(rough heuristic from response_schema)",
+            f"Estimated output tokens: ~{estimated_output_tokens:,} (rough heuristic from response_schema)",
             file=sys.stderr,
         )
         cost_suffix = " [pricing=estimated-default]" if pricing_is_estimated else ""

@@ -684,10 +684,7 @@ def _resolve_questions_for_csv(
     if not panelists:
         return []
     first_responses = panelists[0].get("responses") or []
-    return [
-        {"text": r.get("question", "")} if isinstance(r, dict) else None
-        for r in first_responses
-    ]
+    return [{"text": r.get("question", "")} if isinstance(r, dict) else None for r in first_responses]
 
 
 def _per_response_cost_usd(
@@ -784,9 +781,7 @@ def parse_response_csv_columns(spec: str | None) -> list[str]:
     unknown = [c for c in cols if c not in _RESPONSE_CSV_COLUMNS]
     if unknown:
         supported = ", ".join(sorted(_RESPONSE_CSV_COLUMNS))
-        raise ValueError(
-            f"Unknown column(s): {', '.join(unknown)}. Supported: {supported}"
-        )
+        raise ValueError(f"Unknown column(s): {', '.join(unknown)}. Supported: {supported}")
     return cols
 
 
