@@ -41,8 +41,15 @@ mcp = [
     "mcp>=1.0",
 ]
 composio = [
-    "composio>=0.5",
-    "pydantic>=2.0",
+    # Composio's experimental Toolkit API is the surface this integration
+    # binds to (`composio_client.experimental.Toolkit` + `@toolkit.tool()`).
+    # That surface is still labelled experimental upstream, so we pin to
+    # the 0.5.x line we last verified the contract against. Bump the upper
+    # bound deliberately after re-running tests/test_integrations_composio.py
+    # against the new release; see docs/composio-submission.md for the
+    # troubleshooting checklist when upstream shapes drift.
+    "composio>=0.5,<0.6",
+    "pydantic>=2.0,<3.0",
 ]
 convergence = [
     "synthbench>=0.1",
