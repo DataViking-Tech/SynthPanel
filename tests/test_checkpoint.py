@@ -23,8 +23,10 @@ from unittest.mock import MagicMock
 import pytest
 
 from synth_panel.checkpoint import (
+    CheckpointCollisionError,
     CheckpointDriftError,
     CheckpointFormatError,
+    CheckpointLockError,
     CheckpointNotFoundError,
     CheckpointSchemaTooNewError,
     CheckpointWriter,
@@ -297,6 +299,118 @@ class TestCheckpointWriter:
         # usage should only have counted once
         assert loaded.usage["input_tokens"] == 1
 
+    def test_fresh_writer_refuses_existing_state(self, tmp_path: Path) -> None:
+        """GH-299: a fresh run targeting an existing run id must refuse, not silently overwrite."""
+        run_id = "run-collision"
+        directory = checkpoint_dir_for(run_id, tmp_path)
+        directory.mkdir(parents=True)
+        (directory / "state.json").write_text('{"existing": "checkpoint"}')
+
+        with pytest.raises(CheckpointCollisionError, match="already exists"):
+            CheckpointWriter(
+                run_id=run_id,
+                directory=directory,
+                config=_make_config(["a"]),
+                all_personas=["a"],
+                every=1,
+            )
+        # The on-disk state must still be there — refusal must not destroy it.
+        assert (directory / "state.json").read_text() == '{"existing": "checkpoint"}'
+
+    def test_fresh_writer_with_force_overwrite_proceeds(self, tmp_path: Path) -> None:
+        run_id = "run-force"
+        directory = checkpoint_dir_for(run_id, tmp_path)
+        directory.mkdir(parents=True)
+        (directory / "state.json").write_text('{"old": "data"}')
+
+        writer = CheckpointWriter(
+            run_id=run_id,
+            directory=directory,
+            config=_make_config(["a"]),
+            all_personas=["a"],
+            every=1,
+            force_overwrite=True,
+        )
+        try:
+            writer.flush(force=True)
+            loaded = load_checkpoint(run_id, tmp_path)
+            assert loaded.run_id == run_id  # new state replaced the old
+        finally:
+            writer.close()
+
+    def test_resume_existing_does_not_raise_collision(self, tmp_path: Path) -> None:
+        run_id = "run-resume-flag"
+        directory = checkpoint_dir_for(run_id, tmp_path)
+        directory.mkdir(parents=True)
+        (directory / "state.json").write_text('{"existing": "x"}')
+
+        writer = CheckpointWriter(
+            run_id=run_id,
+            directory=directory,
+            config=_make_config(["a"]),
+            all_personas=["a"],
+            every=1,
+            resume_existing=True,
+        )
+        writer.close()
+
+    def test_concurrent_lock_contention_refused(self, tmp_path: Path) -> None:
+        run_id = "run-concurrent"
+        directory = checkpoint_dir_for(run_id, tmp_path)
+        first = CheckpointWriter(
+            run_id=run_id,
+            directory=directory,
+            config=_make_config(["a"]),
+            all_personas=["a"],
+            every=1,
+        )
+        try:
+            with pytest.raises(CheckpointLockError, match="another process"):
+                CheckpointWriter(
+                    run_id=run_id,
+                    directory=directory,
+                    config=_make_config(["a"]),
+                    all_personas=["a"],
+                    every=1,
+                )
+        finally:
+            first.close()
+
+    def test_lock_released_after_close_allows_reopen(self, tmp_path: Path) -> None:
+        run_id = "run-reopen"
+        directory = checkpoint_dir_for(run_id, tmp_path)
+        first = CheckpointWriter(
+            run_id=run_id,
+            directory=directory,
+            config=_make_config(["a"]),
+            all_personas=["a"],
+            every=1,
+        )
+        first.close()
+        # Same id, no state.json was ever written, so a new fresh writer
+        # may legitimately start. Lock must have been released cleanly.
+        second = CheckpointWriter(
+            run_id=run_id,
+            directory=directory,
+            config=_make_config(["a"]),
+            all_personas=["a"],
+            every=1,
+        )
+        second.close()
+
+    def test_close_is_idempotent(self, tmp_path: Path) -> None:
+        run_id = "run-close-idem"
+        directory = checkpoint_dir_for(run_id, tmp_path)
+        writer = CheckpointWriter(
+            run_id=run_id,
+            directory=directory,
+            config=_make_config(["a"]),
+            all_personas=["a"],
+            every=1,
+        )
+        writer.close()
+        writer.close()  # no raise
+
     def test_preloaded_state_preserved_and_extended(self, tmp_path: Path) -> None:
         run_id = "run-preload"
         directory = checkpoint_dir_for(run_id, tmp_path)
@@ -426,6 +540,7 @@ def _simulate_run_with_abort(
         )
     writer.mark_aborted("signal:SIGINT")
     writer.flush(force=True)
+    writer.close()
     return run_id, partial
 
 
@@ -456,6 +571,7 @@ class TestResumeEndToEnd:
             every=25,
             preloaded_completed=ckpt.completed,
             preloaded_usage=ckpt.usage,
+            resume_existing=True,
         )
         assert writer.remaining() == persona_names[7:]
 
@@ -1047,6 +1163,151 @@ class TestResumeFromCheckpointCli:
         err = capsys.readouterr().err
         assert "drift" in err.lower()
         assert "statistically inconsistent" in err.lower()
+
+
+# ---------------------------------------------------------------------------
+# GH-299: collision guard on fresh runs (CLI surface)
+# ---------------------------------------------------------------------------
+
+
+class TestCollisionCli:
+    """``synthpanel panel run --checkpoint-dir`` must refuse to clobber an existing run."""
+
+    @staticmethod
+    def _parsed(argv: list[str]):
+        from synth_panel.cli.parser import build_parser
+
+        return build_parser().parse_args(argv)
+
+    @staticmethod
+    def _fmt():
+        from synth_panel.cli.output import OutputFormat
+
+        return OutputFormat("text")
+
+    def test_collision_refused_with_helpful_message(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        from unittest.mock import patch
+
+        from synth_panel.cli.commands import handle_panel_run
+
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text(_personas_yaml())
+        instrument_file = tmp_path / "survey.yaml"
+        instrument_file.write_text(_instrument_yaml())
+
+        # Seed a checkpoint directory whose run_id will be hit by the writer.
+        # We can't predict the autogenerated id, so we monkey-patch new_run_id
+        # to deterministically return the seeded id.
+        ckpt_root = tmp_path / "ckpts"
+        seeded_id = "run-test-collision"
+        directory = checkpoint_dir_for(seeded_id, ckpt_root)
+        directory.mkdir(parents=True)
+        (directory / "state.json").write_text('{"existing": "checkpoint"}')
+
+        args = self._parsed(
+            [
+                "--model",
+                "sonnet",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(instrument_file),
+                "--checkpoint-dir",
+                str(ckpt_root),
+                "--no-synthesis",
+            ]
+        )
+        with patch("synth_panel.cli.commands.new_run_id", return_value=seeded_id):
+            code = handle_panel_run(args, self._fmt())
+
+        assert code == 1, "colliding run id should fail the run"
+        err = capsys.readouterr().err
+        assert "already exists" in err
+        assert "--force-overwrite" in err
+        # The seeded checkpoint must survive — the whole point is "don't overwrite".
+        assert (directory / "state.json").read_text() == '{"existing": "checkpoint"}'
+
+    def test_collision_force_overwrite_proceeds(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from unittest.mock import patch
+
+        from synth_panel.cli.commands import handle_panel_run
+        from synth_panel.cost import TokenUsage as CostTokenUsage
+        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text(_personas_yaml())
+        instrument_file = tmp_path / "survey.yaml"
+        instrument_file.write_text(_instrument_yaml())
+
+        ckpt_root = tmp_path / "ckpts"
+        seeded_id = "run-test-force"
+        directory = checkpoint_dir_for(seeded_id, ckpt_root)
+        directory.mkdir(parents=True)
+        (directory / "state.json").write_text('{"old": "data"}')
+
+        registry = WorkerRegistry()
+
+        def fake_run(*args, **kwargs):
+            personas = kwargs["personas"]
+            return (
+                [
+                    PanelistResult(
+                        persona_name=p["name"],
+                        responses=[{"question": "Q1", "response": "x"}],
+                        usage=CostTokenUsage(input_tokens=1, output_tokens=1),
+                    )
+                    for p in personas
+                ],
+                registry,
+                {},
+            )
+
+        args = self._parsed(
+            [
+                "--model",
+                "sonnet",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(instrument_file),
+                "--checkpoint-dir",
+                str(ckpt_root),
+                "--force-overwrite",
+                "--no-synthesis",
+            ]
+        )
+        with (
+            patch("synth_panel.cli.commands.new_run_id", return_value=seeded_id),
+            patch("synth_panel.cli.commands.run_panel_parallel", side_effect=fake_run),
+            patch("synth_panel.cli.commands.LLMClient"),
+        ):
+            code = handle_panel_run(args, self._fmt())
+
+        assert code == 0
+        # Old state was overwritten — re-loading yields a real PanelCheckpoint
+        # with the seeded run id, not the {"old": "data"} stub.
+        loaded = load_checkpoint(seeded_id, ckpt_root)
+        assert loaded.run_id == seeded_id
+        # The fingerprint reflects the new run's config (not the seeded stub
+        # which had no fingerprint at all).
+        assert loaded.config_fingerprint
 
 
 # ---------------------------------------------------------------------------

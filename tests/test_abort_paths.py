@@ -559,6 +559,7 @@ class TestEndToEndResume:
 
         writer.mark_aborted("signal:SIGINT")
         writer.flush(force=True)
+        writer.close()
 
         # The checkpoint on disk now carries 30 completed + 20 remaining.
         mid_ckpt = load_checkpoint(run_id, tmp_path)
@@ -581,6 +582,7 @@ class TestEndToEndResume:
             every=5,
             preloaded_completed=mid_ckpt.completed,
             preloaded_usage=mid_ckpt.usage,
+            resume_existing=True,
         )
 
         def record_cb_resume(pr: PanelistResult) -> None:
@@ -605,6 +607,7 @@ class TestEndToEndResume:
             on_panelist_complete=record_cb_resume,
         )
         writer_resume.flush(force=True)
+        writer_resume.close()
 
         # Final checkpoint: all 50 personas present, remaining empty, no
         # abort left dangling.

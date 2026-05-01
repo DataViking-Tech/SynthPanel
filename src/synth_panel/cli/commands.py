@@ -26,8 +26,10 @@ from synth_panel._runners import (
 )
 from synth_panel.checkpoint import (
     DEFAULT_CHECKPOINT_EVERY,
+    CheckpointCollisionError,
     CheckpointDriftError,
     CheckpointError,
+    CheckpointLockError,
     CheckpointNotFoundError,
     CheckpointWriter,
     checkpoint_dir_for,
@@ -1740,16 +1742,31 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         for pr in preloaded_results:
             preloaded_usage_dict = _merge_usage_dicts(preloaded_usage_dict, pr.usage.to_dict())
 
-        checkpoint_writer = CheckpointWriter(
-            run_id=run_id,
-            directory=directory,
-            config=run_config_dict,
-            all_personas=[p.get("name", "Anonymous") for p in personas],
-            every=checkpoint_every,
-            preloaded_completed=[_panelist_result_to_ckpt_dict(pr, model) for pr in preloaded_results],
-            preloaded_usage=preloaded_usage_dict,
-            cli_args=_build_resume_cli_args(args),
-        )
+        force_overwrite = bool(getattr(args, "force_overwrite", False))
+        try:
+            checkpoint_writer = CheckpointWriter(
+                run_id=run_id,
+                directory=directory,
+                config=run_config_dict,
+                all_personas=[p.get("name", "Anonymous") for p in personas],
+                every=checkpoint_every,
+                preloaded_completed=[_panelist_result_to_ckpt_dict(pr, model) for pr in preloaded_results],
+                preloaded_usage=preloaded_usage_dict,
+                cli_args=_build_resume_cli_args(args),
+                resume_existing=bool(resume_id),
+                force_overwrite=force_overwrite,
+            )
+        except CheckpointCollisionError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            print(
+                "Hint: pass --force-overwrite to replace the existing checkpoint, "
+                "or pass --resume <run-id> to continue from it.",
+                file=sys.stderr,
+            )
+            return 1
+        except CheckpointLockError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
         checkpoint_writer.install_signal_handlers()
 
     # sp-56pb: initialized pre-branch so the aggregator block after the
@@ -1848,7 +1865,10 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 try:
                     checkpoint_writer.flush(force=True)
                 finally:
-                    checkpoint_writer.remove_signal_handlers()
+                    try:
+                        checkpoint_writer.remove_signal_handlers()
+                    finally:
+                        checkpoint_writer.close()
 
         # sp-hsk3: merge preloaded (resumed) results with fresh ones, in
         # the original persona order. Preloaded results are guaranteed to
