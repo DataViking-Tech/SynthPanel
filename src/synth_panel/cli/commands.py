@@ -747,6 +747,37 @@ def _load_schema(value: str) -> dict[str, Any]:
     return schema
 
 
+# sp-ekayy9: rough output-token defaults per response_schema type. The
+# dry-run preview multiplies these by persona_count × question_count to
+# get a worst-case bound for cost estimation. Real responses are usually
+# shorter (especially for free text), so the printed estimate is an upper
+# bound — exactly what an operator needs before paying for a panel run.
+_DRY_RUN_OUTPUT_TOKENS_TEXT_DEFAULT = 300
+_DRY_RUN_OUTPUT_TOKENS_BY_SCHEMA: dict[str, int] = {
+    "scale": 30,
+    "enum": 30,
+    "tagged_themes": 100,
+}
+
+
+def _estimate_output_tokens_per_response(question: Any) -> int:
+    """Return a rough per-response output-token estimate for *question*."""
+    if not isinstance(question, dict):
+        return _DRY_RUN_OUTPUT_TOKENS_TEXT_DEFAULT
+    rs = question.get("response_schema")
+    if not isinstance(rs, dict):
+        return _DRY_RUN_OUTPUT_TOKENS_TEXT_DEFAULT
+    rs_type = rs.get("type")
+    if rs_type == "text":
+        max_tokens = rs.get("max_tokens")
+        if isinstance(max_tokens, int) and not isinstance(max_tokens, bool) and max_tokens > 0:
+            return max_tokens
+        return _DRY_RUN_OUTPUT_TOKENS_TEXT_DEFAULT
+    if isinstance(rs_type, str) and rs_type in _DRY_RUN_OUTPUT_TOKENS_BY_SCHEMA:
+        return _DRY_RUN_OUTPUT_TOKENS_BY_SCHEMA[rs_type]
+    return _DRY_RUN_OUTPUT_TOKENS_TEXT_DEFAULT
+
+
 def _emit_dry_run_preview(
     *,
     personas: list[dict[str, Any]],
@@ -761,11 +792,13 @@ def _emit_dry_run_preview(
 
     Shows each question as it will appear to the LLM (after --var
     substitution, which has already been applied to the instrument),
-    plus persona/question counts and a rough input-token estimate.
+    persona/question counts, panel composition, a rough token estimate,
+    and an estimated cost from the local pricing table.
     """
     persona_count = len(personas)
     questions = instrument.questions
     question_count = len(questions)
+    llm_calls = persona_count * question_count
 
     system_prompt_chars = sum(len(system_prompt_fn(p)) for p in personas)
     question_chars = sum(len(build_question_prompt(q)) for q in questions)
@@ -782,6 +815,18 @@ def _emit_dry_run_preview(
     total_chars = system_prompt_chars + persona_count * (question_chars + follow_up_chars)
     estimated_input_tokens = max(1, total_chars // 4)
 
+    output_tokens_per_persona = sum(_estimate_output_tokens_per_response(q) for q in questions)
+    estimated_output_tokens = persona_count * output_tokens_per_persona
+
+    pricing, pricing_is_estimated = lookup_pricing(model)
+    cost = estimate_cost(
+        TokenUsage(
+            input_tokens=estimated_input_tokens,
+            output_tokens=estimated_output_tokens,
+        ),
+        pricing,
+    )
+
     if fmt is OutputFormat.TEXT:
         print("DRY RUN — no LLM calls will be made", file=sys.stderr)
         print(f"Model: {model}", file=sys.stderr)
@@ -790,6 +835,10 @@ def _emit_dry_run_preview(
             print(f"Questions: {question_count} across {len(instrument.rounds)} rounds", file=sys.stderr)
         else:
             print(f"Questions: {question_count}", file=sys.stderr)
+        print(
+            f"Panel: {persona_count} personas x {question_count} questions = {llm_calls:,} LLM calls",
+            file=sys.stderr,
+        )
         print("", file=sys.stderr)
 
         for round_ in instrument.rounds:
@@ -813,6 +862,17 @@ def _emit_dry_run_preview(
             f"({persona_count} personas x {question_count} questions, ~4 chars/token)",
             file=sys.stderr,
         )
+        print(
+            f"Estimated output tokens: ~{estimated_output_tokens:,} "
+            f"(rough heuristic from response_schema)",
+            file=sys.stderr,
+        )
+        cost_suffix = " [pricing=estimated-default]" if pricing_is_estimated else ""
+        print(
+            f"Estimated cost ({model}): ~${cost.total_cost:.4f}{cost_suffix}",
+            file=sys.stderr,
+        )
+        print("Validation: OK", file=sys.stderr)
         return
 
     preview: dict[str, Any] = {
@@ -820,7 +880,12 @@ def _emit_dry_run_preview(
         "model": model,
         "persona_count": persona_count,
         "question_count": question_count,
+        "llm_calls": llm_calls,
         "estimated_input_tokens": estimated_input_tokens,
+        "estimated_output_tokens": estimated_output_tokens,
+        "estimated_cost_usd": round(cost.total_cost, 6),
+        "cost_is_estimated": pricing_is_estimated,
+        "validation": "ok",
         "rounds": [
             {
                 "name": r.name,

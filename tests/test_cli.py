@@ -3300,6 +3300,192 @@ class TestPanelRunDryRun:
         assert data["rounds"][0]["questions"] == ["Why now?"]
         mock_run_panel.assert_not_called()
 
+    # --- sp-ekayy9: cost estimate + validation + composition --------------
+
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_dry_run_text_shows_panel_composition_and_cost(
+        self, mock_client_cls, mock_run_panel, capsys, tmp_path
+    ):
+        """Text preview prints LLM call count, cost estimate, and validation."""
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n  - name: Bob\n  - name: Carol\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text(
+            "instrument:\n  questions:\n    - text: Q1?\n    - text: Q2?\n    - text: Q3?\n    - text: Q4?\n"
+        )
+
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--model",
+                "sonnet",
+                "--dry-run",
+            ]
+        )
+        assert code == 0
+        err = capsys.readouterr().err
+        assert "Panel: 3 personas x 4 questions = 12 LLM calls" in err
+        assert "Estimated output tokens" in err
+        assert "Estimated cost (sonnet):" in err
+        assert "Validation: OK" in err
+        mock_run_panel.assert_not_called()
+
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_dry_run_json_includes_cost_and_validation(
+        self, mock_client_cls, mock_run_panel, capsys, tmp_path
+    ):
+        """JSON payload exposes llm_calls, cost, and validation fields."""
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n  - name: Bob\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: Q1\n    - text: Q2\n    - text: Q3\n")
+
+        code = main(
+            [
+                "--output-format",
+                "json",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--model",
+                "sonnet",
+                "--dry-run",
+            ]
+        )
+        assert code == 0
+        data = json.loads(capsys.readouterr().out)
+        assert data["llm_calls"] == 6
+        assert data["estimated_output_tokens"] > 0
+        assert data["estimated_cost_usd"] > 0
+        assert data["cost_is_estimated"] is False  # sonnet is in the pricing table
+        assert data["validation"] == "ok"
+        mock_run_panel.assert_not_called()
+
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_dry_run_unknown_model_flags_estimated_pricing(
+        self, mock_client_cls, mock_run_panel, capsys, tmp_path
+    ):
+        """Models not in the pricing table fall back to DEFAULT_PRICING."""
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: Q1?\n")
+
+        code = main(
+            [
+                "--output-format",
+                "json",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--model",
+                "some-unlisted-model-9000",
+                "--dry-run",
+            ]
+        )
+        assert code == 0
+        data = json.loads(capsys.readouterr().out)
+        assert data["cost_is_estimated"] is True
+        assert data["estimated_cost_usd"] > 0
+        mock_run_panel.assert_not_called()
+
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_dry_run_response_schema_max_tokens_drives_output_estimate(
+        self, mock_client_cls, mock_run_panel, capsys, tmp_path
+    ):
+        """A response_schema.max_tokens override scales the output estimate."""
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n")
+        survey_small = tmp_path / "small.yaml"
+        survey_small.write_text(
+            "instrument:\n"
+            "  questions:\n"
+            "    - text: Q1?\n"
+            "      response_schema:\n"
+            "        type: text\n"
+            "        max_tokens: 50\n"
+        )
+        survey_big = tmp_path / "big.yaml"
+        survey_big.write_text(
+            "instrument:\n"
+            "  questions:\n"
+            "    - text: Q1?\n"
+            "      response_schema:\n"
+            "        type: text\n"
+            "        max_tokens: 1000\n"
+        )
+
+        def _run(survey_path):
+            code = main(
+                [
+                    "--output-format",
+                    "json",
+                    "panel",
+                    "run",
+                    "--personas",
+                    str(personas_file),
+                    "--instrument",
+                    str(survey_path),
+                    "--model",
+                    "sonnet",
+                    "--dry-run",
+                ]
+            )
+            assert code == 0
+            return json.loads(capsys.readouterr().out)
+
+        small = _run(survey_small)
+        big = _run(survey_big)
+
+        assert small["estimated_output_tokens"] == 50
+        assert big["estimated_output_tokens"] == 1000
+        assert big["estimated_cost_usd"] > small["estimated_cost_usd"]
+
+    def test_dry_run_invalid_instrument_yaml_returns_nonzero(self, capsys, tmp_path):
+        """Schema errors in the instrument fail the dry-run before any preview."""
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n")
+        survey_file = tmp_path / "survey.yaml"
+        # Bad: scale schema with min >= max should be rejected by parse_instrument.
+        survey_file.write_text(
+            "instrument:\n"
+            "  questions:\n"
+            "    - text: How much?\n"
+            "      response_schema:\n"
+            "        type: scale\n"
+            "        min: 5\n"
+            "        max: 1\n"
+        )
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--dry-run",
+            ]
+        )
+        assert code != 0
+        err = capsys.readouterr().err
+        assert "Validation: OK" not in err
+
 
 # --- sp-nn8k: _build_rounds_shape propagates cost_fallback_warnings ------
 
