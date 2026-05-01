@@ -9,6 +9,9 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 ### Added
 - (sy-ws76) `synthpanel panel run --resume <run-id>` is now a standalone entry point: pass just the run id and the original `--personas` / `--instrument` paths are recovered from the checkpoint's saved CLI args. Existing flags can still be passed to override. New `--allow-drift` flag downgrades checkpoint config drift from a hard error to a warning ("statistically inconsistent" run), for cases where intentionally mixing configs is acceptable. Pre-`sy-ws76` checkpoints (no `cli_args` field) still load — back-compat preserved.
 
+### Fixed
+- (sp-4y5.9, GH #311) `synthpanel pack inspect <pack-id>` no longer silently truncates long persona fields. Description, occupation, background, and traits are word-wrapped to terminal width by default with a continuation indent. Pass `--full` to skip wrapping and preserve embedded newlines (paragraph breaks survive). Previously a long `description` or `background` field would appear cut off at terminal width with no indication that truncation had occurred — a copy-paste hazard for users reviewing personas. Closes #311.
+
 ### Changed (loudness)
 - (sp-g59o) Detection: warn loudly when synthesis output appears unstructured (likely model schema-adherence flake). Triggered when every list field — themes, agreements, disagreements, surprises — is empty while the recommendation slot carries >600 chars of prose. Surfaces as a `synth_panel.synthesis` `logger.warning`, on `SynthesisResult.warnings`, and propagated up to `PanelResult.warnings`. Schema-honoring runs are unchanged. Observed at ~25% on `gemini-flash-lite` synthesis; detection is provider-agnostic.
 
