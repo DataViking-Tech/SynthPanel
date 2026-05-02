@@ -1101,10 +1101,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--target",
         default=None,
         metavar="DIR",
-        help=(
-            "Destination directory (default: ~/.claude). "
-            "Pass .claude for project-scope install."
-        ),
+        help=("Destination directory (default: ~/.claude). Pass .claude for project-scope install."),
     )
 
     # login (sp-lve: credential UX — persist an API key to disk so CLI
