@@ -4426,6 +4426,86 @@ def handle_install_skills(args: argparse.Namespace, fmt: OutputFormat) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Analyze subgroup (GH-341)
+# ---------------------------------------------------------------------------
+
+
+def _load_persona_pack(pack_ref: str) -> list[dict[str, Any]]:
+    """Load personas from a pack ID or YAML file path."""
+    import yaml
+
+    p = Path(pack_ref).expanduser()
+    if p.exists():
+        data = yaml.safe_load(p.read_text(encoding="utf-8"))
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict) and "personas" in data:
+            return data["personas"]
+        raise ValueError(f"Invalid personas file {pack_ref!r}: expected list or dict with 'personas' key")
+
+    from synth_panel.mcp.data import get_persona_pack
+
+    try:
+        pack_data = get_persona_pack(pack_ref)
+        return pack_data.get("personas", [])
+    except (FileNotFoundError, KeyError):
+        raise FileNotFoundError(f"Persona pack not found: {pack_ref!r}") from None
+
+
+def handle_analyze_subgroup(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Subgroup breakdown: group panel responses by a persona field (GH-341)."""
+    import json as _json
+
+    from synth_panel.analysis.subgroup_cli import (
+        analyze_subgroup,
+        format_subgroup_json,
+        format_subgroup_text,
+    )
+
+    result_ref = args.result
+    by_raw: str = args.by
+    fields = [f.strip() for f in by_raw.split(",") if f.strip()]
+    personas_ref = getattr(args, "personas", None)
+    output_fmt = getattr(args, "output", "text") or "text"
+
+    # Load panel result
+    path = Path(result_ref).expanduser()
+    if path.exists() and path.suffix == ".json":
+        data = _json.loads(path.read_text(encoding="utf-8"))
+        data.setdefault("id", path.stem)
+    else:
+        from synth_panel.mcp.data import get_panel_result
+
+        try:
+            data = get_panel_result(result_ref)
+        except FileNotFoundError:
+            print(f"Error: panel result not found: {result_ref}", file=sys.stderr)
+            return 1
+
+    personas_list: list[dict[str, Any]] = []
+    if personas_ref:
+        try:
+            personas_list = _load_persona_pack(personas_ref)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+
+    analysis = analyze_subgroup(data, personas_list, fields)
+
+    if not personas_ref and any("No panelist names matched" in w for w in analysis.global_warnings):
+        print(
+            "Error: pass --personas <pack_or_file> to supply persona attributes for --by analysis.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if output_fmt == "json":
+        print(_json.dumps(format_subgroup_json(analysis), indent=2))
+    else:
+        print(format_subgroup_text(analysis))
+    return 0
+
+
 # Cost subcommands (sy-kmw1)
 # ---------------------------------------------------------------------------
 
