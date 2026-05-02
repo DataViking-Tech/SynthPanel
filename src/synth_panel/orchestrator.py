@@ -504,7 +504,7 @@ def _run_panelist(
                         temperature=eff_temperature,
                         top_p=eff_top_p,
                     )
-                    tracker.record_turn(_convert_llm_usage(result.response.usage))
+                    tracker.record_turn(_convert_llm_usage(result.total_usage))
                     responses.append(
                         {
                             "question": question_text,
@@ -545,7 +545,7 @@ def _run_panelist(
                                 temperature=eff_temperature,
                                 top_p=eff_top_p,
                             )
-                            tracker.record_turn(_convert_llm_usage(extract_result.response.usage))
+                            tracker.record_turn(_convert_llm_usage(extract_result.total_usage))
                             resp_dict["extraction"] = extract_result.data
                             resp_dict["extraction_is_fallback"] = extract_result.is_fallback
                         except Exception as extract_exc:
