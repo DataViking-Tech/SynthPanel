@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import logging
-import random
 import threading
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 
 from synth_panel.llm.aliases import get_base_url_override, resolve_alias
 from synth_panel.llm.errors import LLMError, LLMErrorCategory
@@ -17,6 +16,24 @@ from synth_panel.llm.providers.gemini import GEMINI_CONFIG, GeminiProvider
 from synth_panel.llm.providers.openai_compat import OPENAI_COMPAT_CONFIG, OpenAICompatibleProvider
 from synth_panel.llm.providers.openrouter import OPENROUTER_CONFIG, OpenRouterProvider
 from synth_panel.llm.providers.xai import XAI_CONFIG, XAIProvider
+from synth_panel.llm.retry import (
+    DEFAULT_INITIAL_BACKOFF as _DEFAULT_INITIAL_BACKOFF,
+)
+from synth_panel.llm.retry import (
+    DEFAULT_MAX_BACKOFF as _DEFAULT_MAX_BACKOFF,
+)
+from synth_panel.llm.retry import (
+    DEFAULT_MAX_BACKOFF_RATE_LIMIT as _DEFAULT_MAX_BACKOFF_RATE_LIMIT,
+)
+from synth_panel.llm.retry import (
+    DEFAULT_MAX_RETRIES as _DEFAULT_MAX_RETRIES,
+)
+from synth_panel.llm.retry import (
+    DEFAULT_MAX_RETRIES_RATE_LIMIT as _DEFAULT_MAX_RETRIES_RATE_LIMIT,
+)
+from synth_panel.llm.retry import (
+    RetryPolicy,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,16 +45,6 @@ _PROVIDER_REGISTRY: list[tuple[ProviderConfig, type[LLMProvider]]] = [
     (OPENROUTER_CONFIG, OpenRouterProvider),
     (OPENAI_COMPAT_CONFIG, OpenAICompatibleProvider),
 ]
-
-# Default retry policy (SPEC.md §2 — Retry policy).
-_DEFAULT_INITIAL_BACKOFF = 0.2  # 200ms
-_DEFAULT_MAX_BACKOFF = 2.0  # 2s
-_DEFAULT_MAX_RETRIES = 2
-# Rate-limit backoff has a higher ceiling because providers often hand out
-# Retry-After values in the 1-30s range. Without this, we'd clamp useful
-# server-supplied waits down to max_backoff and burn the retry budget.
-_DEFAULT_MAX_BACKOFF_RATE_LIMIT = 60.0
-_DEFAULT_MAX_RETRIES_RATE_LIMIT = 5
 
 
 class _TokenBucket:
@@ -98,12 +105,15 @@ class LLMClient:
         max_backoff_rate_limit: float = _DEFAULT_MAX_BACKOFF_RATE_LIMIT,
         max_concurrent: int | None = None,
         rate_limit_rps: float | None = None,
+        retry_policy: RetryPolicy | None = None,
     ) -> None:
-        self._max_retries = max_retries
-        self._initial_backoff = initial_backoff
-        self._max_backoff = max_backoff
-        self._max_retries_rate_limit = max_retries_rate_limit
-        self._max_backoff_rate_limit = max_backoff_rate_limit
+        self._retry_policy = retry_policy or RetryPolicy(
+            max_retries=max_retries,
+            initial_backoff=initial_backoff,
+            max_backoff=max_backoff,
+            max_retries_rate_limit=max_retries_rate_limit,
+            max_backoff_rate_limit=max_backoff_rate_limit,
+        )
         self._provider_cache: dict[str, LLMProvider] = {}
         self._cache_lock = threading.Lock()
         self._concurrency: threading.Semaphore | None = (
@@ -181,7 +191,10 @@ class LLMClient:
             self._concurrency.acquire()
         try:
             t0 = time.monotonic()
-            response = self._with_retry(provider.send, request)
+            response = self._retry_policy.run(
+                lambda: provider.send(request),
+                provider_name=_provider_name(provider),
+            )
             elapsed = time.monotonic() - t0
         finally:
             if self._concurrency is not None:
@@ -201,67 +214,13 @@ class LLMClient:
         provider = self._resolve_provider(request.model)
         return provider.stream(request)
 
-    def _sleep_for_retry(self, exc: LLMError, backoff: float) -> float:
-        """Compute how long to sleep before the next retry.
 
-        Honors ``retry_after`` from the error (server-supplied wait, e.g.
-        via ``Retry-After`` header) when present; otherwise uses the
-        current exponential backoff with full jitter.
-        """
-        if exc.retry_after is not None:
-            # Clamp to the rate-limit ceiling so a pathological
-            # Retry-After (e.g. 3600s) doesn't stall the whole run.
-            return min(exc.retry_after, self._max_backoff_rate_limit)
-        return random.uniform(0, backoff)
+def _provider_name(provider: LLMProvider) -> str:
+    """Return the canonical display name for a provider.
 
-    def _with_retry(
-        self,
-        fn: Callable[[CompletionRequest], CompletionResponse],
-        request: CompletionRequest,
-    ) -> CompletionResponse:
-        """Execute *fn* with exponential backoff + jitter on retryable errors.
-
-        Rate-limit errors get a larger retry budget and a higher backoff
-        ceiling than other retryable categories, and respect a server
-        ``Retry-After`` hint when present.
-        """
-        last_error: LLMError | None = None
-        backoff = self._initial_backoff
-
-        attempt = 0
-        while True:
-            try:
-                return fn(request)
-            except LLMError as exc:
-                last_error = exc
-                if not exc.retryable:
-                    break
-                if exc.category == LLMErrorCategory.RATE_LIMIT:
-                    budget = self._max_retries_rate_limit
-                    ceiling = self._max_backoff_rate_limit
-                else:
-                    budget = self._max_retries
-                    ceiling = self._max_backoff
-                if attempt >= budget:
-                    break
-                sleep_for = self._sleep_for_retry(exc, backoff)
-                logger.warning(
-                    "retryable error (attempt %d/%d, category=%s, sleep=%.2fs): %s",
-                    attempt + 1,
-                    budget + 1,
-                    exc.category.value,
-                    sleep_for,
-                    exc,
-                )
-                time.sleep(sleep_for)
-                backoff = min(backoff * 2, ceiling)
-                attempt += 1
-
-        assert last_error is not None
-        if last_error.retryable:
-            raise LLMError(
-                f"Retries exhausted after {attempt + 1} attempts: {last_error}",
-                LLMErrorCategory.RETRIES_EXHAUSTED,
-                cause=last_error,
-            )
-        raise last_error
+    Reads ``provider.config.name`` (set on each provider's ``ProviderConfig``).
+    Falls back to the class name so retry logs always have a value.
+    """
+    config = getattr(provider, "config", None)
+    name = getattr(config, "name", "") if config is not None else ""
+    return name or type(provider).__name__

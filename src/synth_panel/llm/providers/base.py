@@ -24,6 +24,7 @@ class ProviderConfig:
     base_url_env: str
     default_base_url: str
     model_prefixes: tuple[str, ...]
+    name: str = ""
 
     def get_api_key(self) -> str:
         """Return the API key from env or the on-disk credential store."""
