@@ -10,6 +10,7 @@ import sys
 
 from synth_panel.cli.commands import (
     handle_analyze,
+    handle_analyze_subgroup,
     handle_cost_summary,
     handle_doctor,
     handle_install_skills,
@@ -124,6 +125,8 @@ def main(argv: list[str] | None = None) -> int:
             parser.parse_args(["cost", "--help"])
             return 1
     elif args.command == "analyze":
+        if getattr(args, "by", None):
+            return handle_analyze_subgroup(args, output_format)
         return handle_analyze(args, output_format)
     elif args.command == "report":
         return handle_report(args, output_format)

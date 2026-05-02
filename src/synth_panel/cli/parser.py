@@ -1052,6 +1052,23 @@ def build_parser() -> argparse.ArgumentParser:
             "variant_of, input_tokens, output_tokens, error."
         ),
     )
+    analyze_parser.add_argument(
+        "--by",
+        default=None,
+        metavar="FIELD[,FIELD...]",
+        help=(
+            "Break responses down by a persona field (subgroup analysis). "
+            "Comma-separated for cross-tabs (e.g. --by occupation or --by age,gender). "
+            "Numeric integer fields are auto-binned into decade bands. "
+            "Use --personas to supply persona attribute files."
+        ),
+    )
+    analyze_parser.add_argument(
+        "--personas",
+        default=None,
+        metavar="PACK_ID_OR_FILE",
+        help=("Persona pack ID or YAML file supplying per-persona attributes for --by subgroup analysis."),
+    )
 
     # report (sp-viz-layer T4): render a saved panel result as Markdown.
     report_parser = subparsers.add_parser(
