@@ -274,12 +274,17 @@ Add to `.mcp.json` at your project root (or `~/.claude.json` for all projects):
 }
 ```
 
-Or install the bundled plugin (adds the `/focus-group` skill plus the
-`/synthpanel-poll <question>` slash command for one-shot quick polls):
+Or install the bundled plugin (adds the `/synthpanel-poll <question>`
+slash command plus five skills — `focus-group`, `name-test`,
+`concept-test`, `survey-prescreen`, `pricing-probe`):
 
 ```
 /plugin install synthpanel
 ```
+
+Not using Claude Code, or prefer manual install? See
+[`docs/agent-skills.md`](docs/agent-skills.md) for `cp`-based install
+steps and per-host guidance.
 
 </details>
 
