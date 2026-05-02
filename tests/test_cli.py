@@ -2090,6 +2090,7 @@ class TestPackCommands:
         out = capsys.readouterr().out
         assert "developer" in out
         assert "Developers" in out
+        assert "[bundled]" in out
 
     def test_pack_import_and_list(self, capsys):
         pfile = self._tmp / "personas.yaml"
@@ -2401,7 +2402,7 @@ class TestPackCommands:
             ]
         )
         # Case-insensitive substring — matches id, name, description, tags.
-        code = main(["pack", "search", "pricing"])
+        code = main(["pack", "search", "--registry", "pricing"])
         assert code == 0
         out = capsys.readouterr().out
         assert "pricing-probe" in out  # id match
@@ -2426,7 +2427,7 @@ class TestPackCommands:
                 }
             ]
         )
-        code = main(["pack", "search", "nonexistent-xyz"])
+        code = main(["pack", "search", "--registry", "nonexistent-xyz"])
         assert code == 0
         out = capsys.readouterr().out
         assert "No packs match" in out
@@ -2436,7 +2437,7 @@ class TestPackCommands:
             "synth_panel.registry.fetch_registry",
             lambda **kw: {"schema_version": 1, "packs": []},
         )
-        code = main(["pack", "search", "anything"])
+        code = main(["pack", "search", "--registry", "anything"])
         assert code == 0
         out = capsys.readouterr().out
         assert "registry unavailable" in out
@@ -2458,12 +2459,158 @@ class TestPackCommands:
                 }
             ]
         )
-        code = main(["--output-format", "json", "pack", "search", "match"])
+        code = main(["--output-format", "json", "pack", "search", "--registry", "match"])
         assert code == 0
         data = json.loads(capsys.readouterr().out)
         assert data["term"] == "match"
         assert len(data["matches"]) == 1
         assert data["matches"][0]["id"] == "match-one"
+
+    # --- pack save ---
+
+    def test_pack_save_creates_local_pack(self, capsys):
+        pfile = self._tmp / "team.yaml"
+        pfile.write_text("name: Team Pack\npersonas:\n  - name: Alice\n    age: 30\n")
+        code = main(["pack", "save", str(pfile)])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "Team Pack" in out
+        assert "1 personas" in out
+        assert "team-pack" in out
+
+    def test_pack_save_explicit_name(self, capsys):
+        pfile = self._tmp / "p.yaml"
+        pfile.write_text("personas:\n  - name: Bob\n")
+        code = main(["pack", "save", str(pfile), "--name", "Custom Name"])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "Custom Name" in out
+        assert "custom-name" in out
+
+    def test_pack_save_explicit_id(self, capsys):
+        pfile = self._tmp / "p.yaml"
+        pfile.write_text("personas:\n  - name: Eve\n")
+        code = main(["pack", "save", str(pfile), "--name", "My Pack", "--id", "explicit-id"])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "explicit-id" in out
+
+    def test_pack_save_validation_error(self, capsys):
+        pfile = self._tmp / "bad.yaml"
+        pfile.write_text("personas:\n  - age: 30\n")
+        code = main(["pack", "save", str(pfile)])
+        assert code == 1
+        assert "Validation error" in capsys.readouterr().err
+
+    def test_pack_save_file_not_found(self, capsys):
+        code = main(["pack", "save", "/no/such/file.yaml"])
+        assert code == 1
+
+    def test_pack_save_refuses_bundled_name_conflict(self, capsys):
+        pfile = self._tmp / "developer.yaml"
+        pfile.write_text("personas:\n  - name: Dev\n")
+        # 'developer' is a bundled pack ID — save should refuse
+        code = main(["pack", "save", str(pfile), "--name", "developer"])
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "bundled" in err
+
+    def test_pack_save_bundled_conflict_with_custom_id_succeeds(self, capsys):
+        pfile = self._tmp / "p.yaml"
+        pfile.write_text("personas:\n  - name: Dev\n")
+        # Use --id to sidestep the conflict
+        code = main(["pack", "save", str(pfile), "--name", "developer", "--id", "my-dev"])
+        assert code == 0
+        assert "my-dev" in capsys.readouterr().out
+
+    def test_pack_save_shows_in_list_as_local(self, capsys):
+        pfile = self._tmp / "team.yaml"
+        pfile.write_text("name: Team Pack\npersonas:\n  - name: Alice\n")
+        main(["pack", "save", str(pfile)])
+        capsys.readouterr()
+        code = main(["pack", "list"])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "team-pack" in out
+        assert "[local]" in out
+
+    # --- pack uninstall ---
+
+    def test_pack_uninstall_removes_local_pack(self, capsys):
+        from synth_panel.mcp.data import save_persona_pack
+
+        save_persona_pack("Temp", [{"name": "X"}], pack_id="temp-pack")
+        code = main(["pack", "uninstall", "temp-pack"])
+        assert code == 0
+        assert "temp-pack" in capsys.readouterr().out
+        # Verify gone from list
+        code2 = main(["pack", "list"])
+        assert code2 == 0
+        assert "temp-pack" not in capsys.readouterr().out
+
+    def test_pack_uninstall_refuses_bundled(self, capsys):
+        code = main(["pack", "uninstall", "developer"])
+        assert code == 1
+        assert "bundled" in capsys.readouterr().err
+
+    def test_pack_uninstall_not_found(self, capsys):
+        code = main(["pack", "uninstall", "no-such-pack"])
+        assert code == 1
+
+    def test_pack_uninstall_json(self, capsys):
+        from synth_panel.mcp.data import save_persona_pack
+
+        save_persona_pack("J", [{"name": "Y"}], pack_id="jdel")
+        code = main(["--output-format", "json", "pack", "uninstall", "jdel"])
+        assert code == 0
+        data = json.loads(capsys.readouterr().out)
+        assert data["pack_id"] == "jdel"
+
+    # --- pack search (local) ---
+
+    def test_pack_search_local_matches_bundled(self, capsys):
+        code = main(["pack", "search", "developer"])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "developer" in out
+        assert "[bundled]" in out
+
+    def test_pack_search_local_matches_user_saved(self, capsys):
+        from synth_panel.mcp.data import save_persona_pack
+
+        save_persona_pack("Unique Local", [{"name": "Z"}], pack_id="unique-local")
+        code = main(["pack", "search", "unique"])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "unique-local" in out
+        assert "[local]" in out
+
+    def test_pack_search_local_no_matches(self, capsys):
+        code = main(["pack", "search", "xyzzy-no-match-ever"])
+        assert code == 0
+        assert "No packs match" in capsys.readouterr().out
+
+    def test_pack_search_local_json(self, capsys):
+        from synth_panel.mcp.data import save_persona_pack
+
+        save_persona_pack("Search Me", [{"name": "A"}], pack_id="search-me")
+        code = main(["--output-format", "json", "pack", "search", "search-me"])
+        assert code == 0
+        data = json.loads(capsys.readouterr().out)
+        assert data["term"] == "search-me"
+        assert any(m["id"] == "search-me" for m in data["matches"])
+
+    # --- pack list origin column ---
+
+    def test_pack_list_shows_local_origin(self, capsys):
+        from synth_panel.mcp.data import save_persona_pack
+
+        save_persona_pack("My Local", [{"name": "L"}], pack_id="my-local")
+        code = main(["pack", "list"])
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "[local]" in out
+        assert "my-local" in out
 
     def test_pack_generate_success(self, capsys, monkeypatch):
         """pack generate calls LLM and saves a valid persona pack."""

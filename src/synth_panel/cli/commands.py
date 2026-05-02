@@ -3118,9 +3118,9 @@ def _build_rounds_shape(
 def handle_pack_list(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """List persona packs.
 
-    Default: local installed packs. With ``--registry``: packs from the
-    cached synthpanel registry (id, name, ref, version columns). On empty
-    cache + fetch fail, prints an advisory line and exits 0.
+    Default: bundled + local packs with origin column. With ``--registry``:
+    packs from the cached synthpanel registry (id, name, ref, version
+    columns). On empty cache + fetch fail, prints an advisory line and exits 0.
     """
     if getattr(args, "registry", False):
         return _handle_pack_list_registry(fmt)
@@ -3134,7 +3134,8 @@ def handle_pack_list(args: argparse.Namespace, fmt: OutputFormat) -> int:
             print("No persona packs found.")
         else:
             for p in packs:
-                print(f"  {p['id']}  {p['name']}  ({p['persona_count']} personas)")
+                origin = "bundled" if p.get("builtin") else "local"
+                print(f"  {p['id']}  {p['name']}  ({p['persona_count']} personas)  [{origin}]")
     else:
         emit(fmt, message="Persona packs", extra={"packs": packs})
 
@@ -3185,7 +3186,50 @@ def _handle_pack_list_registry(fmt: OutputFormat) -> int:
 
 
 def handle_pack_search(args: argparse.Namespace, fmt: OutputFormat) -> int:
-    """Search registry packs by substring across id, name, description, tags."""
+    """Search packs by substring.
+
+    Default: searches bundled + local packs (id, name, description).
+    With ``--registry``: searches the remote synthpanel registry instead.
+    """
+    if getattr(args, "registry", False):
+        return _handle_pack_search_registry(args, fmt)
+    return _handle_pack_search_local(args, fmt)
+
+
+def _handle_pack_search_local(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Search bundled + user-saved packs by substring."""
+    from synth_panel.mcp.data import list_persona_packs
+
+    term = (args.term or "").lower()
+    packs = list_persona_packs()
+
+    matches: list[dict[str, Any]] = []
+    for p in packs:
+        haystack = " ".join([str(p.get("id", "")), str(p.get("name", "")), str(p.get("description", ""))]).lower()
+        if term in haystack:
+            matches.append(
+                {
+                    "id": str(p["id"]),
+                    "name": str(p["name"]),
+                    "persona_count": p["persona_count"],
+                    "origin": "bundled" if p.get("builtin") else "local",
+                }
+            )
+
+    if fmt is OutputFormat.TEXT:
+        if not matches:
+            print(f"No packs match '{args.term}'.")
+        else:
+            for m in matches:
+                print(f"  {m['id']}  {m['name']}  ({m['persona_count']} personas)  [{m['origin']}]")
+    else:
+        emit(fmt, message="Pack search", extra={"term": args.term, "matches": matches})
+
+    return 0
+
+
+def _handle_pack_search_registry(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Search remote registry packs by substring across id, name, description, tags."""
     from synth_panel.registry import cache_path, fetch_registry
 
     term = (args.term or "").lower()
@@ -3284,6 +3328,78 @@ def _handle_pack_import_local(args: argparse.Namespace, fmt: OutputFormat, sourc
     else:
         emit(fmt, message="Pack imported", extra=result)
 
+    return 0
+
+
+def handle_pack_save(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Save a local YAML file as a named persona pack in the local registry.
+
+    Validates the YAML before saving and refuses to install a pack whose
+    derived ID collides with a bundled pack name.  Use ``--id`` to choose a
+    different ID when a collision is unavoidable.
+    """
+    from synth_panel.mcp.data import PackValidationError, _bundled_packs, save_persona_pack
+
+    source = args.file
+    try:
+        personas = _load_personas(source)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"Error loading file: {exc}", file=sys.stderr)
+        return 1
+
+    # Determine pack name: explicit flag > YAML 'name' key > filename stem
+    pack_name = args.name
+    if not pack_name:
+        data = _load_yaml(source)
+        if isinstance(data, dict):
+            pack_name = data.get("name")
+    if not pack_name:
+        pack_name = Path(source).stem
+
+    pack_id = args.pack_id if getattr(args, "pack_id", None) else _slugify_pack_id(str(pack_name))
+
+    if pack_id in _bundled_packs():
+        print(
+            f"Error: '{pack_id}' conflicts with a bundled pack. Use --id to choose a different ID.",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        result = save_persona_pack(str(pack_name), personas, pack_id=pack_id)
+    except PackValidationError as exc:
+        print(f"Validation error: {exc}", file=sys.stderr)
+        return 1
+
+    if fmt is OutputFormat.TEXT:
+        print(f"Saved pack '{result['name']}' ({result['persona_count']} personas) as {result['id']}")
+    else:
+        emit(fmt, message="Pack saved", extra=result)
+
+    return 0
+
+
+def handle_pack_uninstall(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Uninstall a user-saved persona pack from the local registry.
+
+    Refuses to uninstall bundled packs.
+    """
+    from synth_panel.mcp.data import uninstall_persona_pack
+
+    pack_id = args.pack_id
+    try:
+        uninstall_persona_pack(pack_id)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    if fmt is OutputFormat.TEXT:
+        print(f"Uninstalled pack '{pack_id}'.")
+    else:
+        emit(fmt, message="Pack uninstalled", extra={"pack_id": pack_id})
     return 0
 
 
