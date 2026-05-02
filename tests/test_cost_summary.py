@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -510,6 +511,8 @@ class TestDefaultRunsDir:
 class TestCliSmoke:
     def _run(self, env_dir: Path, *args: str) -> subprocess.CompletedProcess:
         env = {"PATH": "/usr/bin:/bin", "SYNTH_PANEL_DATA_DIR": str(env_dir)}
+        if pythonpath := os.environ.get("PYTHONPATH"):
+            env["PYTHONPATH"] = pythonpath
         return subprocess.run(
             [sys.executable, "-m", "synth_panel", "cost", "summary", *args],
             env=env,
