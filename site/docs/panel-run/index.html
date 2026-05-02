@@ -1,0 +1,946 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>
+      panel run Reference — synthpanel · Run synthetic focus groups with any LLM
+    </title>
+    <meta
+      name="description"
+      content="Complete CLI reference for synthpanel panel run — multi-model ensembles, convergence auto-stop, checkpointing, SynthBench calibration, and more."
+    />
+    <link rel="canonical" href="https://synthpanel.dev/docs/panel-run" />
+
+    <meta name="keywords" content="synthpanel panel run, multi-model ensemble, convergence auto-stop, checkpoint resume, calibrate against, best-model-for, SynthBench, extract-schema, synthesis strategy" />
+
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="synthpanel" />
+    <meta property="og:title" content="panel run Reference — synthpanel" />
+    <meta
+      property="og:description"
+      content="Complete CLI reference for synthpanel panel run — multi-model, convergence, checkpointing, and SynthBench integration."
+    />
+    <meta property="og:url" content="https://synthpanel.dev/docs/panel-run" />
+    <meta property="og:image" content="https://synthpanel.dev/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="synthpanel — Run synthetic focus groups with any LLM" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="panel run Reference — synthpanel" />
+    <meta
+      name="twitter:description"
+      content="Complete CLI reference for synthpanel panel run — multi-model, convergence, checkpointing, and SynthBench integration."
+    />
+    <meta name="twitter:image" content="https://synthpanel.dev/og-image.png" />
+    <meta name="twitter:image:alt" content="synthpanel — Run synthetic focus groups with any LLM" />
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              mono: [
+                "ui-monospace",
+                "SFMono-Regular",
+                "Menlo",
+                "Monaco",
+                "Consolas",
+                "monospace",
+              ],
+            },
+          },
+        },
+      };
+    </script>
+
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      html,
+      body {
+        background-color: #0f172a;
+      }
+      body {
+        background:
+          radial-gradient(
+            ellipse at top,
+            rgba(52, 211, 153, 0.08),
+            transparent 60%
+          ),
+          #0f172a;
+      }
+      button.copy-btn {
+        min-height: 44px;
+        padding: 8px 14px;
+      }
+      .copy-btn:active {
+        transform: translateY(1px);
+      }
+      :target {
+        scroll-margin-top: 1rem;
+      }
+      table {
+        border-collapse: collapse;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 0.5rem 0.75rem;
+        border-bottom: 1px solid rgb(30, 41, 59);
+        vertical-align: top;
+      }
+      th {
+        color: rgb(148, 163, 184);
+        font-weight: 600;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      td code {
+        color: rgb(110, 231, 183);
+        font-size: 0.85em;
+      }
+    </style>
+  </head>
+
+  <body class="text-slate-200 antialiased">
+    <main class="mx-auto max-w-4xl px-6 pb-24 pt-12 sm:pt-16">
+      <!-- Breadcrumb / back link -->
+      <nav class="mb-8 text-sm">
+        <a
+          href="/"
+          class="inline-flex items-center gap-1 text-slate-400 transition hover:text-emerald-300"
+        >
+          <span aria-hidden="true">←</span> synthpanel.dev
+        </a>
+      </nav>
+
+      <!-- Hero -->
+      <header>
+        <p
+          class="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/5 px-3 py-1 text-xs font-medium text-emerald-300"
+        >
+          <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+          Docs · panel run
+        </p>
+        <h1
+          class="bg-gradient-to-br from-white to-slate-400 bg-clip-text font-mono text-4xl font-bold tracking-tight text-transparent sm:text-5xl"
+        >
+          panel run reference
+        </h1>
+        <p class="mt-4 text-lg text-slate-300">
+          Full reference for <code class="text-emerald-400">synthpanel panel run</code>.
+          Covers the advanced flags for multi-model panels, persona variants,
+          structured extraction, synthesis tuning, convergence auto-stop,
+          checkpointing, and SynthBench integration.
+        </p>
+      </header>
+
+      <!-- Table of contents -->
+      <nav class="mt-10 rounded-lg border border-slate-800 bg-slate-900/50 p-5" aria-label="Page sections">
+        <p class="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">On this page</p>
+        <ul class="space-y-1.5 text-sm text-slate-400">
+          <li><a href="#multi-model" class="hover:text-emerald-300 transition">Multi-model — <code class="text-slate-300">--models</code>, <code class="text-slate-300">--blend</code></a></li>
+          <li><a href="#variants" class="hover:text-emerald-300 transition">Persona variants — <code class="text-slate-300">--variants</code>, <code class="text-slate-300">--personas-merge</code></a></li>
+          <li><a href="#extraction" class="hover:text-emerald-300 transition">Structured extraction — <code class="text-slate-300">--extract-schema</code></a></li>
+          <li><a href="#synthesis" class="hover:text-emerald-300 transition">Synthesis strategy — <code class="text-slate-300">--synthesis-strategy</code>, <code class="text-slate-300">--synthesis-auto-escalate</code></a></li>
+          <li><a href="#rate-limit" class="hover:text-emerald-300 transition">Rate limiting — <code class="text-slate-300">--rate-limit-rps</code></a></li>
+          <li><a href="#checkpoint" class="hover:text-emerald-300 transition">Checkpointing &amp; resume — <code class="text-slate-300">--checkpoint-dir</code>, <code class="text-slate-300">--resume</code></a></li>
+          <li><a href="#convergence" class="hover:text-emerald-300 transition">Convergence &amp; auto-stop — <code class="text-slate-300">--convergence-*</code></a></li>
+          <li><a href="#synthbench" class="hover:text-emerald-300 transition">SynthBench — <code class="text-slate-300">--calibrate-against</code>, <code class="text-slate-300">--best-model-for</code>, <code class="text-slate-300">--submit-to-synthbench</code></a></li>
+        </ul>
+      </nav>
+
+      <!-- ── Multi-model ── -->
+      <section class="mt-16" id="multi-model">
+        <h2
+          class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Multi-model &mdash; <code class="text-slate-300 normal-case">--models</code>, <code class="text-slate-300 normal-case">--blend</code>
+        </h2>
+        <p class="mb-6 text-base text-slate-300">
+          <code class="text-emerald-400">--models</code> has two distinct shapes,
+          selected by whether the spec contains a colon (<code class="text-slate-300">:</code>).
+          It is mutually exclusive with <code class="text-slate-300">--model</code>.
+        </p>
+
+        <h3 class="mb-3 font-semibold text-white">Weighted per-persona assignment</h3>
+        <p class="mb-4 text-sm text-slate-400">
+          A spec with colons splits the panel across models in the given ratio.
+          Weights are normalized — <code class="text-slate-300">a:2,b:3</code> and
+          <code class="text-slate-300">a:0.4,b:0.6</code> behave identically.
+          Per-persona <code class="text-emerald-400">model:</code> fields in the YAML
+          always win over the <code class="text-slate-300">--models</code> assignment.
+        </p>
+        <div
+          class="group relative rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-4 font-mono text-sm shadow-xl"
+        >
+          <pre class="text-slate-300 overflow-x-auto whitespace-pre">synthpanel panel run \
+  --personas examples/personas.yaml \
+  --instrument examples/survey.yaml \
+  --models 'haiku:0.5,gemini-2.5-flash:0.5'</pre>
+        </div>
+        <p class="mt-3 text-sm text-slate-400">
+          With 6 personas and the spec above, 3 answer on haiku and 3 on Gemini.
+          7 personas → 3 + 4 (the last model absorbs the remainder). The
+          assignment is fully deterministic and printed to stderr before the run:
+        </p>
+        <div
+          class="mt-3 rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-3 font-mono text-sm shadow-xl"
+        >
+          <pre class="text-slate-300 overflow-x-auto whitespace-pre"><span class="text-slate-500">Model assignment:</span>
+  Maya Chen        → haiku
+  Derek Washington → haiku
+  Priya Patel      → haiku
+  Sam Torres       → gemini-2.5-flash
+  Julia Hoffman    → gemini-2.5-flash
+  Omar Rashid      → gemini-2.5-flash
+<span class="text-slate-500">Totals: haiku=3, gemini-2.5-flash=3</span></pre>
+        </div>
+
+        <h3 class="mt-8 mb-3 font-semibold text-white">Ensemble mode</h3>
+        <p class="mb-4 text-sm text-slate-400">
+          A spec without colons runs the full panel once per model.
+          Combine with <code class="text-emerald-400">--blend</code> to weight-average
+          the response distributions across models for each question.
+        </p>
+        <div
+          class="group relative rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-4 font-mono text-sm shadow-xl"
+        >
+          <pre class="text-slate-300 overflow-x-auto whitespace-pre">synthpanel panel run \
+  --personas examples/personas.yaml \
+  --instrument pricing-discovery \
+  --models 'haiku,sonnet,gemini-2.5-flash' \
+  --blend</pre>
+        </div>
+        <p class="mt-3 text-sm text-slate-400">
+          With 6 personas and 3 models, this runs 18 sessions total. <code class="text-emerald-400">--blend</code>
+          then computes weighted-average distributions using the weights in the spec
+          (equal weights when no <code class="text-slate-300">:</code> is given). Use
+          <code class="text-slate-300">haiku:0.5,sonnet:0.3,gemini:0.2</code> (with colons, in
+          ensemble mode with <code class="text-slate-300">--blend</code>) to apply custom blend
+          weights.
+        </p>
+
+        <div class="mt-6 overflow-x-auto rounded-lg border border-slate-800">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-900/60">
+              <tr>
+                <th>Flag</th>
+                <th>Default</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+              <tr>
+                <td><code>--models SPEC</code></td>
+                <td class="text-slate-400">—</td>
+                <td class="text-slate-300">Multi-model spec. <code>a:w,b:w</code> = weighted split; <code>a,b,c</code> = ensemble (full panel per model).</td>
+              </tr>
+              <tr>
+                <td><code>--blend</code></td>
+                <td class="text-slate-400">off</td>
+                <td class="text-slate-300">Weight-average distributions across ensemble models. Requires <code>--models</code>.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ── Persona variants ── -->
+      <section class="mt-16" id="variants">
+        <h2
+          class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Persona variants &mdash; <code class="text-slate-300 normal-case">--variants</code>, <code class="text-slate-300 normal-case">--personas-merge</code>
+        </h2>
+
+        <h3 class="mb-3 font-semibold text-white">--variants N</h3>
+        <p class="mb-4 text-base text-slate-300">
+          Generate N LLM-perturbed variants per persona before running the panel.
+          The original personas are replaced by <code class="text-slate-300">N × M</code>
+          variants (M = number of original personas). Each variant perturbs one
+          axis — trait swap, mood context, demographic shift, or background
+          rephrase — via a single LLM call per variant.
+        </p>
+        <div
+          class="group relative rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-4 font-mono text-sm shadow-xl"
+        >
+          <pre class="text-slate-300 overflow-x-auto whitespace-pre">synthpanel panel run \
+  --personas small-panel.yaml \    <span class="text-slate-500"># 5 personas</span>
+  --instrument survey.yaml \
+  --variants 4                     <span class="text-slate-500"># → 20 total panelists</span></pre>
+        </div>
+        <p class="mt-3 text-sm text-slate-400">
+          Useful for stress-testing whether results are stable across plausible
+          persona perturbations, or for expanding a small hand-crafted panel into
+          a larger synthetic one.
+        </p>
+
+        <h3 class="mt-8 mb-3 font-semibold text-white">--personas-merge</h3>
+        <p class="mb-4 text-base text-slate-300">
+          Append additional YAML files to <code class="text-emerald-400">--personas</code>.
+          Repeatable. Files are merged in order; later entries override earlier
+          ones on name collision (controlled by
+          <code class="text-emerald-400">--personas-merge-on-collision</code>).
+        </p>
+        <div
+          class="group relative rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-4 font-mono text-sm shadow-xl"
+        >
+          <pre class="text-slate-300 overflow-x-auto whitespace-pre">synthpanel panel run \
+  --personas base-panel.yaml \
+  --personas-merge extra-personas.yaml \
+  --personas-merge regional-overrides.yaml \
+  --instrument survey.yaml</pre>
+        </div>
+
+        <div class="mt-6 overflow-x-auto rounded-lg border border-slate-800">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-900/60">
+              <tr>
+                <th>Flag</th>
+                <th>Default</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+              <tr>
+                <td><code>--variants N</code></td>
+                <td class="text-slate-400">—</td>
+                <td class="text-slate-300">Generate N LLM-perturbed variants per persona. Panel size becomes N × original count.</td>
+              </tr>
+              <tr>
+                <td><code>--personas-merge PATH</code></td>
+                <td class="text-slate-400">—</td>
+                <td class="text-slate-300">Merge additional persona YAML into the panel. Repeatable.</td>
+              </tr>
+              <tr>
+                <td><code>--personas-merge-on-collision</code></td>
+                <td class="text-slate-400"><code>dedup</code></td>
+                <td class="text-slate-300"><code>dedup</code> (later file wins, warning emitted), <code>error</code> (abort on any collision).</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ── Structured extraction ── -->
+      <section class="mt-16" id="extraction">
+        <h2
+          class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Structured extraction &mdash; <code class="text-slate-300 normal-case">--extract-schema</code>
+        </h2>
+        <p class="mb-4 text-base text-slate-300">
+          Unlike <code class="text-emerald-400">--schema</code> (which forces structured-only output
+          and replaces free text), <code class="text-emerald-400">--extract-schema</code> preserves
+          the full free-text response and adds a second LLM call that extracts
+          structured data into an <code class="text-slate-300">extraction</code> key alongside the raw
+          <code class="text-slate-300">response</code>.
+        </p>
+        <div
+          class="group relative rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-4 font-mono text-sm shadow-xl"
+        >
+          <pre class="text-slate-300 overflow-x-auto whitespace-pre">synthpanel panel run \
+  --personas panel.yaml \
+  --instrument feedback-survey.yaml \
+  --extract-schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["positive","neutral","negative"]},"themes":{"type":"array","items":{"type":"string"}}}}'</pre>
+        </div>
+        <p class="mt-4 text-sm text-slate-400">
+          The value can be a JSON file path (<code class="text-slate-300">extract.json</code>)
+          or an inline JSON string. The extraction runs after the panelist answers
+          and is stored under <code class="text-emerald-400">extraction</code> in the result JSON.
+          Use this when you need both the qualitative narrative and a structured
+          signal you can aggregate (e.g. sentiment counts, theme frequency).
+        </p>
+
+        <div class="mt-6 overflow-x-auto rounded-lg border border-slate-800">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-900/60">
+              <tr>
+                <th>Flag</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+              <tr>
+                <td><code>--extract-schema SCHEMA</code></td>
+                <td class="text-slate-300">JSON Schema for post-hoc extraction. Preserves full free-text; adds structured <code>extraction</code> key. File path or inline JSON.</td>
+              </tr>
+              <tr>
+                <td><code>--schema SCHEMA</code></td>
+                <td class="text-slate-300">JSON Schema for structured-only output. Replaces free-text responses. Use when you want only structured data.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ── Synthesis strategy ── -->
+      <section class="mt-16" id="synthesis">
+        <h2
+          class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Synthesis strategy &mdash; <code class="text-slate-300 normal-case">--synthesis-strategy</code>, <code class="text-slate-300 normal-case">--synthesis-auto-escalate</code>
+        </h2>
+        <p class="mb-4 text-base text-slate-300">
+          The synthesis step aggregates all panelist responses into a final summary.
+          For small panels the default <code class="text-emerald-400">auto</code> strategy
+          concatenates everything into one LLM call. For large panels (n ≥ 50) it
+          automatically switches to <code class="text-slate-300">map-reduce</code>.
+        </p>
+
+        <div class="mt-4 overflow-x-auto rounded-lg border border-slate-800">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-900/60">
+              <tr>
+                <th>Strategy</th>
+                <th>How it works</th>
+                <th>When to use</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+              <tr>
+                <td><code>single</code></td>
+                <td class="text-slate-300">All responses concatenated into one call.</td>
+                <td class="text-slate-300">Small panels (n&lt;50). Cheapest and most coherent.</td>
+              </tr>
+              <tr>
+                <td><code>map-reduce</code></td>
+                <td class="text-slate-300">One summary call per question in parallel, then one reduce call across summaries.</td>
+                <td class="text-slate-300">Large panels where responses overflow the synthesis model's context.</td>
+              </tr>
+              <tr>
+                <td><code>auto</code> <span class="text-slate-500">(default)</span></td>
+                <td class="text-slate-300">Pre-flight token estimate picks <code>single</code> or <code>map-reduce</code>.</td>
+                <td class="text-slate-300">Most runs. Falls back to <code>single</code> whenever estimate fits context.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 class="mt-8 mb-3 font-semibold text-white">--synthesis-auto-escalate</h3>
+        <p class="mb-4 text-base text-slate-300">
+          In <code class="text-slate-300">map-reduce</code> mode, a single question whose responses
+          overflow context normally partitions panelists into sub-batches for an inner
+          reduce. With <code class="text-emerald-400">--synthesis-auto-escalate</code>, instead of
+          sub-batching, that question's map call is retried on a larger-context model
+          (gemini-2.5-flash-lite, 1 M ctx) and a warning is emitted. Use this to
+          preserve single-model semantics when sub-batch results are unacceptable.
+        </p>
+
+        <div class="mt-4 overflow-x-auto rounded-lg border border-slate-800">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-900/60">
+              <tr>
+                <th>Flag</th>
+                <th>Default</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+              <tr>
+                <td><code>--synthesis-strategy</code></td>
+                <td class="text-slate-400"><code>auto</code></td>
+                <td class="text-slate-300">Aggregation strategy: <code>single</code>, <code>map-reduce</code>, or <code>auto</code>.</td>
+              </tr>
+              <tr>
+                <td><code>--synthesis-auto-escalate</code></td>
+                <td class="text-slate-400">off</td>
+                <td class="text-slate-300">In map-reduce, retry overflowing question maps on a large-context model instead of sub-batching.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ── Rate limiting ── -->
+      <section class="mt-16" id="rate-limit">
+        <h2
+          class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Rate limiting &mdash; <code class="text-slate-300 normal-case">--rate-limit-rps</code>
+        </h2>
+        <p class="mb-4 text-base text-slate-300">
+          By default the orchestrator fires one concurrent request per panelist
+          (bounded by <code class="text-emerald-400">--max-concurrent</code>).
+          <code class="text-emerald-400">--rate-limit-rps</code> adds a token-bucket that smooths
+          bursts — useful when a provider enforces a requests-per-second limit
+          on top of a concurrency cap.
+        </p>
+        <div
+          class="group relative rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-4 font-mono text-sm shadow-xl"
+        >
+          <pre class="text-slate-300 overflow-x-auto whitespace-pre">synthpanel panel run \
+  --personas large-panel.yaml \
+  --instrument survey.yaml \
+  --max-concurrent 20 \
+  --rate-limit-rps 5.0          <span class="text-slate-500"># at most 5 new requests/sec</span></pre>
+        </div>
+        <p class="mt-3 text-sm text-slate-400">
+          Accepts fractional values: <code class="text-slate-300">0.5</code> means one request every
+          two seconds. Works across all providers on the same client.
+        </p>
+
+        <div class="mt-6 overflow-x-auto rounded-lg border border-slate-800">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-900/60">
+              <tr>
+                <th>Flag</th>
+                <th>Default</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+              <tr>
+                <td><code>--max-concurrent N</code></td>
+                <td class="text-slate-400">unbounded</td>
+                <td class="text-slate-300">Cap concurrent in-flight LLM requests across the panel.</td>
+              </tr>
+              <tr>
+                <td><code>--rate-limit-rps RPS</code></td>
+                <td class="text-slate-400">—</td>
+                <td class="text-slate-300">Token-bucket rate cap in requests per second. Accepts fractional values.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ── Checkpointing ── -->
+      <section class="mt-16" id="checkpoint">
+        <h2
+          class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Checkpointing &amp; resume &mdash; <code class="text-slate-300 normal-case">--checkpoint-dir</code>, <code class="text-slate-300 normal-case">--resume</code>
+        </h2>
+        <p class="mb-4 text-base text-slate-300">
+          For long or expensive runs, checkpointing writes per-panelist progress
+          to disk so you can resume after an interruption without re-running
+          completed panelists.
+        </p>
+
+        <h3 class="mb-3 font-semibold text-white">Starting a checkpointed run</h3>
+        <div
+          class="group relative rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-4 font-mono text-sm shadow-xl"
+        >
+          <pre class="text-slate-300 overflow-x-auto whitespace-pre">synthpanel panel run \
+  --personas panel.yaml \
+  --instrument survey.yaml \
+  --checkpoint-dir /tmp/runs \    <span class="text-slate-500"># opts in; default: ~/.synthpanel/checkpoints</span>
+  --checkpoint-every 10           <span class="text-slate-500"># flush every 10 completed panelists</span></pre>
+        </div>
+        <p class="mt-3 text-sm text-slate-400">
+          The run id is printed to stderr. Each checkpoint is written to
+          <code class="text-slate-300">&lt;checkpoint-dir&gt;/&lt;run-id&gt;/state.json</code>.
+          Omitting <code class="text-slate-300">--checkpoint-dir</code> runs without snapshots.
+        </p>
+
+        <h3 class="mt-8 mb-3 font-semibold text-white">Resuming</h3>
+        <div
+          class="group relative rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-4 font-mono text-sm shadow-xl"
+        >
+          <pre class="text-slate-300 overflow-x-auto whitespace-pre">synthpanel panel run --resume &lt;run-id&gt;</pre>
+        </div>
+        <p class="mt-3 text-sm text-slate-400">
+          When <code class="text-slate-300">--personas</code> and
+          <code class="text-slate-300">--instrument</code> are omitted they are recovered from the
+          checkpoint's saved CLI args. The resume refuses to start if the current
+          config (model, temperature, questions) does not match the checkpointed
+          config — pass <code class="text-emerald-400">--allow-drift</code> to downgrade this to a
+          warning and continue (statistically inconsistent results).
+        </p>
+
+        <div class="mt-6 overflow-x-auto rounded-lg border border-slate-800">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-900/60">
+              <tr>
+                <th>Flag</th>
+                <th>Default</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+              <tr>
+                <td><code>--checkpoint-dir PATH</code></td>
+                <td class="text-slate-400"><code>~/.synthpanel/checkpoints</code></td>
+                <td class="text-slate-300">Directory for per-run snapshots. Setting this opts in to checkpointing.</td>
+              </tr>
+              <tr>
+                <td><code>--checkpoint-every N</code></td>
+                <td class="text-slate-400">25</td>
+                <td class="text-slate-300">Flush a checkpoint every N completed panelists.</td>
+              </tr>
+              <tr>
+                <td><code>--resume RUN_ID</code></td>
+                <td class="text-slate-400">—</td>
+                <td class="text-slate-300">Resume a checkpointed run. Skips already-completed panelists.</td>
+              </tr>
+              <tr>
+                <td><code>--allow-drift</code></td>
+                <td class="text-slate-400">off</td>
+                <td class="text-slate-300">With <code>--resume</code>: downgrade config-mismatch errors to warnings.</td>
+              </tr>
+              <tr>
+                <td><code>--force-overwrite</code></td>
+                <td class="text-slate-400">off</td>
+                <td class="text-slate-300">Replace existing checkpoint state for the same run id instead of refusing.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ── Convergence ── -->
+      <section class="mt-16" id="convergence">
+        <h2
+          class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Convergence &amp; auto-stop &mdash; <code class="text-slate-300 normal-case">--convergence-*</code>
+        </h2>
+        <p class="mb-4 text-base text-slate-300">
+          At large-n scales most of the token budget goes toward diminishing
+          returns — once a response distribution has stabilized, additional
+          panelists add &lt;2% signal. The convergence feature surfaces that
+          signal live so you can see when distributions stabilize and optionally
+          halt early.
+        </p>
+        <p class="mb-6 text-sm text-slate-400">
+          Convergence tracking applies only to <strong class="text-white">bounded</strong> question
+          types (Likert, yes/no, pick-one, any question with a JSON Schema
+          <code class="text-slate-300">enum</code>). Free-text questions are not tracked.
+        </p>
+
+        <div
+          class="group relative rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-4 font-mono text-sm shadow-xl"
+        >
+          <pre class="text-slate-300 overflow-x-auto whitespace-pre">synthpanel panel run \
+  --personas panel.yaml \
+  --instrument pricing-discovery \
+  --convergence-check-every 20 \  <span class="text-slate-500"># compute JSD every 20 panelists</span>
+  --auto-stop \                    <span class="text-slate-500"># halt once all questions converge</span>
+  --convergence-eps 0.02 \         <span class="text-slate-500"># JSD threshold (default: 0.02)</span>
+  --convergence-min-n 50 \         <span class="text-slate-500"># don't stop before n=50</span>
+  --convergence-m 3                <span class="text-slate-500"># 3 consecutive checks below eps</span></pre>
+        </div>
+
+        <p class="mt-4 text-base text-slate-300">
+          When the run finishes the JSON output contains a
+          <code class="text-emerald-400">convergence</code> key:
+        </p>
+        <div
+          class="mt-3 rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-3 font-mono text-sm shadow-xl"
+        >
+          <pre class="text-slate-300 overflow-x-auto whitespace-pre">{
+  <span class="text-emerald-400">"convergence"</span>: {
+    <span class="text-slate-500">"final_n"</span>: 487,
+    <span class="text-slate-500">"auto_stopped"</span>: true,
+    <span class="text-slate-500">"overall_converged_at"</span>: 473,  <span class="text-slate-500">// run this many next time</span>
+    <span class="text-slate-500">"per_question"</span>: {
+      <span class="text-slate-500">"pricing"</span>: { <span class="text-slate-500">"converged_at"</span>: 473, <span class="text-slate-500">"curve"</span>: [...] },
+      <span class="text-slate-500">"tier_preference"</span>: { <span class="text-slate-500">"converged_at"</span>: 410, <span class="text-slate-500">"curve"</span>: [...] }
+    }
+  }
+}</pre>
+        </div>
+        <p class="mt-3 text-sm text-slate-400">
+          <code class="text-slate-300">overall_converged_at</code> answers
+          <em>"how many panelists did you actually need?"</em> — use it to right-size
+          future runs.
+        </p>
+
+        <div class="mt-6 overflow-x-auto rounded-lg border border-slate-800">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-900/60">
+              <tr>
+                <th>Flag</th>
+                <th>Default</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+              <tr>
+                <td><code>--convergence-check-every N</code></td>
+                <td class="text-slate-400">off</td>
+                <td class="text-slate-300">Compute running JSD every N completing panelists. Setting this opts in.</td>
+              </tr>
+              <tr>
+                <td><code>--auto-stop</code></td>
+                <td class="text-slate-400">off</td>
+                <td class="text-slate-300">Halt once all tracked questions converge. Requires <code>--convergence-check-every</code>.</td>
+              </tr>
+              <tr>
+                <td><code>--convergence-eps FLOAT</code></td>
+                <td class="text-slate-400">0.02</td>
+                <td class="text-slate-300">JSD threshold below which a question is treated as converged.</td>
+              </tr>
+              <tr>
+                <td><code>--convergence-min-n N</code></td>
+                <td class="text-slate-400">50</td>
+                <td class="text-slate-300">Minimum panelists before <code>--auto-stop</code> is allowed to fire.</td>
+              </tr>
+              <tr>
+                <td><code>--convergence-m N</code></td>
+                <td class="text-slate-400">3</td>
+                <td class="text-slate-300">Consecutive checks below epsilon required to declare convergence.</td>
+              </tr>
+              <tr>
+                <td><code>--convergence-log PATH</code></td>
+                <td class="text-slate-400">stderr</td>
+                <td class="text-slate-300">Write each convergence check as a JSON line to PATH (for dashboards).</td>
+              </tr>
+              <tr>
+                <td><code>--convergence-baseline DATASET:Q</code></td>
+                <td class="text-slate-400">—</td>
+                <td class="text-slate-300">Load a human baseline convergence curve from SynthBench and include in the report. Requires <code>pip install 'synthpanel[convergence]'</code>.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ── SynthBench ── -->
+      <section class="mt-16" id="synthbench">
+        <h2
+          class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          SynthBench &mdash; <code class="text-slate-300 normal-case">--calibrate-against</code>, <code class="text-slate-300 normal-case">--best-model-for</code>, <code class="text-slate-300 normal-case">--submit-to-synthbench</code>
+        </h2>
+
+        <h3 class="mb-3 font-semibold text-white">--calibrate-against</h3>
+        <p class="mb-4 text-base text-slate-300">
+          Attaches inline calibration to a panel run by comparing the extracted
+          response distribution against a published human baseline. Forces
+          convergence tracking; pair with
+          <code class="text-emerald-400">--convergence-check-every</code> to control cadence (it is
+          never implicit). v1 supports <code class="text-slate-300">gss</code> and
+          <code class="text-slate-300">ntia</code>.
+        </p>
+        <p class="mb-4 text-sm text-slate-400">
+          Auto-derives a pick-one extractor schema from the baseline when option
+          count ≤ 5; otherwise pass <code class="text-emerald-400">--extract-schema</code> explicitly.
+          Requires <code class="text-slate-300">pip install 'synthpanel[convergence]'</code>.
+        </p>
+        <div
+          class="group relative rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-4 font-mono text-sm shadow-xl"
+        >
+          <pre class="text-slate-300 overflow-x-auto whitespace-pre">synthpanel panel run \
+  --personas panel.yaml \
+  --instrument happiness-probe \
+  --calibrate-against gss:HAPPY \
+  --convergence-check-every 20</pre>
+        </div>
+
+        <h3 class="mt-8 mb-3 font-semibold text-white">--best-model-for</h3>
+        <p class="mb-4 text-base text-slate-300">
+          Consult the SynthBench leaderboard and use the top-ranked model for
+          the given topic instead of the default. A recommendation line is
+          printed to stderr before the run. Overrides <code class="text-slate-300">--model</code>;
+          mutually exclusive with <code class="text-slate-300">--models</code>.
+        </p>
+        <div
+          class="group relative rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-4 font-mono text-sm shadow-xl"
+        >
+          <pre class="text-slate-300 overflow-x-auto whitespace-pre">synthpanel panel run \
+  --personas panel.yaml \
+  --instrument survey.yaml \
+  --best-model-for 'political-opinion:globalopinionqa'</pre>
+        </div>
+        <p class="mt-3 text-sm text-slate-400">
+          Format: <code class="text-slate-300">TOPIC</code> (ranked against the default dataset
+          <code class="text-slate-300">globalopinionqa</code>), <code class="text-slate-300">TOPIC:DATASET</code>
+          (specific dataset), or <code class="text-slate-300">:DATASET</code> (rank by SPS across the
+          full dataset). The leaderboard is cached for 24 h at
+          <code class="text-slate-300">~/.synthpanel/synthbench-cache.json</code>.
+        </p>
+
+        <h3 class="mt-8 mb-3 font-semibold text-white">--submit-to-synthbench</h3>
+        <p class="mb-4 text-base text-slate-300">
+          After a calibrated run, upload the per-question JSD and distributions
+          to the SynthBench public leaderboard. Requires
+          <code class="text-emerald-400">--calibrate-against</code> and
+          <code class="text-slate-300">SYNTHBENCH_API_KEY</code> in your environment (mint one at
+          synthbench.org/account). First use prompts for consent, which is
+          recorded locally and not re-prompted. Pass <code class="text-emerald-400">--yes</code>
+          to bypass the consent prompt for CI.
+        </p>
+        <div
+          class="group relative rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-4 font-mono text-sm shadow-xl"
+        >
+          <pre class="text-slate-300 overflow-x-auto whitespace-pre">export SYNTHBENCH_API_KEY=sk_synthbench_...
+
+synthpanel panel run \
+  --personas panel.yaml \
+  --instrument happiness-probe \
+  --calibrate-against gss:HAPPY \
+  --convergence-check-every 20 \
+  --submit-to-synthbench</pre>
+        </div>
+        <p class="mt-3 text-sm text-slate-400">
+          The submission step is non-fatal — a slow or rejecting SynthBench
+          emits a warning but does not affect the panel run's exit code or
+          output. See
+          <a
+            href="https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/synthbench-integration.md"
+            class="text-emerald-400 hover:underline"
+            >docs/synthbench-integration.md</a
+          > for the privacy model and what gets uploaded.
+        </p>
+
+        <div class="mt-6 overflow-x-auto rounded-lg border border-slate-800">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-900/60">
+              <tr>
+                <th>Flag</th>
+                <th>Default</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+              <tr>
+                <td><code>--calibrate-against DATASET:Q</code></td>
+                <td class="text-slate-400">—</td>
+                <td class="text-slate-300">Inline calibration vs a human baseline. v1 allowlist: <code>gss</code>, <code>ntia</code>. Requires <code>synthpanel[convergence]</code>.</td>
+              </tr>
+              <tr>
+                <td><code>--best-model-for TOPIC[:DATASET]</code></td>
+                <td class="text-slate-400">—</td>
+                <td class="text-slate-300">Use the SynthBench leaderboard top model for the topic. Overrides <code>--model</code>.</td>
+              </tr>
+              <tr>
+                <td><code>--submit-to-synthbench</code></td>
+                <td class="text-slate-400">off</td>
+                <td class="text-slate-300">Upload calibration results to SynthBench after the run. Requires <code>--calibrate-against</code> and <code>SYNTHBENCH_API_KEY</code>.</td>
+              </tr>
+              <tr>
+                <td><code>--yes</code></td>
+                <td class="text-slate-400">off</td>
+                <td class="text-slate-300">Bypass the SynthBench consent prompt (for CI/non-interactive use).</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Related links -->
+      <section class="mt-20" id="related">
+        <h2
+          class="mb-6 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          See also
+        </h2>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <a
+            href="/docs/calibration"
+            class="group rounded-lg border border-slate-800 bg-slate-900/40 p-5 transition hover:border-emerald-400/40 hover:bg-slate-900/70"
+          >
+            <div class="flex items-center justify-between">
+              <h3 class="font-semibold text-white">Pack Calibration</h3>
+              <span
+                class="text-slate-500 transition group-hover:text-emerald-300"
+                >→</span
+              >
+            </div>
+            <p class="mt-2 text-sm text-slate-400">
+              Calibrate a persona pack against a human baseline and embed the
+              JSD into the pack YAML.
+            </p>
+          </a>
+          <a
+            href="/mcp"
+            class="group rounded-lg border border-slate-800 bg-slate-900/40 p-5 transition hover:border-emerald-400/40 hover:bg-slate-900/70"
+          >
+            <div class="flex items-center justify-between">
+              <h3 class="font-semibold text-white">MCP Server</h3>
+              <span
+                class="text-slate-500 transition group-hover:text-emerald-300"
+                >→</span
+              >
+            </div>
+            <p class="mt-2 text-sm text-slate-400">
+              Run panels from your AI editor via the MCP
+              <code class="text-slate-300">run_panel</code> tool.
+            </p>
+          </a>
+          <a
+            href="https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/ensemble.md"
+            class="group rounded-lg border border-slate-800 bg-slate-900/40 p-5 transition hover:border-emerald-400/40 hover:bg-slate-900/70"
+          >
+            <div class="flex items-center justify-between">
+              <h3 class="font-semibold text-white">Ensemble deep-dive</h3>
+              <span
+                class="text-slate-500 transition group-hover:text-emerald-300"
+                >→</span
+              >
+            </div>
+            <p class="mt-2 text-sm text-slate-400">
+              Full algorithm, edge cases, and MCP equivalents for
+              <code class="text-slate-300">--models</code> and <code class="text-slate-300">--blend</code>.
+            </p>
+          </a>
+          <a
+            href="https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/convergence.md"
+            class="group rounded-lg border border-slate-800 bg-slate-900/40 p-5 transition hover:border-emerald-400/40 hover:bg-slate-900/70"
+          >
+            <div class="flex items-center justify-between">
+              <h3 class="font-semibold text-white">Convergence deep-dive</h3>
+              <span
+                class="text-slate-500 transition group-hover:text-emerald-300"
+                >→</span
+              >
+            </div>
+            <p class="mt-2 text-sm text-slate-400">
+              Full algorithm, JSON output schema, and baseline curve comparison
+              for the convergence tracker.
+            </p>
+          </a>
+        </div>
+      </section>
+
+      <!-- Footer -->
+      <footer
+        class="mt-20 border-t border-slate-800 pt-6 text-xs text-slate-500"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <span>
+            MIT-licensed ·
+            <a
+              href="https://github.com/DataViking-Tech/SynthPanel"
+              class="hover:text-slate-300"
+              >DataViking-Tech/SynthPanel</a
+            >
+          </span>
+          <span>
+            Built by
+            <a href="https://dataviking.tech" class="hover:text-slate-300"
+              >DataViking</a
+            >
+          </span>
+        </div>
+      </footer>
+    </main>
+
+    <script>
+      document.querySelectorAll(".copy-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const text = btn.getAttribute("data-copy") || "";
+          try {
+            await navigator.clipboard.writeText(text);
+            const original = btn.textContent;
+            btn.textContent = "Copied";
+            btn.classList.add("text-emerald-300", "border-emerald-400/50");
+            setTimeout(() => {
+              btn.textContent = original;
+              btn.classList.remove("text-emerald-300", "border-emerald-400/50");
+            }, 1500);
+          } catch (err) {
+            // Clipboard API unavailable — no-op.
+          }
+        });
+      });
+    </script>
+  </body>
+</html>
