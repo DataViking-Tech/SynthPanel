@@ -28,6 +28,7 @@ OPENAI_COMPAT_CONFIG = ProviderConfig(
     base_url_env="OPENAI_BASE_URL",
     default_base_url="https://api.openai.com",
     model_prefixes=(),  # No prefix — this is the fallback
+    name="OpenAI",
 )
 
 

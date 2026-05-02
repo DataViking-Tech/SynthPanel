@@ -29,6 +29,7 @@ OPENROUTER_CONFIG = ProviderConfig(
     base_url_env="OPENROUTER_BASE_URL",
     default_base_url="https://openrouter.ai/api",
     model_prefixes=("openrouter/",),
+    name="OpenRouter",
 )
 
 

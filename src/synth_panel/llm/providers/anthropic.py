@@ -31,6 +31,7 @@ ANTHROPIC_CONFIG = ProviderConfig(
     base_url_env="ANTHROPIC_BASE_URL",
     default_base_url="https://api.anthropic.com",
     model_prefixes=("claude-",),
+    name="Anthropic",
 )
 
 
