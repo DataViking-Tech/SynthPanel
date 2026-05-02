@@ -4246,6 +4246,70 @@ def handle_mcp_serve(args: argparse.Namespace, fmt: OutputFormat) -> int:
 
 
 # ---------------------------------------------------------------------------
+# install-skills (sy-65k74)
+# ---------------------------------------------------------------------------
+
+_INSTALL_SKILLS_COMMANDS = ["synthpanel-poll.md"]
+_INSTALL_SKILLS_SKILLS = [
+    "concept-test",
+    "focus-group",
+    "name-test",
+    "pricing-probe",
+    "survey-prescreen",
+]
+
+
+def handle_install_skills(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Copy bundled slash commands and skills into a Claude Code target directory."""
+    from importlib.resources import files as _resource_files
+
+    target = Path(getattr(args, "target", None) or Path.home() / ".claude").expanduser()
+    pkg = _resource_files("synth_panel.agent_assets")
+
+    installed: list[str] = []
+    errors: list[str] = []
+
+    commands_dst = target / "commands"
+    commands_dst.mkdir(parents=True, exist_ok=True)
+    for name in _INSTALL_SKILLS_COMMANDS:
+        src = pkg / "commands" / name
+        dst = commands_dst / name
+        try:
+            dst.write_bytes(src.read_bytes())
+            installed.append(f"commands/{name}")
+        except Exception as exc:
+            errors.append(f"commands/{name}: {exc}")
+
+    skills_dst = target / "skills"
+    for skill in _INSTALL_SKILLS_SKILLS:
+        skill_dir = skills_dst / skill
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        src = pkg / "skills" / skill / "SKILL.md"
+        dst = skill_dir / "SKILL.md"
+        try:
+            dst.write_bytes(src.read_bytes())
+            installed.append(f"skills/{skill}/SKILL.md")
+        except Exception as exc:
+            errors.append(f"skills/{skill}/SKILL.md: {exc}")
+
+    if fmt is OutputFormat.JSON:
+        payload: dict[str, Any] = {"target": str(target), "installed": installed}
+        if errors:
+            payload["errors"] = errors
+        print(json.dumps(payload))
+    else:
+        if installed:
+            print(f"Installed {len(installed)} file(s) to {target}:")
+            for f in installed:
+                print(f"  {f}")
+        if errors:
+            for e in errors:
+                print(f"ERROR: {e}", file=sys.stderr)
+
+    return 1 if errors else 0
+
+
+# ---------------------------------------------------------------------------
 # Cost subcommands (sy-kmw1)
 # ---------------------------------------------------------------------------
 

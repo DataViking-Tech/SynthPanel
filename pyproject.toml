@@ -81,6 +81,14 @@ where = ["src"]
 [tool.setuptools.package-data]
 "synth_panel.packs" = ["*.yaml"]
 "synth_panel.packs.instruments" = ["*.yaml"]
+"synth_panel.agent_assets" = [
+    "commands/*.md",
+    "skills/concept-test/*.md",
+    "skills/focus-group/*.md",
+    "skills/name-test/*.md",
+    "skills/pricing-probe/*.md",
+    "skills/survey-prescreen/*.md",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

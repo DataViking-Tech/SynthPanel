@@ -12,6 +12,7 @@ from synth_panel.cli.commands import (
     handle_analyze,
     handle_cost_summary,
     handle_doctor,
+    handle_install_skills,
     handle_instruments_graph,
     handle_instruments_install,
     handle_instruments_list,
@@ -122,6 +123,8 @@ def main(argv: list[str] | None = None) -> int:
         return handle_report(args, output_format)
     elif args.command == "mcp-serve":
         return handle_mcp_serve(args, output_format)
+    elif args.command == "install-skills":
+        return handle_install_skills(args, output_format)
     elif args.command == "login":
         return handle_login(args, output_format)
     elif args.command == "logout":

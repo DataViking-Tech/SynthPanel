@@ -39,7 +39,34 @@ Prefer a zero-config first run? Skip the `env` block entirely — see
 /plugin install synthpanel
 ```
 
-This adds the `/focus-group` skill to your Claude Code session.
+This adds the `/focus-group` skill plus the `/synthpanel-poll` slash command to your Claude Code session. The plugin auto-discovers the bundled `commands/` and `skills/` directories.
+
+### Manual Install (Claude Code without plugin)
+
+If you configured the MCP server manually (without `/plugin install`) you can still get all commands and skills by running:
+
+```bash
+synthpanel install-skills
+```
+
+This copies the bundled slash commands and skills into `~/.claude/`:
+
+| Type | Name | Installs to |
+|------|------|-------------|
+| Slash command | `/synthpanel-poll` | `~/.claude/commands/synthpanel-poll.md` |
+| Skill | `concept-test` | `~/.claude/skills/concept-test/SKILL.md` |
+| Skill | `focus-group` | `~/.claude/skills/focus-group/SKILL.md` |
+| Skill | `name-test` | `~/.claude/skills/name-test/SKILL.md` |
+| Skill | `pricing-probe` | `~/.claude/skills/pricing-probe/SKILL.md` |
+| Skill | `survey-prescreen` | `~/.claude/skills/survey-prescreen/SKILL.md` |
+
+For a project-scoped install (places files in `.claude/` relative to the current directory instead of `~/.claude/`):
+
+```bash
+synthpanel install-skills --target .claude
+```
+
+The command is idempotent — running it again overwrites existing files with the current bundled versions.
 
 ## Tools (12)
 
