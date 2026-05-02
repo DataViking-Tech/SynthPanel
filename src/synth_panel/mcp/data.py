@@ -317,6 +317,22 @@ def save_persona_pack(
     return meta
 
 
+def uninstall_persona_pack(pack_id: str) -> None:
+    """Delete a user-saved persona pack from the local registry.
+
+    Raises :class:`ValueError` when *pack_id* names a bundled pack (those
+    cannot be removed).  Raises :class:`FileNotFoundError` when the pack is
+    not found in the user-saved store.
+    """
+    _validate_pack_id(pack_id)
+    if pack_id in _bundled_packs():
+        raise ValueError(f"'{pack_id}' is a bundled pack and cannot be uninstalled")
+    p = _packs_dir() / f"{pack_id}.yaml"
+    if not p.exists():
+        raise FileNotFoundError(f"Persona pack not found: {pack_id}")
+    p.unlink()
+
+
 # ---------------------------------------------------------------------------
 # Instrument packs (single-file YAML, manifest at top level)
 # ---------------------------------------------------------------------------

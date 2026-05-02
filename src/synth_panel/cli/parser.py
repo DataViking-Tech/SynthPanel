@@ -711,12 +711,50 @@ def build_parser() -> argparse.ArgumentParser:
     # pack search
     pack_search_parser = pack_subparsers.add_parser(
         "search",
-        help="Search registry packs by substring (id, name, description, tags).",
+        help="Search packs by substring (local by default; use --registry for remote).",
     )
     pack_search_parser.add_argument(
         "term",
         metavar="TERM",
-        help="Substring to match (case-insensitive) against id/name/description/tags.",
+        help="Substring to match (case-insensitive) against id/name/description.",
+    )
+    pack_search_parser.add_argument(
+        "--registry",
+        action="store_true",
+        help="Search the remote synthpanel registry instead of local/bundled packs.",
+    )
+
+    # pack save
+    pack_save_parser = pack_subparsers.add_parser(
+        "save",
+        help="Save a local YAML file as a named pack in the local registry (~/.synthpanel/packs/).",
+    )
+    pack_save_parser.add_argument(
+        "file",
+        metavar="FILE",
+        help="Path to a persona pack YAML file.",
+    )
+    pack_save_parser.add_argument(
+        "--name",
+        default=None,
+        help="Display name for the pack (default: from YAML 'name' field or filename stem).",
+    )
+    pack_save_parser.add_argument(
+        "--id",
+        default=None,
+        dest="pack_id",
+        help="Custom pack ID (default: slugified from name). Use to avoid bundled-name conflicts.",
+    )
+
+    # pack uninstall
+    pack_uninstall_parser = pack_subparsers.add_parser(
+        "uninstall",
+        help="Remove a user-saved pack from the local registry (bundled packs cannot be uninstalled).",
+    )
+    pack_uninstall_parser.add_argument(
+        "pack_id",
+        metavar="PACK_ID",
+        help="ID of the user-saved pack to uninstall.",
     )
 
     # pack import
