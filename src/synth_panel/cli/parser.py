@@ -77,8 +77,9 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=False,
         help=(
-            "Enable DEBUG for synthpanel and common third-party loggers (httpx, "
-            "httpcore, urllib3, MCP/websocket libs). Overrides --quiet / verbosity caps."
+            "Enable DEBUG for synthpanel and common third-party loggers (anthropic, "
+            "httpx, httpcore, openai, urllib3, MCP/websocket libs). "
+            "Overrides --quiet / verbosity caps."
         ),
     )
 

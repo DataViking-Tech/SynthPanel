@@ -31,11 +31,13 @@ _VERBOSITY_MAP: dict[str, int] = {
 
 # Roots for ecosystems that spam at INFO/DEBUG when left unchecked.
 _NOISY_LOGGERS: tuple[str, ...] = (
+    "anthropic",
     "httpcore",
     "httpx",
     "hpack",
     "mcp",
     "multipart",
+    "openai",
     "urllib3",
     "websockets",
 )
