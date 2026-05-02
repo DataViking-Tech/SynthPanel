@@ -4266,3 +4266,131 @@ def handle_whoami(args: argparse.Namespace, fmt: OutputFormat) -> int:
         extra={"credentials_path": str(credentials_path()), "providers": rows},
     )
     return 0
+
+
+# ---------------------------------------------------------------------------
+# Domains subcommands (sp-ils5)
+# ---------------------------------------------------------------------------
+
+
+def handle_domains_list(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """List all registered domain templates."""
+    from synth_panel.domains import list_domain_templates
+
+    templates = list_domain_templates()
+
+    if fmt is OutputFormat.TEXT:
+        if not templates:
+            print("No domain templates registered.")
+        else:
+            for t in templates:
+                print(f"  {t['name']:<30}  {t['description']}")
+    else:
+        emit(fmt, message="Domain templates", extra={"domains": templates})
+    return 0
+
+
+def handle_domains_inspect(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Show the full template for a domain."""
+    from synth_panel.domains import DomainNotFoundError, get_domain_template
+
+    try:
+        template = get_domain_template(args.name)
+    except DomainNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    if fmt is OutputFormat.TEXT:
+        print(f"Domain:      {args.name}")
+        print(f"Name:        {template['name']}")
+        print(f"Description: {template['description']}")
+        print()
+        print("Prompt template:")
+        print(template["template"])
+    else:
+        emit(
+            fmt,
+            message="Domain template",
+            extra={"domain": args.name, **template},
+        )
+    return 0
+
+
+def handle_domains_generate(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Generate personas from a domain template using an LLM."""
+    import yaml as _yaml
+
+    from synth_panel.domains import DomainNotFoundError, get_domain_template
+    from synth_panel.llm.client import LLMClient
+    from synth_panel.llm.models import CompletionRequest
+
+    try:
+        template = get_domain_template(args.domain)
+    except DomainNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    n = getattr(args, "n", 5)
+    model = getattr(args, "model", None)
+
+    client = LLMClient(model=model)
+
+    system_prompt = (
+        "You are a synthetic persona generator. Generate realistic, diverse personas "
+        "in valid YAML format. Each persona must have: name, age (integer), occupation, "
+        "background (2-3 sentences), and personality_traits (list of 3-5 lowercase strings). "
+        "Return ONLY a YAML document with a top-level 'personas' list, no markdown fences, "
+        "no commentary."
+    )
+
+    user_prompt = (
+        f"Generate exactly {n} diverse personas for the following domain.\n\n"
+        f"Domain: {template['name']}\n\n"
+        f"{template['template']}\n\n"
+        f"Return a YAML document with a top-level 'personas' list of {n} items."
+    )
+
+    print(f"Generating {n} personas for domain '{args.domain}'...", file=sys.stderr)
+
+    request = CompletionRequest(
+        model=client.model,
+        messages=[{"role": "user", "content": user_prompt}],
+        system=system_prompt,
+        max_tokens=4096,
+    )
+
+    try:
+        response = client.send(request)
+    except Exception as exc:
+        print(f"Error generating personas: {exc}", file=sys.stderr)
+        return 1
+
+    raw_text = response.content.strip()
+
+    try:
+        data = _yaml.safe_load(raw_text)
+    except _yaml.YAMLError as exc:
+        print(f"Error: LLM returned invalid YAML: {exc}", file=sys.stderr)
+        print("Raw output:", file=sys.stderr)
+        print(raw_text, file=sys.stderr)
+        return 1
+
+    if not isinstance(data, dict) or "personas" not in data:
+        print("Error: LLM response did not contain a 'personas' key", file=sys.stderr)
+        return 1
+
+    output_path = getattr(args, "output", None)
+    if fmt is OutputFormat.TEXT:
+        yaml_out = _yaml.safe_dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True)
+        if output_path:
+            Path(output_path).write_text(yaml_out, encoding="utf-8")
+            print(f"Wrote {len(data['personas'])} personas to {output_path}", file=sys.stderr)
+        else:
+            print(yaml_out, end="")
+    else:
+        emit(fmt, message="Generated personas", extra={"domain": args.domain, **data})
+        if output_path:
+            yaml_out = _yaml.safe_dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True)
+            Path(output_path).write_text(yaml_out, encoding="utf-8")
+            print(f"Wrote {len(data['personas'])} personas to {output_path}", file=sys.stderr)
+    return 0

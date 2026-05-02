@@ -85,6 +85,96 @@ _TEMPLATES: dict[str, dict[str, str]] = {
             "Each persona should reflect real clinical workflow constraints and patient care priorities."
         ),
     },
+    "healthcare-providers": {
+        "name": "Independent Healthcare Providers",
+        "description": "Private-practice physicians, dentists, and specialist providers running their own businesses.",
+        "template": (
+            "Generate a diverse panel of independent healthcare providers who own or operate their practices. Include:\n"
+            "- Practice types: primary care, dental, optometry, dermatology, psychiatry, chiropractic, physical therapy\n"
+            "- Practice size: solo, small group (2-5), medium group (6-20)\n"
+            "- Years in practice: newly independent (1-3 yrs), established (5-15 yrs), veteran (20+ yrs)\n"
+            "- Ownership stake: sole owner, partner, recently acquired by PE/health system\n"
+            "- Staff size: front desk only, full admin team, outsourced billing\n"
+            "- Ages: spread across 30-65\n"
+            "- Pain points: EHR burden, insurance reimbursement, patient acquisition, staffing, regulatory compliance\n"
+            "Each persona should reflect the dual pressures of running a healthcare business and delivering quality care."
+        ),
+    },
+    "education-K12": {
+        "name": "K-12 Educators and Administrators",
+        "description": "Teachers, instructional coaches, and school administrators across grade levels.",
+        "template": (
+            "Generate a diverse panel of K-12 educators and school administrators. Include:\n"
+            "- Roles: classroom teachers, instructional coaches, department heads, assistant principals, principals, district administrators\n"
+            "- Grade bands: early elementary (K-2), upper elementary (3-5), middle school (6-8), high school (9-12)\n"
+            "- School types: public, charter, private, rural, urban, suburban\n"
+            "- Subject areas: STEM, humanities, special education, arts, PE, ESL/bilingual\n"
+            "- Experience: first-year teacher, 3-10 yrs classroom, 10+ yrs, career-changers into teaching\n"
+            "- Ages: spread across 22-60\n"
+            "- Challenges: student engagement, standardized testing pressure, tech integration, parent communication, burnout\n"
+            "Each persona should reflect the realities of public education funding, classroom diversity, and school culture."
+        ),
+    },
+    "smb-owners": {
+        "name": "SMB Owner-Operators",
+        "description": "Hands-on owners of small and medium businesses who manage day-to-day operations themselves.",
+        "template": (
+            "Generate a diverse panel of small and medium business owner-operators. Include:\n"
+            "- Industries: retail, food service, professional services, home services, e-commerce, health/wellness\n"
+            "- Business age: startup (<2 yrs), growing (2-7 yrs), mature (7+ yrs)\n"
+            "- Employee count: solo/freelance, 2-10, 11-50\n"
+            "- Revenue range: <$250k, $250k-$1M, $1M-$5M\n"
+            "- Tech savvy: spreadsheet-only, uses SaaS tools, actively automates\n"
+            "- Ages: spread across 25-60\n"
+            "- Motivations: financial independence, passion-driven, family legacy, exit-oriented\n"
+            "Each persona should reflect the cash-flow constraints, operational demands, and growth ambitions of owner-led businesses."
+        ),
+    },
+    "enterprise-buyers": {
+        "name": "Enterprise Software Buyers",
+        "description": "IT leaders, procurement officers, and business stakeholders who evaluate and purchase enterprise software.",
+        "template": (
+            "Generate a diverse panel of enterprise software buyers and evaluators. Include:\n"
+            "- Roles: CIO, CTO, VP of IT, IT Director, procurement manager, business unit sponsor, finance stakeholder\n"
+            "- Company size: mid-market (500-2000 employees), large enterprise (2000-10000), very large (10000+)\n"
+            "- Industries: financial services, healthcare, manufacturing, retail, government, professional services\n"
+            "- Budget authority: final decision-maker, influencer/recommender, technical evaluator, budget approver\n"
+            "- Buying stage: exploring, in evaluation, contract renewal, post-implementation review\n"
+            "- Ages: spread across 30-60\n"
+            "- Concerns: security/compliance, integration complexity, vendor lock-in, TCO, change management, SLAs\n"
+            "Each persona should reflect real enterprise procurement pain points, committee dynamics, and risk tolerance."
+        ),
+    },
+    "creators": {
+        "name": "Content Creators and Influencers",
+        "description": "Independent creators monetizing content across social platforms and direct audiences.",
+        "template": (
+            "Generate a diverse panel of digital content creators. Include:\n"
+            "- Platform focus: YouTube, TikTok, Instagram, Twitch, Substack/newsletters, podcasting, LinkedIn\n"
+            "- Niche: tech/gaming, lifestyle/beauty, finance/investing, fitness, education, comedy, B2B thought leadership\n"
+            "- Audience size: nano (<10k), micro (10k-100k), mid-tier (100k-1M), macro (1M+)\n"
+            "- Revenue model: ad/sponsorship, subscription, merchandise, courses/coaching, agency work\n"
+            "- Years creating: beginner (0-1), growing (1-3), established (3-7), veteran (7+)\n"
+            "- Ages: spread across 18-45\n"
+            "- Challenges: algorithm changes, burnout, monetization consistency, brand-deal negotiation, copyright/IP\n"
+            "Each persona should reflect the hustle economics, platform dependency, and audience relationship dynamics of creator life."
+        ),
+    },
+    "graduate-students": {
+        "name": "Graduate Students and Early-Career Researchers",
+        "description": "PhD students, master's students, and postdocs navigating academia and research careers.",
+        "template": (
+            "Generate a diverse panel of graduate students and early-career researchers. Include:\n"
+            "- Degree level: master's (coursework/thesis), PhD (early/mid/late stage), postdoc\n"
+            "- Fields: STEM (CS, biology, physics, engineering), social sciences, humanities, professional programs (MBA, law, medicine)\n"
+            "- Institution type: R1 research university, teaching-focused university, international institution\n"
+            "- Funding: fully funded RA/TA, fellowship, self-funded, part-time while working\n"
+            "- Career trajectory: academia-bound, industry pivot, government/NGO, entrepreneurship\n"
+            "- Ages: spread across 22-38\n"
+            "- Challenges: advisor relationships, imposter syndrome, funding uncertainty, publish-or-perish pressure, work-life balance, job market anxiety\n"
+            "Each persona should reflect the intellectual ambition, financial precarity, and career uncertainty of graduate training."
+        ),
+    },
 }
 
 

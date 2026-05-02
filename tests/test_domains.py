@@ -216,3 +216,40 @@ class TestDeliberatelyHomogeneous:
         categories = " ".join(warnings).lower()
         assert "age diversity" in categories
         assert "background variety" in categories
+
+
+# ---------------------------------------------------------------------------
+# New domain templates (sp-ils5)
+# ---------------------------------------------------------------------------
+
+
+def _assert_domain_shape(key: str) -> None:
+    t = get_domain_template(key)
+    assert isinstance(t["name"], str) and t["name"]
+    assert isinstance(t["description"], str) and t["description"]
+    assert isinstance(t["template"], str) and len(t["template"]) > 50
+
+
+class TestNewDomainTemplates:
+    def test_healthcare_providers_shape(self):
+        _assert_domain_shape("healthcare-providers")
+
+    def test_education_k12_shape(self):
+        _assert_domain_shape("education-K12")
+
+    def test_smb_owners_shape(self):
+        _assert_domain_shape("smb-owners")
+
+    def test_enterprise_buyers_shape(self):
+        _assert_domain_shape("enterprise-buyers")
+
+    def test_creators_shape(self):
+        _assert_domain_shape("creators")
+
+    def test_graduate_students_shape(self):
+        _assert_domain_shape("graduate-students")
+
+    def test_all_new_domains_in_list(self):
+        keys = {t["name"] for t in list_domain_templates()}
+        for expected in ("healthcare-providers", "education-K12", "smb-owners", "enterprise-buyers", "creators", "graduate-students"):
+            assert expected in keys, f"domain '{expected}' missing from list"

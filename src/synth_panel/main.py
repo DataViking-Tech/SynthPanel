@@ -10,6 +10,9 @@ import sys
 
 from synth_panel.cli.commands import (
     handle_analyze,
+    handle_domains_generate,
+    handle_domains_inspect,
+    handle_domains_list,
     handle_instruments_graph,
     handle_instruments_install,
     handle_instruments_list,
@@ -95,6 +98,17 @@ def main(argv: list[str] | None = None) -> int:
             return handle_instruments_graph(args, output_format)
         else:
             parser.parse_args(["instruments", "--help"])
+            return 1
+    elif args.command == "domains":
+        sub = getattr(args, "domains_command", None)
+        if sub == "list":
+            return handle_domains_list(args, output_format)
+        elif sub == "inspect":
+            return handle_domains_inspect(args, output_format)
+        elif sub == "generate":
+            return handle_domains_generate(args, output_format)
+        else:
+            parser.parse_args(["domains", "--help"])
             return 1
     elif args.command == "analyze":
         return handle_analyze(args, output_format)

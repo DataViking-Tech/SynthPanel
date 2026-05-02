@@ -873,6 +873,57 @@ def build_parser() -> argparse.ArgumentParser:
         help="DAG output format (default: text).",
     )
 
+    # domains (sp-ils5)
+    domains_parser = subparsers.add_parser(
+        "domains",
+        help="Domain template management: list, inspect, generate.",
+    )
+    domains_subparsers = domains_parser.add_subparsers(dest="domains_command")
+
+    domains_subparsers.add_parser(
+        "list",
+        help="List all registered domain templates.",
+    )
+
+    domains_inspect_parser = domains_subparsers.add_parser(
+        "inspect",
+        help="Show the full prompt template for a domain.",
+    )
+    domains_inspect_parser.add_argument(
+        "name",
+        metavar="NAME",
+        help="Domain name (as listed by 'domains list').",
+    )
+
+    domains_generate_parser = domains_subparsers.add_parser(
+        "generate",
+        help="Generate personas from a domain template using an LLM.",
+    )
+    domains_generate_parser.add_argument(
+        "domain",
+        metavar="DOMAIN",
+        help="Domain name (as listed by 'domains list').",
+    )
+    domains_generate_parser.add_argument(
+        "--n",
+        type=int,
+        default=5,
+        metavar="N",
+        help="Number of personas to generate (default: 5).",
+    )
+    domains_generate_parser.add_argument(
+        "--output",
+        "-o",
+        default=None,
+        metavar="FILE",
+        help="Write personas to a YAML file instead of stdout.",
+    )
+    domains_generate_parser.add_argument(
+        "--model",
+        default=None,
+        help="LLM model to use (default: auto-detect from available API keys).",
+    )
+
     # analyze
     analyze_parser = subparsers.add_parser(
         "analyze",
