@@ -194,7 +194,7 @@ class TestSynthesizePanel:
 
         assert result.is_fallback, "empty payload must mark fallback=True"
         assert result.error is not None
-        assert "missing keys" in result.error
+        assert "missing" in result.error
         # All six required keys are missing; the error should list them.
         for key in ("summary", "themes", "agreements", "disagreements", "surprises", "recommendation"):
             assert key in result.error
@@ -216,12 +216,9 @@ class TestSynthesizePanel:
 
         assert result.is_fallback
         assert result.error is not None
+        # sp-d1x0: the engine retries on missing fields and returns a clean
+        # fallback after all strikes, so 'surprises' appears in the error msg.
         assert "surprises" in result.error
-        # Other present fields should round-trip so the operator can see
-        # what *was* returned when diagnosing.
-        assert result.summary == "Some summary"
-        assert result.themes == ["a", "b"]
-        assert result.surprises == []
 
     def test_fallback_partial_payload_logs_warning(self, caplog):
         """sp-qvqx: partial payload must emit a logger.warning."""
@@ -230,10 +227,12 @@ class TestSynthesizePanel:
         mock_client = MagicMock()
         mock_client.send.return_value = _make_synthesis_response({"summary": "x"})
 
-        with caplog.at_level(logging.WARNING, logger="synth_panel.synthesis"):
+        with caplog.at_level(logging.WARNING, logger="synth_panel.structured.output"):
             synthesize_panel(mock_client, _PANELIST_RESULTS, _QUESTIONS)
 
-        assert any("missing keys" in rec.message for rec in caplog.records)
+        # sp-d1x0: warning now emitted by the structured output engine after
+        # all retries are exhausted, not by synthesis.py directly.
+        assert "exhausted" in caplog.text
 
     def test_prompt_version_in_result(self):
         """synthesis_prompt_version is included in the result."""

@@ -301,7 +301,7 @@ def synthesize_panel(
     )
 
     # Convert usage
-    usage = _convert_llm_usage(result.response.usage)
+    usage = _convert_llm_usage(result.total_usage)
     pricing, _ = lookup_pricing(resolved_model)
     cost = estimate_cost(usage, pricing)
 
