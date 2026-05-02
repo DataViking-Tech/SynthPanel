@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>
+      Pack Calibration — synthpanel · Run synthetic focus groups with any LLM
+    </title>
+    <meta
+      name="description"
+      content="How to calibrate a persona pack against a known human baseline using Jensen-Shannon divergence. CLI reference for synthpanel pack calibrate."
+    />
+    <link rel="canonical" href="https://synthpanel.dev/docs/calibration" />
+
+    <meta name="keywords" content="persona pack calibration, Jensen-Shannon divergence, synthetic focus group baseline, GSS calibration, NTIA calibration, synthpanel calibrate" />
+
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="synthpanel" />
+    <meta property="og:title" content="Pack Calibration — synthpanel" />
+    <meta
+      property="og:description"
+      content="Calibrate a persona pack against a known human baseline (GSS, NTIA). CLI reference, JSD interpretation table, and methodology details."
+    />
+    <meta property="og:url" content="https://synthpanel.dev/docs/calibration" />
+    <meta property="og:image" content="https://synthpanel.dev/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="synthpanel — Run synthetic focus groups with any LLM" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Pack Calibration — synthpanel" />
+    <meta
+      name="twitter:description"
+      content="Calibrate a persona pack against a known human baseline. JSD interpretation, CLI flags, and methodology."
+    />
+    <meta name="twitter:image" content="https://synthpanel.dev/og-image.png" />
+    <meta name="twitter:image:alt" content="synthpanel — Run synthetic focus groups with any LLM" />
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              mono: [
+                "ui-monospace",
+                "SFMono-Regular",
+                "Menlo",
+                "Monaco",
+                "Consolas",
+                "monospace",
+              ],
+            },
+          },
+        },
+      };
+    </script>
+
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      html,
+      body {
+        background-color: #0f172a;
+      }
+      body {
+        background:
+          radial-gradient(
+            ellipse at top,
+            rgba(52, 211, 153, 0.08),
+            transparent 60%
+          ),
+          #0f172a;
+      }
+      button.copy-btn {
+        min-height: 44px;
+        padding: 8px 14px;
+      }
+      .copy-btn:active {
+        transform: translateY(1px);
+      }
+      :target {
+        scroll-margin-top: 1rem;
+      }
+      table {
+        border-collapse: collapse;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 0.5rem 0.75rem;
+        border-bottom: 1px solid rgb(30, 41, 59);
+        vertical-align: top;
+      }
+      th {
+        color: rgb(148, 163, 184);
+        font-weight: 600;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      td code {
+        color: rgb(110, 231, 183);
+        font-size: 0.85em;
+      }
+    </style>
+  </head>
+
+  <body class="text-slate-200 antialiased">
+    <main class="mx-auto max-w-4xl px-6 pb-24 pt-12 sm:pt-16">
+      <!-- Breadcrumb / back link -->
+      <nav class="mb-8 text-sm">
+        <a
+          href="/"
+          class="inline-flex items-center gap-1 text-slate-400 transition hover:text-emerald-300"
+        >
+          <span aria-hidden="true">←</span> synthpanel.dev
+        </a>
+      </nav>
+
+      <!-- Hero -->
+      <header>
+        <p
+          class="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/5 px-3 py-1 text-xs font-medium text-emerald-300"
+        >
+          <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+          Docs · Pack Calibration
+        </p>
+        <h1
+          class="bg-gradient-to-br from-white to-slate-400 bg-clip-text font-mono text-4xl font-bold tracking-tight text-transparent sm:text-5xl"
+        >
+          Pack calibration
+        </h1>
+        <p class="mt-4 text-lg text-slate-300">
+          Calibration is how a persona pack proves its fit to a known human
+          baseline. Run <code class="text-emerald-400">synthpanel pack calibrate</code>
+          and the result is written back into the pack YAML so the manifest is
+          self-describing.
+        </p>
+      </header>
+
+      <!-- CLI Reference -->
+      <section class="mt-16" id="cli">
+        <h2
+          class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          CLI reference
+        </h2>
+        <div
+          class="group relative rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-4 font-mono text-sm shadow-xl"
+        >
+          <pre class="text-slate-300 overflow-x-auto whitespace-pre">synthpanel pack calibrate &lt;PACK_YAML&gt;
+  --against DATASET:QUESTION   <span class="text-slate-500"># e.g. gss:HAPPY (v1 allowlist: gss, ntia)</span>
+  [--n 50]                     <span class="text-slate-500"># panel size</span>
+  [--models MODELS]            <span class="text-slate-500"># default: panel run default</span>
+  [--samples-per-question 15]  <span class="text-slate-500"># for stable JSD</span>
+  [--output PATH]              <span class="text-slate-500"># default: rewrite PACK_YAML in place</span>
+  [--dry-run]                  <span class="text-slate-500"># print what would be written</span>
+  [--yes]                      <span class="text-slate-500"># skip overwrite confirm</span></pre>
+        </div>
+
+        <p class="mt-6 text-base text-slate-300">
+          After a successful run the pack YAML gains a top-level
+          <code class="text-emerald-400">calibration:</code> list:
+        </p>
+
+        <div
+          class="mt-4 rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-4 font-mono text-sm shadow-xl"
+        >
+          <pre class="text-slate-300 overflow-x-auto whitespace-pre"><span class="text-slate-500">calibration:</span>
+  - dataset: gss
+    question: HAPPY
+    jsd: 0.18
+    n: 100
+    samples_per_question: 15
+    models: [haiku:0.30, gemini-flash-lite:0.30, qwen3-plus:0.20, deepseek-v3:0.20]
+    extractor: pick_one:auto-derived
+    panelist_cost_usd: 0.6451
+    calibrated_at: 2026-04-26T14:23:00Z
+    synthpanel_version: 0.11.1
+    methodology_url: https://synthpanel.dev/docs/calibration</pre>
+        </div>
+      </section>
+
+      <!-- What JSD means -->
+      <section class="mt-16" id="jsd">
+        <h2
+          class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          What JSD means
+        </h2>
+        <p class="mb-6 text-base text-slate-300">
+          Calibration reports <strong class="text-white">Jensen-Shannon divergence</strong>
+          between the pack's extracted answer distribution and the dataset's
+          published human distribution. JSD is bounded in
+          <code class="text-slate-300">[0, 1]</code> (using log₂):
+        </p>
+        <div class="overflow-x-auto rounded-lg border border-slate-800">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-900/60">
+              <tr>
+                <th>JSD</th>
+                <th>Interpretation</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+              <tr>
+                <td><code>&lt; 0.05</code></td>
+                <td class="text-slate-300">Tightly aligned — pack mirrors the human distribution.</td>
+              </tr>
+              <tr>
+                <td><code>0.05–0.15</code></td>
+                <td class="text-slate-300">Strong alignment — small but real distributional drift.</td>
+              </tr>
+              <tr>
+                <td><code>0.15–0.30</code></td>
+                <td class="text-slate-300">Moderate — usable for directional research, not census.</td>
+              </tr>
+              <tr>
+                <td><code>0.30–0.50</code></td>
+                <td class="text-slate-300">Weak — major disagreement on at least one mode.</td>
+              </tr>
+              <tr>
+                <td><code>&gt; 0.50</code></td>
+                <td class="text-slate-300">Effectively uncalibrated.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="mt-4 text-sm text-slate-400">
+          JSD is computed locally via the same metric the convergence tracker
+          uses (see <code class="text-slate-300">src/synth_panel/convergence.py</code>);
+          the pack YAML is the <strong class="text-white">only</strong> durable
+          artifact — calibration does not phone home and is distinct from
+          <code class="text-slate-300">--submit-to-synthbench</code>.
+        </p>
+      </section>
+
+      <!-- When to calibrate -->
+      <section class="mt-16" id="when">
+        <h2
+          class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          When to calibrate
+        </h2>
+        <p class="mb-4 text-base text-slate-300">
+          Calibrate a pack when <strong class="text-white">any</strong> of the following is true:
+        </p>
+        <ul class="space-y-3 text-base text-slate-300">
+          <li class="flex gap-3">
+            <span class="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-emerald-400"></span>
+            The pack will be cited in a research artifact and you need a
+            defensible fit-to-baseline number.
+          </li>
+          <li class="flex gap-3">
+            <span class="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-emerald-400"></span>
+            You have changed the pack (added/removed personas, edited
+            <code class="text-emerald-400">personality_traits</code>, regenerated descriptions)
+            and want to know whether your edits drifted the distribution.
+          </li>
+          <li class="flex gap-3">
+            <span class="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-emerald-400"></span>
+            You are comparing two packs that target the same audience and need
+            a shared yardstick.
+          </li>
+        </ul>
+        <p class="mt-4 text-sm text-slate-400">
+          You do <strong class="text-white">not</strong> need to calibrate before every panel run.
+          The <code class="text-slate-300">calibration:</code> list is a snapshot, not a runtime guard.
+        </p>
+      </section>
+
+      <!-- Choosing a baseline -->
+      <section class="mt-16" id="baselines">
+        <h2
+          class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Choosing a baseline
+        </h2>
+        <p class="mb-4 text-base text-slate-300">
+          The <code class="text-emerald-400">--against DATASET:QUESTION</code> flag accepts the
+          v1 inline-publishable allowlist:
+        </p>
+        <div class="overflow-x-auto rounded-lg border border-slate-800 mb-6">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-900/60">
+              <tr>
+                <th>Dataset</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+              <tr>
+                <td><code>gss</code></td>
+                <td class="text-slate-300">
+                  General Social Survey aggregates. <code>HAPPY</code> is the
+                  canonical demo question (3-option Likert);
+                  <code>HEALTH</code> and <code>LIFE</code> also work.
+                </td>
+              </tr>
+              <tr>
+                <td><code>ntia</code></td>
+                <td class="text-slate-300">
+                  NTIA Internet Use Survey. Useful for technology-adoption packs.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="text-sm text-slate-400">
+          Other datasets (OpinionsQA, PewTech, GlobalOpinionQA, WVS, …) are
+          <strong class="text-white">gated</strong> for redistribution and require
+          post-hoc calibration via <code class="text-slate-300">synthbench</code> directly.
+          They are intentionally not exposed here so a calibrated pack YAML can be
+          checked into a public repo without relicensing concerns.
+        </p>
+        <p class="mt-4 text-sm text-slate-400">
+          To override the allowlist for internal use:
+        </p>
+        <div
+          class="mt-3 group relative flex items-center justify-between rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-3 text-left font-mono text-sm shadow-xl"
+        >
+          <span class="select-all text-slate-300">
+            <span class="text-slate-500">$</span>
+            <span class="text-emerald-400"> SYNTHBENCH_ALLOW_GATED=1</span>
+            <span class="text-slate-300"> synthpanel pack calibrate ... --against wvs:Q1</span>
+          </span>
+          <button
+            type="button"
+            class="copy-btn ml-3 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-emerald-400/50 hover:text-emerald-300"
+            data-copy="SYNTHBENCH_ALLOW_GATED=1 synthpanel pack calibrate ... --against wvs:Q1"
+            aria-label="Copy command"
+          >
+            Copy
+          </button>
+        </div>
+      </section>
+
+      <!-- Methodology -->
+      <section class="mt-16" id="methodology">
+        <h2
+          class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Methodology
+        </h2>
+        <p class="mb-6 text-base text-slate-300">
+          For each calibration run:
+        </p>
+        <ol class="space-y-4 text-base text-slate-300">
+          <li class="flex gap-4">
+            <span class="flex-shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-400/10 text-xs font-bold text-emerald-400 border border-emerald-400/30">1</span>
+            <span>The SynthBench baseline payload is fetched (same loader as
+              <code class="text-emerald-400">panel run --calibrate-against</code>).</span>
+          </li>
+          <li class="flex gap-4">
+            <span class="flex-shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-400/10 text-xs font-bold text-emerald-400 border border-emerald-400/30">2</span>
+            <span>A <code class="text-emerald-400">pick_one</code> extraction schema is
+              auto-derived from the baseline's small-enum distribution. If the
+              baseline is Likert/ranking or too-wide, the command hard-fails
+              with a hint to supply <code class="text-slate-300">--extract-schema</code>
+              via <code class="text-slate-300">panel run</code> instead.</span>
+          </li>
+          <li class="flex gap-4">
+            <span class="flex-shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-400/10 text-xs font-bold text-emerald-400 border border-emerald-400/30">3</span>
+            <span>A panel of <code class="text-emerald-400">--n</code> panelists is run against
+              the dataset's question text. Each panelist answers
+              <code class="text-emerald-400">--samples-per-question</code> times.</span>
+          </li>
+          <li class="flex gap-4">
+            <span class="flex-shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-400/10 text-xs font-bold text-emerald-400 border border-emerald-400/30">4</span>
+            <span>The model distribution is compared against the baseline's
+              <code class="text-emerald-400">human_distribution</code> via
+              Jensen-Shannon divergence.</span>
+          </li>
+          <li class="flex gap-4">
+            <span class="flex-shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-400/10 text-xs font-bold text-emerald-400 border border-emerald-400/30">5</span>
+            <span>The resulting JSD, plus provenance (extractor, models, cost,
+              timestamp, synthpanel version), is merged into the pack YAML's
+              <code class="text-emerald-400">calibration:</code> list.
+              Re-running against the same <code class="text-slate-300">(dataset, question)</code>
+              pair <strong class="text-white">replaces</strong> the prior entry rather than
+              appending, so the list is always a clean record of
+              one-result-per-baseline.</span>
+          </li>
+        </ol>
+      </section>
+
+      <!-- Idempotence -->
+      <section class="mt-16" id="idempotence">
+        <h2
+          class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Idempotence and re-runs
+        </h2>
+        <ul class="space-y-3 text-base text-slate-300">
+          <li class="flex gap-3">
+            <span class="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-emerald-400"></span>
+            Re-running calibration against the same <code class="text-slate-300">dataset:question</code>
+            replaces the prior entry — newest wins.
+          </li>
+          <li class="flex gap-3">
+            <span class="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-emerald-400"></span>
+            Calibration against a different <code class="text-slate-300">dataset:question</code>
+            appends a new entry alongside any existing ones.
+          </li>
+          <li class="flex gap-3">
+            <span class="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-emerald-400"></span>
+            <code class="text-emerald-400">--dry-run</code> prints the rewritten YAML to stdout
+            without touching the file. Use this to preview what would change
+            before committing.
+          </li>
+        </ul>
+      </section>
+
+      <!-- Limitations -->
+      <section class="mt-16" id="limitations">
+        <h2
+          class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Limitations
+        </h2>
+        <ul class="space-y-3 text-base text-slate-300">
+          <li class="flex gap-3">
+            <span class="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-slate-500"></span>
+            Auto-discovering "which question should this pack calibrate
+            against?" is <strong class="text-white">out of scope</strong> for the v1 command.
+            You pick the baseline.
+          </li>
+          <li class="flex gap-3">
+            <span class="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-slate-500"></span>
+            Calibration measures distributional fit on <strong class="text-white">one</strong>
+            answer distribution. A low JSD on <code class="text-slate-300">gss:HAPPY</code>
+            does not imply low JSD on a different question — calibrate against
+            multiple baselines if you need broad coverage.
+          </li>
+          <li class="flex gap-3">
+            <span class="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-slate-500"></span>
+            The command requires the
+            <code class="text-emerald-400">synthpanel[convergence]</code> extra
+            (for the <code class="text-slate-300">synthbench</code> baseline loader).
+            Install with <code class="text-slate-300">pip install 'synthpanel[convergence]'</code>
+            if not already present.
+          </li>
+        </ul>
+      </section>
+
+      <!-- Related links -->
+      <section class="mt-20" id="related">
+        <h2
+          class="mb-6 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          See also
+        </h2>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <a
+            href="/mcp"
+            class="group rounded-lg border border-slate-800 bg-slate-900/40 p-5 transition hover:border-emerald-400/40 hover:bg-slate-900/70"
+          >
+            <div class="flex items-center justify-between">
+              <h3 class="font-semibold text-white">MCP Server</h3>
+              <span
+                class="text-slate-500 transition group-hover:text-emerald-300"
+                >→</span
+              >
+            </div>
+            <p class="mt-2 text-sm text-slate-400">
+              Run calibrated panel runs via the MCP tools from your AI editor.
+            </p>
+          </a>
+          <a
+            href="https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/calibration.md"
+            class="group rounded-lg border border-slate-800 bg-slate-900/40 p-5 transition hover:border-emerald-400/40 hover:bg-slate-900/70"
+          >
+            <div class="flex items-center justify-between">
+              <h3 class="font-semibold text-white">Source docs</h3>
+              <span
+                class="text-slate-500 transition group-hover:text-emerald-300"
+                >→</span
+              >
+            </div>
+            <p class="mt-2 text-sm text-slate-400">
+              The canonical
+              <code class="text-slate-300">docs/calibration.md</code> in the GitHub
+              repo.
+            </p>
+          </a>
+          <a
+            href="https://github.com/DataViking-Tech/SynthPanel"
+            class="group rounded-lg border border-slate-800 bg-slate-900/40 p-5 transition hover:border-emerald-400/40 hover:bg-slate-900/70"
+          >
+            <div class="flex items-center justify-between">
+              <h3 class="font-semibold text-white">Report an issue</h3>
+              <span
+                class="text-slate-500 transition group-hover:text-emerald-300"
+                >→</span
+              >
+            </div>
+            <p class="mt-2 text-sm text-slate-400">
+              Open an issue on GitHub if something looks wrong.
+            </p>
+          </a>
+        </div>
+      </section>
+
+      <!-- Footer -->
+      <footer
+        class="mt-20 border-t border-slate-800 pt-6 text-xs text-slate-500"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <span>
+            MIT-licensed ·
+            <a
+              href="https://github.com/DataViking-Tech/SynthPanel"
+              class="hover:text-slate-300"
+              >DataViking-Tech/SynthPanel</a
+            >
+          </span>
+          <span>
+            Built by
+            <a href="https://dataviking.tech" class="hover:text-slate-300"
+              >DataViking</a
+            >
+          </span>
+        </div>
+      </footer>
+    </main>
+
+    <script>
+      document.querySelectorAll(".copy-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const text = btn.getAttribute("data-copy") || "";
+          try {
+            await navigator.clipboard.writeText(text);
+            const original = btn.textContent;
+            btn.textContent = "Copied";
+            btn.classList.add("text-emerald-300", "border-emerald-400/50");
+            setTimeout(() => {
+              btn.textContent = original;
+              btn.classList.remove("text-emerald-300", "border-emerald-400/50");
+            }, 1500);
+          } catch (err) {
+            // Clipboard API unavailable — no-op.
+          }
+        });
+      });
+    </script>
+  </body>
+</html>
