@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>
+      Recommended Models — synthpanel · SynthBench-validated model picks
+    </title>
+    <meta
+      name="description"
+      content="SynthBench-validated model recommendations for synthetic focus group research. Use --best-model-for to auto-select the top-ranked model for your use case."
+    />
+    <link rel="canonical" href="https://synthpanel.dev/recommended-models" />
+
+    <meta name="keywords" content="recommended models, SynthBench, synthetic survey models, best LLM for focus groups, synthpanel model selection, globalopinionqa" />
+
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="synthpanel" />
+    <meta property="og:title" content="Recommended Models — synthpanel" />
+    <meta
+      property="og:description"
+      content="SynthBench-validated model picks for synthetic focus group research. Auto-select the top-ranked model with --best-model-for."
+    />
+    <meta property="og:url" content="https://synthpanel.dev/recommended-models" />
+    <meta property="og:image" content="https://synthpanel.dev/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="synthpanel — Run synthetic focus groups with any LLM" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Recommended Models — synthpanel" />
+    <meta
+      name="twitter:description"
+      content="SynthBench-validated model picks. Use --best-model-for for auto-selection."
+    />
+    <meta name="twitter:image" content="https://synthpanel.dev/og-image.png" />
+    <meta name="twitter:image:alt" content="synthpanel — Run synthetic focus groups with any LLM" />
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              mono: [
+                "ui-monospace",
+                "SFMono-Regular",
+                "Menlo",
+                "Monaco",
+                "Consolas",
+                "monospace",
+              ],
+            },
+          },
+        },
+      };
+    </script>
+
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      html,
+      body {
+        background-color: #0f172a;
+      }
+      body {
+        background:
+          radial-gradient(
+            ellipse at top,
+            rgba(52, 211, 153, 0.08),
+            transparent 60%
+          ),
+          #0f172a;
+      }
+      button.copy-btn {
+        min-height: 44px;
+        padding: 8px 14px;
+      }
+      .copy-btn:active {
+        transform: translateY(1px);
+      }
+      :target {
+        scroll-margin-top: 1rem;
+      }
+      table {
+        border-collapse: collapse;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 0.5rem 0.75rem;
+        border-bottom: 1px solid rgb(30, 41, 59);
+        vertical-align: top;
+      }
+      th {
+        color: rgb(148, 163, 184);
+        font-weight: 600;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      td code {
+        color: rgb(110, 231, 183);
+        font-size: 0.85em;
+      }
+    </style>
+  </head>
+
+  <body class="text-slate-200 antialiased">
+    <main class="mx-auto max-w-4xl px-6 pb-24 pt-12 sm:pt-16">
+      <!-- Breadcrumb / back link -->
+      <nav class="mb-8 text-sm">
+        <a
+          href="/"
+          class="inline-flex items-center gap-1 text-slate-400 transition hover:text-emerald-300"
+        >
+          <span aria-hidden="true">←</span> synthpanel.dev
+        </a>
+      </nav>
+
+      <!-- Hero -->
+      <header>
+        <p
+          class="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/5 px-3 py-1 text-xs font-medium text-emerald-300"
+        >
+          <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+          Docs · Recommended Models
+        </p>
+        <h1
+          class="bg-gradient-to-br from-white to-slate-400 bg-clip-text font-mono text-4xl font-bold tracking-tight text-transparent sm:text-5xl"
+        >
+          Recommended models
+        </h1>
+        <p class="mt-4 text-lg text-slate-300">
+          SynthPanel can consult the
+          <a
+            href="https://synthbench.org"
+            class="text-emerald-400 underline decoration-emerald-400/40 underline-offset-2 hover:text-emerald-300"
+            >SynthBench</a
+          >
+          public leaderboard to pick the best-ranked model for the kind of
+          research you're running. This closes the credibility loop: scores
+          measured on the bench drive defaults in the harness.
+        </p>
+      </header>
+
+      <!-- TL;DR -->
+      <section class="mt-16" id="tldr">
+        <h2
+          class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Quick start
+        </h2>
+        <div
+          class="rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-4 font-mono text-sm shadow-xl"
+        >
+          <pre class="text-slate-300 overflow-x-auto whitespace-pre"><span class="text-slate-500"># Use the top-ranked model for a specific topic</span>
+synthpanel panel run \
+  --personas examples/personas.yaml \
+  --instrument pricing-discovery \
+  --best-model-for <span class="text-amber-300">"Economy &amp; Work"</span>
+
+<span class="text-slate-500"># Top-ranked model across a whole dataset (by SPS)</span>
+synthpanel panel run ... --best-model-for <span class="text-amber-300">":globalopinionqa"</span>
+
+<span class="text-slate-500"># Topic within a non-default dataset</span>
+synthpanel panel run ... --best-model-for <span class="text-amber-300">"Technology &amp; Digital Life:globalopinionqa"</span></pre>
+        </div>
+
+        <p class="mt-6 text-base text-slate-300">
+          Before the run, SynthPanel prints a recommendation line to stderr so
+          you can cancel and override:
+        </p>
+        <div
+          class="mt-3 rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-3 font-mono text-sm shadow-xl"
+        >
+          <pre class="text-emerald-300 overflow-x-auto whitespace-pre text-xs">synthbench: best model for globalopinionqa/Economy &amp; Work → claude-haiku-4-5-20251001 · SPS 0.850 · JSD 0.091 · n=100 · $0.032/100q · cached 0h ago · source=synthbench.org</pre>
+        </div>
+      </section>
+
+      <!-- How it works -->
+      <section class="mt-16" id="how-it-works">
+        <h2
+          class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          How it works
+        </h2>
+        <ol class="space-y-4 text-base text-slate-300">
+          <li class="flex gap-4">
+            <span class="flex-shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-400/10 text-xs font-bold text-emerald-400 border border-emerald-400/30">1</span>
+            <span>On first use, SynthPanel fetches
+              <code class="text-emerald-400">https://synthbench.org/data/leaderboard.json</code>
+              and caches it at <code class="text-slate-300">~/.synthpanel/synthbench-cache.json</code>
+              for 24 hours.</span>
+          </li>
+          <li class="flex gap-4">
+            <span class="flex-shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-400/10 text-xs font-bold text-emerald-400 border border-emerald-400/30">2</span>
+            <span>Entries are filtered to the requested <code class="text-emerald-400">dataset</code>
+              (default <code class="text-slate-300">globalopinionqa</code>), then ranked — by the
+              named topic's score when a topic is given, otherwise by overall SPS.</span>
+          </li>
+          <li class="flex gap-4">
+            <span class="flex-shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-400/10 text-xs font-bold text-emerald-400 border border-emerald-400/30">3</span>
+            <span>The top entry's <code class="text-emerald-400">model</code> field is resolved
+              through SynthPanel's alias table (so <code class="text-slate-300">"haiku"</code>
+              becomes <code class="text-slate-300">claude-haiku-4-5-20251001</code>) and stamped
+              onto <code class="text-slate-300">--model</code> for the rest of the pipeline.</span>
+          </li>
+        </ol>
+      </section>
+
+      <!-- Environment knobs -->
+      <section class="mt-16" id="env">
+        <h2
+          class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Environment knobs
+        </h2>
+        <div class="overflow-x-auto rounded-lg border border-slate-800">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-900/60">
+              <tr>
+                <th>Variable</th>
+                <th>Effect</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+              <tr>
+                <td><code>SYNTHPANEL_SYNTHBENCH_URL</code></td>
+                <td class="text-slate-300">Override the fetch URL (useful for forks or air-gapped environments).</td>
+              </tr>
+              <tr>
+                <td><code>SYNTHPANEL_SYNTHBENCH_OFFLINE=1</code></td>
+                <td class="text-slate-300">Never hit the network; use the cache if present, otherwise skip the recommendation.</td>
+              </tr>
+              <tr>
+                <td><code>SYNTHPANEL_SYNTHBENCH_REFRESH=1</code></td>
+                <td class="text-slate-300">Bypass the 24h TTL and force a fresh fetch (ignores the cached ETag).</td>
+              </tr>
+              <tr>
+                <td><code>SYNTH_PANEL_DATA_DIR</code></td>
+                <td class="text-slate-300">Override the data dir where the cache lives.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Graceful offline behaviour -->
+      <section class="mt-16" id="offline">
+        <h2
+          class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Graceful offline behaviour
+        </h2>
+        <ul class="space-y-3 text-base text-slate-300">
+          <li class="flex gap-3">
+            <span class="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-emerald-400"></span>
+            <span><strong class="text-white">Stale cache + network error</strong> → stderr warning, use stale cache.</span>
+          </li>
+          <li class="flex gap-3">
+            <span class="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-emerald-400"></span>
+            <span><strong class="text-white">No cache + network error</strong> → stderr "synthbench unavailable", fall through to whatever <code class="text-slate-300">--model</code> or default was already in effect.</span>
+          </li>
+          <li class="flex gap-3">
+            <span class="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-emerald-400"></span>
+            <span><strong class="text-white">Empty entries after filter</strong> → same fall-through.</span>
+          </li>
+        </ul>
+        <p class="mt-4 text-sm text-slate-400">
+          No recommendation is ever fatal. <code class="text-emerald-400">--best-model-for</code>
+          is advisory: a bad network day won't take the panel down.
+        </p>
+      </section>
+
+      <!-- Use-case table -->
+      <section class="mt-16" id="picks">
+        <h2
+          class="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Use-case → top-ranked model
+        </h2>
+        <p class="mb-4 text-sm text-slate-400">
+          Snapshot from <code class="text-slate-300">leaderboard.json</code> on 2026-04-24.
+          The live data updates continuously — consult the CLI flag or
+          <a href="https://synthbench.org" class="text-emerald-400 hover:text-emerald-300">synthbench.org</a>
+          for current picks.
+        </p>
+        <div class="overflow-x-auto rounded-lg border border-slate-800">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-900/60">
+              <tr>
+                <th>Use case</th>
+                <th>Dataset</th>
+                <th>Top SynthBench pick</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+              <tr>
+                <td class="text-slate-300">General attitudes research</td>
+                <td><code>globalopinionqa</code></td>
+                <td><code>claude-haiku-4-5-20251001</code></td>
+              </tr>
+              <tr>
+                <td class="text-slate-300">Economic / workplace surveys</td>
+                <td><code>globalopinionqa</code></td>
+                <td><code>claude-haiku-4-5-20251001</code></td>
+              </tr>
+              <tr>
+                <td class="text-slate-300">Tech product discovery</td>
+                <td><code>globalopinionqa</code></td>
+                <td><code>gemini-2.5-flash</code></td>
+              </tr>
+              <tr>
+                <td class="text-slate-300">Health &amp; science messaging</td>
+                <td><code>globalopinionqa</code></td>
+                <td class="text-slate-400">see <code class="text-slate-300">--best-model-for "Health &amp; Science"</code></td>
+              </tr>
+              <tr>
+                <td class="text-slate-300">International affairs / policy</td>
+                <td><code>globalopinionqa</code></td>
+                <td class="text-slate-400">see CLI</td>
+              </tr>
+              <tr>
+                <td class="text-slate-300">Trust &amp; wellbeing</td>
+                <td><code>globalopinionqa</code></td>
+                <td class="text-slate-400">see CLI</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Caveats -->
+      <section class="mt-16" id="caveats">
+        <h2
+          class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Caveats
+        </h2>
+        <ul class="space-y-4 text-base text-slate-300">
+          <li class="flex gap-3">
+            <span class="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-slate-500"></span>
+            <span><strong class="text-white">Ensembles &amp; product configs.</strong>
+              Some leaderboard entries are SynthPanel product configs
+              (<code class="text-slate-300">framework=product</code>,
+              <code class="text-slate-300">is_ensemble=true</code>). These aren't runnable as a plain
+              <code class="text-slate-300">--model</code> value, so SynthPanel falls back to the
+              underlying base model inferred from the entry's
+              <code class="text-slate-300">config_id</code>. A stderr note records the substitution.</span>
+          </li>
+          <li class="flex gap-3">
+            <span class="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-slate-500"></span>
+            <span><strong class="text-white">Sparse topics.</strong>
+              When the top entry's <code class="text-slate-300">run_count &lt; 3</code>, a
+              low-confidence warning is emitted. Treat those recommendations as
+              suggestive rather than authoritative.</span>
+          </li>
+          <li class="flex gap-3">
+            <span class="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-slate-500"></span>
+            <span><strong class="text-white">Provider/model strings vary.</strong>
+              The leaderboard publishes the raw <code class="text-slate-300">model</code> string the
+              run used — sometimes a canonical id, sometimes a short alias.
+              SynthPanel passes the string through the alias resolver so either
+              shape works, but the raw value is preserved in the recommendation
+              line as <code class="text-slate-300">raw_model</code>.</span>
+          </li>
+        </ul>
+      </section>
+
+      <!-- Scoping -->
+      <section class="mt-16" id="scoping">
+        <h2
+          class="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Scoping
+        </h2>
+        <p class="text-base text-slate-300">
+          <code class="text-emerald-400">--best-model-for</code> picks a single model for the whole
+          panel. It is mutually exclusive with <code class="text-slate-300">--models</code>
+          (which splits the panel across multiple models) — mixing the two is
+          rejected at parse time.
+        </p>
+      </section>
+
+      <!-- Related links -->
+      <section class="mt-20" id="related">
+        <h2
+          class="mb-6 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          See also
+        </h2>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <a
+            href="https://synthbench.org"
+            class="group rounded-lg border border-slate-800 bg-slate-900/40 p-5 transition hover:border-emerald-400/40 hover:bg-slate-900/70"
+          >
+            <div class="flex items-center justify-between">
+              <h3 class="font-semibold text-white">SynthBench leaderboard</h3>
+              <span
+                class="text-slate-500 transition group-hover:text-emerald-300"
+                >→</span
+              >
+            </div>
+            <p class="mt-2 text-sm text-slate-400">
+              Live model rankings at synthbench.org — updated continuously.
+            </p>
+          </a>
+          <a
+            href="/mcp"
+            class="group rounded-lg border border-slate-800 bg-slate-900/40 p-5 transition hover:border-emerald-400/40 hover:bg-slate-900/70"
+          >
+            <div class="flex items-center justify-between">
+              <h3 class="font-semibold text-white">MCP Server</h3>
+              <span
+                class="text-slate-500 transition group-hover:text-emerald-300"
+                >→</span
+              >
+            </div>
+            <p class="mt-2 text-sm text-slate-400">
+              Use <code class="text-slate-300">run_panel</code> from your AI editor with the
+              top-ranked model.
+            </p>
+          </a>
+          <a
+            href="https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/recommended-models.md"
+            class="group rounded-lg border border-slate-800 bg-slate-900/40 p-5 transition hover:border-emerald-400/40 hover:bg-slate-900/70"
+          >
+            <div class="flex items-center justify-between">
+              <h3 class="font-semibold text-white">Source docs</h3>
+              <span
+                class="text-slate-500 transition group-hover:text-emerald-300"
+                >→</span
+              >
+            </div>
+            <p class="mt-2 text-sm text-slate-400">
+              The canonical
+              <code class="text-slate-300">docs/recommended-models.md</code> in the GitHub
+              repo.
+            </p>
+          </a>
+          <a
+            href="https://github.com/DataViking-Tech/SynthPanel"
+            class="group rounded-lg border border-slate-800 bg-slate-900/40 p-5 transition hover:border-emerald-400/40 hover:bg-slate-900/70"
+          >
+            <div class="flex items-center justify-between">
+              <h3 class="font-semibold text-white">Report an issue</h3>
+              <span
+                class="text-slate-500 transition group-hover:text-emerald-300"
+                >→</span
+              >
+            </div>
+            <p class="mt-2 text-sm text-slate-400">
+              Open an issue on GitHub if something looks wrong.
+            </p>
+          </a>
+        </div>
+      </section>
+
+      <!-- Footer -->
+      <footer
+        class="mt-20 border-t border-slate-800 pt-6 text-xs text-slate-500"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <span>
+            MIT-licensed ·
+            <a
+              href="https://github.com/DataViking-Tech/SynthPanel"
+              class="hover:text-slate-300"
+              >DataViking-Tech/SynthPanel</a
+            >
+          </span>
+          <span>
+            Built by
+            <a href="https://dataviking.tech" class="hover:text-slate-300"
+              >DataViking</a
+            >
+          </span>
+        </div>
+      </footer>
+    </main>
+
+    <script>
+      document.querySelectorAll(".copy-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const text = btn.getAttribute("data-copy") || "";
+          try {
+            await navigator.clipboard.writeText(text);
+            const original = btn.textContent;
+            btn.textContent = "Copied";
+            btn.classList.add("text-emerald-300", "border-emerald-400/50");
+            setTimeout(() => {
+              btn.textContent = original;
+              btn.classList.remove("text-emerald-300", "border-emerald-400/50");
+            }, 1500);
+          } catch (err) {
+            // Clipboard API unavailable — no-op.
+          }
+        });
+      });
+    </script>
+  </body>
+</html>

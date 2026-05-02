@@ -16,6 +16,11 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://synthpanel.dev/recommended-models</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://synthpanel.dev/blog/synthpanel-vs-commercial-alternatives.html</loc>
     <lastmod>2026-04-15</lastmod>
     <changefreq>monthly</changefreq>
