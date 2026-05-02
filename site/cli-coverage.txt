@@ -1,0 +1,27 @@
+# CLI subcommand coverage manifest for synthpanel.dev
+#
+# This file lists every top-level subcommand exposed by `synthpanel --help`.
+# The CI job scripts/check_site_cli_sync.py compares this list against the
+# live --help output and fails the build on any drift.
+#
+# Workflow when adding a new subcommand:
+#   1. Add the subcommand to the CLI (src/synth_panel/cli/parser.py)
+#   2. Document it on the site (synthpanel.dev) or file a docs ticket
+#   3. Add the subcommand name to this file to keep CI green
+#
+# Removing a subcommand: delete its line here.
+
+analyze
+cost
+doctor
+install-skills
+instruments
+login
+logout
+mcp-serve
+pack
+panel
+prompt
+report
+runs
+whoami
