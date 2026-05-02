@@ -1089,6 +1089,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Start the MCP server (stdio transport).",
     )
 
+    # install-skills (sy-65k74)
+    install_skills_parser = subparsers.add_parser(
+        "install-skills",
+        help=(
+            "Install bundled Claude Code slash commands and skills into ~/.claude/ "
+            "(or a project-level .claude/ with --target)."
+        ),
+    )
+    install_skills_parser.add_argument(
+        "--target",
+        default=None,
+        metavar="DIR",
+        help=("Destination directory (default: ~/.claude). Pass .claude for project-scope install."),
+    )
+
     # login (sp-lve: credential UX — persist an API key to disk so CLI
     # use without exported env vars isn't a dead end).
     login_parser = subparsers.add_parser(
