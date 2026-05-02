@@ -3205,9 +3205,7 @@ def _handle_pack_search_local(args: argparse.Namespace, fmt: OutputFormat) -> in
 
     matches: list[dict[str, Any]] = []
     for p in packs:
-        haystack = " ".join(
-            [str(p.get("id", "")), str(p.get("name", "")), str(p.get("description", ""))]
-        ).lower()
+        haystack = " ".join([str(p.get("id", "")), str(p.get("name", "")), str(p.get("description", ""))]).lower()
         if term in haystack:
             matches.append(
                 {
@@ -3362,8 +3360,7 @@ def handle_pack_save(args: argparse.Namespace, fmt: OutputFormat) -> int:
 
     if pack_id in _bundled_packs():
         print(
-            f"Error: '{pack_id}' conflicts with a bundled pack. "
-            "Use --id to choose a different ID.",
+            f"Error: '{pack_id}' conflicts with a bundled pack. Use --id to choose a different ID.",
             file=sys.stderr,
         )
         return 1
