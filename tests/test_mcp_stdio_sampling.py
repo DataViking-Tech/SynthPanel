@@ -26,7 +26,6 @@ import pytest
 
 pytest.importorskip("mcp")
 
-from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.shared.context import RequestContext
 from mcp.types import (
@@ -34,6 +33,8 @@ from mcp.types import (
     CreateMessageResult,
     TextContent,
 )
+
+from mcp import ClientSession, StdioServerParameters
 
 
 def _server_env() -> dict[str, str]:
