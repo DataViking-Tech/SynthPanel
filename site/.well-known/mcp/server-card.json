@@ -1,0 +1,42 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.DataViking-Tech/synthpanel",
+  "title": "SynthPanel",
+  "description": "Run synthetic focus groups using AI personas. 12 MCP tools for single prompts, full panel runs, and v3 branching (adaptive) instruments across any LLM provider (Claude, OpenAI, Gemini, xAI).",
+  "version": "0.13.0-dev",
+  "websiteUrl": "https://synthpanel.dev",
+  "repository": {
+    "url": "https://github.com/DataViking-Tech/SynthPanel",
+    "source": "github"
+  },
+  "serverInfo": {
+    "name": "synthpanel",
+    "version": "0.13.0-dev"
+  },
+  "capabilities": {
+    "tools": { "listChanged": false },
+    "resources": { "subscribe": false, "listChanged": false },
+    "prompts": { "listChanged": false }
+  },
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "synthpanel",
+      "version": "0.13.0-dev",
+      "runtimeHint": "uvx",
+      "runtimeArguments": [
+        { "type": "positional", "value": "synthpanel[mcp]" },
+        { "type": "positional", "value": "synthpanel" },
+        { "type": "positional", "value": "mcp-serve" }
+      ],
+      "transport": { "type": "stdio" },
+      "environmentVariables": [
+        { "name": "ANTHROPIC_API_KEY", "description": "Anthropic API key (Claude models — default)", "isRequired": false, "isSecret": true },
+        { "name": "OPENAI_API_KEY",    "description": "OpenAI API key (GPT models)",                  "isRequired": false, "isSecret": true },
+        { "name": "GOOGLE_API_KEY",    "description": "Google API key (Gemini models)",                "isRequired": false, "isSecret": true },
+        { "name": "XAI_API_KEY",       "description": "xAI API key (Grok models)",                     "isRequired": false, "isSecret": true }
+      ]
+    }
+  ]
+}
