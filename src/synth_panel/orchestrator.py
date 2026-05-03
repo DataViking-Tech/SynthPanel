@@ -343,6 +343,202 @@ class PanelistResult:
     model: str | None = None
 
 
+# ---------------------------------------------------------------------------
+# v1.0.0 contract flags (sy-ac-5)
+# ---------------------------------------------------------------------------
+
+
+# The 7 enum members from schemas/v1.0.0.json#/flags_enum. Frozen at
+# the contract level; new codes ship as a parallel schema version, not
+# in-place edits. Kept as a tuple here (not re-read from the JSON) so
+# the import stays free of disk I/O — :func:`Flag.__post_init__` is on
+# the hot path of every panel run.
+FLAG_CODES: tuple[str, ...] = (
+    "low_convergence",
+    "demographic_skew",
+    "small_n",
+    "persona_collision",
+    "out_of_distribution",
+    "refusal_or_degenerate",
+    "schema_drift",
+)
+
+SEVERITIES: tuple[str, ...] = ("info", "warn", "block")
+
+
+@dataclass(frozen=True)
+class Flag:
+    """An enum-bound quality flag from the v1.0.0 contract.
+
+    Lands on ``panel_verdict.flags[]``. ``code`` must be one of
+    :data:`FLAG_CODES`; non-enum signals belong on :class:`FlagExtension`.
+    """
+
+    code: str
+    severity: str
+
+    def __post_init__(self) -> None:
+        if self.code not in FLAG_CODES:
+            raise ValueError(
+                f"Flag.code must be one of {FLAG_CODES}, got {self.code!r}; use FlagExtension for non-enum codes"
+            )
+        if self.severity not in SEVERITIES:
+            raise ValueError(f"Flag.severity must be one of {SEVERITIES}, got {self.severity!r}")
+
+
+@dataclass(frozen=True)
+class FlagExtension:
+    """A non-enum signal carried on ``panel_verdict.extension[]``.
+
+    Lets callers surface bespoke quality concerns (e.g. a domain-specific
+    cohort warning) without touching the frozen v1.0.0 ``flags_enum``.
+    """
+
+    code: str
+    message: str
+    severity: str
+
+    def __post_init__(self) -> None:
+        if not self.code:
+            raise ValueError("FlagExtension.code must be non-empty")
+        if self.code in FLAG_CODES:
+            raise ValueError(f"FlagExtension.code {self.code!r} collides with an enum member; use Flag instead")
+        if self.severity not in SEVERITIES:
+            raise ValueError(f"FlagExtension.severity must be one of {SEVERITIES}, got {self.severity!r}")
+
+
+@dataclass
+class PanelState:
+    """Post-synthesis snapshot the flag-raiser inspects.
+
+    Built by the orchestrator after a run finishes (or aborts — the
+    raiser is robust to partial state). The verdict assembler (AC-6)
+    consumes the same shape, so additions here are append-only.
+    """
+
+    panelist_results: list[PanelistResult] = field(default_factory=list)
+    personas: list[dict[str, Any]] = field(default_factory=list)
+    convergence: float | None = None
+    schema_drift: bool = False
+    expected_categories: list[str] | None = None
+    observed_categories: list[str] | None = None
+    extensions: list[FlagExtension] = field(default_factory=list)
+
+
+# Threshold knobs. Tuned in build-plan.md, not part of the wire contract;
+# treat as safe to nudge without bumping the schema version. The raiser
+# trips at the boundary inclusive on the lower side (n < BLOCK → block,
+# BLOCK ≤ n < WARN → warn, n ≥ WARN → no flag).
+_SMALL_N_BLOCK = 4
+_SMALL_N_WARN = 8
+_LOW_CONVERGENCE_BLOCK = 0.30
+_LOW_CONVERGENCE_WARN = 0.50
+_REFUSAL_BLOCK_FRAC = 0.50
+_REFUSAL_WARN_FRAC = 0.25
+
+# Demographic keys we check for uniformity. Limited to common persona
+# fields so the heuristic doesn't flag on incidental shared metadata
+# (e.g. every persona happening to have the same ``llm_overrides``).
+_DEMOGRAPHIC_KEYS: tuple[str, ...] = ("occupation", "age", "gender", "region", "country")
+
+
+def _is_degenerate(pr: PanelistResult) -> bool:
+    """A panelist counts as degenerate if their session errored or
+    every recorded response was an error / skipped / empty.
+
+    Mirrors how the synthesizer treats ``error`` / ``skipped_by_budget``
+    rows when building convergence inputs — keep the two in sync.
+    """
+    if pr.error:
+        return True
+    if not pr.responses:
+        return True
+    bad = 0
+    for r in pr.responses:
+        if r.get("error") or r.get("skipped_by_budget"):
+            bad += 1
+            continue
+        resp = r.get("response")
+        if resp is None or (isinstance(resp, str) and not resp.strip()):
+            bad += 1
+    return bad == len(pr.responses)
+
+
+def _detect_demographic_skew(personas: list[dict[str, Any]]) -> bool:
+    """All personas share an identical value on at least one demographic key."""
+    if len(personas) < 2:
+        return False
+    for k in _DEMOGRAPHIC_KEYS:
+        values = [p.get(k) for p in personas if isinstance(p, dict) and k in p]
+        if len(values) == len(personas) and len(set(values)) == 1:
+            return True
+    return False
+
+
+def _detect_persona_collision(personas: list[dict[str, Any]], results: list[PanelistResult]) -> bool:
+    """Two personas (or two results) carry the same name."""
+    pnames = [p.get("name") for p in personas if isinstance(p, dict) and p.get("name")]
+    if len(pnames) != len(set(pnames)):
+        return True
+    rnames = [r.persona_name for r in results]
+    return len(rnames) != len(set(rnames))
+
+
+def _raise_flags(panel_state: PanelState) -> list[Flag]:
+    """Inspect ``panel_state`` post-synthesis and emit enum-bound flags.
+
+    Each returned :class:`Flag` maps to one of the 7 ``flags_enum``
+    members in ``schemas/v1.0.0.json``. Severity is one of
+    :data:`SEVERITIES`. The function never raises on a malformed
+    ``panel_state`` — missing fields skip the relevant check so the
+    raiser stays callable on partial / aborted runs (sp-56pb).
+
+    Non-enum signals belong on ``panel_state.extensions``; the verdict
+    assembler (AC-6) surfaces them under ``panel_verdict.extension[]``
+    rather than ``flags[]``. Mixing the two would silently shadow a
+    real enum member, hence :class:`FlagExtension` rejects enum codes
+    at construction time.
+    """
+    flags: list[Flag] = []
+    n = len(panel_state.panelist_results)
+
+    if 0 < n < _SMALL_N_BLOCK:
+        flags.append(Flag(code="small_n", severity="block"))
+    elif _SMALL_N_BLOCK <= n < _SMALL_N_WARN:
+        flags.append(Flag(code="small_n", severity="warn"))
+
+    if panel_state.convergence is not None:
+        c = panel_state.convergence
+        if c < _LOW_CONVERGENCE_BLOCK:
+            flags.append(Flag(code="low_convergence", severity="block"))
+        elif c < _LOW_CONVERGENCE_WARN:
+            flags.append(Flag(code="low_convergence", severity="warn"))
+
+    if _detect_demographic_skew(panel_state.personas):
+        flags.append(Flag(code="demographic_skew", severity="warn"))
+
+    if _detect_persona_collision(panel_state.personas, panel_state.panelist_results):
+        flags.append(Flag(code="persona_collision", severity="warn"))
+
+    if panel_state.expected_categories is not None and panel_state.observed_categories is not None:
+        expected = set(panel_state.expected_categories)
+        if any(c not in expected for c in panel_state.observed_categories):
+            flags.append(Flag(code="out_of_distribution", severity="warn"))
+
+    if n > 0:
+        bad_count = sum(1 for pr in panel_state.panelist_results if _is_degenerate(pr))
+        frac = bad_count / n
+        if frac >= _REFUSAL_BLOCK_FRAC:
+            flags.append(Flag(code="refusal_or_degenerate", severity="block"))
+        elif frac >= _REFUSAL_WARN_FRAC:
+            flags.append(Flag(code="refusal_or_degenerate", severity="warn"))
+
+    if panel_state.schema_drift:
+        flags.append(Flag(code="schema_drift", severity="warn"))
+
+    return flags
+
+
 @dataclass
 class RoundResult:
     """Per-round panelist + synthesis bundle for a multi-round run."""
