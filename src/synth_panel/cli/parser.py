@@ -1021,6 +1021,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="DAG output format (default: text).",
     )
 
+    # domains — bundled persona-generation domain templates
+    domains_parser = subparsers.add_parser(
+        "domains",
+        help="Inspect bundled domain templates that guide persona generation.",
+    )
+    domains_subparsers = domains_parser.add_subparsers(dest="domains_command")
+
+    domains_subparsers.add_parser(
+        "list",
+        help="List all bundled domain templates.",
+    )
+
+    domains_inspect_parser = domains_subparsers.add_parser(
+        "inspect",
+        help="Show a domain template's full prompt body and metadata.",
+    )
+    domains_inspect_parser.add_argument(
+        "name",
+        metavar="NAME",
+        help="Domain template name (as listed by 'domains list', e.g. career-tech).",
+    )
+
     # analyze
     analyze_parser = subparsers.add_parser(
         "analyze",
