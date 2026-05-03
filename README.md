@@ -6,6 +6,7 @@
 [![Python versions](https://img.shields.io/pypi/pyversions/synthpanel.svg)](https://pypi.org/project/synthpanel/)
 [![MCP](https://img.shields.io/badge/MCP-enabled-brightgreen.svg)](https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/mcp.md)
 [![GHCR](https://img.shields.io/badge/ghcr.io-dataviking--tech%2Fsynthpanel-2496ED?logo=docker&logoColor=white)](https://github.com/DataViking-Tech/SynthPanel/pkgs/container/synthpanel)
+[![Ko-fi](https://img.shields.io/badge/Support-Ko--fi-FF5E5B?logo=ko-fi)](https://ko-fi.com/dataviking)
 
 Site: <https://synthpanel.dev> · Benchmark: <https://synthbench.org>
 

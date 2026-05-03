@@ -35,6 +35,7 @@ Repository = "https://github.com/DataViking-Tech/SynthPanel"
 Issues = "https://github.com/DataViking-Tech/SynthPanel/issues"
 Changelog = "https://github.com/DataViking-Tech/SynthPanel/releases"
 "MCP Reference" = "https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/mcp.md"
+Funding = "https://ko-fi.com/dataviking"
 
 [project.optional-dependencies]
 mcp = [
