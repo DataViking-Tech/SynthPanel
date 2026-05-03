@@ -8,6 +8,14 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 Work in progress for the next release after v1.0.0 lands.
 
+### Documentation
+
+- `docs/oauth-discovery.md` — records the AR-5 (sy-iaf) determination that
+  OAuth/OIDC discovery metadata is not applicable to SynthPanel: the CLI is
+  local, the MCP server is stdio, and synthpanel.dev is a static site, so no
+  protected API exists for `/.well-known/openid-configuration` or
+  `/.well-known/oauth-authorization-server` to describe.
+
 ## [1.0.0] - TBD
 
 The frozen MCP contract release. The schema at
