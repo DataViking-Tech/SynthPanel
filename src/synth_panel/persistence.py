@@ -102,6 +102,10 @@ class Session:
     messages: list[ConversationMessage] = field(default_factory=list)
     compaction: CompactionMeta | None = None
     fork: ForkMeta | None = None
+    # AC-7: stamped on every JSONL row for panel-run transcripts so each line
+    # is self-describing. Omitted (None) for run_prompt and other non-panel
+    # sessions per the v1.0.0 contract in schemas/v1.0.0.json.
+    decision_being_informed: str | None = None
 
     # --- Mutation helpers --------------------------------------------------
 
@@ -158,6 +162,8 @@ class Session:
             d["compaction"] = self.compaction.to_dict()
         if self.fork is not None:
             d["fork"] = self.fork.to_dict()
+        if self.decision_being_informed is not None:
+            d["decision_being_informed"] = self.decision_being_informed
         return d
 
     @classmethod
@@ -176,12 +182,20 @@ class Session:
             messages=[ConversationMessage.from_dict(m) for m in data["messages"]],
             compaction=compaction,
             fork=fork,
+            decision_being_informed=data.get("decision_being_informed"),
         )
 
     # --- Serialisation: JSONL ---------------------------------------------
 
     def to_jsonl(self) -> str:
-        """Serialise as newline-delimited JSON records."""
+        """Serialise as newline-delimited JSON records.
+
+        When ``decision_being_informed`` is set, every emitted row carries it
+        (AC-7 transcript stamping) so each line of the transcript is
+        self-describing.
+        """
+        decision = _validated_decision_stamp(self.decision_being_informed)
+
         lines: list[str] = []
         meta: dict[str, Any] = {
             "type": "session_meta",
@@ -192,14 +206,17 @@ class Session:
         }
         if self.fork is not None:
             meta["fork"] = self.fork.to_dict()
+        _stamp(meta, decision)
         lines.append(json.dumps(meta, separators=(",", ":")))
 
         for msg in self.messages:
-            record = {"type": "message", **msg.to_dict()}
+            record: dict[str, Any] = {"type": "message", **msg.to_dict()}
+            _stamp(record, decision)
             lines.append(json.dumps(record, separators=(",", ":")))
 
         if self.compaction is not None:
             record = {"type": "compaction", **self.compaction.to_dict()}
+            _stamp(record, decision)
             lines.append(json.dumps(record, separators=(",", ":")))
 
         return "\n".join(lines) + "\n"
@@ -218,6 +235,7 @@ class Session:
         messages: list[ConversationMessage] = []
         compaction: CompactionMeta | None = None
         fork: ForkMeta | None = None
+        decision_being_informed: str | None = None
 
         for i, line in enumerate(lines, start=1):
             try:
@@ -233,10 +251,19 @@ class Session:
                 updated_at = record["updated_at"]
                 if "fork" in record:
                     fork = ForkMeta.from_dict(record["fork"])
+                # session_meta is the canonical source for the decision; if a
+                # downstream row disagrees we still trust the header so a
+                # corrupted middle line cannot rewrite session-level identity.
+                if "decision_being_informed" in record:
+                    decision_being_informed = record["decision_being_informed"]
             elif rtype == "message":
-                messages.append(ConversationMessage.from_dict(record))
+                # Strip the stamp before delegating to ConversationMessage so
+                # legacy and stamped rows produce identical message objects.
+                msg_record = {k: v for k, v in record.items() if k != "decision_being_informed"}
+                messages.append(ConversationMessage.from_dict(msg_record))
             elif rtype == "compaction":
-                compaction = CompactionMeta.from_dict(record)
+                cmp_record = {k: v for k, v in record.items() if k != "decision_being_informed"}
+                compaction = CompactionMeta.from_dict(cmp_record)
             else:
                 raise SessionFormatError(f"Unknown record type {rtype!r} at line {i}")
 
@@ -251,6 +278,7 @@ class Session:
             messages=messages,
             compaction=compaction,
             fork=fork,
+            decision_being_informed=decision_being_informed,
         )
 
 
@@ -274,6 +302,30 @@ class SessionIOError(SessionError):
 # ---------------------------------------------------------------------------
 # Atomic file writing
 # ---------------------------------------------------------------------------
+
+
+def _validated_decision_stamp(value: str | None) -> str | None:
+    """Return *value* if safe to embed as a JSONL row stamp, else raise.
+
+    A newline in the field would split a single record across multiple lines
+    and silently corrupt every downstream reader. The contract validator
+    (structured.validate.validate_request, AC-2) is the upstream authority
+    for shape rules; persistence keeps a self-protective check at its own
+    boundary so a misuse can't produce malformed transcripts.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError("decision_being_informed must be a string")
+    if "\n" in value or "\r" in value:
+        raise ValueError("decision_being_informed must not contain newline characters")
+    return value
+
+
+def _stamp(record: dict[str, Any], decision: str | None) -> None:
+    """Attach the decision stamp to a JSONL row when set."""
+    if decision is not None:
+        record["decision_being_informed"] = decision
 
 
 def _atomic_write(path: Path, data: str) -> None:
@@ -384,10 +436,19 @@ def load_session(path: str | Path) -> Session:
 def append_message(
     path: str | Path,
     message: ConversationMessage,
+    *,
+    decision_being_informed: str | None = None,
 ) -> None:
-    """Append a single message record to a JSONL session file."""
+    """Append a single message record to a JSONL session file.
+
+    When ``decision_being_informed`` is provided, the appended row is stamped
+    with it (AC-7) so live-streamed transcripts stay self-describing on a
+    per-row basis even before the session is closed.
+    """
     p = Path(path)
-    record = {"type": "message", **message.to_dict()}
+    decision = _validated_decision_stamp(decision_being_informed)
+    record: dict[str, Any] = {"type": "message", **message.to_dict()}
+    _stamp(record, decision)
     line = json.dumps(record, separators=(",", ":")) + "\n"
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
