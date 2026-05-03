@@ -9,17 +9,56 @@
 
 Site: <https://synthpanel.dev> · Benchmark: <https://synthbench.org>
 
-Open-source synthetic focus groups. Any LLM. Your terminal or your agent's tool call.
+**SynthPanel is the synthetic-population MCP server for AI agents.**
 
-**Zero-config inside any MCP host that speaks sampling** (Claude Desktop, Claude Code, Cursor, Windsurf) — drop the config in and run a panel with **no API key set**. The host runs the model on your behalf, using its own subscription. [Bring your own provider key](docs/mcp.md#model-resolution-order) (Claude, GPT, Gemini, Grok, local) when you want reproducibility, ensembles, or larger panels. Personas and instruments are plain YAML; every response is schema-validated with per-turn cost telemetry. Runs from your terminal, a pipeline, or an AI agent's MCP tool call.
+When your agent needs to know what a representative slice of humans would say
+about a decision — pricing, naming, friction points, copy — it makes one tool
+call:
+
+```jsonc
+// MCP tool call
+{
+  "tool": "run_panel",
+  "arguments": {
+    "stimulus": "price at $49 or $79?",
+    "decision_being_informed": "choosing launch tier price"
+  }
+}
+
+// Response
+{
+  "headline": "Cohort splits on $79; price is the dominant objection.",
+  "convergence": 0.74,
+  "dissent_count": 3,
+  "flags": [{ "code": "small_n", "severity": "warn" }],
+  "schema_version": "1.0.0",
+  ...
+}
+```
+
+You get a verdict envelope: a **0–1 agreement score your agent can threshold
+on**, dissenting verbatims, and demographic flags (closed enum, severity-tagged
+— branch on them). **Bring your own LLM key — Claude, OpenAI, Gemini, or
+local.** Drops into Claude Code, Cursor, Windsurf, LangChain, CrewAI, OpenAI
+Agents SDK.
 
 ```bash
 pip install synthpanel
-synthpanel panel run --personas personas.yaml --instrument survey.yaml
-
-# For MCP server support (Claude Code, Cursor, Windsurf, etc.)
-pip install synthpanel[mcp]
 ```
+
+**Frozen contract:** the v1.0.0 schema lives in the package at
+[`synthpanel/schemas/v1.0.0.json`](src/synth_panel/schemas/v1.0.0.json) and is
+echoed in every response (`schema_version: "1.0.0"`). Field-by-field reference:
+[docs/response-contract.md](docs/response-contract.md). Migrating from v0.12?
+[docs/migration-v1.md](docs/migration-v1.md). Methodology and inspectability:
+[docs/methodology.md](docs/methodology.md).
+
+**Zero-config inside any MCP host that speaks sampling** (Claude Desktop,
+Claude Code, Cursor, Windsurf) — drop the config in and run a panel with **no
+API key set**. The host runs the model on your behalf, using its own
+subscription. Bring your own provider key when you want reproducibility,
+ensembles, or larger panels. Personas and instruments are plain YAML; every
+response is schema-validated with per-turn cost telemetry.
 
 ## Why
 
@@ -30,7 +69,53 @@ Traditional focus groups cost $5,000-$15,000 and take weeks. Synthetic panels co
 - **Hypothesis generation** across demographic segments
 - **Concept testing** at the speed of thought
 
-## Quick Start
+## Agent Quick Start
+
+Wire the MCP server into your editor (see [Use with Claude Code / Cursor /
+Windsurf / Zed](#use-with-claude-code--cursor--windsurf--zed) below) and call
+the four research tools from agent code. Every panel-running call requires a
+`decision_being_informed` field (12–280 chars, single line) — the panel won't
+run without one.
+
+```jsonc
+// run_panel — full synthetic focus group
+{
+  "tool": "run_panel",
+  "arguments": {
+    "personas_pack": "general-consumer",
+    "instrument_pack": "pricing-discovery",
+    "decision_being_informed": "choosing launch tier price"
+  }
+}
+
+// run_quick_poll — one question across personas
+{
+  "tool": "run_quick_poll",
+  "arguments": {
+    "question": "Which name feels most premium: Core, Plus, or Pro?",
+    "personas_pack": "general-consumer",
+    "decision_being_informed": "naming the paid tier"
+  }
+}
+
+// extend_panel — append an ad-hoc follow-up round
+{
+  "tool": "extend_panel",
+  "arguments": {
+    "result_id": "result-20260503-abc123",
+    "questions": ["What would you pay for this if it shipped tomorrow?"],
+    "decision_being_informed": "validating the indie pricing ceiling"
+  }
+}
+```
+
+Branch on `verdict.flags[]` (closed enum, severity-tagged) and threshold on
+`verdict.convergence` (0–1). See [docs/response-contract.md](docs/response-contract.md)
+for the full envelope.
+
+## Human Operator Quick Start
+
+Prefer a terminal? Same engine, CLI surface.
 
 ```bash
 # Install from PyPI
