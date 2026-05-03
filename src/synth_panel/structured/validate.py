@@ -10,7 +10,9 @@ fragment-level rules expressed in the v1.0.0 schema (decision_being_informed
 shape, panel_verdict required fields, flag/severity enum membership). Tool
 wiring lives elsewhere — AC-3 plugs ``validate_request`` into the MCP
 ``run_panel`` / ``run_quick_poll`` / ``extend_panel`` handlers, and AC-9
-plugs ``validate_response`` into the response gate.
+plugs :func:`apply_response_gate` (which calls :func:`validate_response`)
+into the MCP response path so no v1.0.0 ``panel_verdict`` artifact can
+leave the server unvalidated.
 """
 
 from __future__ import annotations
@@ -230,4 +232,38 @@ def validate_response(artifact: dict[str, Any]) -> ErrorEnvelope | None:
     return None
 
 
-__all__ = ["ErrorEnvelope", "validate_request", "validate_response"]
+def apply_response_gate(artifact: Any) -> Any:
+    """AC-9 response gate — final validation before egress.
+
+    Treats *artifact* as a v1.0.0 ``panel_verdict`` candidate iff it is a
+    ``dict`` carrying a ``schema_version`` key. In that case
+    :func:`validate_response` runs and, on failure, the artifact is
+    replaced with the typed error envelope dict. Conformant artifacts
+    are returned unchanged (same identity).
+
+    Anything else — non-dicts, dicts without ``schema_version`` (legacy
+    pre-contract MCP shapes such as ``{"results": [...], ...}``) — passes
+    through untouched. The contract is enforced exactly where it claims
+    to apply, without regressing shipped clients that still consume the
+    pre-v1.0.0 response envelope.
+
+    The gate is the single MCP egress chokepoint for the v1.0.0
+    contract; treat every ``return json.dumps(...)`` site that may carry
+    a panel_verdict as a place to call this function.
+    """
+    if not isinstance(artifact, dict):
+        return artifact
+    if "schema_version" not in artifact:
+        return artifact
+    err = validate_response(artifact)
+    if err is None:
+        return artifact
+    return err.to_dict()
+
+
+__all__ = [
+    "ErrorEnvelope",
+    "apply_response_gate",
+    "validate_request",
+    "validate_response",
+]

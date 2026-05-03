@@ -123,6 +123,7 @@ from synth_panel.orchestrator import (
     run_panel_parallel,
 )
 from synth_panel.prompts import build_question_prompt, persona_system_prompt
+from synth_panel.structured.validate import apply_response_gate
 from synth_panel.synthesis import synthesize_panel
 
 logger = logging.getLogger(__name__)
@@ -1153,7 +1154,7 @@ async def run_panel(
                 temperature=temperature,
                 hint=decision.hint,
             )
-            return json.dumps(sampling_result, indent=2)
+            return json.dumps(apply_response_gate(sampling_result), indent=2)
 
     # ── Ensemble mode: run with each model, compare across models ────────
     if models and len(models) >= 2:
@@ -1192,7 +1193,7 @@ async def run_panel(
                 },
                 indent=2,
             )
-        return json.dumps(ens_result, indent=2)
+        return json.dumps(apply_response_gate(ens_result), indent=2)
 
     # Resolve instrument source (pack > inline instrument > questions).
     instrument_obj: Instrument | None = None
@@ -1231,7 +1232,7 @@ async def run_panel(
                 },
                 indent=2,
             )
-        return json.dumps(result, indent=2)
+        return json.dumps(apply_response_gate(result), indent=2)
 
     if not questions:
         return json.dumps({"error": "No questions or instrument provided."})
@@ -1263,7 +1264,7 @@ async def run_panel(
             },
             indent=2,
         )
-    return json.dumps(result, indent=2)
+    return json.dumps(apply_response_gate(result), indent=2)
 
 
 @mcp.tool()
@@ -1392,7 +1393,7 @@ async def run_quick_poll(
             temperature=temperature,
             hint=decision.hint,
         )
-        return json.dumps(result, indent=2)
+        return json.dumps(apply_response_gate(result), indent=2)
 
     questions = [{"text": question}]
     result = await _run_panel_async(
@@ -1408,7 +1409,7 @@ async def run_quick_poll(
         top_p=top_p,
     )
     result["mode"] = "byok"
-    return json.dumps(result, indent=2)
+    return json.dumps(apply_response_gate(result), indent=2)
 
 
 async def _run_panel_sampling(
@@ -1851,7 +1852,7 @@ async def extend_panel(
         # sp-0ozi: top-level synthesis_error so MCP clients can gate on
         # envelope shape without inspecting the appended round.
         response["synthesis_error"] = synthesis_error
-    return json.dumps(response, indent=2)
+    return json.dumps(apply_response_gate(response), indent=2)
 
 
 @mcp.tool()
