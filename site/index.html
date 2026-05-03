@@ -594,5 +594,14 @@ synthpanel report &lt;result-id&gt; -o report.md</pre>
         });
       });
     </script>
+
+    <script type="module">
+      import { registerWebMCP } from "./webmcp.js";
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", registerWebMCP);
+      } else {
+        registerWebMCP();
+      }
+    </script>
   </body>
 </html>
