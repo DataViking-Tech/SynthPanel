@@ -9,12 +9,19 @@ Operational runbook for the static landing site served at <https://synthpanel.de
   step is required for HTML.**
 - `site/_headers` ships the security header set (CSP, HSTS, frame deny, etc.)
   via the `/*` rule, plus RFC 8288 `Link` headers for agent discovery
-  (`api-catalog`, `service-doc`) on the homepage `/` rule. Cloudflare Pages
-  applies these automatically.
+  (`api-catalog`, `service-doc`) on the homepage `/` rule. A scoped block
+  attaches JSON content-type + wildcard CORS to
+  `/.well-known/mcp/server-card.json` (AR-7 / sy-02p) so agent discovery
+  scanners can fetch the card cross-origin. Cloudflare Pages applies all of
+  these automatically.
 - `site/_worker.js` is a Pages **Advanced Mode** worker that implements
   `Accept: text/markdown` content negotiation (see "Markdown for Agents"
   below). Markdown renditions are pre-built from each HTML page by
   `scripts/render_site_markdown.py` and committed alongside the source.
+- `site/.well-known/mcp/server-card.json` is the MCP Server Card
+  (SEP-2127). The version inside the card is drift-guarded against
+  `synth_panel.__version__` by `tests/test_well_known_server_card.py` —
+  bump both together at release time.
 
 ## Cloudflare Pages project (one-time setup)
 
