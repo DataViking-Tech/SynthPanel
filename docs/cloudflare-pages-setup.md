@@ -150,6 +150,24 @@ curl -sI -H 'Accept: text/markdown' https://synthpanel.dev/og-image.png
   count (chars / 4) for budgeting purposes; agents that need exact
   numbers should run their own tokenizer over the body.
 
+## Agent discovery files
+
+The site ships several `.well-known` documents for the agent-ready ecosystem.
+Cloudflare Pages serves any path inside `site/` as a static asset, so adding a
+new file is enough to publish it — no Workers or routing rules needed.
+
+- `site/.well-known/oauth-protected-resource` — RFC 9728 OAuth Protected
+  Resource Metadata (sy-4nf, AR-6). The file has no extension, so `_headers`
+  carries an explicit `Content-Type: application/json` rule for the path.
+  Without it the global `X-Content-Type-Options: nosniff` would block parsing.
+
+After deploy, verify with:
+```bash
+curl -sI https://synthpanel.dev/.well-known/oauth-protected-resource | grep -i content-type
+#   content-type: application/json
+```
+
+
 ## Why a separate site (vs. README only)
 
 GitHub renders the README well for developers but isn't a domain users can

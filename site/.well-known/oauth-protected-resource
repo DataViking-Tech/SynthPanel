@@ -1,0 +1,7 @@
+{
+  "resource": "https://synthpanel.dev",
+  "authorization_servers": [
+    "https://synthpanel.dev"
+  ],
+  "scopes_supported": []
+}
