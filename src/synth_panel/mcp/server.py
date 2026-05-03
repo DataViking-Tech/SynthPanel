@@ -123,7 +123,7 @@ from synth_panel.orchestrator import (
     run_panel_parallel,
 )
 from synth_panel.prompts import build_question_prompt, persona_system_prompt
-from synth_panel.structured.validate import apply_response_gate
+from synth_panel.structured.validate import apply_response_gate, validate_request
 from synth_panel.synthesis import synthesize_panel
 
 logger = logging.getLogger(__name__)
@@ -236,6 +236,29 @@ def _reject_weighted_model_spec(
             )
         }
     )
+
+
+def _validate_decision_request(tool: str, decision_being_informed: str | None) -> str | None:
+    """AC-3: enforce v1.0.0 constraints on ``decision_being_informed``.
+
+    When the field is provided, run the validator-core (AC-2) to enforce
+    the 12-280 trimmed-length, UTF-8 string-shape, and no-newline rules.
+    Returns a JSON-serialised typed error envelope on violation, or
+    ``None`` when the value conforms.
+
+    Missing / ``None`` is intentionally pass-through here. Under v1.0.x
+    the migration grace path (AC-4 ``apply_legacy_grace``) synthesises
+    ``"unspecified-legacy-call"`` ahead of the validator; under
+    ``SYNTHPANEL_SCHEMA_MIN>=1.1.0`` that shim becomes a no-op so the
+    validator's ``MISSING_DECISION`` branch fires. AC-3 sits behind that
+    decision and only owns the constraint surface.
+    """
+    if decision_being_informed is None:
+        return None
+    err = validate_request(tool, {"decision_being_informed": decision_being_informed})
+    if err is None:
+        return None
+    return json.dumps(err.to_dict())
 
 
 # Re-export for backward compatibility — callers patch these names.
@@ -890,6 +913,7 @@ async def run_panel(
     synthesis_temperature: float | None = None,
     variants: int | None = None,
     use_sampling: bool | None = None,
+    decision_being_informed: str | None = None,
     ctx: Context = None,
 ) -> str:
     """Run a full synthetic focus group panel.
@@ -1021,7 +1045,16 @@ async def run_panel(
             personas by :data:`SAMPLING_MAX_QUESTIONS` questions; larger
             panels require BYOK. Ensemble mode (``models``) and v3
             branching are BYOK-only.
+        decision_being_informed: Required v1.0.0 contract field — the
+            decision this panel will inform, in 12-280 characters
+            (trimmed), single line, UTF-8. Echoed verbatim into the
+            verdict's ``meta`` and stamped on every transcript row.
+            Validation failures return a typed ``MISSING_DECISION`` /
+            ``DECISION_TOO_LONG`` / ``INVALID_TOOL_ARG`` error envelope.
     """
+    decision_error = _validate_decision_request("run_panel", decision_being_informed)
+    if decision_error is not None:
+        return decision_error
     spec_error = _reject_weighted_model_spec(
         model=model,
         models=models,
@@ -1279,6 +1312,7 @@ async def run_quick_poll(
     temperature: float | None = None,
     top_p: float | None = None,
     use_sampling: bool | None = None,
+    decision_being_informed: str | None = None,
     ctx: Context = None,
 ) -> str:
     """Quick single-question poll across personas.
@@ -1338,7 +1372,15 @@ async def run_quick_poll(
         use_sampling: Explicit mode override. ``True`` forces sampling
             (error if unsupported), ``False`` forces BYOK. ``None``
             auto-picks based on creds + client capability.
+        decision_being_informed: Required v1.0.0 contract field — the
+            decision this poll will inform, in 12-280 characters
+            (trimmed), single line, UTF-8. Validation failures return a
+            typed ``MISSING_DECISION`` / ``DECISION_TOO_LONG`` /
+            ``INVALID_TOOL_ARG`` error envelope.
     """
+    decision_error = _validate_decision_request("run_quick_poll", decision_being_informed)
+    if decision_error is not None:
+        return decision_error
     spec_error = _reject_weighted_model_spec(
         model=model,
         synthesis_model=synthesis_model,
@@ -1718,6 +1760,7 @@ async def extend_panel(
     synthesis: bool = True,
     synthesis_model: str | None = None,
     synthesis_prompt: str | None = None,
+    decision_being_informed: str | None = None,
     ctx: Context = None,
 ) -> str:
     """Append a single ad-hoc round to a saved panel result.
@@ -1743,7 +1786,15 @@ async def extend_panel(
         synthesis: Whether to synthesize the new round.
         synthesis_model: Synthesis model. Defaults to panelist model.
         synthesis_prompt: Custom synthesis prompt for the new round.
+        decision_being_informed: Required v1.0.0 contract field — the
+            decision this extension informs, in 12-280 characters
+            (trimmed), single line, UTF-8. Validation failures return a
+            typed ``MISSING_DECISION`` / ``DECISION_TOO_LONG`` /
+            ``INVALID_TOOL_ARG`` error envelope.
     """
+    decision_error = _validate_decision_request("extend_panel", decision_being_informed)
+    if decision_error is not None:
+        return decision_error
     spec_error = _reject_weighted_model_spec(
         model=model,
         synthesis_model=synthesis_model,
