@@ -115,6 +115,7 @@ class StructuredOutputEngine:
         system: str | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
+        seed: int | None = None,
     ) -> StructuredResult:
         """Run a completion with tool-use forcing and extract structured data.
 
@@ -132,6 +133,7 @@ class StructuredOutputEngine:
                     system=system,
                     temperature=temperature,
                     top_p=top_p,
+                    seed=seed,
                 )
             )
             return StructuredResult(data={}, response=response, total_usage=response.usage)
@@ -174,6 +176,7 @@ class StructuredOutputEngine:
                 tool_choice=ToolChoice.specific(config.tool_name),
                 temperature=temperature,
                 top_p=top_p,
+                seed=seed,
             )
 
             try:

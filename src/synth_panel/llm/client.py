@@ -122,6 +122,10 @@ class LLMClient:
         self._bucket: _TokenBucket | None = (
             _TokenBucket(rate_limit_rps) if rate_limit_rps and rate_limit_rps > 0 else None
         )
+        # Track which providers we've already warned for unsupported seed
+        # (one-shot per LLMClient instance, per provider name).
+        self._seed_warned: set[str] = set()
+        self._seed_warned_lock = threading.Lock()
 
     def _resolve_provider(self, model: str) -> LLMProvider:
         """Resolve a provider for the given canonical model name."""
@@ -177,13 +181,44 @@ class LLMClient:
                 stream=request.stream,
                 temperature=request.temperature,
                 top_p=request.top_p,
+                seed=request.seed,
             )
         return request
+
+    def _check_seed_support(self, request: CompletionRequest, provider: LLMProvider) -> None:
+        """Emit a one-shot warning when ``seed`` is set on a provider that
+        does not honor it (sy-cxp).
+
+        Anthropic's Messages API has no equivalent of OpenAI's ``seed``
+        parameter, and local / unknown OpenAI-compatible endpoints aren't
+        guaranteed to support it either. Rather than silently dropping the
+        flag, log once per (provider) so the user knows determinism won't
+        hold for those calls — repeated per-turn warnings would be noise.
+        """
+        if request.seed is None:
+            return
+        config = getattr(provider, "config", None)
+        supports = bool(getattr(config, "supports_seed", False))
+        if supports:
+            return
+        name = _provider_name(provider)
+        with self._seed_warned_lock:
+            if name in self._seed_warned:
+                return
+            self._seed_warned.add(name)
+        logger.warning(
+            "--seed=%s is not supported by %s models; runs against this "
+            "provider will not be deterministic. Use temperature=0 for "
+            "closer-to-deterministic output.",
+            request.seed,
+            name,
+        )
 
     def send(self, request: CompletionRequest) -> CompletionResponse:
         """Send a blocking completion request with automatic retry."""
         request = self._prepare(request)
         provider = self._resolve_provider(request.model)
+        self._check_seed_support(request, provider)
         logger.debug("send model=%s max_tokens=%d", request.model, request.max_tokens)
         if self._bucket is not None:
             self._bucket.acquire()
@@ -212,6 +247,7 @@ class LLMClient:
         """Send a streaming request. Retry is NOT applied to streams."""
         request = self._prepare(request)
         provider = self._resolve_provider(request.model)
+        self._check_seed_support(request, provider)
         return provider.stream(request)
 
 

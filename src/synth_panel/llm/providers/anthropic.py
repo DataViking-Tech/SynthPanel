@@ -219,6 +219,9 @@ class AnthropicProvider(LLMProvider):
         )
 
     def stream(self, request: CompletionRequest) -> Iterator[StreamEvent]:
+        # Anthropic's API has no ``seed`` parameter (sy-cxp); the
+        # LLMClient warns once per provider when seed is set on a
+        # non-supporting provider, so we just drop it here.
         request_copy = CompletionRequest(
             model=request.model,
             max_tokens=request.max_tokens,

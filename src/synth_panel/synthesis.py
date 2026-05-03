@@ -251,6 +251,7 @@ def synthesize_panel(
     panelist_cost: CostEstimate | None = None,
     temperature: float | None = None,
     top_p: float | None = None,
+    seed: int | None = None,
 ) -> SynthesisResult:
     """Synthesize panelist responses into a structured research finding.
 
@@ -298,6 +299,7 @@ def synthesize_panel(
         config=config,
         temperature=temperature,
         top_p=top_p,
+        seed=seed,
     )
 
     # Convert usage
@@ -680,6 +682,7 @@ def _sub_chunk_question_synthesis(
     context_limit: int,
     temperature: float | None,
     top_p: float | None,
+    seed: int | None = None,
     question_index: int | None = None,
 ) -> tuple[SynthesisResult, int]:
     """Synthesize one overflowing question by partitioning panelists (sp-4g6a).
@@ -742,6 +745,7 @@ def _sub_chunk_question_synthesis(
             panelist_cost=None,
             temperature=temperature,
             top_p=top_p,
+            seed=seed,
         )
         batch_results.append(res)
 
@@ -758,6 +762,7 @@ def _sub_chunk_question_synthesis(
         panelist_cost=None,
         temperature=temperature,
         top_p=top_p,
+        seed=seed,
     )
 
     # Aggregate usage / cost across every batch call + the inner reduce
@@ -796,6 +801,7 @@ def synthesize_panel_mapreduce(
     panelist_cost: CostEstimate | None = None,
     temperature: float | None = None,
     top_p: float | None = None,
+    seed: int | None = None,
     personas: list[dict[str, Any]] | None = None,
     max_workers: int | None = None,
     auto_escalate: bool = False,
@@ -932,6 +938,7 @@ def synthesize_panel_mapreduce(
                 context_limit=plan["context_limit"],
                 temperature=temperature,
                 top_p=top_p,
+                seed=seed,
                 question_index=idx,
             )
             meta["batch_count"] = batch_count
@@ -946,6 +953,7 @@ def synthesize_panel_mapreduce(
             panelist_cost=None,
             temperature=temperature,
             top_p=top_p,
+            seed=seed,
         )
         return idx, res, meta
 
@@ -977,6 +985,7 @@ def synthesize_panel_mapreduce(
         panelist_cost=None,
         temperature=temperature,
         top_p=top_p,
+        seed=seed,
     )
 
     # Cost rollup

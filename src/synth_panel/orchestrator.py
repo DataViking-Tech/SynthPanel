@@ -599,6 +599,7 @@ def _run_panelist(
     extract_schema: dict[str, Any] | None = None,
     temperature: float | None = None,
     top_p: float | None = None,
+    seed: int | None = None,
     question_budget: QuestionFailureBudget | None = None,
 ) -> tuple[PanelistResult, Session]:
     """Execute a single panelist's full interview. Runs in a worker thread.
@@ -648,6 +649,7 @@ def _run_panelist(
             max_tokens=eff_max_tokens,
             temperature=eff_temperature,
             top_p=eff_top_p,
+            seed=seed,
         )
 
         # Set up structured output engine if schema provided
@@ -699,6 +701,7 @@ def _run_panelist(
                         system=system_prompt,
                         temperature=eff_temperature,
                         top_p=eff_top_p,
+                        seed=seed,
                     )
                     tracker.record_turn(_convert_llm_usage(result.total_usage))
                     responses.append(
@@ -740,6 +743,7 @@ def _run_panelist(
                                 system=system_prompt,
                                 temperature=eff_temperature,
                                 top_p=eff_top_p,
+                                seed=seed,
                             )
                             tracker.record_turn(_convert_llm_usage(extract_result.total_usage))
                             resp_dict["extraction"] = extract_result.data
@@ -882,6 +886,7 @@ def run_panel_parallel(
     extract_schema: dict[str, Any] | None = None,
     temperature: float | None = None,
     top_p: float | None = None,
+    seed: int | None = None,
     persona_models: dict[str, str] | None = None,
     convergence_tracker: ConvergenceTracker | None = None,
     on_panelist_complete: Callable[[PanelistResult], None] | None = None,
@@ -1011,6 +1016,7 @@ def run_panel_parallel(
                 extract_schema,
                 temperature,
                 top_p,
+                seed,
                 question_budget,
             )
             future_to_index[future] = idx
@@ -1160,6 +1166,7 @@ def run_multi_round_panel(
     extract_schema: dict[str, Any] | None = None,
     temperature: float | None = None,
     top_p: float | None = None,
+    seed: int | None = None,
     persona_models: dict[str, str] | None = None,
 ) -> MultiRoundResult:
     """Execute a (possibly branching) multi-round panel run.
@@ -1225,6 +1232,7 @@ def run_multi_round_panel(
             extract_schema=extract_schema,
             temperature=temperature,
             top_p=top_p,
+            seed=seed,
             persona_models=persona_models,
         )
 
@@ -1366,6 +1374,7 @@ def ensemble_run(
     extract_schema: dict[str, Any] | None = None,
     temperature: float | None = None,
     top_p: float | None = None,
+    seed: int | None = None,
 ) -> EnsembleResult:
     """Run the same panel with each model and compare results.
 
@@ -1391,6 +1400,7 @@ def ensemble_run(
             extract_schema=extract_schema,
             temperature=temperature,
             top_p=top_p,
+            seed=seed,
         )
         per_model[model_name] = results
         model_usage = ZERO_USAGE

@@ -31,6 +31,7 @@ GEMINI_CONFIG = ProviderConfig(
     default_base_url="https://generativelanguage.googleapis.com/v1beta/openai",
     model_prefixes=("gemini-",),
     name="Gemini",
+    supports_seed=True,
 )
 
 

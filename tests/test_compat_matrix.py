@@ -78,6 +78,7 @@ def patched_panel(monkeypatch):
         extract_schema=None,
         temperature=None,
         top_p=None,
+        seed=None,
         persona_models=None,
     ):
         results = [

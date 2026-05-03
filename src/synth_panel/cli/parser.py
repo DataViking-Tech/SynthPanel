@@ -265,6 +265,20 @@ def build_parser() -> argparse.ArgumentParser:
         help=("Nucleus sampling cutoff for panelist LLM calls (0.0-1.0). Default: provider default."),
     )
     panel_run_parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        metavar="INT",
+        help=(
+            "Sampling seed for reproducible panel runs (sy-cxp). Forwarded "
+            "to providers that support it (OpenAI, Gemini, xAI, OpenRouter). "
+            "Anthropic / unknown providers warn once and proceed without "
+            "determinism — use --temperature 0 for closer-to-deterministic "
+            "Claude output. Distinct from --resume, which replays a "
+            "previously-cached run; --seed only constrains a fresh run."
+        ),
+    )
+    panel_run_parser.add_argument(
         "--synthesis-temperature",
         type=float,
         default=None,

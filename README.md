@@ -876,6 +876,38 @@ synthpanel panel run --personas personas.yaml --instrument survey.yaml --prompt-
 
 Templates use Python format-string syntax (`{field_name}`). Missing persona fields are left as literal `{field_name}` in the output.
 
+## Reproducibility (`--seed`)
+
+Pass `--seed N` to `panel run` for reproducible sampling on providers that
+honor the seed parameter (OpenAI, Gemini, xAI, OpenRouter):
+
+```bash
+synthpanel panel run --seed 42 --personas p.yaml --instrument s.yaml
+```
+
+What synthpanel **can** promise:
+
+- Forwards the seed to providers that support it.
+- Records the seed in the run's `metadata.parameters.seed` and in the
+  checkpoint fingerprint, so a `--resume` run with a different seed
+  fails loudly instead of silently mixing samples.
+
+What synthpanel **cannot** promise:
+
+- Anthropic's Messages API has no `seed` parameter. When `--seed` is set
+  on a Claude model, synthpanel logs a single warning per provider and
+  proceeds without determinism. Use `--temperature 0` for closer-to-
+  deterministic Claude output, but expect drift across model versions.
+- Even on supporting providers, "seeded" sampling is best-effort: model
+  serving infrastructure and silent server-side updates can still shift
+  outputs between runs.
+
+`--seed` is for *new* runs you want to be reproducible. To replay a
+previously-cached run exactly, use `synthpanel panel run --resume <run-id>`
+— that path serves cached responses verbatim and is independent of
+`--seed`. See [docs/reproducibility.md](docs/reproducibility.md) for
+the full picture.
+
 ## Methodology Notes
 
 Synthetic research is useful for exploration, hypothesis generation, and rapid iteration. It is **not** a replacement for talking to real humans.

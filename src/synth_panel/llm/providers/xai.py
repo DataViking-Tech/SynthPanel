@@ -30,6 +30,7 @@ XAI_CONFIG = ProviderConfig(
     default_base_url="https://api.x.ai",
     model_prefixes=("grok-",),
     name="xAI",
+    supports_seed=True,
 )
 
 

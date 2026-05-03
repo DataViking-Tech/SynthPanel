@@ -300,6 +300,7 @@ class AgentRuntime:
         usage_tracker: UsageTracker | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
+        seed: int | None = None,
     ) -> None:
         self._client = client
         self._session = session
@@ -316,6 +317,7 @@ class AgentRuntime:
         self._usage_tracker = usage_tracker or UsageTracker()
         self._temperature = temperature
         self._top_p = top_p
+        self._seed = seed
 
     @property
     def session(self) -> Session:
@@ -354,6 +356,7 @@ class AgentRuntime:
                 tool_choice=self._tool_choice,
                 temperature=self._temperature,
                 top_p=self._top_p,
+                seed=self._seed,
             )
 
             # 3. Call LLM
