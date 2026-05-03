@@ -7,9 +7,10 @@ Operational runbook for the static landing site served at <https://synthpanel.de
 - Files live in [`site/`](../site/) at the repo root.
 - Pure static HTML; Tailwind is loaded from `cdn.tailwindcss.com`. **No build
   step is required.**
-- `site/_headers` ships the security header set (CSP, HSTS, frame deny, etc.).
-  Cloudflare Pages applies these automatically for any path matched by the
-  `/*` rule.
+- `site/_headers` ships the security header set (CSP, HSTS, frame deny, etc.)
+  via the `/*` rule, plus RFC 8288 `Link` headers for agent discovery
+  (`api-catalog`, `service-doc`) on the homepage `/` rule. Cloudflare Pages
+  applies these automatically.
 
 ## Cloudflare Pages project (one-time setup)
 

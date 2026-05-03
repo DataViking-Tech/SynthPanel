@@ -5,3 +5,9 @@
   Permissions-Policy: geolocation=(), microphone=(), camera=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+
+# RFC 8288 Link headers — agent discovery (sy-7r1)
+# api-catalog target served by /.well-known/api-catalog (RFC 9727, sy-czo).
+/
+  Link: </.well-known/api-catalog>; rel="api-catalog"
+  Link: </docs/panel-run>; rel="service-doc"
