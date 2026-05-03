@@ -63,6 +63,30 @@ open http://localhost:8080/
 
 There is no test suite for the site — visual smoke check only.
 
+## Agent-discovery surface (`site/.well-known/`)
+
+Files under `site/.well-known/` are advertised to AI agents per the
+[isitagentready.com](https://isitagentready.com/) skill set. Cloudflare Pages
+serves them verbatim from the build directory.
+
+| Path | Media type | Bead |
+|---|---|---|
+| `/.well-known/api-catalog` | `application/linkset+json` (RFC 9727) | sy-czo / AR-4 |
+
+The `api-catalog` file has **no extension**, so the default Cloudflare
+Content-Type would be `application/octet-stream`. The override lives in
+`site/_headers` under the `/.well-known/api-catalog` block — keep it in sync
+with the JSON file. After deploy, smoke-check with:
+
+```bash
+curl -sI https://synthpanel.dev/.well-known/api-catalog | grep -i content-type
+#   content-type: application/linkset+json
+```
+
+The `tests/test_site_api_catalog.py` regression guard validates the JSON
+shape and the header override; it does **not** check live header
+propagation.
+
 ## Editing checklist
 
 When you change `site/index.html`:

@@ -23,3 +23,7 @@
   Access-Control-Allow-Origin: *
   Access-Control-Allow-Methods: GET, HEAD, OPTIONS
   Cache-Control: public, max-age=300
+
+# RFC 9727 api-catalog (sy-czo) — extension-less file, force linkset+json media type.
+/.well-known/api-catalog
+  Content-Type: application/linkset+json
