@@ -6,7 +6,85 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [Unreleased]
 
+Work in progress for the next release after v1.0.0 lands.
+
+## [1.0.0] - TBD
+
+The frozen MCP contract release. The schema at
+[`synthpanel/schemas/v1.0.0.json`](src/synth_panel/schemas/v1.0.0.json) is
+embedded in the package, echoed in every response and every error
+(`schema_version: "1.0.0"`), and append-only — breaking changes will ship as a
+parallel `v2.0.0.json`, never as in-place edits.
+
 ### Added
+
+- `decision_being_informed` — required string field (12–280 chars, single
+  line, UTF-8) on `run_panel`, `run_quick_poll`, and `extend_panel`. Echoed
+  verbatim into `panel_verdict.meta.decision_being_informed` and stamped on
+  every transcript row for audit join. Not used on `run_prompt`
+  (sub-decisional scratch work). Validated pre-model at the request boundary.
+- `panel_verdict.json` envelope — `additionalProperties: false`, with
+  `headline` (≤ 140 chars), `convergence` (0–1), `dissent_count` (≥ 0),
+  `top_3_verbatims` (0–3 `{persona_id, quote}` items), `flags[]` (closed
+  enum), `extension[]` (open observability), `full_transcript_uri`, `meta`,
+  and `schema_version`. Returned alongside every successful panel run.
+- `flags[]` closed enum — seven codes (`low_convergence`, `demographic_skew`,
+  `small_n`, `persona_collision`, `out_of_distribution`,
+  `refusal_or_degenerate`, `schema_drift`) each carrying
+  `severity: "info" | "warn" | "block"`. Multiple flags can stack; highest
+  severity wins for gating. Agents must NOT branch on `extension[]` — that's
+  the open escape hatch for non-enum signals.
+- Typed error envelope — `{error_code, message, field_path?, schema_version,
+  retry_safe}`. v1 codes: `MISSING_DECISION`, `DECISION_TOO_LONG`,
+  `INVALID_TOOL_ARG`, `INVALID_FLAG`, `SCHEMA_DRIFT`, `MODEL_TIMEOUT`,
+  `INTERNAL_ERROR`. `retry_safe = true` only for `MODEL_TIMEOUT` and
+  `SCHEMA_DRIFT` pre-exhaustion.
+- Embedded schema asset — `synthpanel/schemas/v1.0.0.json` ships inside the
+  package. No remote URL, offline-safe, deterministic, no DNS dependency.
+- `SYNTHPANEL_DRIFT_DEGRADE` env flag — opt-in beta of the v1.1 default.
+  When set to `1`, 3-strike retry exhaustion returns a degraded
+  `panel_verdict.json` with `flags: [{ "code": "schema_drift",
+  "severity": "warn" }]` instead of the typed `SCHEMA_DRIFT` error.
+  **Off by default in v1.0.0; on by default in v1.1.0.** See
+  [docs/mcp.md#host-integration-flags](docs/mcp.md#host-integration-flags).
+- New canonical docs:
+  [`docs/response-contract.md`](docs/response-contract.md) (field-by-field
+  reference), [`docs/migration-v1.md`](docs/migration-v1.md) (v0.12 → v1.0
+  walkthrough with grace-window state diagram), and
+  [`docs/methodology.md`](docs/methodology.md) (the inspectability landing).
+  `SPEC.md` carries a verbatim frozen-contract appendix.
+
+### Changed
+
+- MCP request schema is **breaking** for panel-running tools — the new
+  `decision_being_informed` field is required. Gated on `schema_version`;
+  callers that miss it during the v1.0.x grace window log warning
+  `W_DECISION_MISSING` and run with the synthesized placeholder
+  `"unspecified-legacy-call"`. v1.1.0 will hard-reject with `MISSING_DECISION`.
+- Validation now runs at **both sides** of structured output — request
+  validated before model invocation (cheap reject, no token spend), response
+  validated before the artifact leaves the server (closed-enum `flags[]`,
+  `additionalProperties: false`).
+- README reframed agent-first: lede is now an MCP tool-call example, not a
+  CLI invocation. CLI moves to a "Human Operator" section below the fold.
+  `convergence` is defined inline as "0–1 agreement score your agent can
+  threshold on"; "BYO-key" is disambiguated as "bring your own LLM key —
+  Claude, OpenAI, Gemini, or local"; the word "primitive" is dropped (per
+  validation panel: read as lower-level infrastructure).
+
+### Deprecated
+
+- Implicit-decision panel calls (no `decision_being_informed` field).
+  Synthesized in v1.0.x with warning `W_DECISION_MISSING`; **removal in
+  v1.1.0** — at which point the call returns `MISSING_DECISION` and no panel
+  runs. Migrate during the v1.0.x window.
+
+### Removed
+
+- Nothing. v1.0.0 is additive on top of the v0.12 surface; the only break is
+  the new request-side requirement, which is gated by schema version.
+
+### Added (cycle work folded in from prior `[Unreleased]`)
 - (GH-289, sp-b8y47x) New bundled `students` persona pack — 15 personas spanning undergraduate (5), graduate (5), and non-traditional learners (5). Covers in-state public, HBCU, liberal-arts, large-public commuter, and international F-1 cohorts at the undergrad layer; PhD, professional master's (MBA, MPH), and MD-PhD at the graduate layer; and returning adult, online part-time, bootcamp career-changer, GI-bill veteran, and working-clinical-professional online-master's profiles for non-traditional. Demographics, funding sources, and pain points differ per persona to avoid the "rounding-error" failure mode flagged in the n=100 self-audit. Total shipped persona count rises 145 → 160 across 10 bundled packs.
 - (GH-297, sp-tzavk0) `synthpanel analyze <result> --output responses-csv` — emit one row per (panelist, question) response as a flat CSV for spreadsheet workflows (Google Sheets / Excel pivots, qualitative coding). Default columns: `persona_id, persona_name, question_id, question_text, response, response_type, cost`; opt-in extras via `--columns` (`model`, `variant_of`, `input_tokens`, `output_tokens`, `error`). Distinct from the existing `--output csv` analytical summary. Cells are CSV-injection-safe (formula triggers `=`, `+`, `-`, `@` and control chars get a `'` prefix per OWASP guidance), embedded newlines and commas round-trip cleanly through `csv.DictReader`, and rows use RFC 4180 CRLF terminators. Structured (dict/list) responses serialize as JSON.
 - (GH-308, sp-4y5.1) `synthpanel pack diff <pack-a> <pack-b>` — compare two persona packs side-by-side. Reports added/removed/unchanged/changed personas (matched by name), per-persona field-level diffs (age, occupation, background, traits, gender), and composition deltas (age range, age mean, role distribution, gender split when present). Accepts built-in pack names, user-saved pack IDs, or YAML file paths for either side; supports `--format json` for CI integration.

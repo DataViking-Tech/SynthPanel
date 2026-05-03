@@ -791,4 +791,210 @@ Each component must be validated against a live LLM API (Claude or OpenAI-compat
 
 ---
 
+## 12. v1.0.0 Frozen MCP Response Contract
+
+**v1.0.0 boundary — frozen at this point.** The schema below ships as
+`synthpanel/schemas/v1.0.0.json`, embedded in the package. `schema_version`
+is echoed in every response and every error. Breaking changes = major bump +
+parallel schema file (no in-place mutation). An append-only-schema CI linter
+gates this.
+
+The text below is the verbatim frozen-contract section. Reference docs:
+[`docs/response-contract.md`](docs/response-contract.md),
+[`docs/migration-v1.md`](docs/migration-v1.md).
+
+### 12.1 Request side — `decision_being_informed`
+
+A required string field that every panel-running tool call must declare.
+
+| Property | Value |
+|---|---|
+| Name | `decision_being_informed` |
+| Type | `string`, required |
+| Length | 12–280 chars (trimmed) |
+| Encoding | UTF-8 |
+| Constraints | Single line — newlines rejected |
+| Lives on | `run_panel`, `run_quick_poll`, `extend_panel` |
+| Does NOT live on | `run_prompt` (sub-decisional scratch work) |
+
+#### Validation behavior
+
+- Absent / empty / `<12` chars after trim → typed error `MISSING_DECISION`
+- `>280` chars → typed error `DECISION_TOO_LONG`. **No silent truncation.**
+
+#### Echo behavior
+
+Verbatim into `panel_verdict.json` at `meta.decision_being_informed`. Also
+stamped on every transcript row for audit join. No paraphrase, no
+summarization.
+
+#### Migration (grace period)
+
+One-minor grace period (v1.0.0 → v1.1.0):
+
+- v1.0.x: missing field logs warning `W_DECISION_MISSING` and synthesizes
+  `"unspecified-legacy-call"`.
+- v1.1.0: hard-rejects missing field (CHANGELOG entry required).
+
+#### Rationale
+
+- *Required:* a panel without a declared decision is a fishing expedition.
+- *12–280:* below 12 is a label, not a decision; 280 fits a tweet, forces
+  clarity, survives logs.
+- *Echoed:* the verdict is unreadable six months later without the question
+  it was answering.
+
+### 12.2 Response artifact — `panel_verdict.json`
+
+Returned alongside every panel run.
+
+```json
+{
+  "headline": "string ≤ 140 chars",
+  "convergence": 0.74,
+  "dissent_count": 3,
+  "top_3_verbatims": [
+    { "persona_id": "string", "quote": "string" },
+    { "persona_id": "string", "quote": "string" },
+    { "persona_id": "string", "quote": "string" }
+  ],
+  "flags": [
+    { "code": "low_convergence", "severity": "warn" }
+  ],
+  "extension": [],
+  "full_transcript_uri": "string",
+  "meta": {
+    "decision_being_informed": "verbatim echo of request field"
+  },
+  "schema_version": "1.0.0"
+}
+```
+
+#### Field rules
+
+- `headline`: ≤ 140 chars; model-generated per panel.
+- `convergence`: numeric, range 0.0–1.0 inclusive. Documented inline as "0–1
+  agreement score your agent can threshold on" (per panel-validated lede).
+- `dissent_count`: integer ≥ 0.
+- `top_3_verbatims`: exactly 0–3 entries; each entry is a
+  `{persona_id, quote}` object. Selection logic deferred to v1.1; v1.0 ships
+  with model-driven selection plus deterministic tie-breaking on
+  `persona_id`.
+- `flags`: closed-enum array. See §12.3.
+- `extension`: open array of `{code, message, severity}` objects.
+  Observability only — agents must NOT branch on `extension[]`.
+- `full_transcript_uri`: pointer to the saved JSONL transcript.
+
+#### Markdown card rendering
+
+`headline` + `convergence` + `flags` also render as a markdown card for any
+human reader who opens the artifact. The card is the **hero artifact** for
+launch. One schema, two reading depths: the agent skims the JSON, the human
+descends into the card and verbatims.
+
+### 12.3 `flags[]` closed enum
+
+Closed enum on the response artifact. **`extension[]` is the escape hatch**
+for non-enum signals — agents branch only on `flags[]`.
+
+| Code | Meaning | Trigger |
+|---|---|---|
+| `low_convergence` | Inter-persona variance exceeds tolerance | Variance > threshold on primary measure |
+| `demographic_skew` | Realized panel drifted from requested quotas | Any quota cell off > 15% post-synthesis |
+| `small_n` | Sample too thin for the decision class | n < floor mapped from `decision_being_informed` |
+| `persona_collision` | Duplicate/near-duplicate personas inflated agreement | Cosine similarity > 0.92 across ≥ 2 personas |
+| `out_of_distribution` | Stimulus outside training/persona coverage | Retrieval confidence below floor |
+| `refusal_or_degenerate` | One or more personas refused or returned empty/boilerplate | Parser-level detection |
+| `schema_drift` | Degraded artifact returned after 3-strike retry exhaustion | See §12.5 (drift behavior) |
+
+#### Severity
+
+Each flag carries `severity: "info" | "warn" | "block"`. Multiple flags can
+stack (set semantics). Highest severity wins for gating decisions.
+
+#### Trigger ownership
+
+The **panel orchestrator** raises all flags post-synthesis, pre-envelope.
+Synthesizer and structured-output engine surface signals; orchestrator
+decides.
+
+### 12.4 Typed error envelope
+
+```json
+{
+  "error_code": "MISSING_DECISION",
+  "message": "decision_being_informed is required for run_panel",
+  "field_path": "decision_being_informed",
+  "schema_version": "1.0.0",
+  "retry_safe": false
+}
+```
+
+#### v1 error codes
+
+| Code | When | `retry_safe` |
+|---|---|---|
+| `MISSING_DECISION` | Required field absent or `<12` chars after trim | `false` |
+| `DECISION_TOO_LONG` | `>280` chars | `false` |
+| `INVALID_TOOL_ARG` | Other request validation failure | `false` |
+| `INVALID_FLAG` | Response carries a flag not in the closed enum | `false` |
+| `SCHEMA_DRIFT` | Degraded artifact itself fails re-validation (catastrophic) | `true` (pre-exhaustion) |
+| `MODEL_TIMEOUT` | Provider timeout | `true` |
+| `INTERNAL_ERROR` | Uncategorized server-side failure | `false` |
+
+`retry_safe = true` only for `MODEL_TIMEOUT` and `SCHEMA_DRIFT`
+pre-exhaustion.
+
+### 12.5 Drift behavior (3-strike retry exhaustion)
+
+When the structured-output engine's 3-strike retry exhausts on haiku
+malformed output, the server returns the **degraded artifact** with
+`flags: [{ "code": "schema_drift", "severity": "warn" }]` — **not** a typed
+error. Rationale: the panel ran, the user gets partial signal, the flag is
+the contract for "trust this less."
+
+Typed `SCHEMA_DRIFT` error fires only if the degraded artifact itself fails
+re-validation (catastrophic case).
+
+#### Default behavior
+
+`SYNTHPANEL_DRIFT_DEGRADE` env flag: **off by default in v1.0.0** (typed
+error on exhaustion), **on by default in v1.1.0** (degraded artifact with
+flag). Documented in `docs/mcp.md` host-integration section. Migration note
+in v1.1 CHANGELOG.
+
+### 12.6 Validation boundary
+
+Validation runs at **both sides** of structured-output:
+
+- Request side: validated **before** model invocation (cheap reject, no
+  token spend). Enforces `decision_being_informed` constraints.
+- Response side: validated **after** model returns, **before** artifact
+  leaves the server. Enforces full response contract including `flags[]`
+  closed enum.
+
+Justification: fail fast, fail closed.
+
+#### Schema asset
+
+Single file: `synthpanel/schemas/v1.0.0.json`, embedded in the package. No
+remote URL — offline-safe, deterministic, no DNS dependency. Published URL
+is a v2 problem.
+
+### 12.7 Out of scope for v1.0.0
+
+Explicitly deferred (these do not block v1.0.0):
+
+- User-facing real-data anchoring / calibration to caller's own data
+- Human-facing dashboard
+- Pack registry (network-effect platform play)
+- MCP host compatibility matrix as a published artifact
+- Persona embedding tuning
+- Convergence-score parity check across CLI-sonnet vs MCP-haiku (soft gate;
+  document deviation)
+- Performance baseline (p50/p95 envelope latency) — capture as reference,
+  not gate
+
+---
+
 *End of specification.*

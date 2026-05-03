@@ -73,16 +73,73 @@ synthpanel install-skills --target .claude
 
 The command is idempotent — running it again overwrites existing files with the current bundled versions.
 
+## Frozen v1.0.0 Contract
+
+Every panel-running tool call (`run_panel`, `run_quick_poll`, `extend_panel`)
+**requires** a `decision_being_informed` string field. `run_prompt` does not.
+
+- 12–280 chars, single line, UTF-8.
+- Echoed verbatim into `panel_verdict.meta.decision_being_informed`.
+- Missing or `<12` chars → typed error `MISSING_DECISION`. `>280` → `DECISION_TOO_LONG`.
+  No silent truncation.
+
+The response envelope (`panel_verdict.json`) is closed-shape with
+`schema_version: "1.0.0"` and a closed `flags[]` enum. Full reference:
+[docs/response-contract.md](response-contract.md). Migration guide:
+[docs/migration-v1.md](migration-v1.md).
+
 ## Tools (12)
 
 ### Research Tools
 
 | Tool | Description |
 |------|-------------|
-| `run_prompt` | Send a single prompt to an LLM. No personas required. The simplest tool — ask a quick research question. |
-| `run_panel` | Run a full synthetic focus group panel. Each persona answers all questions independently in parallel, followed by synthesis. Accepts inline `questions`, an inline `instrument` dict (v1/v2/v3), or an `instrument_pack` name. |
-| `run_quick_poll` | Quick single-question poll across personas. A simplified `run_panel` for one question with synthesis. |
-| `extend_panel` | Append a single ad-hoc round to a saved panel result. Reuses each panelist's saved session for conversational context. **Not** a re-entry into the v3 DAG — use for human-in-the-loop follow-ups. |
+| `run_prompt` | Send a single prompt to an LLM. No personas required. The simplest tool — ask a quick research question. **Does not require `decision_being_informed`.** |
+| `run_panel` | Run a full synthetic focus group panel. Each persona answers all questions independently in parallel, followed by synthesis. Accepts inline `questions`, an inline `instrument` dict (v1/v2/v3), or an `instrument_pack` name. **Requires `decision_being_informed`.** |
+| `run_quick_poll` | Quick single-question poll across personas. A simplified `run_panel` for one question with synthesis. **Requires `decision_being_informed`.** |
+| `extend_panel` | Append a single ad-hoc round to a saved panel result. Reuses each panelist's saved session for conversational context. **Not** a re-entry into the v3 DAG — use for human-in-the-loop follow-ups. **Requires `decision_being_informed`.** |
+
+### Tool-call examples
+
+```jsonc
+// run_panel
+{
+  "tool": "run_panel",
+  "arguments": {
+    "personas_pack": "general-consumer",
+    "instrument_pack": "pricing-discovery",
+    "decision_being_informed": "choosing launch tier price"
+  }
+}
+
+// run_quick_poll
+{
+  "tool": "run_quick_poll",
+  "arguments": {
+    "question": "Which name feels most premium: Core, Plus, or Pro?",
+    "personas_pack": "general-consumer",
+    "decision_being_informed": "naming the paid tier"
+  }
+}
+
+// extend_panel
+{
+  "tool": "extend_panel",
+  "arguments": {
+    "result_id": "result-20260503-abc123",
+    "questions": ["What would you pay for this if it shipped tomorrow?"],
+    "decision_being_informed": "validating the indie pricing ceiling"
+  }
+}
+
+// run_prompt — no decision_being_informed
+{
+  "tool": "run_prompt",
+  "arguments": {
+    "prompt": "Summarize the Q3 retention drop in two sentences."
+  }
+}
+```
 
 ### Persona Pack Management
 
@@ -293,6 +350,53 @@ inside a sampling-capable client for reproducibility.
 The remaining tools (`run_panel`, `extend_panel`, pack/result
 management) always use BYOK — heavier workflows benefit from direct
 provider access and structured outputs.
+
+## Host Integration Flags
+
+### `SYNTHPANEL_DRIFT_DEGRADE`
+
+Controls what the server returns when the structured-output engine's 3-strike
+retry budget exhausts (see the `sp-d1x0` retry policy).
+
+| Setting | v1.0.0 default | v1.1.0 default | Behavior on exhaustion |
+|---|---|---|---|
+| unset / `0` | ✓ | — | Typed `SCHEMA_DRIFT` error envelope, `retry_safe: true` |
+| `1` | — | ✓ | Degraded `panel_verdict.json` with `flags: [{ "code": "schema_drift", "severity": "warn" }]` |
+
+**Semantics.** The `1` setting is the v1.1 default rolled out as an opt-in
+beta in v1.0. The panel ran; the partial signal is returned with a flag the
+agent can branch on. The off-by-default setting in v1.0 returns a typed error
+instead, leaving the recovery decision to the caller.
+
+**Rollback.** This is a runtime env flag — change it and restart the
+server. No persisted state. To roll back from `1` to off, unset the env var
+on the next launch.
+
+**v1.1.0 migration.** The default flips to on. If your agent code relies on
+seeing `SCHEMA_DRIFT` errors today, switch to checking
+`flags[].code == "schema_drift"` before the v1.1 cutover. The CHANGELOG entry
+for v1.1.0 will mark the flip.
+
+Set in your MCP `env` block alongside provider keys:
+
+```json
+{
+  "mcpServers": {
+    "synth_panel": {
+      "command": "synthpanel",
+      "args": ["mcp-serve"],
+      "env": {
+        "ANTHROPIC_API_KEY": "sk-...",
+        "SYNTHPANEL_DRIFT_DEGRADE": "1"
+      }
+    }
+  }
+}
+```
+
+See [docs/response-contract.md](response-contract.md) for the full envelope
+shape and [docs/migration-v1.md](migration-v1.md) for the grace-window state
+diagram.
 
 ## Data Storage
 
