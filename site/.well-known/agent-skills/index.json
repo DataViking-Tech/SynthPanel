@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "skills": [
+    {
+      "name": "focus-group",
+      "type": "skill-md",
+      "description": "Run a synthetic focus group — define personas, craft questions, and collect structured qualitative feedback from AI panelists.",
+      "url": "/.well-known/agent-skills/focus-group/SKILL.md",
+      "digest": "sha256:1ee1f2fd06d33f65096c2702fc1aab0821f13a5a8e0df8429fddaf18959c7e45"
+    },
+    {
+      "name": "name-test",
+      "type": "skill-md",
+      "description": "Quickly test 1-3 candidate product or feature names with a synthetic panel — surfaces confusion, pronounceability, and memorability concerns in one pass.",
+      "url": "/.well-known/agent-skills/name-test/SKILL.md",
+      "digest": "sha256:71ad5806fe3dc051b5b4d45d4a729a62b15cb63ee4872b824fedc200816c5c44"
+    },
+    {
+      "name": "concept-test",
+      "type": "skill-md",
+      "description": "Validate a product concept or value proposition with a target audience — surfaces whether the problem is real, whether the solution lands, and what would prevent adoption.",
+      "url": "/.well-known/agent-skills/concept-test/SKILL.md",
+      "digest": "sha256:7dc12d79243d92fda1a76c88ec76450b3b6f5008988be3092887df544500d7cf"
+    },
+    {
+      "name": "survey-prescreen",
+      "type": "skill-md",
+      "description": "Pre-screen a survey instrument with synthetic respondents before sending to real participants — catches ambiguous wording, leading questions, and dead-end branches cheaply.",
+      "url": "/.well-known/agent-skills/survey-prescreen/SKILL.md",
+      "digest": "sha256:a3c083d20b7af7fdb2071680b1124904775fdba8a06b3e8da1d80a2cd417abe8"
+    },
+    {
+      "name": "pricing-probe",
+      "type": "skill-md",
+      "description": "Probe pricing sensitivity with a target audience using the bundled 'pricing-discovery' branching instrument — surfaces pain, price anchoring, or competitor alternatives based on what the panel volunteers first.",
+      "url": "/.well-known/agent-skills/pricing-probe/SKILL.md",
+      "digest": "sha256:6f9b34f9b1907cc9bc69673a12746bc84dc376bc085c2a337a1b36f3dda37433"
+    }
+  ]
+}
