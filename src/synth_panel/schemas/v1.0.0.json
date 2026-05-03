@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://synthpanel.dev/schemas/v1.0.0.json",
+  "title": "SynthPanel MCP Contract v1.0.0",
+  "schema_version": "1.0.0",
+  "description": "Frozen MCP request/response contract. Append-only: new contract versions ship as parallel files (v1.1.0.json, v2.0.0.json), never as in-place edits to this file.",
+  "flags_enum": {
+    "type": "string",
+    "enum": [
+      "low_convergence",
+      "demographic_skew",
+      "small_n",
+      "persona_collision",
+      "out_of_distribution",
+      "refusal_or_degenerate",
+      "schema_drift"
+    ]
+  },
+  "severity_enum": {
+    "type": "string",
+    "enum": ["info", "warn", "block"]
+  },
+  "error_codes_enum": {
+    "type": "string",
+    "enum": [
+      "MISSING_DECISION",
+      "DECISION_TOO_LONG",
+      "INVALID_TOOL_ARG",
+      "INVALID_FLAG",
+      "SCHEMA_DRIFT",
+      "MODEL_TIMEOUT",
+      "INTERNAL_ERROR"
+    ]
+  },
+  "request_fragments": {
+    "decision_being_informed": {
+      "type": "string",
+      "minLength": 12,
+      "maxLength": 280,
+      "pattern": "^[^\\n\\r]+$",
+      "description": "Required on run_panel, run_quick_poll, extend_panel. Not used on run_prompt. Length is enforced post-trim by the request validator (AC-2/AC-3); newlines are rejected."
+    }
+  },
+  "tools": {
+    "run_panel": {
+      "type": "object",
+      "required": ["decision_being_informed"],
+      "properties": {
+        "decision_being_informed": {
+          "$ref": "#/request_fragments/decision_being_informed"
+        }
+      }
+    },
+    "run_quick_poll": {
+      "type": "object",
+      "required": ["decision_being_informed"],
+      "properties": {
+        "decision_being_informed": {
+          "$ref": "#/request_fragments/decision_being_informed"
+        }
+      }
+    },
+    "extend_panel": {
+      "type": "object",
+      "required": ["decision_being_informed"],
+      "properties": {
+        "decision_being_informed": {
+          "$ref": "#/request_fragments/decision_being_informed"
+        }
+      }
+    },
+    "run_prompt": {
+      "type": "object",
+      "not": { "required": ["decision_being_informed"] }
+    }
+  },
+  "panel_verdict": {
+    "type": "object",
+    "required": [
+      "headline",
+      "convergence",
+      "dissent_count",
+      "top_3_verbatims",
+      "flags",
+      "extension",
+      "full_transcript_uri",
+      "meta",
+      "schema_version"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "headline": { "type": "string", "maxLength": 140 },
+      "convergence": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+      "dissent_count": { "type": "integer", "minimum": 0 },
+      "top_3_verbatims": {
+        "type": "array",
+        "minItems": 0,
+        "maxItems": 3,
+        "items": {
+          "type": "object",
+          "required": ["persona_id", "quote"],
+          "additionalProperties": false,
+          "properties": {
+            "persona_id": { "type": "string" },
+            "quote": { "type": "string" }
+          }
+        }
+      },
+      "flags": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["code", "severity"],
+          "additionalProperties": false,
+          "properties": {
+            "code": { "$ref": "#/flags_enum" },
+            "severity": { "$ref": "#/severity_enum" }
+          }
+        }
+      },
+      "extension": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["code", "message", "severity"],
+          "additionalProperties": false,
+          "properties": {
+            "code": { "type": "string" },
+            "message": { "type": "string" },
+            "severity": { "$ref": "#/severity_enum" }
+          }
+        }
+      },
+      "full_transcript_uri": { "type": "string" },
+      "meta": {
+        "type": "object",
+        "required": ["decision_being_informed"],
+        "properties": {
+          "decision_being_informed": {
+            "$ref": "#/request_fragments/decision_being_informed"
+          }
+        }
+      },
+      "schema_version": { "type": "string", "const": "1.0.0" }
+    }
+  },
+  "error_envelope": {
+    "type": "object",
+    "required": ["error_code", "message", "schema_version", "retry_safe"],
+    "additionalProperties": false,
+    "properties": {
+      "error_code": { "$ref": "#/error_codes_enum" },
+      "message": { "type": "string" },
+      "field_path": { "type": "string" },
+      "schema_version": { "type": "string", "const": "1.0.0" },
+      "retry_safe": { "type": "boolean" }
+    }
+  }
+}

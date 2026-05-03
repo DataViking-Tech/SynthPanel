@@ -81,6 +81,7 @@ where = ["src"]
 [tool.setuptools.package-data]
 "synth_panel.packs" = ["*.yaml"]
 "synth_panel.packs.instruments" = ["*.yaml"]
+"synth_panel.schemas" = ["*.json"]
 "synth_panel.agent_assets" = [
     "commands/*.md",
     "skills/concept-test/*.md",
