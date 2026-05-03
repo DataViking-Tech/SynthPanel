@@ -6,11 +6,15 @@ Operational runbook for the static landing site served at <https://synthpanel.de
 
 - Files live in [`site/`](../site/) at the repo root.
 - Pure static HTML; Tailwind is loaded from `cdn.tailwindcss.com`. **No build
-  step is required.**
+  step is required for HTML.**
 - `site/_headers` ships the security header set (CSP, HSTS, frame deny, etc.)
   via the `/*` rule, plus RFC 8288 `Link` headers for agent discovery
   (`api-catalog`, `service-doc`) on the homepage `/` rule. Cloudflare Pages
   applies these automatically.
+- `site/_worker.js` is a Pages **Advanced Mode** worker that implements
+  `Accept: text/markdown` content negotiation (see "Markdown for Agents"
+  below). Markdown renditions are pre-built from each HTML page by
+  `scripts/render_site_markdown.py` and committed alongside the source.
 
 ## Cloudflare Pages project (one-time setup)
 
@@ -62,6 +66,58 @@ When you change `site/index.html`:
   (sp-p3g) made the cross-link an explicit acceptance criterion.
 - If you bump Tailwind to the production build, drop the
   `cdn.tailwindcss.com` entry from `site/_headers` CSP `script-src`.
+
+When you change **any** `site/**/*.html`:
+
+- Re-run `python scripts/render_site_markdown.py` to regenerate the
+  agent-facing `.md` rendition. CI's `test_committed_markdown_matches_fresh_render`
+  fails the build if you forget.
+
+## Markdown for Agents (content negotiation)
+
+The site honors `Accept: text/markdown` per Cloudflare's
+[Markdown for Agents reference](https://developers.cloudflare.com/fundamentals/reference/markdown-for-agents/)
+and the
+[`agent-skills/markdown-negotiation`](https://isitagentready.com/.well-known/agent-skills/markdown-negotiation/SKILL.md)
+skill. AI agents that prefer structured markdown over rendered HTML
+get a clean, token-efficient rendition; browsers continue to receive
+HTML untouched.
+
+**Verification:**
+
+```bash
+# HTML by default
+curl -sI https://synthpanel.dev/ | grep -i content-type
+#   content-type: text/html; charset=utf-8
+
+# Markdown when explicitly requested
+curl -sI -H 'Accept: text/markdown' https://synthpanel.dev/
+#   HTTP/2 200
+#   content-type: text/markdown; charset=utf-8
+#   vary: Accept
+#   x-markdown-tokens: 1827
+
+# 406 when no rendition exists for the path
+curl -sI -H 'Accept: text/markdown' https://synthpanel.dev/og-image.png
+#   HTTP/2 406
+```
+
+**Implementation:**
+
+- `site/_worker.js` is the Pages worker. It runs first for every
+  request, and only intercepts when the `Accept` header explicitly
+  prefers `text/markdown`. All other traffic falls through to static
+  asset serving (HTML, images, sitemap, robots.txt).
+- Markdown renditions live next to the HTML they mirror —
+  `site/index.html` ⇄ `site/index.md`,
+  `site/mcp/index.html` ⇄ `site/mcp/index.md`, etc.
+- The renditions are produced by `scripts/render_site_markdown.py`, a
+  stdlib-only Python script that walks `site/**/*.html` and emits a
+  structured markdown rendition (headings, lists, code blocks, tables,
+  links). The script is idempotent; rerun whenever HTML changes.
+- The `x-markdown-tokens` response header is an approximate token
+  count (chars / 4) for budgeting purposes; agents that need exact
+  numbers should run their own tokenizer over the body.
 
 ## Why a separate site (vs. README only)
 
