@@ -955,6 +955,7 @@ def _build_run_config_fingerprint(
     response_schema: dict[str, Any] | None,
     extract_schema: dict[str, Any] | None,
     template_vars: dict[str, str] | None,
+    seed: int | None = None,
 ) -> dict[str, Any]:
     """Build a stable-key config dict whose hash detects resume drift.
 
@@ -972,6 +973,7 @@ def _build_run_config_fingerprint(
         "persona_models": dict(persona_models) if persona_models else None,
         "temperature": temperature,
         "top_p": top_p,
+        "seed": seed,
         "response_schema": response_schema,
         "extract_schema": extract_schema,
         "template_vars": dict(template_vars) if template_vars else None,
@@ -1293,6 +1295,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     # Generation parameters
     temperature: float | None = getattr(args, "temperature", None)
     top_p: float | None = getattr(args, "top_p", None)
+    seed: int | None = getattr(args, "seed", None)
 
     # ── sp-blend: multi-model ensemble ───────────────────────────────────
     # Parse --models spec and build per-persona model assignments.
@@ -1476,6 +1479,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             extract_schema=extract_schema,
             temperature=temperature,
             top_p=top_p,
+            seed=seed,
         )
         timer.stop()
 
@@ -1748,6 +1752,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             persona_models=persona_models,
             temperature=temperature,
             top_p=top_p,
+            seed=seed,
             response_schema=response_schema,
             extract_schema=extract_schema,
             template_vars=template_vars,
@@ -1854,6 +1859,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             extract_schema=extract_schema,
             temperature=temperature,
             top_p=top_p,
+            seed=seed,
         )
         # Build weights dict from the model spec
         blend_weights = {m: w for m, w in model_spec}
@@ -1902,6 +1908,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 extract_schema=extract_schema,
                 temperature=temperature,
                 top_p=top_p,
+                seed=seed,
                 persona_models=persona_models,
                 max_workers=max_concurrent,
                 convergence_tracker=convergence_tracker,
@@ -2126,6 +2133,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                         panelist_cost=panelist_cost_est,
                         temperature=effective_synth_temp,
                         top_p=top_p,
+                        seed=seed,
                         personas=personas,
                         auto_escalate=getattr(args, "synthesis_auto_escalate", False),
                     )
@@ -2140,6 +2148,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                         panelist_cost=panelist_cost_est,
                         temperature=effective_synth_temp,
                         top_p=top_p,
+                        seed=seed,
                     )
             except MapChunkOverflowError as exc:
                 # sp-exu6: per-map chunk overflow — distinct from the
@@ -4759,6 +4768,9 @@ def _build_params_metadata(
         params["temperature"] = temperature
     if top_p is not None:
         params["top_p"] = top_p
+    seed = getattr(args, "seed", None)
+    if seed is not None:
+        params["seed"] = seed
     synthesis_temperature = getattr(args, "synthesis_temperature", None)
     if synthesis_temperature is not None:
         params["synthesis_temperature"] = synthesis_temperature

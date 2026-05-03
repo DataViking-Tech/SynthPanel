@@ -8,6 +8,15 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 Work in progress for the next release after v1.0.0 lands.
 
+### Added
+
+- `--seed N` flag on `panel run` (sy-cxp) for reproducible sampling.
+  Forwarded to providers that support it (OpenAI, Gemini, xAI, OpenRouter)
+  and recorded in `metadata.parameters.seed` plus the resume fingerprint.
+  Anthropic and other non-supporting providers log a single warning per
+  run and proceed without determinism. See `docs/reproducibility.md` for
+  the boundary between `--seed` (new runs) and `--resume` (replay).
+
 ### Documentation
 
 - `docs/oauth-discovery.md` — records the AR-5 (sy-iaf) determination that

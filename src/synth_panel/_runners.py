@@ -634,6 +634,7 @@ def run_panel_sync(
     synthesis_prompt: str | None = None,
     temperature: float | None = None,
     top_p: float | None = None,
+    seed: int | None = None,
     persona_models: dict[str, str] | None = None,
     extract_schema: dict[str, Any] | None = None,
     synthesis_temperature: float | None = None,
@@ -678,6 +679,7 @@ def run_panel_sync(
         response_schema=response_schema,
         temperature=temperature,
         top_p=top_p,
+        seed=seed,
         persona_models=persona_models,
         extract_schema=extract_schema,
     )
@@ -742,6 +744,7 @@ def run_panel_sync(
                     custom_prompt=synthesis_prompt,
                     panelist_cost=panelist_cost,
                     temperature=synthesis_temperature,
+                    seed=seed,
                 )
                 synthesis_dict = synthesis_result.to_dict()
             except Exception as exc:
@@ -783,6 +786,7 @@ def run_multi_round_sync(
     synthesis_prompt: str | None,
     temperature: float | None = None,
     top_p: float | None = None,
+    seed: int | None = None,
     persona_models: dict[str, str] | None = None,
     extract_schema: dict[str, Any] | None = None,
     synthesis_temperature: float | None = None,
@@ -804,6 +808,7 @@ def run_multi_round_sync(
             panelist_model=model,
             custom_prompt=synthesis_prompt,
             temperature=synthesis_temperature,
+            seed=seed,
         )
 
     final_fn = _round_synth if synthesis else None
@@ -819,6 +824,7 @@ def run_multi_round_sync(
         response_schema=response_schema,
         temperature=temperature,
         top_p=top_p,
+        seed=seed,
         persona_models=persona_models,
         extract_schema=extract_schema,
     )

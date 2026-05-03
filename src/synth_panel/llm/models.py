@@ -179,6 +179,7 @@ class CompletionRequest:
     stream: bool = False
     temperature: float | None = None
     top_p: float | None = None
+    seed: int | None = None
 
 
 # ---------------------------------------------------------------------------

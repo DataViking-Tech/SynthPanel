@@ -30,6 +30,7 @@ OPENROUTER_CONFIG = ProviderConfig(
     default_base_url="https://openrouter.ai/api",
     model_prefixes=("openrouter/",),
     name="OpenRouter",
+    supports_seed=True,
 )
 
 
@@ -131,6 +132,7 @@ class OpenRouterProvider(LLMProvider):
                 stream=request.stream,
                 temperature=request.temperature,
                 top_p=request.top_p,
+                seed=request.seed,
             )
         body = build_openai_body(request)
         # Ask OpenRouter to always return the detailed usage block (including
@@ -177,6 +179,7 @@ class OpenRouterProvider(LLMProvider):
                 stream=True,
                 temperature=request.temperature,
                 top_p=request.top_p,
+                seed=request.seed,
             )
         body = build_openai_body(request, stream=True)
         # Mirror send(): ensure OpenRouter emits usage details in the final

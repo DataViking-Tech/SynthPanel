@@ -473,6 +473,7 @@ def run_prompt(
     model: str | None = None,
     temperature: float | None = None,
     top_p: float | None = None,
+    seed: int | None = None,
 ) -> PromptResult:
     """Send a single prompt to an LLM and return its response.
 
@@ -509,6 +510,7 @@ def run_prompt(
         messages=[InputMessage(role="user", content=[TextBlock(text=prompt)])],
         temperature=temperature,
         top_p=top_p,
+        seed=seed,
     )
     response = client.send(request)
     usage = CostTokenUsage(
@@ -540,6 +542,7 @@ def quick_poll(
     synthesis_prompt: str | None = None,
     temperature: float | None = None,
     top_p: float | None = None,
+    seed: int | None = None,
 ) -> PollResult:
     """Ask one question of a panel and get synthesized findings back.
 
@@ -604,6 +607,7 @@ def quick_poll(
         synthesis_prompt=synthesis_prompt,
         temperature=temperature,
         top_p=top_p,
+        seed=seed,
     )
 
     # sp-atvc: re-price per actual model when panelists ran across
@@ -687,6 +691,7 @@ def run_panel(
     synthesis_prompt: str | None = None,
     temperature: float | None = None,
     top_p: float | None = None,
+    seed: int | None = None,
     persona_models: dict[str, str] | None = None,
     extract_schema: str | dict[str, Any] | None = None,
     synthesis_temperature: float | None = None,
@@ -776,6 +781,7 @@ def run_panel(
             synthesis_prompt=synthesis_prompt,
             temperature=temperature,
             top_p=top_p,
+            seed=seed,
             persona_models=persona_models,
             extract_schema=resolved_extract_schema,
             synthesis_temperature=synthesis_temperature,
@@ -877,6 +883,7 @@ def run_panel(
         synthesis_prompt=synthesis_prompt,
         temperature=temperature,
         top_p=top_p,
+        seed=seed,
         persona_models=persona_models,
         extract_schema=resolved_extract_schema,
         synthesis_temperature=synthesis_temperature,

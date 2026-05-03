@@ -184,6 +184,7 @@ def ensemble_run(
     extract_schema: dict[str, Any] | None = None,
     temperature: float | None = None,
     top_p: float | None = None,
+    seed: int | None = None,
 ) -> EnsembleResult:
     """Run a panel once per model and aggregate results.
 
@@ -235,6 +236,7 @@ def ensemble_run(
             extract_schema=extract_schema,
             temperature=temperature,
             top_p=top_p,
+            seed=seed,
         )
 
         # Aggregate usage for this model

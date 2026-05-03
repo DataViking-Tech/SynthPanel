@@ -135,6 +135,8 @@ def build_openai_body(
         body["temperature"] = request.temperature
     if request.top_p is not None:
         body["top_p"] = request.top_p
+    if request.seed is not None:
+        body["seed"] = request.seed
 
     return body
 
