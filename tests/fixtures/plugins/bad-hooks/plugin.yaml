@@ -1,0 +1,7 @@
+name: bad-hooks-plugin
+version: 0.1.0
+description: Declares an unknown hook name and a malformed hook value.
+hooks:
+  pre_tool_use: "echo not-a-list"
+  on_persona_load:
+    - "echo wrong-name"

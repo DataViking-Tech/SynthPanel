@@ -21,6 +21,7 @@ logout
 mcp-serve
 pack
 panel
+plugin
 prompt
 report
 runs

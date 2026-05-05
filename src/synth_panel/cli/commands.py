@@ -13,7 +13,10 @@ import re
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from synth_panel.plugins.lint import LintReport
 
 import yaml
 
@@ -5840,3 +5843,97 @@ def _print_text_diff(q: TextQuestionDiff) -> None:
         print(f"    New in B: {', '.join(q.new_themes)}")
     if q.dropped_themes:
         print(f"    Gone in B: {', '.join(q.dropped_themes)}")
+
+
+# ---------------------------------------------------------------------------
+# plugin lint (sy-0rr)
+# ---------------------------------------------------------------------------
+
+
+def handle_plugin_lint(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Lint one plugin directory or every installed plugin (--all)."""
+    from synth_panel.plugins.lint import lint_plugin
+
+    strict = bool(getattr(args, "strict", False))
+    lint_all = bool(getattr(args, "lint_all", False))
+    path = getattr(args, "path", None)
+
+    if lint_all and path:
+        print(
+            "Error: pass either a plugin path or --all, not both.",
+            file=sys.stderr,
+        )
+        return 1
+    if not lint_all and not path:
+        print(
+            "Error: provide a plugin path or pass --all.",
+            file=sys.stderr,
+        )
+        return 1
+
+    targets: list[Path] = []
+    if lint_all:
+        config_dir = Path(getattr(args, "plugin_config_dir", None) or Path.home() / ".synthpanel").expanduser()
+        plugins_dir = config_dir / "plugins"
+        if not plugins_dir.exists():
+            if fmt is OutputFormat.TEXT:
+                print(f"No plugins installed under {plugins_dir}.")
+            else:
+                emit(
+                    fmt,
+                    message="no plugins installed",
+                    extra={"plugins_dir": str(plugins_dir), "reports": []},
+                )
+            return 0
+        targets = sorted(p for p in plugins_dir.iterdir() if p.is_dir())
+        if not targets:
+            if fmt is OutputFormat.TEXT:
+                print(f"No plugins installed under {plugins_dir}.")
+            else:
+                emit(
+                    fmt,
+                    message="no plugins installed",
+                    extra={"plugins_dir": str(plugins_dir), "reports": []},
+                )
+            return 0
+    else:
+        targets = [Path(path)]
+
+    reports: list[LintReport] = [lint_plugin(t) for t in targets]
+    failed = [r for r in reports if not r.passed(strict=strict)]
+
+    if fmt is OutputFormat.TEXT:
+        for report in reports:
+            _print_lint_report(report, strict=strict)
+        _print_lint_summary(reports, strict=strict)
+    else:
+        payload = {
+            "strict": strict,
+            "reports": [r.to_dict() for r in reports],
+            "failed": len(failed),
+            "passed": len(reports) - len(failed),
+        }
+        message = "plugin lint passed" if not failed else "plugin lint failed"
+        emit(fmt, message=message, extra=payload)
+
+    return 1 if failed else 0
+
+
+def _print_lint_report(report: LintReport, *, strict: bool) -> None:
+    label = report.plugin_name or report.plugin_path
+    status = "ok" if report.passed(strict=strict) else "fail"
+    print(f"--- {label} [{status}]")
+    if not report.issues:
+        print("  ✓ no issues")
+        return
+    for issue in report.issues:
+        print(f"  {issue.format()}")
+
+
+def _print_lint_summary(reports: list[LintReport], *, strict: bool) -> None:
+    failed = sum(1 for r in reports if not r.passed(strict=strict))
+    if failed == 0:
+        suffix = "" if len(reports) == 1 else "s"
+        print(f"\n{len(reports)} plugin{suffix} lint OK.")
+    else:
+        print(f"\n{failed} plugin lint failed.")

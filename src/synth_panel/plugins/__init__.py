@@ -8,6 +8,7 @@ and lifecycle commands (init/shutdown).
 from __future__ import annotations
 
 from synth_panel.plugins.hooks import ShellHookRunner
+from synth_panel.plugins.lint import LintIssue, LintReport, lint_plugin
 from synth_panel.plugins.manager import PluginManager
 from synth_panel.plugins.manifest import (
     PluginHooks,
@@ -19,6 +20,8 @@ from synth_panel.plugins.manifest import (
 from synth_panel.plugins.registry import PluginRegistry
 
 __all__ = [
+    "LintIssue",
+    "LintReport",
     "PluginHooks",
     "PluginKind",
     "PluginLifecycle",
@@ -27,4 +30,5 @@ __all__ = [
     "PluginMetadata",
     "PluginRegistry",
     "ShellHookRunner",
+    "lint_plugin",
 ]

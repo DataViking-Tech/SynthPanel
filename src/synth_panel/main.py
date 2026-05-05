@@ -35,6 +35,7 @@ from synth_panel.cli.commands import (
     handle_panel_inspect,
     handle_panel_run,
     handle_panel_synthesize,
+    handle_plugin_lint,
     handle_prompt,
     handle_report,
     handle_runs_diff,
@@ -132,6 +133,13 @@ def main(argv: list[str] | None = None) -> int:
         return handle_report(args, output_format)
     elif args.command == "mcp-serve":
         return handle_mcp_serve(args, output_format)
+    elif args.command == "plugin":
+        sub = getattr(args, "plugin_command", None)
+        if sub == "lint":
+            return handle_plugin_lint(args, output_format)
+        else:
+            parser.parse_args(["plugin", "--help"])
+            return 1
     elif args.command == "install-skills":
         return handle_install_skills(args, output_format)
     elif args.command == "login":

@@ -1,0 +1,2 @@
+name: bad-manifest-plugin
+description: Missing the required 'version' field.

@@ -1,0 +1,22 @@
+name: good-plugin
+version: 1.0.0
+description: A clean plugin manifest used by the lint test suite.
+default_enabled: true
+permissions:
+  - read
+  - write
+hooks:
+  pre_tool_use:
+    - "echo pre"
+  post_tool_use:
+    - "echo post"
+lifecycle:
+  init:
+    - "echo init"
+  shutdown:
+    - "echo shutdown"
+tools:
+  - name: example_tool
+    description: A demo tool.
+commands:
+  - name: example_cmd

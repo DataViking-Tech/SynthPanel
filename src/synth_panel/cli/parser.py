@@ -1159,6 +1159,45 @@ def build_parser() -> argparse.ArgumentParser:
         help="Start the MCP server (stdio transport).",
     )
 
+    # plugin (sy-0rr): author-time tooling for plugin manifests
+    plugin_parser = subparsers.add_parser(
+        "plugin",
+        help="Plugin author tooling: lint a plugin source directory.",
+    )
+    plugin_subparsers = plugin_parser.add_subparsers(dest="plugin_command")
+
+    plugin_lint_parser = plugin_subparsers.add_parser(
+        "lint",
+        help="Validate a plugin manifest and surface schema problems before install.",
+    )
+    plugin_lint_parser.add_argument(
+        "path",
+        nargs="?",
+        default=None,
+        metavar="PATH",
+        help="Plugin source directory (containing plugin.yaml). Required unless --all is given.",
+    )
+    plugin_lint_parser.add_argument(
+        "--all",
+        action="store_true",
+        default=False,
+        dest="lint_all",
+        help="Lint every plugin currently installed under ~/.synthpanel/plugins/.",
+    )
+    plugin_lint_parser.add_argument(
+        "--strict",
+        action="store_true",
+        default=False,
+        help="Treat warnings as failures (non-zero exit if any warning is reported).",
+    )
+    plugin_lint_parser.add_argument(
+        "--config-dir",
+        default=None,
+        metavar="DIR",
+        dest="plugin_config_dir",
+        help="Override the plugin install root used by --all (default: ~/.synthpanel).",
+    )
+
     # install-skills (sy-65k74)
     install_skills_parser = subparsers.add_parser(
         "install-skills",
