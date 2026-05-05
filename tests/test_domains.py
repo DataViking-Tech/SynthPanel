@@ -43,6 +43,11 @@ class TestListDomainTemplates:
         templates = list_domain_templates()
         assert len(templates) >= 3
 
+    def test_returns_at_least_four(self):
+        # sy-pb6 acceptance: bundled registry must surface ≥4 entries.
+        templates = list_domain_templates()
+        assert len(templates) >= 4
+
     def test_entries_have_required_keys(self):
         for entry in list_domain_templates():
             assert "name" in entry
@@ -52,6 +57,33 @@ class TestListDomainTemplates:
         templates = list_domain_templates()
         names = [t["name"] for t in templates]
         assert names == sorted(names)
+
+
+class TestBundledDomainShape:
+    """Each bundled domain must have the same structural shape as career-tech."""
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "education-k12",
+            "enterprise-buyers",
+            "creators",
+            "graduate-students",
+        ],
+    )
+    def test_new_domain_loads_and_has_shape(self, name):
+        t = get_domain_template(name)
+        # Same keys as the reference template.
+        ref = get_domain_template("career-tech")
+        assert set(t.keys()) == set(ref.keys())
+        # Non-empty content with enough specificity to drive distinguishable personas.
+        assert isinstance(t["name"], str) and t["name"].strip()
+        assert isinstance(t["description"], str) and t["description"].strip()
+        body = t["template"]
+        assert isinstance(body, str)
+        # Templates should encode multiple bullet-point dimensions like career-tech.
+        assert body.count("\n- ") >= 4, f"{name}: expected ≥4 bullet dimensions"
+        assert "Each persona" in body or "each persona" in body
 
 
 # ---------------------------------------------------------------------------
@@ -216,3 +248,63 @@ class TestDeliberatelyHomogeneous:
         categories = " ".join(warnings).lower()
         assert "age diversity" in categories
         assert "background variety" in categories
+
+
+# ---------------------------------------------------------------------------
+# CLI surface: `synthpanel domains list` / `synthpanel domains inspect`
+# ---------------------------------------------------------------------------
+
+
+class TestDomainsCLI:
+    def test_list_text(self, capsys):
+        from synth_panel.main import main
+
+        code = main(["domains", "list"])
+        out = capsys.readouterr().out
+        assert code == 0
+        # career-tech is the founding bundled entry; tests rely on its presence.
+        assert "career-tech" in out
+        # And at least two of the new entries.
+        new_entries = ("education-k12", "enterprise-buyers", "creators", "graduate-students")
+        assert sum(1 for n in new_entries if n in out) >= 2
+
+    def test_list_json(self, capsys):
+        import json as _json
+
+        from synth_panel.main import main
+
+        code = main(["--output-format", "json", "domains", "list"])
+        assert code == 0
+        payload = _json.loads(capsys.readouterr().out)
+        names = [d["name"] for d in payload["domains"]]
+        assert "career-tech" in names
+        assert len(names) >= 4
+
+    def test_inspect_text(self, capsys):
+        from synth_panel.main import main
+
+        code = main(["domains", "inspect", "career-tech"])
+        out = capsys.readouterr().out
+        assert code == 0
+        assert "career-tech" in out
+        assert "template:" in out
+        assert "Generate a diverse panel" in out
+
+    def test_inspect_unknown_returns_nonzero(self, capsys):
+        from synth_panel.main import main
+
+        code = main(["domains", "inspect", "no-such-domain"])
+        err = capsys.readouterr().err
+        assert code == 1
+        assert "no-such-domain" in err
+
+    def test_inspect_json(self, capsys):
+        import json as _json
+
+        from synth_panel.main import main
+
+        code = main(["--output-format", "json", "domains", "inspect", "career-tech"])
+        assert code == 0
+        payload = _json.loads(capsys.readouterr().out)
+        assert payload["name"] == "career-tech"
+        assert "template" in payload["template"]

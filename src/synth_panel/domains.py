@@ -85,6 +85,74 @@ _TEMPLATES: dict[str, dict[str, str]] = {
             "Each persona should reflect real clinical workflow constraints and patient care priorities."
         ),
     },
+    "education-k12": {
+        "name": "K-12 Educators",
+        "description": "Teachers, administrators, and support staff across grade bands.",
+        "template": (
+            "Generate a diverse panel of K-12 educators. Include:\n"
+            "- Roles: classroom teachers, principals, assistant principals, paraprofessionals,\n"
+            "  district staff, instructional coaches, school counselors, special-ed teachers\n"
+            "- Grade bands: early elementary (K-2), upper elementary (3-5), middle (6-8), high (9-12)\n"
+            "- Subjects (secondary): ELA, math, science, social studies, electives, CTE\n"
+            "- School types: public, charter, magnet, private, rural, urban, suburban\n"
+            "- Experience: novice (0-3 yrs), mid-career (4-15 yrs), veteran (15+ yrs)\n"
+            "- Ages: spread across 23-62\n"
+            "- Attitudes: tech-forward, traditionalist, burned-out, idealistic, pragmatic\n"
+            "Each persona should reflect real classroom constraints, district politics, and student-population context."
+        ),
+    },
+    "enterprise-buyers": {
+        "name": "Enterprise Software Buyers",
+        "description": "Decision-makers who evaluate and purchase B2B software at >250-seat orgs.",
+        "template": (
+            "Generate a diverse panel of enterprise software buyers. Include:\n"
+            "- Functions: IT/CIO org, security, finance/procurement, HR, sales ops,\n"
+            "  marketing ops, engineering leadership, operations\n"
+            "- Buyer roles: economic buyer, technical evaluator, end-user champion, procurement gatekeeper\n"
+            "- Org sizes: mid-market (250-2k seats), enterprise (2k-25k), F500 (25k+)\n"
+            "- Industries: financial services, healthcare, manufacturing, retail, public sector, tech\n"
+            "- Deal sizes typically signed off: <$50k, $50-250k, $250k-1M, $1M+\n"
+            "- Ages: spread across 32-60\n"
+            "- Attitudes: risk-averse vs. innovator, vendor-loyal vs. best-of-breed, cost-led vs. outcome-led\n"
+            "Each persona should reflect real procurement constraints (security review, legal, budget cycles) and the\n"
+            "specific stakeholders they must align before signing."
+        ),
+    },
+    "creators": {
+        "name": "Content Creators",
+        "description": "Independent creators monetizing audiences across platforms.",
+        "template": (
+            "Generate a diverse panel of content creators. Include:\n"
+            "- Primary platforms: YouTube, TikTok, Instagram, Twitch, Substack, podcasting, X/Twitter\n"
+            "- Audience size: nano (<10k), micro (10-100k), mid (100k-1M), macro (1M+)\n"
+            "- Niches: lifestyle, gaming, education, tech, beauty, fitness, finance, comedy, news\n"
+            "- Monetization mix: ad revenue, brand deals, merch, subscriptions/memberships, courses, affiliate\n"
+            "- Career stage: side hustle, transitioning full-time, full-time established, post-burnout pivot\n"
+            "- Ages: spread across 19-50\n"
+            "- Attitudes: algorithm-chaser vs. community-builder, brand-friendly vs. anti-sponsorship,\n"
+            "  optimistic vs. burnt-out\n"
+            "Each persona should reflect real platform-specific economics and creator-burnout dynamics."
+        ),
+    },
+    "graduate-students": {
+        "name": "Graduate Students",
+        "description": "Master's and PhD students across discipline clusters.",
+        "template": (
+            "Generate a diverse panel of graduate students. Include:\n"
+            "- Degree programs: PhD, research master's, professional master's (MBA, MPH, MSW, MFA, JD)\n"
+            "- Discipline clusters: STEM (CS, bio, physics, engineering), humanities (history, literature,\n"
+            "  philosophy), social sciences (psych, econ, sociology), professional (medicine, law, business)\n"
+            "- Year in program: first-year, mid-program, ABD/dissertating, defending\n"
+            "- Funding situation: fully funded, TA-supported, partial scholarship, self-funded/loans\n"
+            "- Institution type: R1 research, R2, regional, professional school, international\n"
+            "- Ages: spread across 22-42\n"
+            "- Career intent: academia/professoriate, industry research, government/policy, entrepreneurship,\n"
+            "  unsure/exploring\n"
+            "- Attitudes: idealistic, jaded, burned-out, careerist, vocational\n"
+            "Each persona should reflect real advisor-relationship dynamics, funding precarity,\n"
+            "and post-grad job-market anxieties."
+        ),
+    },
 }
 
 

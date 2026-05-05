@@ -4680,6 +4680,52 @@ def handle_instruments_graph(args: argparse.Namespace, fmt: OutputFormat) -> int
     return 0
 
 
+def handle_domains_list(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """List bundled domain prompt templates."""
+    from synth_panel.domains import list_domain_templates
+
+    domains = list_domain_templates()
+
+    if fmt is OutputFormat.TEXT:
+        if not domains:
+            print("No domain templates registered.")
+            return 0
+        width = max(len(d["name"]) for d in domains)
+        for d in domains:
+            print(f"  {d['name']:<{width}}  {d['description']}")
+    else:
+        emit(fmt, message="Domain templates", extra={"domains": domains})
+    return 0
+
+
+def handle_domains_inspect(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Print a domain template's full prompt body and metadata."""
+    from synth_panel.domains import DomainNotFoundError, get_domain_template
+
+    try:
+        template = get_domain_template(args.name)
+    except DomainNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    if fmt is OutputFormat.TEXT:
+        print(f"name:        {args.name}")
+        print(f"label:       {template.get('name', '')}")
+        print(f"description: {template.get('description', '')}")
+        print()
+        print("template:")
+        body = template.get("template", "")
+        for line in body.splitlines() or [""]:
+            print(f"  {line}")
+    else:
+        emit(
+            fmt,
+            message="Domain template",
+            extra={"name": args.name, "template": template},
+        )
+    return 0
+
+
 def _render_text_dag(instrument: Instrument) -> str:
     """Plain-text node + edge listing of an instrument's round DAG."""
 

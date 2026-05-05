@@ -13,6 +13,8 @@ from synth_panel.cli.commands import (
     handle_analyze_subgroup,
     handle_cost_summary,
     handle_doctor,
+    handle_domains_inspect,
+    handle_domains_list,
     handle_install_skills,
     handle_instruments_graph,
     handle_instruments_install,
@@ -117,6 +119,15 @@ def main(argv: list[str] | None = None) -> int:
             return handle_instruments_graph(args, output_format)
         else:
             parser.parse_args(["instruments", "--help"])
+            return 1
+    elif args.command == "domains":
+        sub = getattr(args, "domains_command", None)
+        if sub == "list":
+            return handle_domains_list(args, output_format)
+        elif sub == "inspect":
+            return handle_domains_inspect(args, output_format)
+        else:
+            parser.parse_args(["domains", "--help"])
             return 1
     elif args.command == "cost":
         sub = getattr(args, "cost_command", None)
