@@ -3,7 +3,7 @@
   "name": "io.github.DataViking-Tech/synthpanel",
   "title": "SynthPanel",
   "description": "Run synthetic focus groups using AI personas. 12 MCP tools for single prompts, full panel runs, and v3 branching (adaptive) instruments across any LLM provider (Claude, OpenAI, Gemini, xAI).",
-  "version": "0.13.0-dev",
+  "version": "1.0.0",
   "websiteUrl": "https://synthpanel.dev",
   "repository": {
     "url": "https://github.com/DataViking-Tech/SynthPanel",
@@ -11,7 +11,7 @@
   },
   "serverInfo": {
     "name": "synthpanel",
-    "version": "0.13.0-dev"
+    "version": "1.0.0"
   },
   "capabilities": {
     "tools": { "listChanged": false },
@@ -23,7 +23,7 @@
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "synthpanel",
-      "version": "0.13.0-dev",
+      "version": "1.0.0",
       "runtimeHint": "uvx",
       "runtimeArguments": [
         { "type": "positional", "value": "synthpanel[mcp]" },
