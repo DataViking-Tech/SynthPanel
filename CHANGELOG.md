@@ -10,6 +10,16 @@ Work in progress for the next release after v1.0.0 lands.
 
 ### Added
 
+- `synth_panel.attachments.pdf` (hq-glz6) — PDF attachment ingest with a
+  cheap-local decision tree: native PDF submission for text-bearing files
+  within Anthropic's limits, text extraction via `pypdfium2` for oversize
+  text-bearing PDFs, page-as-image rendering at 150 DPI for scanned PDFs.
+  Encrypted PDFs reject with `PdfEncryptedError`; oversize-and-scanned
+  combinations reject with `PdfOversizeScannedError`. Submission mode
+  recommendation (inline base64 below 4 MiB, Files API above) and an
+  estimated-token cost preview surface alongside every plan. Install with
+  `pip install synthpanel[pdf]` (adds `pypdfium2` + `Pillow`, both
+  permissively licensed and shipped as wheels — no system binary).
 - `--seed N` flag on `panel run` (sy-cxp) for reproducible sampling.
   Forwarded to providers that support it (OpenAI, Gemini, xAI, OpenRouter)
   and recorded in `metadata.parameters.seed` plus the resume fingerprint.

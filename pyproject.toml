@@ -57,6 +57,16 @@ composio = [
 convergence = [
     "synthbench>=0.1",
 ]
+pdf = [
+    # pypdfium2 wraps Google's PDFium under Apache-2.0 / BSD-3-Clause and
+    # ships pre-built wheels for linux/mac/win without a system binary.
+    # Picked over PyMuPDF (AGPL-3.0 blocks SaaS distribution) and
+    # pdf2image (requires Poppler). See hq-31t8 §1 for the full rationale.
+    "pypdfium2>=4.30",
+    # Pillow is used to encode rendered page bitmaps as PNG for the
+    # page-as-image fallback (scanned PDFs).
+    "Pillow>=10.0",
+]
 report = []
 visual = [
     # Optional Playwright + headless Chromium for the URL-attachment
@@ -74,6 +84,8 @@ dev = [
     "mypy>=1.10",
     "pip-audit>=2.7",
     "tomli>=2.0; python_version<'3.11'",
+    "pypdfium2>=4.30",
+    "Pillow>=10.0",
 ]
 
 [project.scripts]
