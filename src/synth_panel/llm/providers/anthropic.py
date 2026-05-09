@@ -126,7 +126,15 @@ def _build_content_blocks(blocks: list[ContentBlock]) -> list[dict[str, Any]]:
 
 
 def _build_messages(request: CompletionRequest) -> list[dict[str, Any]]:
-    """Convert InputMessages to Anthropic API format."""
+    """Convert InputMessages to Anthropic API format.
+
+    When ``request.cache_enabled`` is True (default), automatically marks
+    the trailing text block of the last user message with
+    ``cache_control: ephemeral`` so single-turn callers get prefix
+    caching for free. With ``cache_enabled`` False (hq-0pbp: P=1 panels
+    or sub-minimum prefixes), no auto marker is added — explicit
+    per-block ``cache_control`` set by the caller is preserved either way.
+    """
     last_user_idx = -1
     for i, msg in enumerate(request.messages):
         if msg.role == "user":
@@ -135,11 +143,13 @@ def _build_messages(request: CompletionRequest) -> list[dict[str, Any]]:
     result = []
     for i, msg in enumerate(request.messages):
         content = _build_content_blocks(msg.content)
-        if i == last_user_idx and content:
-            for j in range(len(content) - 1, -1, -1):
-                if content[j].get("type") == "text":
-                    content[j] = {**content[j], "cache_control": {"type": "ephemeral"}}
-                    break
+        if request.cache_enabled and i == last_user_idx and content:
+            already_marked = any("cache_control" in b for b in content)
+            if not already_marked:
+                for j in range(len(content) - 1, -1, -1):
+                    if content[j].get("type") == "text":
+                        content[j] = {**content[j], "cache_control": {"type": "ephemeral"}}
+                        break
         result.append({"role": msg.role, "content": content})
     return result
 
@@ -216,7 +226,10 @@ class AnthropicProvider(LLMProvider):
             "messages": _build_messages(request),
         }
         if request.system:
-            body["system"] = [{"type": "text", "text": request.system, "cache_control": {"type": "ephemeral"}}]
+            sys_block: dict[str, Any] = {"type": "text", "text": request.system}
+            if request.cache_enabled:
+                sys_block["cache_control"] = {"type": "ephemeral"}
+            body["system"] = [sys_block]
         tools = _build_tools(request)
         if tools is not None:
             body["tools"] = tools
@@ -283,6 +296,7 @@ class AnthropicProvider(LLMProvider):
             stream=True,
             temperature=request.temperature,
             top_p=request.top_p,
+            cache_enabled=request.cache_enabled,
         )
         url = f"{self._base_url}/v1/messages"
         body = self._build_body(request_copy)

@@ -254,7 +254,15 @@ class ToolChoice:
 
 @dataclass
 class CompletionRequest:
-    """Everything needed to send one request to an LLM provider."""
+    """Everything needed to send one request to an LLM provider.
+
+    ``cache_enabled`` (hq-0pbp) gates the provider's auto-applied
+    ``cache_control: ephemeral`` markers — system block and the trailing
+    user-message text marker. When ``False`` (P=1 panels, sub-1024-token
+    prefixes, debugging) the request goes out without any auto markers
+    and the caller's explicit per-block ``cache_control`` settings still
+    flow through unchanged.
+    """
 
     model: str
     max_tokens: int
@@ -266,6 +274,7 @@ class CompletionRequest:
     temperature: float | None = None
     top_p: float | None = None
     seed: int | None = None
+    cache_enabled: bool = True
 
 
 # ---------------------------------------------------------------------------

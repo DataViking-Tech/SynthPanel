@@ -6,6 +6,7 @@ Manages lifecycle of independent agent sessions running concurrently.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import threading
 import time as _time
@@ -15,23 +16,218 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from synth_panel.attachments import filter_attachments
+from synth_panel.attachments.filter import count_strata
 from synth_panel.conditions import evaluate_condition, normalize_follow_up
 from synth_panel.convergence import ConvergenceTracker, extract_categorical_responses
 from synth_panel.cost import ZERO_USAGE, CostGate, TokenUsage, UsageTracker, resolve_cost
 from synth_panel.instrument import END_SENTINEL, Instrument, Round
 from synth_panel.llm.client import LLMClient
-from synth_panel.llm.models import InputMessage, TextBlock
+from synth_panel.llm.models import ContentBlock, InputMessage, TextBlock
 from synth_panel.llm.models import TokenUsage as LLMTokenUsage
 from synth_panel.persistence import Session
+from synth_panel.prompts import build_question_blocks
 from synth_panel.question_budget import QuestionFailureBudget
 from synth_panel.routing import route_round
 from synth_panel.runtime import AgentRuntime, TurnSummary
 from synth_panel.structured.output import StructuredOutputConfig, StructuredOutputEngine
 
 logger = logging.getLogger(__name__)
+
+
+class PanelPlanningError(Exception):
+    """Raised at the frame stage of :func:`run_panel_parallel` when the
+    planned panel violates a structural caching invariant (hq-0pbp).
+
+    Currently the only check is the **K≤5 stratification cap**: if any
+    question's per-persona attachment filters partition the panel into
+    more than 5 strata, the planner refuses the run before any LLM call.
+    Above K=5 the cached economics collapse toward 1.5x the K=1 floor
+    (per D-phase hq-cxth §5/§7), defeating the whole point of
+    stratification. The fix is on the instrument author's side — coarsen
+    the predicates so K stays ≤ 5 (the methodological target is K=3:
+    desktop / mobile / tablet, etc.).
+    """
+
+
+_STRATA_CAP = 5
+
+
+def _enforce_strata_cap(
+    personas: list[dict[str, Any]],
+    questions: list[dict[str, Any]],
+    *,
+    max_k: int = _STRATA_CAP,
+) -> None:
+    """Frame-stage gate: refuse panels whose stratification produces K > ``max_k``.
+
+    Walks every question with attachments and computes
+    :func:`count_strata` for that question's attachment list. The first
+    question to exceed the cap raises :class:`PanelPlanningError` with
+    its question index, the offending K, and the hard cap so the
+    instrument author can fix the predicates.
+
+    No-attachment questions and questions whose attachments lack
+    ``filter`` clauses always partition into K=1, so they never trip
+    the gate. The check runs per-question rather than aggregate-across-
+    questions because the cache prefix is per-question — exceeding the
+    cap on any one question collapses caching for THAT question alone.
+    """
+    if not personas:
+        return
+    for q_idx, q in enumerate(questions):
+        if not isinstance(q, dict):
+            continue
+        atts = q.get("attachments") or []
+        if not isinstance(atts, list) or not atts:
+            continue
+        # Skip if attachments are bank-ref strings — strata count requires
+        # dict-form attachments with optional filter predicates.
+        dict_atts = [a for a in atts if isinstance(a, dict)]
+        if not dict_atts:
+            continue
+        k = count_strata(personas, dict_atts)
+        if k > max_k:
+            raise PanelPlanningError(
+                f"stratification produces {k} strata at question[{q_idx}]; "
+                f"cap is {max_k}. Coarsen attachment filter predicates so "
+                f"the panel partitions into at most {max_k} attachment-sets "
+                f"(hq-0pbp / hq-cxth §5)."
+            )
+
+
+def _min_stratum_population(
+    personas: list[dict[str, Any]],
+    questions: list[dict[str, Any]],
+) -> int:
+    """Smallest stratum population across all attachment-bearing questions.
+
+    Returns ``len(personas)`` when no question has dict-form
+    attachments — equivalent to "the whole panel is one stratum."
+    Otherwise walks each question, partitions personas by their matched
+    attachment set (same key as :func:`count_strata`), and returns the
+    minimum group size observed across all questions. The orchestrator
+    feeds this into the per-question cache-marker predicate so a single
+    skewed-filter question can't trip the marker for the whole run.
+    """
+    if not personas:
+        return 0
+    min_pop = len(personas)
+    saw_any_attachments = False
+    for q in questions:
+        if not isinstance(q, dict):
+            continue
+        atts = q.get("attachments") or []
+        if not isinstance(atts, list):
+            continue
+        dict_atts = [a for a in atts if isinstance(a, dict)]
+        if not dict_atts:
+            continue
+        saw_any_attachments = True
+        groups: dict[frozenset[int], int] = {}
+        for p in personas:
+            if not isinstance(p, dict):
+                continue
+            matched = filter_attachments(dict_atts, p)
+            key = frozenset(id(a) for a in matched)
+            groups[key] = groups.get(key, 0) + 1
+        if groups:
+            min_pop = min(min_pop, min(groups.values()))
+    return min_pop if saw_any_attachments else len(personas)
+
+
+# ---------------------------------------------------------------------------
+# Caching parameters (hq-0pbp / D-phase hq-cxth)
+# ---------------------------------------------------------------------------
+
+# Anthropic's documented minimum cacheable prefix length. Below this the
+# API silently skips caching — we mirror their floor to keep our predicate
+# honest. Approximated via chars/4 since synthpanel ships no tokenizer.
+_MIN_CACHEABLE_TOKENS = 1024
+_CHARS_PER_TOKEN = 4
+_MIN_CACHEABLE_CHARS = _MIN_CACHEABLE_TOKENS * _CHARS_PER_TOKEN
+
+# Minimum stratum population for per-question attachment caching to break
+# even (1.25x write + 0.1xN reads vs Nx1.0x uncached). Below this we don't
+# emit per-question cache markers regardless of prefix length.
+_MIN_STRATUM_POP_FOR_CACHE = 2
+
+CacheTier = Literal["5m", "1h"]
+
+
+def _approx_prefix_chars(system_prompt: str, blocks: list[ContentBlock]) -> int:
+    """Cheap upper-bound estimate of the cacheable prefix size in chars.
+
+    Counts the system prompt plus every text-bearing block in ``blocks``;
+    image/document attachments contribute a synthetic 1500-token estimate
+    each (≈ 6000 chars) since we have no way to size base64 payloads as
+    tokens without invoking the provider tokenizer. Conservative on the
+    high side: a slight over-count of prefix tokens just causes us to
+    cache a slightly smaller-than-floor prefix, which the API silently
+    drops anyway.
+    """
+    total = len(system_prompt or "")
+    for b in blocks:
+        if isinstance(b, TextBlock):
+            total += len(b.text)
+        else:
+            # Image/document/html/url blocks are typically much larger than
+            # text per token. 6000-char estimate per multimodal block keeps
+            # the predicate safely above the 4096-char floor when even one
+            # attachment is present.
+            total += 6000
+    return total
+
+
+def _stratum_fingerprint(
+    *,
+    model: str,
+    system_prompt: str,
+    panel_shared_attachments: list[dict[str, Any]] | None,
+    question_attachments: list[dict[str, Any]],
+    question_text: str,
+) -> str:
+    """SHA256-derived 16-char fingerprint of the cacheable prefix (hq-0pbp).
+
+    Logged for cache-hit telemetry. Hashes model id + persona system
+    prompt + per-attachment SHA256 hashes (when supplied as
+    pre-computed bank refs) or attachment payload data + the question
+    text. Two panelists in the same stratum produce byte-identical
+    fingerprints; any divergence in the fingerprint prefix indicates a
+    cache miss is unavoidable.
+
+    The 16-char truncation is enough to disambiguate within a single
+    panel run (collision probability << 1 at K ≤ 5) while keeping log
+    lines short. Per-attachment SHA256 reuses the digest from the CAS
+    layer (hq-cqt5) when callers stash it under ``att["sha256"]``;
+    otherwise we fall back to hashing the source dict so the
+    fingerprint stays computable for runs without persisted CAS refs.
+    """
+
+    def _att_digest(att: dict[str, Any]) -> str:
+        cached = att.get("sha256")
+        if isinstance(cached, str) and cached:
+            return cached
+        payload = att.get("source") or att.get("text") or att.get("url") or att
+        return hashlib.sha256(repr(payload).encode("utf-8")).hexdigest()
+
+    h = hashlib.sha256()
+    h.update(model.encode("utf-8"))
+    h.update(b"\x00")
+    h.update(hashlib.sha256((system_prompt or "").encode("utf-8")).digest())
+    h.update(b"\x00")
+    for att in panel_shared_attachments or []:
+        h.update(_att_digest(att).encode("utf-8"))
+        h.update(b"|")
+    h.update(b"\x00")
+    for att in question_attachments:
+        h.update(_att_digest(att).encode("utf-8"))
+        h.update(b"|")
+    h.update(b"\x00")
+    h.update(question_text.encode("utf-8"))
+    return h.hexdigest()[:16]
 
 
 class RunAbortedError(Exception):
@@ -602,6 +798,11 @@ def _run_panelist(
     top_p: float | None = None,
     seed: int | None = None,
     question_budget: QuestionFailureBudget | None = None,
+    cache_enabled: bool = True,
+    cache_tier: CacheTier = "5m",
+    panel_shared_attachments: list[dict[str, Any]] | None = None,
+    stratum_population: int = 1,
+    request_id: str | None = None,
 ) -> tuple[PanelistResult, Session]:
     """Execute a single panelist's full interview. Runs in a worker thread.
 
@@ -651,6 +852,7 @@ def _run_panelist(
             temperature=eff_temperature,
             top_p=eff_top_p,
             seed=seed,
+            cache_enabled=cache_enabled,
         )
 
         # Set up structured output engine if schema provided
@@ -675,7 +877,63 @@ def _run_panelist(
             # alongside the question regardless of skip path. Multimodal
             # block emission off this list is hq-0pbp's responsibility.
             raw_attachments = question.get("attachments", []) if isinstance(question, dict) else []
-            attachments_for_persona = filter_attachments(raw_attachments, persona) if raw_attachments else []
+            # Only treat dict-form attachments as filterable; bank-ref strings
+            # pass through as-is and produce no per-persona divergence.
+            dict_attachments = [a for a in raw_attachments if isinstance(a, dict)]
+            attachments_for_persona = filter_attachments(dict_attachments, persona) if dict_attachments else []
+
+            # hq-0pbp: build the multimodal user-message blocks for this
+            # question. When the question has no attachments and no panel-
+            # shared blocks, this collapses to a single TextBlock — the
+            # legacy text-only path. Per-question cache marker fires only
+            # when the run-level cache is enabled AND this stratum is
+            # large enough to amortize the cache write AND the cacheable
+            # prefix clears Anthropic's 1024-token floor.
+            user_blocks = build_question_blocks(
+                question,
+                attachments=attachments_for_persona,
+                panel_shared_attachments=panel_shared_attachments,
+            )
+            prefix_chars = _approx_prefix_chars(system_prompt, user_blocks)
+            has_any_attachment_block = bool(attachments_for_persona) or bool(panel_shared_attachments)
+            should_mark_cache = (
+                cache_enabled
+                and stratum_population >= _MIN_STRATUM_POP_FOR_CACHE
+                and prefix_chars >= _MIN_CACHEABLE_CHARS
+                and has_any_attachment_block
+            )
+            if should_mark_cache:
+                user_blocks = build_question_blocks(
+                    question,
+                    attachments=attachments_for_persona,
+                    panel_shared_attachments=panel_shared_attachments,
+                    cache_marker=True,
+                )
+
+            # hq-0pbp: stratum fingerprint for cache-hit telemetry. Logged
+            # at INFO so operators can confirm two panelists in the same
+            # stratum produce identical fingerprints (and thus a cache hit
+            # on the second one). Computed regardless of whether caching
+            # is currently enabled — observability cost is negligible and
+            # it lets us debug "why didn't this cache?" post hoc.
+            fingerprint = _stratum_fingerprint(
+                model=model,
+                system_prompt=system_prompt,
+                panel_shared_attachments=panel_shared_attachments,
+                question_attachments=attachments_for_persona,
+                question_text=question_text,
+            )
+            logger.info(
+                "[%s] stratum_fp=%s persona=%s q=%d cache=%s tier=%s P=%d prefix_chars=%d",
+                request_id or "-",
+                fingerprint,
+                name,
+                qi,
+                "on" if should_mark_cache else "off",
+                cache_tier,
+                stratum_population,
+                prefix_chars,
+            )
 
             # sp-xw2z6o: per-question failure budget. If a prior panelist
             # tripped this question's budget, skip it cheaply instead of
@@ -692,15 +950,25 @@ def _run_panelist(
                 )
                 continue
 
+            # hq-0pbp: turn input is multimodal blocks when this question
+            # carries any attachments (panel-shared or per-persona).
+            # Otherwise the legacy single-text path is used so non-attachment
+            # call sites stay untouched.
+            has_attachments = bool(attachments_for_persona) or bool(panel_shared_attachments)
+            turn_input: str | list[ContentBlock] = user_blocks if has_attachments else question_text
+
             try:
                 if structured_engine and structured_config:
                     # Use structured output: run turn for conversation context,
                     # then extract structured response
-                    summary = runtime.run_turn(question_text)
+                    summary = runtime.run_turn(turn_input)
                     tracker.record_turn(summary.usage)
 
                     # Build messages from session history for structured extraction
-                    messages = [InputMessage(role="user", content=[TextBlock(text=question_text)])]
+                    extract_user_content: list[ContentBlock] = (
+                        list(user_blocks) if has_attachments else [TextBlock(text=question_text)]
+                    )
+                    messages = [InputMessage(role="user", content=extract_user_content)]
                     result = structured_engine.extract(
                         model=model,
                         max_tokens=eff_max_tokens,
@@ -721,7 +989,7 @@ def _run_panelist(
                         }
                     )
                 else:
-                    summary = runtime.run_turn(question_text)
+                    summary = runtime.run_turn(turn_input)
                     response_text = _extract_text(summary)
                     resp_dict: dict[str, Any] = {
                         "question": question_text,
@@ -733,10 +1001,13 @@ def _run_panelist(
                     # free-text response (--extract-schema).
                     if extract_engine and extract_config:
                         try:
+                            extract_user_content = (
+                                list(user_blocks) if has_attachments else [TextBlock(text=question_text)]
+                            )
                             extract_messages = [
                                 InputMessage(
                                     role="user",
-                                    content=[TextBlock(text=question_text)],
+                                    content=extract_user_content,
                                 ),
                                 InputMessage(
                                     role="assistant",
@@ -908,6 +1179,8 @@ def run_panel_parallel(
     on_panelist_complete: Callable[[PanelistResult], None] | None = None,
     cost_gate: CostGate | None = None,
     question_budget: QuestionFailureBudget | None = None,
+    panel_shared_attachments: list[dict[str, Any]] | None = None,
+    cache_tier: CacheTier = "5m",
 ) -> tuple[list[PanelistResult], WorkerRegistry, dict[str, Session]]:
     """Run all panelists in parallel and return ordered results.
 
@@ -968,11 +1241,28 @@ def run_panel_parallel(
         if isinstance(p, dict) and p.get("llm_overrides"):
             validate_llm_overrides(p["llm_overrides"], persona_name=p.get("name", "Anonymous"))
 
+    # hq-0pbp: K≤5 frame-stage gate. Refuse panels whose attachment
+    # stratification produces more than 5 distinct strata before any
+    # worker spawns or LLM call lands. Above K=5 the cached economics
+    # collapse — see D-phase hq-cxth §5/§7. The check runs per-question;
+    # the first violator raises with question index + offending K + cap.
+    _enforce_strata_cap(personas, questions)
+
+    # hq-0pbp: per-question stratum population for cache-marker decisions.
+    # Min stratum size across all attachment-bearing questions is the
+    # safe lower bound — if any question splits the panel into singletons
+    # the cache predicate refuses the marker for that question. Empty /
+    # no-attachment panels fall back to len(personas) so the legacy
+    # always-on prefix caching still applies.
+    min_stratum_pop = _min_stratum_population(personas, questions)
+
     registry = WorkerRegistry()
     effective_workers = max_workers or len(personas)
     sentiment_cache: dict[str, str] = {}
     sentiment_cache_lock = threading.Lock()
     request_id = uuid.uuid4().hex[:12]
+    # hq-0pbp: P=1 panels skip caching entirely (D-phase hq-cxth §6 bypass).
+    cache_enabled_for_run = len(personas) >= _MIN_STRATUM_POP_FOR_CACHE
     logger.info(
         "[%s] panel starting: %d personas, %d questions, model=%s, workers=%d",
         request_id,
@@ -1034,6 +1324,11 @@ def run_panel_parallel(
                 top_p,
                 seed,
                 question_budget,
+                cache_enabled_for_run,
+                cache_tier,
+                panel_shared_attachments,
+                min_stratum_pop,
+                request_id,
             )
             future_to_index[future] = idx
 

@@ -9,6 +9,18 @@ from typing import TYPE_CHECKING, Any
 import jinja2
 from jinja2.sandbox import SandboxedEnvironment
 
+from synth_panel.llm.models import (
+    ContentBlock,
+    DocumentBlock,
+    FileRefSource,
+    HTMLBlock,
+    ImageBlock,
+    InlineSource,
+    TextBlock,
+    URLBlock,
+    URLSource,
+)
+
 if TYPE_CHECKING:
     pass
 
@@ -125,6 +137,149 @@ def persona_system_prompt_from_template(
 
 
 def build_question_prompt(question: dict[str, Any]) -> str:
-    """Build a user prompt from a question definition."""
+    """Build a user prompt from a question definition.
+
+    Returns the question text only — multimodal block emission lives in
+    :func:`build_question_blocks` (hq-0pbp). This stays the legacy text-only
+    builder for size estimation, previews, and call paths that don't carry
+    attachments.
+    """
     text = question.get("text", question) if isinstance(question, dict) else str(question)
     return str(text)
+
+
+# ---------------------------------------------------------------------------
+# Multimodal question prompt blocks (hq-0pbp / D-phase hq-cxth)
+# ---------------------------------------------------------------------------
+
+
+_DEFAULT_IMAGE_MEDIA_TYPE = "image/png"
+_DEFAULT_DOCUMENT_MEDIA_TYPE = "application/pdf"
+_VALID_IMAGE_MEDIA_TYPES: frozenset[str] = frozenset({"image/png", "image/jpeg", "image/gif", "image/webp"})
+
+
+def _attachment_source(att: dict[str, Any]) -> Any:
+    """Build the typed source variant from an attachment dict.
+
+    Accepts the three source shapes validated by
+    :mod:`synth_panel.instrument`: inline base64, public URL, or
+    Files-API ref. Raises :class:`ValueError` on unrecognized shapes so
+    bad attachment dicts surface here instead of at wire serialization.
+    """
+    src = att.get("source")
+    if not isinstance(src, dict):
+        raise ValueError(f"attachment {att.get('type')!r} requires a 'source' mapping")
+    stype = src.get("type")
+    if stype == "base64":
+        data = src.get("data", "")
+        return InlineSource(data=data)
+    if stype == "url":
+        return URLSource(url=src.get("url", ""))
+    if stype == "file":
+        return FileRefSource(file_id=src.get("file_id", ""))
+    raise ValueError(f"unrecognized attachment source.type: {stype!r}")
+
+
+def _attachment_to_block(att: dict[str, Any]) -> ContentBlock:
+    """Convert a single attachment dict to a typed :class:`ContentBlock`.
+
+    The dict shape matches what
+    :func:`synth_panel.instrument._validate_attachment` accepts: ``type``
+    discriminator + ``source`` (or ``url``/``text`` for ``url``/``html``),
+    optional ``media_type``. Unknown types raise ``ValueError`` rather than
+    silently dropping content — the orchestrator catches and records the
+    failure as a per-question error.
+    """
+    atype = att.get("type")
+    if atype == "image":
+        media_type = att.get("media_type", _DEFAULT_IMAGE_MEDIA_TYPE)
+        if media_type not in _VALID_IMAGE_MEDIA_TYPES:
+            raise ValueError(f"image attachment media_type {media_type!r} not supported")
+        return ImageBlock(source=_attachment_source(att), media_type=media_type)
+    if atype == "document":
+        media_type = att.get("media_type", _DEFAULT_DOCUMENT_MEDIA_TYPE)
+        return DocumentBlock(source=_attachment_source(att), media_type=media_type)
+    if atype == "html":
+        text = att.get("text", "")
+        if not isinstance(text, str):
+            raise ValueError("html attachment requires a 'text' string")
+        return HTMLBlock(text=text)
+    if atype == "url":
+        url = att.get("url", "")
+        if not isinstance(url, str) or not url:
+            raise ValueError("url attachment requires a non-empty 'url' string")
+        fetch_mode = att.get("fetch_mode", "auto")
+        return URLBlock(url=url, fetch_mode=fetch_mode)
+    raise ValueError(f"unsupported attachment type for block emission: {atype!r}")
+
+
+def _apply_cache_marker(block: ContentBlock) -> ContentBlock:
+    """Return a copy of ``block`` with ``cache_control='ephemeral'`` set.
+
+    Only the four block types that carry a ``cache_control`` field are
+    supported (Image, Document, HTML, Text). Tool-use / tool-result
+    blocks are returned unchanged — the marker only makes sense on
+    user-facing content.
+    """
+    if isinstance(block, ImageBlock):
+        return ImageBlock(source=block.source, media_type=block.media_type, cache_control="ephemeral")
+    if isinstance(block, DocumentBlock):
+        return DocumentBlock(source=block.source, media_type=block.media_type, cache_control="ephemeral")
+    if isinstance(block, HTMLBlock):
+        return HTMLBlock(text=block.text, cache_control="ephemeral")
+    if isinstance(block, TextBlock):
+        # TextBlock has no cache_control field; the Anthropic provider
+        # adds the marker at wire time when ``cache_enabled`` is set.
+        return block
+    return block
+
+
+def build_question_blocks(
+    question: dict[str, Any],
+    attachments: list[dict[str, Any]] | None = None,
+    *,
+    panel_shared_attachments: list[dict[str, Any]] | None = None,
+    cache_marker: bool = False,
+) -> list[ContentBlock]:
+    """Emit the per-question user-message content blocks (hq-0pbp).
+
+    Anthropic-cited canonical order (Vision + PDF docs: image-then-text):
+
+        1. Panel-shared documents
+        2. Panel-shared images
+        3. Per-question attachments (already filtered per persona by
+           :func:`synth_panel.attachments.filter_attachments`)
+        4. Question text
+
+    When ``cache_marker`` is True, the prefix-cache breakpoint is placed
+    on the LAST block before the question text — i.e., the last attachment
+    if any are present, otherwise the question text itself (delegated to
+    the provider's auto-marker via ``request.cache_enabled``). Caller is
+    responsible for the P≥2 / 1024-token-prefix predicate; this helper
+    just applies the marker it's told to.
+    """
+    blocks: list[ContentBlock] = []
+    shared = list(panel_shared_attachments or [])
+    per_q = list(attachments or [])
+
+    # 1+2: panel-shared docs first, then panel-shared images
+    shared_docs = [a for a in shared if a.get("type") == "document"]
+    shared_images = [a for a in shared if a.get("type") == "image"]
+    shared_other = [a for a in shared if a.get("type") not in ("document", "image")]
+    for att in (*shared_docs, *shared_images, *shared_other):
+        blocks.append(_attachment_to_block(att))
+
+    # 3: per-question attachments in caller-supplied order
+    for att in per_q:
+        blocks.append(_attachment_to_block(att))
+
+    # 4: question text
+    text = question.get("text", question) if isinstance(question, dict) else str(question)
+    text_block = TextBlock(text=str(text))
+
+    if cache_marker and blocks:
+        # Mark the LAST attachment block (the cache breakpoint sits at the
+        # end of the cacheable prefix; the question text trails it).
+        blocks[-1] = _apply_cache_marker(blocks[-1])
+    blocks.append(text_block)
+    return blocks

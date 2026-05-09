@@ -16,12 +16,20 @@ from synth_panel.llm.client import LLMClient
 from synth_panel.llm.models import (
     CompletionRequest,
     CompletionResponse,
+    ContentBlock,
+    DocumentBlock,
+    FileRefSource,
+    HTMLBlock,
+    ImageBlock,
+    InlineSource,
     InputMessage,
     TextBlock,
     ToolChoice,
     ToolDefinition,
     ToolInvocationBlock,
     ToolResultBlock,
+    URLBlock,
+    URLSource,
 )
 from synth_panel.llm.models import (
     TokenUsage as LLMTokenUsage,
@@ -165,6 +173,102 @@ def _convert_usage(llm_usage: LLMTokenUsage) -> TokenUsage:
 # ---------------------------------------------------------------------------
 
 
+def _source_from_dict(src: dict[str, Any]) -> Any:
+    stype = src.get("type")
+    if stype == "base64":
+        return InlineSource(data=src.get("data", ""))
+    if stype == "url":
+        return URLSource(url=src.get("url", ""))
+    if stype == "file":
+        return FileRefSource(file_id=src.get("file_id", ""))
+    raise ValueError(f"unrecognized source type: {stype!r}")
+
+
+def _block_dict_to_content_block(block: dict[str, Any]) -> ContentBlock | None:
+    """Convert a session-stored block dict back to a typed ContentBlock.
+
+    Returns ``None`` for unrecognized block types so callers can drop them
+    rather than crashing the session loop. Multimodal blocks (image,
+    document, html, url) round-trip through the persistence layer as plain
+    dicts; this helper restores the type discriminator before sending to
+    the provider.
+    """
+    btype = block.get("type", "text")
+    if btype == "text":
+        return TextBlock(text=block.get("text", ""))
+    if btype == "tool_use":
+        return ToolInvocationBlock(
+            id=block.get("id", ""),
+            name=block.get("name", ""),
+            input=block.get("input", {}),
+        )
+    if btype == "tool_result":
+        return ToolResultBlock(
+            tool_use_id=block.get("tool_use_id", ""),
+            content=[TextBlock(text=block.get("text", ""))],
+            is_error=block.get("is_error", False),
+        )
+    if btype == "image":
+        src = block.get("source", {})
+        media_type = block.get("media_type", "image/png")
+        return ImageBlock(
+            source=_source_from_dict(src),
+            media_type=media_type,
+            cache_control=block.get("cache_control"),
+        )
+    if btype == "document":
+        src = block.get("source", {})
+        media_type = block.get("media_type", "application/pdf")
+        return DocumentBlock(
+            source=_source_from_dict(src),
+            media_type=media_type,
+            cache_control=block.get("cache_control"),
+        )
+    if btype == "html":
+        return HTMLBlock(text=block.get("text", ""), cache_control=block.get("cache_control"))
+    if btype == "url":
+        return URLBlock(url=block.get("url", ""), fetch_mode=block.get("fetch_mode", "auto"))
+    return None
+
+
+def _content_block_to_dict(block: ContentBlock) -> dict[str, Any]:
+    """Serialize a typed :class:`ContentBlock` to a session-storable dict.
+
+    Inverse of :func:`_block_dict_to_content_block`. Multimodal blocks
+    persist by source variant + media_type so a resumed session can
+    re-emit byte-identical wire payloads. ``cache_control`` is dropped
+    on persistence — it's a per-request hint, not part of the message.
+    """
+    if isinstance(block, TextBlock):
+        return {"type": "text", "text": block.text}
+    if isinstance(block, ToolInvocationBlock):
+        return {"type": "tool_use", "id": block.id, "name": block.name, "input": block.input}
+    if isinstance(block, ToolResultBlock):
+        text = "".join(getattr(c, "text", "") for c in block.content)
+        return {
+            "type": "tool_result",
+            "tool_use_id": block.tool_use_id,
+            "text": text,
+            "is_error": block.is_error,
+        }
+    if isinstance(block, (ImageBlock, DocumentBlock)):
+        src = block.source
+        if isinstance(src, InlineSource):
+            src_dict: dict[str, Any] = {"type": "base64", "data": src.data}
+        elif isinstance(src, URLSource):
+            src_dict = {"type": "url", "url": src.url}
+        elif isinstance(src, FileRefSource):
+            src_dict = {"type": "file", "file_id": src.file_id}
+        else:
+            src_dict = {"type": "unknown"}
+        return {"type": block.type, "source": src_dict, "media_type": block.media_type}
+    if isinstance(block, HTMLBlock):
+        return {"type": "html", "text": block.text}
+    if isinstance(block, URLBlock):
+        return {"type": "url", "url": block.url, "fetch_mode": block.fetch_mode}
+    return {"type": "text", "text": str(block)}
+
+
 def _session_messages_to_input(messages: list[ConversationMessage]) -> list[InputMessage]:
     """Convert persistence messages to LLM input messages.
 
@@ -177,44 +281,25 @@ def _session_messages_to_input(messages: list[ConversationMessage]) -> list[Inpu
         if msg.role == "system":
             continue
         if msg.role == "tool":
-            # Tool results are sent as user-role messages per API convention
-            result.append(
-                InputMessage(
-                    role="user",
-                    content=[
+            content_blocks: list[ContentBlock] = []
+            for block in msg.content:
+                if block.get("type") == "tool_result":
+                    content_blocks.append(
                         ToolResultBlock(
                             tool_use_id=block.get("tool_use_id", ""),
                             content=[TextBlock(text=block.get("text", ""))],
                             is_error=block.get("is_error", False),
                         )
-                        if block.get("type") == "tool_result"
-                        else TextBlock(text=block.get("text", ""))
-                        for block in msg.content
-                    ],
-                )
-            )
+                    )
+                else:
+                    content_blocks.append(TextBlock(text=block.get("text", "")))
+            result.append(InputMessage(role="user", content=content_blocks))
         elif msg.role in ("user", "assistant"):
             content_blocks = []
             for block in msg.content:
-                btype = block.get("type", "text")
-                if btype == "text":
-                    content_blocks.append(TextBlock(text=block.get("text", "")))
-                elif btype == "tool_use":
-                    content_blocks.append(
-                        ToolInvocationBlock(
-                            id=block.get("id", ""),
-                            name=block.get("name", ""),
-                            input=block.get("input", {}),
-                        )
-                    )
-                elif btype == "tool_result":
-                    content_blocks.append(
-                        ToolResultBlock(
-                            tool_use_id=block.get("tool_use_id", ""),
-                            content=[TextBlock(text=block.get("text", ""))],
-                            is_error=block.get("is_error", False),
-                        )
-                    )
+                cb = _block_dict_to_content_block(block)
+                if cb is not None:
+                    content_blocks.append(cb)
             result.append(InputMessage(role=msg.role, content=content_blocks))
     return result
 
@@ -301,6 +386,7 @@ class AgentRuntime:
         temperature: float | None = None,
         top_p: float | None = None,
         seed: int | None = None,
+        cache_enabled: bool = True,
     ) -> None:
         self._client = client
         self._session = session
@@ -318,6 +404,7 @@ class AgentRuntime:
         self._temperature = temperature
         self._top_p = top_p
         self._seed = seed
+        self._cache_enabled = cache_enabled
 
     @property
     def session(self) -> Session:
@@ -327,16 +414,24 @@ class AgentRuntime:
     def usage_tracker(self) -> UsageTracker:
         return self._usage_tracker
 
-    def run_turn(self, user_input: str) -> TurnSummary:
+    def run_turn(self, user_input: str | list[ContentBlock]) -> TurnSummary:
         """Execute a complete conversational turn.
 
         A turn may involve multiple iterations if the LLM requests tool use.
+
+        ``user_input`` is either:
+
+        - a plain ``str`` — wrapped in a single TextBlock, the legacy path; or
+        - a ``list[ContentBlock]`` — multimodal user message (hq-0pbp). Cache
+          markers carried on individual blocks (Image / Document / HTML) are
+          preserved when the message is serialized for the wire.
         """
         # 1. Push user message
-        user_msg = ConversationMessage(
-            role="user",
-            content=[{"type": "text", "text": user_input}],
-        )
+        if isinstance(user_input, str):
+            content_dicts: list[dict[str, Any]] = [{"type": "text", "text": user_input}]
+        else:
+            content_dicts = [_content_block_to_dict(b) for b in user_input]
+        user_msg = ConversationMessage(role="user", content=content_dicts)
         self._session.push_message(user_msg)
 
         summary = TurnSummary()
@@ -357,6 +452,7 @@ class AgentRuntime:
                 temperature=self._temperature,
                 top_p=self._top_p,
                 seed=self._seed,
+                cache_enabled=self._cache_enabled,
             )
 
             # 3. Call LLM
