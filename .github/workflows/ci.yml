@@ -66,10 +66,18 @@ jobs:
         run: pip install -e ".[dev,mcp]"
 
       - name: pip-audit
-        # CVE-2026-3219 affects pip 26.0.1 (the runner default) with no patched
-        # release yet. Ignore until a fixed pip ships, then drop this flag.
+        # CVE-2026-3219 affects pip 26.0.1 (the runner default); fix in pip 26.1.
+        # CVE-2026-6357 affects pip 26.0.1; fix also in pip 26.1.
+        # Both ignored until the runner image picks up patched pip, then drop.
         # Tracking: https://nvd.nist.gov/vuln/detail/CVE-2026-3219
-        run: pip-audit --ignore-vuln CVE-2026-3219
+        # Tracking: https://nvd.nist.gov/vuln/detail/CVE-2026-6357
+        #
+        # `--skip-editable` excludes the `synthpanel` package itself (installed
+        # via `pip install -e .`). The audit is meant to catch dependency
+        # vulnerabilities, not vulnerabilities in the package being audited —
+        # and the latter would also fail "not found on PyPI" on release commits
+        # before the version actually ships.
+        run: pip-audit --skip-editable --ignore-vuln CVE-2026-3219 --ignore-vuln CVE-2026-6357
 
   test:
     runs-on: ubuntu-latest

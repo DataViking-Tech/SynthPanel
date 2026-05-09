@@ -6,42 +6,93 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [Unreleased]
 
-Work in progress for the next release after v1.0.0 lands.
+(Empty — next-cycle work lands here.)
 
-### Added
-
-- `synth_panel.attachments.pdf` (hq-glz6) — PDF attachment ingest with a
-  cheap-local decision tree: native PDF submission for text-bearing files
-  within Anthropic's limits, text extraction via `pypdfium2` for oversize
-  text-bearing PDFs, page-as-image rendering at 150 DPI for scanned PDFs.
-  Encrypted PDFs reject with `PdfEncryptedError`; oversize-and-scanned
-  combinations reject with `PdfOversizeScannedError`. Submission mode
-  recommendation (inline base64 below 4 MiB, Files API above) and an
-  estimated-token cost preview surface alongside every plan. Install with
-  `pip install synthpanel[pdf]` (adds `pypdfium2` + `Pillow`, both
-  permissively licensed and shipped as wheels — no system binary).
-- `--seed N` flag on `panel run` (sy-cxp) for reproducible sampling.
-  Forwarded to providers that support it (OpenAI, Gemini, xAI, OpenRouter)
-  and recorded in `metadata.parameters.seed` plus the resume fingerprint.
-  Anthropic and other non-supporting providers log a single warning per
-  run and proceed without determinism. See `docs/reproducibility.md` for
-  the boundary between `--seed` (new runs) and `--resume` (replay).
-
-### Documentation
-
-- `docs/oauth-discovery.md` — records the AR-5 (sy-iaf) determination that
-  OAuth/OIDC discovery metadata is not applicable to SynthPanel: the CLI is
-  local, the MCP server is stdio, and synthpanel.dev is a static site, so no
-  protected API exists for `/.well-known/openid-configuration` or
-  `/.well-known/oauth-authorization-server` to describe.
-
-## [1.0.0] - TBD
+## [1.0.0] - 2026-05-09
 
 The frozen MCP contract release. The schema at
 [`synthpanel/schemas/v1.0.0.json`](src/synth_panel/schemas/v1.0.0.json) is
 embedded in the package, echoed in every response and every error
 (`schema_version: "1.0.0"`), and append-only — breaking changes will ship as a
 parallel `v2.0.0.json`, never as in-place edits.
+
+This release also lands the **multimodal attachments system** (hq-pojo epic) —
+panels can now react to images, fetched URLs, PDFs, and inline HTML across all
+four attachment types, with per-persona stratified delivery, prompt-caching
+across panel-shared content, and a unified security perimeter for URL fetches.
+See the *Added (multimodal attachments, hq-pojo)* sub-section below.
+
+### Added (multimodal attachments, hq-pojo epic)
+
+- **Question/panel attachments data model** (hq-l0lw) — questions can carry
+  references into a top-level `Instrument.attachments` bank (string IDs) plus
+  `inline_attachments` for one-off blocks. Four attachment types supported:
+  `image` (PNG/JPEG/GIF/WebP), `document` (PDF), `url` (fetched at frame
+  stage), and `html` (inline text). `ContentBlock` union extended with
+  frozen `ImageBlock` / `DocumentBlock` / `URLBlock` / `HTMLBlock` dataclasses
+  using `Literal`-discriminated `type` fields and a tagged-union `source`
+  variant (base64 / url / file_id) mirroring Anthropic API shape. New
+  `accept_multimodal_sampling: bool = False` parameter on the four MCP tools
+  preserves the existing silent-drop semantics for callers who haven't
+  opted in (T6 migration: feature flag).
+- **URL attachment fetcher with security perimeter** (hq-gmju) — content-type
+  ladder (try `Accept: text/markdown` → trafilatura on HTML → optional
+  Playwright screenshot for visual artifacts) selected per question's
+  `attachment_intent` field. SSRF perimeter: deny RFC1918, loopback,
+  link-local, IMDS (`169.254.169.254`), CGNAT, IPv6 ULA, IPv4-mapped IPv6;
+  DNS-rebinding mitigation via pin-to-resolved-IP; magic-byte sniff via
+  `puremagic`; size caps 8/25/10 MiB (HTML/PDF/image); httpx
+  `Timeout(3,10,3,2)`; redirect cap 3 with per-hop SSRF + content-type
+  recheck. Content-addressable on-disk cache (`~/.synthpanel/cache/url/`)
+  with 15-min default TTL, 2 GiB LRU, per-question `pin: true` opt-out.
+  Per-attachment failure policy: `abort` / `skip_question` (default) /
+  `placeholder`. New optional dep `synthpanel[visual]` for Playwright.
+- **Per-persona stratification** (hq-iczd) — each attachment can carry an
+  `attachment_filter: list[predicate]` clause (predicates `{field, op,
+  value}` with implicit AND across, ops `equals`/`contains`/`matches`/
+  `gte`/`lte`/`in`). Filter evaluation reuses the v3 routing-predicate
+  engine (refactored to accept arbitrary `valid_fields` allowlists).
+  Non-matching personas receive the question text without the attachment
+  — no skip, no fallback, no placeholder; their response is still a valid
+  datapoint ("what would you say without seeing the ad?"). Frame-stage
+  evaluation site at `orchestrator.py` mirrors the existing budget-gate
+  sibling. New `count_strata(personas)` helper exposes the partition
+  cardinality K to the caching layer.
+- **Multimodal block emission + prompt caching** (hq-0pbp) — block order
+  per Anthropic best practices: shared documents → shared images →
+  per-question attachments → text. `cache_control: ephemeral` placed on
+  the last shared block so the entire shared prefix is cached. Persona
+  system prompts always cached. K≤5 strata cap enforced at frame stage
+  (raises `PanelPlanningError` above K=5) — architecturally prevents the
+  per-persona cache-defeat cliff (would cost 1.25× of uncached). 5-min
+  cache tier default with explicit `panel.cache_tier` override; bypass
+  for P=1 panels and prefixes below Anthropic's 1024-token cacheability
+  minimum. Stratum-fingerprint logging surfaces cache-hit telemetry
+  without sending custom keys (Anthropic derives keys from prefix bytes).
+- **Persistence layer (CAS)** (hq-qd7r) — attachment payloads stored in a
+  content-addressable two-tier layout: global CAS at
+  `~/.synthpanel/attachments/<sha256[0:2]>/<sha256>.<ext>` for cross-run
+  dedup, plus per-run `<result-id>.attachments/refs.json` carrying typed
+  `AttachmentRef` records `{id, kind, sha256, content_type, byte_size,
+  source_uri?, fetched_at?, dims?, thumb_sha256?, ...}`. Result JSON
+  stores ref IDs only — bytes never inline. New
+  `ANNOTATED_CHOICE_SCHEMA` extends the extractor registry with optional
+  `attachment_id` linking responses back to the attachment they
+  reacted to. New top-level `result_format_version` field on saved
+  results (`"1.1"` when attachments present, else `"1.0"`); existing
+  consumers untouched. New env var `SYNTH_PANEL_ATTACHMENT_DIR` for
+  out-of-tree CAS storage. `pip install synthpanel[pdf]` covers PDF
+  payload handling.
+- **PDF attachment ingest decision tree** (hq-glz6) — moved from prior
+  [Unreleased]. Native PDF submission for text-bearing files within
+  Anthropic's limits, text extraction via `pypdfium2` for oversize
+  text-bearing PDFs, page-as-image rendering at 150 DPI for scanned PDFs.
+  Encrypted PDFs reject with `PdfEncryptedError`; oversize-and-scanned
+  combinations reject with `PdfOversizeScannedError`. Submission mode
+  recommendation (inline base64 below 4 MiB, Files API above) and an
+  estimated-token cost preview surface alongside every plan. Install
+  with `pip install synthpanel[pdf]` (`pypdfium2` + `Pillow`, both
+  permissively licensed wheels — no system binary).
 
 ### Added
 
@@ -117,6 +168,11 @@ parallel `v2.0.0.json`, never as in-place edits.
 - (GH-308, sp-4y5.1) `synthpanel pack diff <pack-a> <pack-b>` — compare two persona packs side-by-side. Reports added/removed/unchanged/changed personas (matched by name), per-persona field-level diffs (age, occupation, background, traits, gender), and composition deltas (age range, age mean, role distribution, gender split when present). Accepts built-in pack names, user-saved pack IDs, or YAML file paths for either side; supports `--format json` for CI integration.
 - (sy-ws76) `synthpanel panel run --resume <run-id>` is now a standalone entry point: pass just the run id and the original `--personas` / `--instrument` paths are recovered from the checkpoint's saved CLI args. Existing flags can still be passed to override. New `--allow-drift` flag downgrades checkpoint config drift from a hard error to a warning ("statistically inconsistent" run), for cases where intentionally mixing configs is acceptable. Pre-`sy-ws76` checkpoints (no `cli_args` field) still load — back-compat preserved.
 - (sp-4loufu) Per-persona LLM overrides via a YAML `llm_overrides:` block on each persona, accepting `temperature`, `top_p`, `max_tokens`, and `model`. Lets researchers vary stochasticity within a single panel — e.g. a "deliberate" persona at `temperature: 0.3` and an "exploratory" one at `0.9` — without giving up the run-level `--temperature` default for everyone else. Overrides flow through the structured-output and extraction calls too, are validated up front (out-of-range temperature, unknown keys, etc. fail the run before any LLM call), and naturally show up in per-persona cost tracking because each persona's request carries its own `max_tokens`. The new `llm_overrides.model` is recognised alongside the legacy top-level `model` field; top-level wins on collision so existing YAML is unchanged.
+- (sy-cxp) `--seed N` flag on `panel run` for reproducible sampling. Forwarded to providers that support it (OpenAI, Gemini, xAI, OpenRouter) and recorded in `metadata.parameters.seed` plus the resume fingerprint. Anthropic and other non-supporting providers log a single warning per run and proceed without determinism. See `docs/reproducibility.md` for the boundary between `--seed` (new runs) and `--resume` (replay).
+
+### Documentation
+
+- `docs/oauth-discovery.md` (sy-iaf) — records the AR-5 determination that OAuth/OIDC discovery metadata is not applicable to SynthPanel: the CLI is local, the MCP server is stdio, and synthpanel.dev is a static site, so no protected API exists for `/.well-known/openid-configuration` or `/.well-known/oauth-authorization-server` to describe.
 
 ### Fixed
 - (GH-340, sp-xehk) Provider clients now share a single, formally-named retry/backoff policy (`synth_panel.llm.retry.RetryPolicy`) instead of relying on retry logic buried inside `LLMClient`. The class encapsulates the budgets, backoff curve, and `Retry-After` handling that previously lived in `_with_retry`, so all five providers (Anthropic, Gemini, xAI, OpenRouter, OpenAI-compatible) get identical behavior and the policy is now reusable / injectable via `LLMClient(retry_policy=...)`. Retry attempts log at `INFO` (was `WARNING`) with `provider`, `attempt`, and `reason` fields so operators can see where backoff is happening per-provider without enabling DEBUG. Provider display names are formalized on `ProviderConfig.name`. Behavior unchanged: 401 still does not retry, 429 retries with budget+jitter, server-supplied `Retry-After` still dominates exponential backoff. Closes #340.
@@ -134,6 +190,7 @@ parallel `v2.0.0.json`, never as in-place edits.
 
 ### Fixed
 - (sp-4y5.7, GH #309) Cap `anthropic` and `openai` SDK loggers at WARNING by default, completing the third-party DEBUG-leak fix from PR #352. Issue #309 explicitly listed both libraries as noisy at DEBUG; they were missing from the `_NOISY_LOGGERS` set. `--debug-all` (and its help text) now surface them alongside `httpx`/`httpcore`/`urllib3`/MCP/websocket libs.
+- (hq-kmyx) `tests/test_attachments_filter.py::TestInstrumentValidatesAttachmentFilter::test_valid_filter_parses` fixture aligned with the canonical bank-plus-string-ref shape per hq-xzsm data-model design (top-level `Instrument.attachments` keyed by string IDs, dict-form refs go in `inline_attachments`). Surfaced and resolved during the hq-pojo I-phase swarm.
 
 ## [0.12.0] - 2026-04-26
 
