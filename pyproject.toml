@@ -25,7 +25,9 @@ classifiers = [
 dependencies = [
     "httpx>=0.27",
     "jinja2>=3.1",
+    "puremagic>=1.20",
     "pyyaml>=6.0",
+    "trafilatura>=1.10",
 ]
 
 [project.urls]
@@ -56,6 +58,14 @@ convergence = [
     "synthbench>=0.1",
 ]
 report = []
+visual = [
+    # Optional Playwright + headless Chromium for the URL-attachment
+    # ladder's screenshot step (hq-hqlp §1, step 3). Adds ~80 MB of
+    # browser shell on install (`playwright install --with-deps chromium`),
+    # which is why this stays opt-in. The fetch ladder degrades to
+    # text-only when the import is missing.
+    "playwright>=1.40",
+]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
