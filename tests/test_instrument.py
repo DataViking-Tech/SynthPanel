@@ -745,12 +745,15 @@ class TestAttachments:
                 }
             )
 
-    def test_question_ref_must_be_string(self):
-        with pytest.raises(InstrumentError, match="must be a string"):
+    def test_question_ref_must_be_string_or_mapping(self):
+        # Dict-form refs (inline attachments with optional `filter`, hq-iczd)
+        # are accepted alongside bank-id strings — only non-string non-dict
+        # values are rejected.
+        with pytest.raises(InstrumentError, match=r"string or mapping"):
             parse_instrument(
                 {
                     "version": 1,
-                    "questions": [{"text": "Q", "attachments": [{"id": "x"}]}],
+                    "questions": [{"text": "Q", "attachments": [123]}],
                     "attachments": {"x": self._bank()},
                 }
             )

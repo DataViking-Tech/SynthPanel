@@ -329,9 +329,15 @@ def _validate_attachments(
                         f"{context} question[{i}]: attachments must be a list of ids, got {type(refs).__name__}"
                     )
                 for ref in refs:
+                    if isinstance(ref, dict):
+                        # Dict-form: inline attachment carrying optional `filter`
+                        # for hq-iczd stratification. Cache-control invariant
+                        # below treats these as inline (not part of the
+                        # shared/bank-referenced prefix).
+                        continue
                     if not isinstance(ref, str):
                         raise InstrumentError(
-                            f"{context} question[{i}]: attachment ref must be a string, got {type(ref).__name__}"
+                            f"{context} question[{i}]: attachment ref must be a string or mapping, got {type(ref).__name__}"
                         )
                     if ref not in bank:
                         raise InstrumentError(
@@ -366,12 +372,19 @@ def _validate_attachments(
             # and it must sit at the end of the shared (bank-referenced) prefix.
             ephemeral_idx: list[int] = []
             position = 0
-            shared_prefix_end = len(refs) if isinstance(refs, list) else 0
-            if isinstance(refs, list):
-                for ref in refs:
-                    if bank.get(ref, {}).get("cache_control") == "ephemeral":
-                        ephemeral_idx.append(position)
-                    position += 1
+            # Only string refs participate in the shared (bank-referenced) prefix.
+            # Dict-form refs (inline w/ stratification filter) are appended after.
+            shared_refs = [r for r in refs if isinstance(r, str)] if isinstance(refs, list) else []
+            inline_dict_refs = [r for r in refs if isinstance(r, dict)] if isinstance(refs, list) else []
+            shared_prefix_end = len(shared_refs)
+            for ref in shared_refs:
+                if bank.get(ref, {}).get("cache_control") == "ephemeral":
+                    ephemeral_idx.append(position)
+                position += 1
+            for ref in inline_dict_refs:
+                if ref.get("cache_control") == "ephemeral":
+                    ephemeral_idx.append(position)
+                position += 1
             if isinstance(inline, list):
                 for block in inline:
                     if isinstance(block, dict) and block.get("cache_control") == "ephemeral":
