@@ -1,12 +1,17 @@
 """Predicate engine and round router for v3 branching instruments.
 
-Predicates are structured dicts on disk — no parser, no eval. Three
-operators (``contains``, ``equals``, ``matches``) over the fields of a
-``SynthesisResult``-shaped context. The router walks ``route_when``
-clauses in order; first matching ``if`` wins, otherwise the ``else``
-clause (validated to exist by the instrument parser). The reserved
-sentinel ``__end__`` marks a terminal target — the orchestrator runs
-final synthesis on the path traversed so far.
+Predicates are structured dicts on disk — no parser, no eval. Six
+operators (``contains``, ``equals``, ``matches``, ``gte``, ``lte``,
+``in``) over an open or closed set of fields. The router walks
+``route_when`` clauses in order; first matching ``if`` wins, otherwise
+the ``else`` clause (validated to exist by the instrument parser). The
+reserved sentinel ``__end__`` marks a terminal target — the
+orchestrator runs final synthesis on the path traversed so far.
+
+The predicate engine is shared with the attachments stratification
+filter (``synth_panel.attachments.filter``). Routing closes ``field``
+to the SynthesisResult schema via ``_VALID_FIELDS``; attachments pass
+``valid_fields=None`` to allow any persona key.
 """
 
 from __future__ import annotations
@@ -23,23 +28,43 @@ class RoutingError(ValueError):
     """Raised when a route_when clause cannot be resolved."""
 
 
-def evaluate_predicate(predicate: dict[str, Any], context: dict[str, Any]) -> bool:
-    """Evaluate a structured predicate against a synthesis context.
+def _evaluate_predicate(
+    predicate: dict[str, Any],
+    context: dict[str, Any],
+    *,
+    valid_fields: frozenset[str] | None,
+) -> bool:
+    """Evaluate a structured predicate against a context dict.
 
-    ``predicate`` shape: ``{"field": str, "op": str, "value": str}``.
-    Supported ops: ``contains`` (substring against any list entry or
-    against a string field), ``equals`` (exact string match), ``matches``
-    (``re.search``). Unknown field raises ``KeyError`` with the offending
-    name; unknown op raises ``ValueError``.
+    ``predicate`` shape: ``{"field": str, "op": str, "value": Any}``.
+
+    Supported ops:
+
+    - ``contains`` — substring against any list entry or a string field.
+    - ``equals`` — exact match; on list targets, "any element equals".
+    - ``matches`` — ``re.search``; on list targets, "any element matches".
+    - ``gte`` / ``lte`` — coerce both sides to ``float``; raise on
+      non-numeric.
+    - ``in`` — ``value`` is a list; passes if ``target`` equals any
+      element, or for list targets, if any element appears in ``value``.
+
+    When ``valid_fields`` is a frozenset the field name is enforced
+    against that allowlist (routing). When ``None`` any key is allowed
+    and a missing key on ``context`` evaluates as ``False`` (attachments
+    against open-shape personas).
     """
     field = predicate["field"]
     op = predicate["op"]
     value = predicate["value"]
 
-    if field not in _VALID_FIELDS:
-        raise KeyError(field)
-
-    target = context[field]
+    if valid_fields is not None:
+        if field not in valid_fields:
+            raise KeyError(field)
+        target = context[field]
+    else:
+        if field not in context:
+            return False
+        target = context[field]
 
     if op == "contains":
         if isinstance(target, list):
@@ -61,7 +86,30 @@ def evaluate_predicate(predicate: dict[str, Any], context: dict[str, Any]) -> bo
             return bool(pattern.search(target))
         return False
 
+    if op == "gte":
+        return float(target) >= float(value)
+
+    if op == "lte":
+        return float(target) <= float(value)
+
+    if op == "in":
+        if not isinstance(value, list):
+            raise ValueError(f"'in' op requires a list value, got {type(value).__name__}")
+        if isinstance(target, list):
+            return any(item in value for item in target)
+        return target in value
+
     raise ValueError(f"unknown predicate op: {op!r}")
+
+
+def evaluate_predicate(predicate: dict[str, Any], context: dict[str, Any]) -> bool:
+    """Evaluate a routing predicate against a synthesis context.
+
+    Thin wrapper that closes ``field`` to the SynthesisResult-shaped
+    allowlist (``_VALID_FIELDS``). Unknown field raises ``KeyError``;
+    unknown op raises ``ValueError``.
+    """
+    return _evaluate_predicate(predicate, context, valid_fields=_VALID_FIELDS)
 
 
 def route_round(route_when: list[dict[str, Any]], context: dict[str, Any]) -> str:

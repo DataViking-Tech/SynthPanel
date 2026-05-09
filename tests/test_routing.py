@@ -65,6 +65,31 @@ class TestMatches:
         assert not evaluate_predicate({"field": "summary", "op": "matches", "value": r"^Nothing"}, ctx)
 
 
+class TestNewOps:
+    """hq-iczd: gte/lte/in operators added for attachment stratification.
+
+    These ops are exposed via ``evaluate_predicate`` against the routing
+    allowlist as a side-effect of sharing the predicate engine. Routing
+    fields are strings, so numeric ops here must coerce or raise.
+    """
+
+    def test_in_list_target_any_member_match(self, ctx):
+        assert evaluate_predicate({"field": "themes", "op": "in", "value": ["pricing pain", "noise"]}, ctx)
+
+    def test_in_string_target_membership(self, ctx):
+        assert evaluate_predicate(
+            {"field": "recommendation", "op": "in", "value": ["A", "Publish a clear pricing page."]},
+            ctx,
+        )
+
+    def test_in_no_match(self, ctx):
+        assert not evaluate_predicate({"field": "themes", "op": "in", "value": ["mobile", "tablet"]}, ctx)
+
+    def test_in_requires_list_value(self, ctx):
+        with pytest.raises(ValueError, match="'in' op requires a list"):
+            evaluate_predicate({"field": "themes", "op": "in", "value": "pricing pain"}, ctx)
+
+
 class TestErrors:
     def test_unknown_field_raises_keyerror_with_name(self, ctx):
         with pytest.raises(KeyError) as exc:

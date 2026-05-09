@@ -97,6 +97,35 @@ class InstrumentError(ValueError):
 
 _RESPONSE_SCHEMA_TYPES: frozenset[str] = frozenset({"text", "scale", "enum", "tagged_themes"})
 
+_ATTACHMENT_FILTER_OPS: frozenset[str] = frozenset({"contains", "equals", "matches", "gte", "lte", "in"})
+
+
+def _validate_attachment_filter(flt: Any, *, context: str, q_index: int, a_index: int) -> None:
+    """Validate an attachment-level ``filter: list[predicate]`` clause.
+
+    Each predicate must be a dict with ``field`` (str), ``op`` (one of
+    the six routing/attachment ops), and ``value`` (any). The list may
+    be empty — semantically equivalent to no filter — but must be a
+    list when present. Numeric ops (``gte``/``lte``) and ``in`` are
+    not coerced here; they fail at evaluation time if the persona
+    trait can't satisfy them.
+    """
+    loc = f"{context} question[{q_index}] attachments[{a_index}] filter"
+    if not isinstance(flt, list):
+        raise InstrumentError(f"{loc}: must be a list of predicates, got {type(flt).__name__}")
+    for k, p in enumerate(flt):
+        if not isinstance(p, dict):
+            raise InstrumentError(f"{loc}[{k}]: must be a mapping, got {type(p).__name__}")
+        for key in ("field", "op", "value"):
+            if key not in p:
+                raise InstrumentError(f"{loc}[{k}]: missing required key '{key}'")
+        if not isinstance(p["field"], str) or not p["field"]:
+            raise InstrumentError(f"{loc}[{k}]: 'field' must be a non-empty string")
+        if not isinstance(p["op"], str) or p["op"] not in _ATTACHMENT_FILTER_OPS:
+            raise InstrumentError(f"{loc}[{k}]: 'op' must be one of {sorted(_ATTACHMENT_FILTER_OPS)}, got {p['op']!r}")
+        if p["op"] == "in" and not isinstance(p["value"], list):
+            raise InstrumentError(f"{loc}[{k}]: 'in' op requires a list 'value'")
+
 
 def _validate_response_schema(rs: Any, *, context: str, q_index: int) -> None:
     """Validate a question-level ``response_schema`` entry.
@@ -190,6 +219,23 @@ def _validate_questions(questions: list[dict[str, Any]], context: str) -> None:
         rs = q.get("response_schema")
         if rs is not None:
             _validate_response_schema(rs, context=context, q_index=i)
+
+        # hq-iczd: validate optional per-attachment stratification filters.
+        # Attachment shape itself is hq-pojo's contract; here we only check
+        # the ``filter`` predicate list so authoring typos fail at parse
+        # time rather than silently mismatching at runtime.
+        attachments = q.get("attachments")
+        if attachments is not None:
+            if not isinstance(attachments, list):
+                raise InstrumentError(
+                    f"{context} question[{i}]: attachments must be a list, got {type(attachments).__name__}"
+                )
+            for ai, att in enumerate(attachments):
+                if not isinstance(att, dict):
+                    continue
+                flt = att.get("filter")
+                if flt is not None:
+                    _validate_attachment_filter(flt, context=context, q_index=i, a_index=ai)
 
         follow_ups = q.get("follow_ups")
         if isinstance(follow_ups, list):

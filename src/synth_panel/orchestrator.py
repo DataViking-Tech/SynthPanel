@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
+from synth_panel.attachments import filter_attachments
 from synth_panel.conditions import evaluate_condition, normalize_follow_up
 from synth_panel.convergence import ConvergenceTracker, extract_categorical_responses
 from synth_panel.cost import ZERO_USAGE, CostGate, TokenUsage, UsageTracker, resolve_cost
@@ -669,6 +670,13 @@ def _run_panelist(
         for qi, question in enumerate(questions):
             question_text = question_prompt_fn(question)
 
+            # hq-iczd: per-persona attachment stratification. Compute the
+            # filtered attachment list before the budget gate so it travels
+            # alongside the question regardless of skip path. Multimodal
+            # block emission off this list is hq-0pbp's responsibility.
+            raw_attachments = question.get("attachments", []) if isinstance(question, dict) else []
+            attachments_for_persona = filter_attachments(raw_attachments, persona) if raw_attachments else []
+
             # sp-xw2z6o: per-question failure budget. If a prior panelist
             # tripped this question's budget, skip it cheaply instead of
             # re-failing. We still record an entry so per-panelist response
@@ -769,6 +777,14 @@ def _run_panelist(
                         question_budget.record_failure(qi, question_text=question_text)
                     except Exception:  # pragma: no cover - defensive
                         logger.warning("question_budget.record_failure raised; ignoring", exc_info=True)
+
+            # hq-iczd: persist the per-persona filtered attachment list on
+            # the just-appended main-question response so downstream
+            # consumers (hq-0pbp caching/multimodal emission, persistence
+            # readback) can recover the stratification decision. Only stamp
+            # when the question carried attachments at all.
+            if raw_attachments and responses and responses[-1].get("question") == question_text:
+                responses[-1]["attachments"] = attachments_for_persona
 
             # Handle conditional follow-ups (text mode only)
             raw_follow_ups = question.get("follow_ups", []) if isinstance(question, dict) else []
