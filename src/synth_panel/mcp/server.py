@@ -75,7 +75,14 @@ from synth_panel.cost import (
 from synth_panel.cost import TokenUsage as CostTokenUsage
 from synth_panel.instrument import Instrument, parse_instrument
 from synth_panel.llm.client import LLMClient
-from synth_panel.llm.models import CompletionRequest, InputMessage, TextBlock
+from synth_panel.llm.models import (
+    CompletionRequest,
+    ImageBlock,
+    InlineSource,
+    InputMessage,
+    TextBlock,
+    URLSource,
+)
 from synth_panel.mcp.data import (
     get_panel_result as _data_get_panel_result,
 )
@@ -164,6 +171,35 @@ def _resolve_mcp_default_model() -> str:
         if has_credential(env_var):
             return alias
     return MCP_DEFAULT_MODEL
+
+
+def _serialize_content_block(block: Any) -> dict[str, Any]:
+    """Render a synthpanel ContentBlock as a JSON-friendly dict.
+
+    Used by tools that surface multimodal sampling output (T6 / hq-l0lw)
+    to MCP callers — the tool payload must be JSON-serializable, but our
+    ContentBlock dataclasses are not. Only the multimodal types the
+    sampling pathway can actually return today (TextBlock, ImageBlock)
+    are emitted; future block types should grow a branch here.
+    """
+    if isinstance(block, TextBlock):
+        return {"type": "text", "text": block.text}
+    if isinstance(block, ImageBlock):
+        if isinstance(block.source, InlineSource):
+            source: dict[str, Any] = {
+                "type": "base64",
+                "media_type": block.media_type,
+                "data": block.source.data,
+            }
+        elif isinstance(block.source, URLSource):
+            source = {"type": "url", "url": block.source.url}
+        else:
+            source = {"type": "file", "file_id": getattr(block.source, "file_id", "")}
+        out: dict[str, Any] = {"type": "image", "source": source}
+        if block.cache_control is not None:
+            out["cache_control"] = block.cache_control
+        return out
+    return {"type": "unknown"}
 
 
 def _looks_like_weighted_model_spec(value: str) -> bool:
@@ -799,6 +835,7 @@ async def run_prompt(
     temperature: float | None = None,
     top_p: float | None = None,
     use_sampling: bool | None = None,
+    accept_multimodal_sampling: bool = False,
     ctx: Context = None,
 ) -> str:
     """Send a single prompt to an LLM and get a response. No personas required.
@@ -828,6 +865,12 @@ async def run_prompt(
         use_sampling: Explicit mode override. ``True`` forces sampling
             (error if unsupported), ``False`` forces BYOK. ``None``
             auto-picks based on creds + client capability.
+        accept_multimodal_sampling: Opt into preserving image/document
+            blocks the MCP host returns from sampling (T6 / hq-l0lw).
+            Default-off — the host's image content is silently dropped
+            and only text is surfaced, preserving the contract callers
+            relied on before this flag landed. Multimodal turns can
+            cost ~10x a text-only turn, so this is per-call opt-in.
     """
     spec_error = _reject_weighted_model_spec(model=model)
     if spec_error is not None:
@@ -845,22 +888,24 @@ async def run_prompt(
             prompt=prompt,
             max_tokens=4096,
             temperature=temperature,
+            accept_multimodal=accept_multimodal_sampling,
         )
         # sp-k2ed4a: surface host-side truncation so callers see why a
         # prompt response is short, not just a generic empty result.
         warnings = [sample["warning"]] if sample.get("truncated") and sample.get("warning") else []
-        return json.dumps(
-            {
-                "response": sample["text"],
-                "model": sample["model"],
-                "mode": "sampling",
-                "usage": None,
-                "cost": None,
-                "hint": decision.hint,
-                "warnings": warnings,
-            },
-            indent=2,
-        )
+        payload: dict[str, Any] = {
+            "response": sample["text"],
+            "model": sample["model"],
+            "mode": "sampling",
+            "usage": None,
+            "cost": None,
+            "hint": decision.hint,
+            "warnings": warnings,
+        }
+        if accept_multimodal_sampling:
+            blocks = sample.get("content_blocks") or []
+            payload["content_blocks"] = [_serialize_content_block(b) for b in blocks]
+        return json.dumps(payload, indent=2)
 
     client = _get_shared_client()
     request = CompletionRequest(
@@ -913,6 +958,7 @@ async def run_panel(
     synthesis_temperature: float | None = None,
     variants: int | None = None,
     use_sampling: bool | None = None,
+    accept_multimodal_sampling: bool = False,
     decision_being_informed: str | None = None,
     ctx: Context = None,
 ) -> str:
@@ -1186,6 +1232,7 @@ async def run_panel(
                 synthesis_prompt=synthesis_prompt,
                 temperature=temperature,
                 hint=decision.hint,
+                accept_multimodal=accept_multimodal_sampling,
             )
             return json.dumps(apply_response_gate(sampling_result), indent=2)
 
@@ -1312,6 +1359,7 @@ async def run_quick_poll(
     temperature: float | None = None,
     top_p: float | None = None,
     use_sampling: bool | None = None,
+    accept_multimodal_sampling: bool = False,
     decision_being_informed: str | None = None,
     ctx: Context = None,
 ) -> str:
@@ -1434,6 +1482,7 @@ async def run_quick_poll(
             synthesis_prompt=synthesis_prompt,
             temperature=temperature,
             hint=decision.hint,
+            accept_multimodal=accept_multimodal_sampling,
         )
         return json.dumps(apply_response_gate(result), indent=2)
 
@@ -1463,6 +1512,7 @@ async def _run_panel_sampling(
     synthesis_prompt: str | None,
     temperature: float | None,
     hint: str | None,
+    accept_multimodal: bool = False,
 ) -> dict[str, Any]:
     """Run a full panel via MCP sampling.
 
@@ -1502,6 +1552,7 @@ async def _run_panel_sampling(
             system_prompt=system_prompt,
             max_tokens=SAMPLING_MAX_TOKENS_DEFAULT,
             temperature=temperature,
+            accept_multimodal=accept_multimodal,
         )
         host_model = sample["model"]
         if sample.get("truncated") and sample.get("warning"):
@@ -1577,6 +1628,7 @@ async def _run_quick_poll_sampling(
     synthesis_prompt: str | None,
     temperature: float | None,
     hint: str | None,
+    accept_multimodal: bool = False,
 ) -> dict[str, Any]:
     """Run a quick poll via MCP sampling.
 
@@ -1604,6 +1656,7 @@ async def _run_quick_poll_sampling(
             system_prompt=system_prompt,
             max_tokens=2048,
             temperature=temperature,
+            accept_multimodal=accept_multimodal,
         )
         host_model = sample["model"]
         if sample.get("truncated") and sample.get("warning"):
@@ -1637,6 +1690,7 @@ async def _run_quick_poll_sampling(
             system_prompt=synth_prompt,
             max_tokens=2048,
             temperature=temperature,
+            accept_multimodal=accept_multimodal,
         )
         if synth.get("truncated") and synth.get("warning"):
             sampling_warnings.append(f"synthesis: {synth['warning']}")
@@ -1760,6 +1814,7 @@ async def extend_panel(
     synthesis: bool = True,
     synthesis_model: str | None = None,
     synthesis_prompt: str | None = None,
+    accept_multimodal_sampling: bool = False,
     decision_being_informed: str | None = None,
     ctx: Context = None,
 ) -> str:

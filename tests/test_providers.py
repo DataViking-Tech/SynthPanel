@@ -715,6 +715,81 @@ class TestAnthropicProvider:
         assert "cache_control" not in assistant_content[0]
 
 
+class TestAnthropicAttachmentSerialization:
+    """Wire serialization for image / document / html / url blocks (hq-l0lw)."""
+
+    def test_image_inline_base64(self):
+        from synth_panel.llm.models import ImageBlock, InlineSource
+        from synth_panel.llm.providers.anthropic import _build_content_blocks
+
+        out = _build_content_blocks([ImageBlock(source=InlineSource(data="AAAA"), media_type="image/png")])
+        assert out == [
+            {
+                "type": "image",
+                "source": {"type": "base64", "media_type": "image/png", "data": "AAAA"},
+            }
+        ]
+
+    def test_image_url_source(self):
+        from synth_panel.llm.models import ImageBlock, URLSource
+        from synth_panel.llm.providers.anthropic import _build_content_blocks
+
+        out = _build_content_blocks([ImageBlock(source=URLSource(url="https://x/y.jpg"), media_type="image/jpeg")])
+        assert out[0]["source"] == {"type": "url", "url": "https://x/y.jpg"}
+
+    def test_image_file_ref_source(self):
+        from synth_panel.llm.models import FileRefSource, ImageBlock
+        from synth_panel.llm.providers.anthropic import _build_content_blocks
+
+        out = _build_content_blocks([ImageBlock(source=FileRefSource(file_id="f_1"), media_type="image/png")])
+        assert out[0]["source"] == {"type": "file", "file_id": "f_1"}
+
+    def test_image_with_cache_control(self):
+        from synth_panel.llm.models import ImageBlock, InlineSource
+        from synth_panel.llm.providers.anthropic import _build_content_blocks
+
+        out = _build_content_blocks(
+            [
+                ImageBlock(
+                    source=InlineSource(data="AAAA"),
+                    media_type="image/png",
+                    cache_control="ephemeral",
+                )
+            ]
+        )
+        assert out[0]["cache_control"] == {"type": "ephemeral"}
+
+    def test_document_pdf_inline(self):
+        from synth_panel.llm.models import DocumentBlock, InlineSource
+        from synth_panel.llm.providers.anthropic import _build_content_blocks
+
+        out = _build_content_blocks([DocumentBlock(source=InlineSource(data="JVBERi0..."))])
+        assert out[0]["type"] == "document"
+        assert out[0]["source"]["media_type"] == "application/pdf"
+
+    def test_html_block_lowers_to_text(self):
+        from synth_panel.llm.models import HTMLBlock
+        from synth_panel.llm.providers.anthropic import _build_content_blocks
+
+        out = _build_content_blocks([HTMLBlock(text="<b>hi</b>")])
+        assert out == [{"type": "text", "text": "<b>hi</b>"}]
+
+    def test_url_block_at_wire_raises(self):
+        # URLBlock must be lowered by the fetcher (hq-hqlp) before serialization.
+        # If one reaches the wire, fail loudly rather than silently dropping it.
+        from synth_panel.llm.models import URLBlock
+        from synth_panel.llm.providers.anthropic import _build_content_blocks
+
+        with pytest.raises(ValueError, match="URLBlock"):
+            _build_content_blocks([URLBlock(url="https://example.com")])
+
+    def test_existing_text_block_serialization_unchanged(self):
+        from synth_panel.llm.providers.anthropic import _build_content_blocks
+
+        out = _build_content_blocks([TextBlock(text="hi")])
+        assert out == [{"type": "text", "text": "hi"}]
+
+
 # ---------------------------------------------------------------------------
 # Tests: Anthropic SSE stream parsing
 # ---------------------------------------------------------------------------

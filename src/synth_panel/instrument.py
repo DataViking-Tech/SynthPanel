@@ -38,13 +38,27 @@ v1 and v2 stay valid as degenerate v3.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlparse
 
 from synth_panel.conditions import ConditionError, validate_condition_string
 from synth_panel.structured.schemas import is_known_schema
 
 END_SENTINEL = "__end__"
+
+# Authored attachment IDs (the keys in Instrument.attachments) must match this
+# pattern so they're safe to interpolate into log lines, file paths, and
+# downstream URIs without escaping.
+_ATTACHMENT_ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
+
+_ATTACHMENT_TYPES: frozenset[str] = frozenset({"image", "document", "url", "html"})
+
+_IMAGE_MEDIA_TYPES: frozenset[str] = frozenset({"image/png", "image/jpeg", "image/gif", "image/webp"})
+_DOCUMENT_MEDIA_TYPES: frozenset[str] = frozenset({"application/pdf"})
+
+_FETCH_MODES: frozenset[str] = frozenset({"auto", "html_text", "screenshot", "markdown"})
 
 
 @dataclass
@@ -75,6 +89,7 @@ class Instrument:
     rounds: list[Round] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     system_prompt_template: str | None = None
+    attachments: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     @property
     def questions(self) -> list[dict[str, Any]]:
@@ -185,6 +200,198 @@ def _validate_response_schema(rs: Any, *, context: str, q_index: int) -> None:
             raise InstrumentError(f"{loc}: 'max_tokens' must be a positive integer when provided")
 
 
+def _validate_attachment_source(source: Any, *, attachment_type: str, context: str) -> None:
+    """Shape-check an attachment ``source`` mapping (tagged-union variant).
+
+    Recognized variants:
+      * ``{"type": "base64", "data": "..."}`` — inline base64 payload.
+      * ``{"type": "url", "url": "..."}`` — externally-hosted resource.
+      * ``{"type": "file", "file_id": "..."}`` — provider Files API ref.
+    """
+    if not isinstance(source, dict):
+        raise InstrumentError(f"{context}: '{attachment_type}' source must be a mapping, got {type(source).__name__}")
+    stype = source.get("type")
+    if stype == "base64":
+        data = source.get("data")
+        if not isinstance(data, str) or not data:
+            raise InstrumentError(f"{context}: source.data must be a non-empty string for base64 source")
+    elif stype == "url":
+        url = source.get("url")
+        if not isinstance(url, str) or not url:
+            raise InstrumentError(f"{context}: source.url must be a non-empty string for url source")
+        parsed = urlparse(url)
+        if not parsed.scheme or not parsed.netloc:
+            raise InstrumentError(f"{context}: source.url '{url}' is not a syntactically valid URL")
+    elif stype == "file":
+        file_id = source.get("file_id")
+        if not isinstance(file_id, str) or not file_id:
+            raise InstrumentError(f"{context}: source.file_id must be a non-empty string for file source")
+    else:
+        raise InstrumentError(f"{context}: source.type must be one of 'base64', 'url', 'file' (got {stype!r})")
+
+
+def _validate_attachment(att_id: str, raw: Any, *, context: str) -> None:
+    """Type-check a single attachment definition.
+
+    The bank value is a dict with at least a ``type`` discriminator. Per-type
+    shape checks land payload errors at parse time, before the run starts.
+    """
+    if not _ATTACHMENT_ID_RE.match(att_id):
+        raise InstrumentError(f"{context}: attachment id {att_id!r} must match ^[a-z][a-z0-9_-]{{0,63}}$")
+    if not isinstance(raw, dict):
+        raise InstrumentError(f"{context}: attachment '{att_id}' must be a mapping, got {type(raw).__name__}")
+    atype = raw.get("type")
+    if atype not in _ATTACHMENT_TYPES:
+        raise InstrumentError(
+            f"{context}: attachment '{att_id}' has unknown type {atype!r}; expected one of {sorted(_ATTACHMENT_TYPES)}"
+        )
+
+    loc = f"{context} attachment '{att_id}'"
+
+    if atype == "image":
+        media_type = raw.get("media_type")
+        if media_type is not None and media_type not in _IMAGE_MEDIA_TYPES:
+            raise InstrumentError(
+                f"{loc}: media_type {media_type!r} not allowed; expected one of {sorted(_IMAGE_MEDIA_TYPES)}"
+            )
+        _validate_attachment_source(raw.get("source"), attachment_type="image", context=loc)
+    elif atype == "document":
+        media_type = raw.get("media_type", "application/pdf")
+        if media_type not in _DOCUMENT_MEDIA_TYPES:
+            raise InstrumentError(
+                f"{loc}: media_type {media_type!r} not allowed; expected one of {sorted(_DOCUMENT_MEDIA_TYPES)}"
+            )
+        _validate_attachment_source(raw.get("source"), attachment_type="document", context=loc)
+    elif atype == "url":
+        url = raw.get("url")
+        if not isinstance(url, str) or not url:
+            raise InstrumentError(f"{loc}: 'url' must be a non-empty string")
+        parsed = urlparse(url)
+        if not parsed.scheme or not parsed.netloc:
+            raise InstrumentError(f"{loc}: url {url!r} is not a syntactically valid URL")
+        fetch_mode = raw.get("fetch_mode", "auto")
+        if fetch_mode not in _FETCH_MODES:
+            raise InstrumentError(
+                f"{loc}: fetch_mode {fetch_mode!r} not recognized; expected one of {sorted(_FETCH_MODES)}"
+            )
+    elif atype == "html":
+        text = raw.get("text")
+        if not isinstance(text, str) or not text:
+            raise InstrumentError(f"{loc}: 'text' must be a non-empty string")
+
+    cache_control = raw.get("cache_control")
+    if cache_control is not None and cache_control != "ephemeral":
+        raise InstrumentError(f"{loc}: cache_control must be 'ephemeral' or absent (got {cache_control!r})")
+
+
+def _validate_attachments(
+    bank: Any,
+    questions_by_context: list[tuple[list[dict[str, Any]], str]],
+) -> dict[str, dict[str, Any]]:
+    """Validate the top-level attachment bank and per-question references.
+
+    Args:
+        bank: Raw value for ``Instrument.attachments``. Either ``None`` or
+            a dict-keyed-by-id mapping.
+        questions_by_context: Each tuple is ``(question_list, context_label)``
+            so reachability errors mention the round.
+
+    Returns:
+        The validated bank as a dict (empty if ``bank`` is None).
+
+    Validation:
+        * Bank ID format: ``^[a-z][a-z0-9_-]{0,63}$``.
+        * Per-attachment type/shape checks (image/document/url/html).
+        * Per-question ``attachments`` list: every string resolves to a bank id.
+        * Cache invariant: at most one block per question may carry
+          ``cache_control: ephemeral`` (across the resolved bank refs and
+          inline blocks), and it must be the last entry of the shared
+          (bank-referenced) prefix. Protects the prompt-caching contract
+          (hq-bqrw §8) at parse time.
+    """
+    if bank is None:
+        bank = {}
+    if not isinstance(bank, dict):
+        raise InstrumentError(f"'attachments' must be a mapping keyed by id, got {type(bank).__name__}")
+    for att_id, raw in bank.items():
+        if not isinstance(att_id, str):
+            raise InstrumentError(f"attachment ids must be strings, got {type(att_id).__name__}")
+        _validate_attachment(att_id, raw, context="attachments")
+
+    for questions, context in questions_by_context:
+        for i, q in enumerate(questions):
+            if not isinstance(q, dict):
+                continue
+            refs = q.get("attachments")
+            if refs is not None:
+                if not isinstance(refs, list):
+                    raise InstrumentError(
+                        f"{context} question[{i}]: attachments must be a list of ids, got {type(refs).__name__}"
+                    )
+                for ref in refs:
+                    if not isinstance(ref, str):
+                        raise InstrumentError(
+                            f"{context} question[{i}]: attachment ref must be a string, got {type(ref).__name__}"
+                        )
+                    if ref not in bank:
+                        raise InstrumentError(
+                            f"{context} question[{i}]: attachment ref '{ref}' "
+                            f"does not resolve to a top-level attachment"
+                        )
+
+            inline = q.get("inline_attachments")
+            if inline is not None:
+                if not isinstance(inline, list):
+                    raise InstrumentError(
+                        f"{context} question[{i}]: inline_attachments must be a list, got {type(inline).__name__}"
+                    )
+                for j, block in enumerate(inline):
+                    if not isinstance(block, dict):
+                        raise InstrumentError(f"{context} question[{i}] inline_attachments[{j}] must be a mapping")
+                    btype = block.get("type")
+                    if btype not in _ATTACHMENT_TYPES and btype != "text":
+                        raise InstrumentError(
+                            f"{context} question[{i}] inline_attachments[{j}] has unknown "
+                            f"type {btype!r}; expected one of {sorted(_ATTACHMENT_TYPES | {'text'})}"
+                        )
+                    # text blocks are simple; reuse attachment shape checks for the rest
+                    if btype != "text":
+                        _validate_attachment(
+                            f"inline_{i}_{j}",
+                            {**block, "type": btype},  # already-shape; ID purely for error context
+                            context=f"{context} question[{i}] inline_attachments[{j}]",
+                        )
+
+            # Cache-control invariant: at most one ephemeral marker per question,
+            # and it must sit at the end of the shared (bank-referenced) prefix.
+            ephemeral_idx: list[int] = []
+            position = 0
+            shared_prefix_end = len(refs) if isinstance(refs, list) else 0
+            if isinstance(refs, list):
+                for ref in refs:
+                    if bank.get(ref, {}).get("cache_control") == "ephemeral":
+                        ephemeral_idx.append(position)
+                    position += 1
+            if isinstance(inline, list):
+                for block in inline:
+                    if isinstance(block, dict) and block.get("cache_control") == "ephemeral":
+                        ephemeral_idx.append(position)
+                    position += 1
+            if len(ephemeral_idx) > 1:
+                raise InstrumentError(
+                    f"{context} question[{i}]: at most one attachment may carry "
+                    f"cache_control=ephemeral (got {len(ephemeral_idx)})"
+                )
+            if ephemeral_idx and ephemeral_idx[0] != shared_prefix_end - 1:
+                raise InstrumentError(
+                    f"{context} question[{i}]: cache_control=ephemeral must mark "
+                    f"the LAST shared (bank-referenced) attachment, not an inline "
+                    f"or earlier-shared block"
+                )
+
+    return bank
+
+
 def _validate_questions(questions: list[dict[str, Any]], context: str) -> None:
     """Validate ``extraction_schema`` and ``response_schema`` on questions.
 
@@ -284,6 +491,14 @@ def parse_instrument(data: dict[str, Any]) -> Instrument:
         raise InstrumentError("Instrument must have either 'questions' (v1) or 'rounds' (v2) key")
 
     instrument.system_prompt_template = spt
+
+    # Attachments are top-level (not per-round) so the bank shows up once on
+    # the parsed Instrument regardless of v1/v2/v3 shape.
+    raw_attachments = data.get("attachments")
+    instrument.attachments = _validate_attachments(
+        raw_attachments,
+        [(r.questions, f"round '{r.name}'") for r in instrument.rounds],
+    )
     return instrument
 
 

@@ -51,7 +51,93 @@ class ThinkingBlock:
     type: Literal["thinking"] = "thinking"
 
 
-ContentBlock = TextBlock | ToolInvocationBlock | ToolResultBlock | ThinkingBlock
+# ---------------------------------------------------------------------------
+# Attachment content blocks (multimodal stimuli — hq-pojo / hq-l0lw)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class InlineSource:
+    """Base64-encoded payload supplied inline."""
+
+    data: str
+    type: Literal["base64"] = "base64"
+
+
+@dataclass(frozen=True)
+class URLSource:
+    """External URL the provider will fetch directly (e.g. Anthropic image-by-URL)."""
+
+    url: str
+    type: Literal["url"] = "url"
+
+
+@dataclass(frozen=True)
+class FileRefSource:
+    """Reference to a resource in the provider's Files API."""
+
+    file_id: str
+    type: Literal["file"] = "file"
+
+
+ImageSource = InlineSource | URLSource | FileRefSource
+DocumentSource = InlineSource | URLSource | FileRefSource
+
+
+_IMAGE_MEDIA_TYPES: frozenset[str] = frozenset({"image/png", "image/jpeg", "image/gif", "image/webp"})
+
+
+@dataclass(frozen=True)
+class ImageBlock:
+    """An image payload (inline, URL, or file ref)."""
+
+    source: ImageSource
+    media_type: Literal["image/png", "image/jpeg", "image/gif", "image/webp"] = "image/png"
+    cache_control: Literal["ephemeral"] | None = None
+    type: Literal["image"] = "image"
+
+
+@dataclass(frozen=True)
+class DocumentBlock:
+    """A document payload (PDF, currently)."""
+
+    source: DocumentSource
+    media_type: Literal["application/pdf"] = "application/pdf"
+    cache_control: Literal["ephemeral"] | None = None
+    type: Literal["document"] = "document"
+
+
+@dataclass(frozen=True)
+class URLBlock:
+    """Pre-fetch URL stub. The fetcher (hq-hqlp) lowers these to
+    TextBlock / ImageBlock / DocumentBlock before wire serialization.
+    Persisted alongside the lowered block so readback can reproduce intent.
+    """
+
+    url: str
+    fetch_mode: Literal["auto", "html_text", "screenshot", "markdown"] = "auto"
+    type: Literal["url"] = "url"
+
+
+@dataclass(frozen=True)
+class HTMLBlock:
+    """Raw HTML / rich text block. Lowered to a TextBlock at wire time."""
+
+    text: str
+    cache_control: Literal["ephemeral"] | None = None
+    type: Literal["html"] = "html"
+
+
+ContentBlock = (
+    TextBlock
+    | ToolInvocationBlock
+    | ToolResultBlock
+    | ThinkingBlock
+    | ImageBlock
+    | DocumentBlock
+    | URLBlock
+    | HTMLBlock
+)
 
 
 # ---------------------------------------------------------------------------

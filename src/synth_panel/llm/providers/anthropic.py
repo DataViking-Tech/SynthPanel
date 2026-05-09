@@ -13,6 +13,11 @@ from synth_panel.llm.models import (
     CompletionRequest,
     CompletionResponse,
     ContentBlock,
+    DocumentBlock,
+    FileRefSource,
+    HTMLBlock,
+    ImageBlock,
+    InlineSource,
     StopReason,
     StreamEvent,
     StreamEventType,
@@ -21,6 +26,8 @@ from synth_panel.llm.models import (
     TokenUsage,
     ToolChoiceKind,
     ToolInvocationBlock,
+    URLBlock,
+    URLSource,
 )
 from synth_panel.llm.providers.base import LLMProvider, ProviderConfig
 
@@ -46,8 +53,26 @@ def _build_tool_choice(request: CompletionRequest) -> dict[str, Any] | None:
     return {"type": "tool", "name": tc.name}
 
 
+def _build_source(src: Any, *, media_type: str) -> dict[str, Any]:
+    """Serialize an attachment source (tagged-union) to Anthropic API shape."""
+    if isinstance(src, InlineSource):
+        return {"type": "base64", "media_type": media_type, "data": src.data}
+    if isinstance(src, URLSource):
+        return {"type": "url", "url": src.url}
+    if isinstance(src, FileRefSource):
+        return {"type": "file", "file_id": src.file_id}
+    raise TypeError(f"Unrecognized attachment source: {type(src).__name__}")
+
+
 def _build_content_blocks(blocks: list[ContentBlock]) -> list[dict[str, Any]]:
-    """Serialize content blocks to Anthropic API format."""
+    """Serialize content blocks to Anthropic API format.
+
+    Image and document blocks lower to the native ``{"type": "image"|"document",
+    "source": {...}}`` shape. ``HTMLBlock`` lowers to a TextBlock at the wire.
+    ``URLBlock`` is a pre-fetch stub owned by the URL fetcher (hq-hqlp); it
+    must be lowered to a concrete block before reaching this function, so we
+    raise rather than silently dropping it.
+    """
     out: list[dict[str, Any]] = []
     for b in blocks:
         if isinstance(b, TextBlock):
@@ -60,6 +85,32 @@ def _build_content_blocks(blocks: list[ContentBlock]) -> list[dict[str, Any]]:
                     "name": b.name,
                     "input": b.input,
                 }
+            )
+        elif isinstance(b, ImageBlock):
+            entry: dict[str, Any] = {
+                "type": "image",
+                "source": _build_source(b.source, media_type=b.media_type),
+            }
+            if b.cache_control is not None:
+                entry["cache_control"] = {"type": b.cache_control}
+            out.append(entry)
+        elif isinstance(b, DocumentBlock):
+            entry = {
+                "type": "document",
+                "source": _build_source(b.source, media_type=b.media_type),
+            }
+            if b.cache_control is not None:
+                entry["cache_control"] = {"type": b.cache_control}
+            out.append(entry)
+        elif isinstance(b, HTMLBlock):
+            entry = {"type": "text", "text": b.text}
+            if b.cache_control is not None:
+                entry["cache_control"] = {"type": b.cache_control}
+            out.append(entry)
+        elif isinstance(b, URLBlock):
+            raise ValueError(
+                f"URLBlock(url={b.url!r}) reached the wire serializer; "
+                "URL blocks must be lowered by the fetcher (hq-hqlp) before send"
             )
         elif hasattr(b, "tool_use_id"):  # ToolResultBlock
             content = [{"type": "text", "text": c.text} for c in b.content]

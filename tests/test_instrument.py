@@ -607,3 +607,273 @@ class TestExtractionSchema:
             }
             inst = parse_instrument(data)
             assert inst.questions[0]["extraction_schema"] == name
+
+
+# ---------------------------------------------------------------------------
+# Attachment bank parsing (hq-l0lw)
+# ---------------------------------------------------------------------------
+
+
+class TestAttachments:
+    """Top-level ``Instrument.attachments`` bank + per-question references."""
+
+    def _bank(self, **overrides):
+        base = {
+            "type": "image",
+            "media_type": "image/png",
+            "source": {"type": "base64", "data": "AAAA"},
+        }
+        base.update(overrides)
+        return base
+
+    def test_default_attachments_is_empty(self):
+        inst = parse_instrument({"questions": [{"text": "Q"}]})
+        assert inst.attachments == {}
+
+    def test_image_inline_base64(self):
+        inst = parse_instrument(
+            {
+                "version": 1,
+                "questions": [{"text": "Q", "attachments": ["hero"]}],
+                "attachments": {"hero": self._bank()},
+            }
+        )
+        assert "hero" in inst.attachments
+        assert inst.attachments["hero"]["type"] == "image"
+
+    def test_image_url_source(self):
+        inst = parse_instrument(
+            {
+                "version": 1,
+                "questions": [{"text": "Q"}],
+                "attachments": {
+                    "remote": {
+                        "type": "image",
+                        "media_type": "image/jpeg",
+                        "source": {"type": "url", "url": "https://example.com/x.jpg"},
+                    }
+                },
+            }
+        )
+        assert inst.attachments["remote"]["source"]["type"] == "url"
+
+    def test_document_pdf(self):
+        parse_instrument(
+            {
+                "version": 1,
+                "questions": [{"text": "Q"}],
+                "attachments": {
+                    "spec": {
+                        "type": "document",
+                        "source": {"type": "file", "file_id": "file_abc"},
+                    }
+                },
+            }
+        )
+
+    def test_url_block(self):
+        parse_instrument(
+            {
+                "version": 1,
+                "questions": [{"text": "Q"}],
+                "attachments": {"page": {"type": "url", "url": "https://example.com"}},
+            }
+        )
+
+    def test_html_block(self):
+        parse_instrument(
+            {
+                "version": 1,
+                "questions": [{"text": "Q"}],
+                "attachments": {"snippet": {"type": "html", "text": "<b>hi</b>"}},
+            }
+        )
+
+    def test_unknown_type_rejected(self):
+        with pytest.raises(InstrumentError, match="unknown type"):
+            parse_instrument(
+                {
+                    "version": 1,
+                    "questions": [{"text": "Q"}],
+                    "attachments": {"bad": {"type": "video"}},
+                }
+            )
+
+    def test_invalid_id_rejected(self):
+        with pytest.raises(InstrumentError, match="must match"):
+            parse_instrument(
+                {
+                    "version": 1,
+                    "questions": [{"text": "Q"}],
+                    "attachments": {"BadCase": self._bank()},
+                }
+            )
+
+    def test_invalid_image_media_type_rejected(self):
+        with pytest.raises(InstrumentError, match="media_type"):
+            parse_instrument(
+                {
+                    "version": 1,
+                    "questions": [{"text": "Q"}],
+                    "attachments": {
+                        "x": {
+                            "type": "image",
+                            "media_type": "image/bmp",
+                            "source": {"type": "base64", "data": "x"},
+                        }
+                    },
+                }
+            )
+
+    def test_invalid_url_rejected(self):
+        with pytest.raises(InstrumentError, match="syntactically valid URL"):
+            parse_instrument(
+                {
+                    "version": 1,
+                    "questions": [{"text": "Q"}],
+                    "attachments": {"x": {"type": "url", "url": "not a url"}},
+                }
+            )
+
+    def test_unresolved_question_ref_rejected(self):
+        with pytest.raises(InstrumentError, match="does not resolve"):
+            parse_instrument(
+                {
+                    "version": 1,
+                    "questions": [{"text": "Q", "attachments": ["nope"]}],
+                    "attachments": {},
+                }
+            )
+
+    def test_question_ref_must_be_string(self):
+        with pytest.raises(InstrumentError, match="must be a string"):
+            parse_instrument(
+                {
+                    "version": 1,
+                    "questions": [{"text": "Q", "attachments": [{"id": "x"}]}],
+                    "attachments": {"x": self._bank()},
+                }
+            )
+
+    def test_inline_attachment_text_block_accepted(self):
+        parse_instrument(
+            {
+                "version": 1,
+                "questions": [
+                    {
+                        "text": "Q",
+                        "inline_attachments": [{"type": "text", "text": "headline"}],
+                    }
+                ],
+            }
+        )
+
+    def test_inline_attachment_unknown_type_rejected(self):
+        with pytest.raises(InstrumentError, match="unknown"):
+            parse_instrument(
+                {
+                    "version": 1,
+                    "questions": [
+                        {
+                            "text": "Q",
+                            "inline_attachments": [{"type": "video", "data": "x"}],
+                        }
+                    ],
+                }
+            )
+
+    def test_dual_ephemeral_rejected(self):
+        with pytest.raises(InstrumentError, match="at most one attachment"):
+            parse_instrument(
+                {
+                    "version": 1,
+                    "questions": [{"text": "Q", "attachments": ["a", "b"]}],
+                    "attachments": {
+                        "a": self._bank(cache_control="ephemeral"),
+                        "b": self._bank(cache_control="ephemeral"),
+                    },
+                }
+            )
+
+    def test_ephemeral_must_mark_last_shared(self):
+        # Marker on the FIRST of two shared blocks violates the contract.
+        with pytest.raises(InstrumentError, match="LAST shared"):
+            parse_instrument(
+                {
+                    "version": 1,
+                    "questions": [{"text": "Q", "attachments": ["a", "b"]}],
+                    "attachments": {
+                        "a": self._bank(cache_control="ephemeral"),
+                        "b": self._bank(),
+                    },
+                }
+            )
+
+    def test_ephemeral_last_shared_accepted(self):
+        # Marker on the LAST of the shared prefix is the supported shape.
+        parse_instrument(
+            {
+                "version": 1,
+                "questions": [{"text": "Q", "attachments": ["a", "b"]}],
+                "attachments": {
+                    "a": self._bank(),
+                    "b": self._bank(cache_control="ephemeral"),
+                },
+            }
+        )
+
+    def test_ephemeral_on_inline_rejected(self):
+        # Inline blocks are per-question divergent, so they're never shared
+        # cache prefix — marking one ephemeral violates the architectural
+        # constraint we're protecting at parse time.
+        with pytest.raises(InstrumentError, match="LAST shared"):
+            parse_instrument(
+                {
+                    "version": 1,
+                    "questions": [
+                        {
+                            "text": "Q",
+                            "attachments": ["a"],
+                            "inline_attachments": [
+                                {
+                                    "type": "html",
+                                    "text": "<i>x</i>",
+                                    "cache_control": "ephemeral",
+                                }
+                            ],
+                        }
+                    ],
+                    "attachments": {"a": self._bank()},
+                }
+            )
+
+    def test_attachments_carries_through_v3_rounds(self):
+        inst = parse_instrument(
+            {
+                "version": 3,
+                "rounds": [
+                    {
+                        "name": "intro",
+                        "questions": [{"text": "Q1", "attachments": ["hero"]}],
+                        "route_when": [{"else": "wrap"}],
+                    },
+                    {
+                        "name": "wrap",
+                        "questions": [{"text": "Q2", "attachments": ["hero"]}],
+                    },
+                ],
+                "attachments": {"hero": self._bank()},
+            }
+        )
+        assert "hero" in inst.attachments
+        assert len(inst.rounds) == 2
+
+    def test_attachments_must_be_mapping(self):
+        with pytest.raises(InstrumentError, match="must be a mapping"):
+            parse_instrument(
+                {
+                    "version": 1,
+                    "questions": [{"text": "Q"}],
+                    "attachments": [{"id": "hero"}],
+                }
+            )

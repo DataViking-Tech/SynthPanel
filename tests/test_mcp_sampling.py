@@ -332,6 +332,78 @@ class TestRunPromptSamplingBranches:
         assert "use_sampling=True" in data["error"]
 
 
+class TestAcceptMultimodalSamplingFlag:
+    """T6 feature flag: opt into preserving image blocks from MCP host.
+
+    Default-off preserves the silent-drop semantics callers depended on
+    before hq-l0lw. The flag is per-call and lives on every tool that
+    can hit the sampling pathway (run_prompt / run_panel / run_quick_poll
+    / extend_panel — though extend_panel doesn't currently sample).
+    """
+
+    @pytest.mark.asyncio
+    async def test_default_off_does_not_emit_content_blocks(self):
+        from synth_panel.mcp.server import run_prompt
+
+        ctx = _make_sampling_ctx(supports=True, sample_text="just text")
+        raw = await run_prompt(prompt="Hi", ctx=ctx)
+        data = json.loads(raw)
+        # Default-off: no content_blocks key, only the flat string.
+        assert "content_blocks" not in data
+        assert data["response"] == "just text"
+
+    @pytest.mark.asyncio
+    async def test_flag_on_surfaces_text_blocks(self):
+        from synth_panel.mcp.server import run_prompt
+
+        ctx = _make_sampling_ctx(supports=True, sample_text="hi from host")
+        raw = await run_prompt(prompt="Hi", accept_multimodal_sampling=True, ctx=ctx)
+        data = json.loads(raw)
+        assert "content_blocks" in data
+        # MCP host returned a single TextContent → one TextBlock entry.
+        assert data["content_blocks"] == [{"type": "text", "text": "hi from host"}]
+
+    @pytest.mark.asyncio
+    async def test_flag_on_surfaces_image_blocks(self):
+        # Build a context whose MCP create_message returns a multimodal
+        # response (text + image). The flag should surface BOTH; the
+        # legacy `response` field still carries text only.
+        from synth_panel.mcp.server import run_prompt
+
+        ctx = MagicMock()
+        ctx.session.check_client_capability.return_value = True
+
+        async def _create_message(**kwargs: Any):
+            msg = MagicMock()
+            text_block = MagicMock()
+            text_block.type = "text"
+            text_block.text = "see image"
+            image_block = MagicMock()
+            image_block.type = "image"
+            image_block.data = "AAAA"
+            image_block.mimeType = "image/png"
+            msg.content = [text_block, image_block]
+            msg.model = "host-model"
+            msg.role = "assistant"
+            msg.stopReason = "endTurn"
+            return msg
+
+        ctx.session.create_message = AsyncMock(side_effect=_create_message)
+        ctx.report_progress = AsyncMock()
+
+        raw = await run_prompt(prompt="Hi", accept_multimodal_sampling=True, ctx=ctx)
+        data = json.loads(raw)
+        assert data["response"] == "see image"
+        assert {"type": "text", "text": "see image"} in data["content_blocks"]
+        image_entries = [b for b in data["content_blocks"] if b["type"] == "image"]
+        assert len(image_entries) == 1
+        assert image_entries[0]["source"] == {
+            "type": "base64",
+            "media_type": "image/png",
+            "data": "AAAA",
+        }
+
+
 # ---------------------------------------------------------------------------
 # Integration — run_quick_poll sampling path
 # ---------------------------------------------------------------------------

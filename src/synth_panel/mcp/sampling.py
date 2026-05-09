@@ -254,6 +254,7 @@ async def sample_text(
     system_prompt: str | None = None,
     max_tokens: int = SAMPLING_MAX_TOKENS_DEFAULT,
     temperature: float | None = None,
+    accept_multimodal: bool = False,
 ) -> dict[str, Any]:
     """Run one sampling round via ``ctx.session.create_message``.
 
@@ -272,6 +273,15 @@ async def sample_text(
     and surface a ready-to-display ``warning`` string so callers can
     propagate the signal into their ``warnings`` payload instead of
     chalking the partial JSON up to a generic schema-fail.
+
+    Multimodal sampling (T6 / hq-l0lw): when ``accept_multimodal`` is
+    ``True`` the result dict carries a ``content_blocks`` key holding
+    the parsed list of synthpanel
+    :class:`~synth_panel.llm.models.ContentBlock`\\ s for image / document /
+    text content the host returned. Default-off preserves the silent-drop
+    behaviour callers depended on before this flag landed. The cost cliff
+    is real (multimodal tokens can be ~10x a text-only turn), so the flag
+    is opt-in per call.
     """
     from mcp.types import SamplingMessage, TextContent
 
@@ -289,6 +299,7 @@ async def sample_text(
     )
 
     text = _extract_text(result.content)
+    content_blocks = _extract_content_blocks(result.content) if accept_multimodal else None
     stop_reason = getattr(result, "stopReason", None)
     truncated = stop_reason == SAMPLING_STOP_REASON_TRUNCATED
     warning: str | None = None
@@ -303,6 +314,7 @@ async def sample_text(
         )
     return {
         "text": text,
+        "content_blocks": content_blocks,
         "model": result.model,
         "stop_reason": stop_reason,
         "role": result.role,
@@ -327,3 +339,42 @@ def _extract_text(content: Any) -> str:
         if btype == "text":
             parts.append(getattr(block, "text", ""))
     return "\n".join(p for p in parts if p)
+
+
+def _extract_content_blocks(content: Any) -> list[Any]:
+    """Convert MCP sampling result content into synthpanel ContentBlocks.
+
+    Used when callers opt into multimodal sampling (T6 / hq-l0lw). MCP
+    ``TextContent`` lowers to :class:`~synth_panel.llm.models.TextBlock`;
+    ``ImageContent`` lowers to a base64
+    :class:`~synth_panel.llm.models.ImageBlock`. Unrecognized block types
+    are dropped (the host shouldn't return them, but we don't want a
+    schema fail to crash the sampling path).
+    """
+    from synth_panel.llm.models import ImageBlock, InlineSource, TextBlock
+
+    if content is None:
+        return []
+    blocks = content if isinstance(content, list) else [content]
+    out: list[Any] = []
+    for block in blocks:
+        btype = getattr(block, "type", None)
+        if btype == "text":
+            text = getattr(block, "text", "")
+            if text:
+                out.append(TextBlock(text=text))
+        elif btype == "image":
+            data = getattr(block, "data", None)
+            media_type = getattr(block, "mimeType", None) or getattr(block, "media_type", None)
+            if (
+                isinstance(data, str)
+                and isinstance(media_type, str)
+                and media_type in {"image/png", "image/jpeg", "image/gif", "image/webp"}
+            ):
+                out.append(
+                    ImageBlock(
+                        source=InlineSource(data=data),
+                        media_type=media_type,  # type: ignore[arg-type]
+                    )
+                )
+    return out
