@@ -229,22 +229,29 @@ class TestInstrumentValidatesAttachmentFilter:
             parse_instrument(instrument)
 
     def test_valid_filter_parses(self):
+        # Per D-phase data-model (hq-xzsm decision 2): attachments on a
+        # question are string IDs that resolve into the top-level
+        # ``attachments`` bank; the bank entry carries the per-persona
+        # ``filter`` clause. Inline dict-shaped refs go in
+        # ``inline_attachments`` instead.
         from synth_panel.instrument import parse_instrument
 
         instrument = {
             "version": 1,
+            "attachments": {
+                "ad1": {
+                    "type": "html",
+                    "text": "<p>ad copy</p>",
+                    "filter": [
+                        {"field": "device", "op": "equals", "value": "mobile"},
+                        {"field": "age", "op": "gte", "value": 25},
+                    ],
+                },
+            },
             "questions": [
                 {
                     "text": "Q",
-                    "attachments": [
-                        {
-                            "id": "ad1",
-                            "filter": [
-                                {"field": "device", "op": "equals", "value": "mobile"},
-                                {"field": "age", "op": "gte", "value": 25},
-                            ],
-                        }
-                    ],
+                    "attachments": ["ad1"],
                 }
             ],
         }
