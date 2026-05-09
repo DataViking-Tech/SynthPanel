@@ -501,6 +501,11 @@ def list_panel_results() -> list[dict[str, Any]]:
     for p in sorted(_results_dir().glob("*.json"), reverse=True):
         if p.name.endswith(".pre-extend.json"):
             continue
+        # `<id>.attachments/refs.json` is a sidecar index, not a result.
+        # The non-recursive glob above already excludes it, but a defensive
+        # check protects callers who might pass a recursive pattern in.
+        if p.parent.name.endswith(".attachments"):
+            continue
         try:
             data = json.loads(p.read_text(encoding="utf-8"))
             entry: dict[str, Any] = {
@@ -523,14 +528,39 @@ def list_panel_results() -> list[dict[str, Any]]:
     return results
 
 
-def get_panel_result(result_id: str) -> dict[str, Any]:
-    """Load a panel result by ID."""
+def get_panel_result(result_id: str, *, load_attachments: bool = False) -> dict[str, Any]:
+    """Load a panel result by ID.
+
+    When *load_attachments* is True and a ``<result_id>.attachments/refs.json``
+    sidecar exists, the parsed refs map is attached as
+    ``data["attachments"]`` and ``data["_attachments_loaded"]`` is set to
+    True. Default behavior is identical to pre-attachments code paths:
+    no extra fields, no extra I/O. Existing consumers
+    (``cost_summary.py``, ``analysis/inspect.py``) read the result via
+    the default path and stay unchanged.
+    """
     _validate_pack_id(result_id)
     p = _results_dir() / f"{result_id}.json"
     if not p.exists():
         raise FileNotFoundError(f"Panel result not found: {result_id}")
     data = json.loads(p.read_text(encoding="utf-8"))
     data["id"] = result_id
+    if load_attachments:
+        from synth_panel.attachments.store import refs_path
+
+        rp = refs_path(_results_dir(), result_id)
+        if rp.exists():
+            try:
+                refs_raw = json.loads(rp.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                refs_raw = None
+            if isinstance(refs_raw, dict):
+                data["attachments"] = refs_raw
+                data["_attachments_loaded"] = True
+            else:
+                data["_attachments_loaded"] = False
+        else:
+            data["_attachments_loaded"] = False
     return data
 
 
@@ -565,6 +595,7 @@ def save_panel_result(
     questions: list[dict[str, Any]] | None = None,
     variants_config: dict[str, Any] | None = None,
     models: list[str] | None = None,
+    attachments: dict[str, dict[str, Any]] | None = None,
 ) -> str:
     """Save panel results and return the result ID.
 
@@ -575,6 +606,12 @@ def save_panel_result(
       ``extraction_schema``.
     * ``variants_config``: variant generation config (``n``, ``seed``).
     * ``models``: list of all model identifiers used in the run.
+    * ``attachments``: ``{ref_id: AttachmentRef}`` map written to a
+      ``<result_id>.attachments/refs.json`` sidecar. When non-empty,
+      ``result_format_version`` bumps from ``"1.0"`` to ``"1.1"`` so
+      readback layers can branch on the schema version. Bytes always
+      live in CAS (see :mod:`synth_panel.attachments.store`); only
+      refs land here.
 
     Per-result entries in *results* may contain ``_variant_of`` and
     ``_model`` fields; per-response dicts may contain an ``extraction``
@@ -582,8 +619,10 @@ def save_panel_result(
     """
     rid = f"result-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
     p = _results_dir() / f"{rid}.json"
+    has_attachments = bool(attachments)
     data: dict[str, Any] = {
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "result_format_version": "1.1" if has_attachments else "1.0",
         "model": model,
         "persona_count": persona_count,
         "question_count": question_count,
@@ -602,4 +641,12 @@ def save_panel_result(
     if models is not None:
         data["models"] = models
     p.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+    if has_attachments:
+        from synth_panel.attachments.store import refs_path
+
+        rp = refs_path(_results_dir(), rid)
+        rp.parent.mkdir(parents=True, exist_ok=True)
+        rp.write_text(json.dumps(attachments, indent=2) + "\n", encoding="utf-8")
+
     return rid

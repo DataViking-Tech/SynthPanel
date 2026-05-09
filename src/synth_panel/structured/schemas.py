@@ -63,11 +63,27 @@ PICK_ONE_SCHEMA: dict[str, Any] = {
     "required": ["choice"],
 }
 
+# pick_one + optional `attachment_id` referencing AttachmentRef.id from
+# the per-result refs.json. `attachment_id` is optional (soft validation),
+# so a model that doesn't reference an attachment passes the same as
+# under pick_one — the schemas diverge only when the model *does* cite a
+# specific attachment.
+ANNOTATED_CHOICE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "choice": {"type": "string"},
+        "reasoning": {"type": "string"},
+        "attachment_id": {"type": "string"},
+    },
+    "required": ["choice"],
+}
+
 _REGISTRY: dict[str, dict[str, Any]] = {
     "ranking": RANKING_SCHEMA,
     "likert": LIKERT_SCHEMA,
     "yes_no": YES_NO_SCHEMA,
     "pick_one": PICK_ONE_SCHEMA,
+    "annotated_choice": ANNOTATED_CHOICE_SCHEMA,
 }
 
 

@@ -44,10 +44,12 @@ class TestGetSchema:
 
 
 class TestListSchemas:
-    def test_returns_all_four(self):
+    def test_returns_all_registered(self):
         schemas = list_schemas()
         names = {s["name"] for s in schemas}
-        assert names == {"ranking", "likert", "yes_no", "pick_one"}
+        # `annotated_choice` was added by hq-qd7r for attachment-bearing
+        # responses (pick_one + optional `attachment_id`).
+        assert names == {"ranking", "likert", "yes_no", "pick_one", "annotated_choice"}
 
     def test_entries_have_schema_key(self):
         for entry in list_schemas():

@@ -152,6 +152,11 @@ def discover_run_files(runs_dir: Path) -> list[Path]:
         # synthesis sidecars: <result-id>.synthesis-<timestamp>.json
         if ".synthesis-" in name:
             continue
+        # attachment sidecars: <result-id>.attachments/refs.json
+        # The non-recursive glob above won't match these, but if a caller
+        # ever swaps in rglob the filter still excludes them.
+        if p.parent.name.endswith(".attachments"):
+            continue
         out.append(p)
     return out
 
