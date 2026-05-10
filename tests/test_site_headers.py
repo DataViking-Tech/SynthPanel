@@ -80,3 +80,52 @@ def test_security_headers_still_apply_globally() -> None:
         "strict-transport-security",
     ):
         assert required in names, f"global /* block lost {required!r}"
+
+
+def _cache_control(blocks: dict[str, list[tuple[str, str]]], path: str) -> str | None:
+    for name, value in blocks.get(path, []):
+        if name.lower() == "cache-control":
+            return value
+    return None
+
+
+def test_global_default_cache_control_is_html_bucket() -> None:
+    """Per dvi-25f cache-control-policy.md, HTML pages must always revalidate.
+
+    The /* default applies to any path not overridden by a more specific rule,
+    which catches pretty-URL HTML pages like /, /blog/*, /docs/*.
+    """
+    blocks = _parse_headers_file(HEADERS_PATH.read_text())
+    cc = _cache_control(blocks, "/*")
+    assert cc == "private, no-store, must-revalidate", (
+        f"global /* Cache-Control must be the HTML bucket "
+        f"'private, no-store, must-revalidate' per dvi-25f, got {cc!r}"
+    )
+
+
+def test_api_json_endpoints_have_cacheable_api_bucket() -> None:
+    """Cacheable API JSON endpoints get public, max-age=60, must-revalidate."""
+    blocks = _parse_headers_file(HEADERS_PATH.read_text())
+    expected = "public, max-age=60, must-revalidate"
+    for path in (
+        "/.well-known/mcp/server-card.json",
+        "/.well-known/oauth-protected-resource",
+        "/.well-known/api-catalog",
+        "/.well-known/agent-skills/index.json",
+    ):
+        cc = _cache_control(blocks, path)
+        assert cc == expected, (
+            f"{path} Cache-Control must be {expected!r} per dvi-25f cacheable-API bucket, got {cc!r}"
+        )
+
+
+def test_unhashed_static_extensions_have_5min_hedge() -> None:
+    """Per dvi-25f, unhashed static assets get public, max-age=300, must-revalidate."""
+    blocks = _parse_headers_file(HEADERS_PATH.read_text())
+    expected = "public, max-age=300, must-revalidate"
+    for ext in ("png", "jpg", "svg", "ico", "txt", "xml"):
+        path = f"/*.{ext}"
+        cc = _cache_control(blocks, path)
+        assert cc == expected, (
+            f"{path} Cache-Control must be {expected!r} per dvi-25f unhashed-static bucket, got {cc!r}"
+        )

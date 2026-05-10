@@ -6,6 +6,21 @@
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
   Vary: Accept
+  Cache-Control: private, no-store, must-revalidate
+
+# Unhashed static assets — short public cache (5 min hedge per dvi-25f cache-control-policy.md).
+/*.png
+  Cache-Control: public, max-age=300, must-revalidate
+/*.jpg
+  Cache-Control: public, max-age=300, must-revalidate
+/*.svg
+  Cache-Control: public, max-age=300, must-revalidate
+/*.ico
+  Cache-Control: public, max-age=300, must-revalidate
+/*.txt
+  Cache-Control: public, max-age=300, must-revalidate
+/*.xml
+  Cache-Control: public, max-age=300, must-revalidate
 
 # RFC 8288 Link headers — agent discovery (sy-7r1)
 # api-catalog target served by /.well-known/api-catalog (RFC 9727, sy-czo).
@@ -14,21 +29,29 @@
   Link: </docs/panel-run>; rel="service-doc"
 
 # Markdown renditions for "Markdown for Agents" content negotiation (sy-ifw).
+# These are content renditions of HTML pages and inherit the HTML bucket
+# (private, no-store, must-revalidate) from /*.
 /*.md
   Content-Type: text/markdown; charset=utf-8
   Vary: Accept
 
+# API JSON — short public cache, must-revalidate (dvi-25f cacheable-API bucket).
 /.well-known/mcp/server-card.json
   Content-Type: application/json; charset=utf-8
   Access-Control-Allow-Origin: *
   Access-Control-Allow-Methods: GET, HEAD, OPTIONS
-  Cache-Control: public, max-age=300
+  Cache-Control: public, max-age=60, must-revalidate
 
 # RFC 9727 api-catalog (sy-czo) — extension-less file, force linkset+json media type.
 /.well-known/api-catalog
   Content-Type: application/linkset+json
+  Cache-Control: public, max-age=60, must-revalidate
 
 # RFC 9728 oauth-protected-resource (sy-4nf) — extension-less file, force JSON media type.
 /.well-known/oauth-protected-resource
   Content-Type: application/json
-  Cache-Control: public, max-age=3600
+  Cache-Control: public, max-age=60, must-revalidate
+
+# Agent skills index — cacheable API JSON.
+/.well-known/agent-skills/index.json
+  Cache-Control: public, max-age=60, must-revalidate

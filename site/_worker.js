@@ -69,10 +69,11 @@ export default {
     headers.set("vary", "Accept");
     headers.set("x-markdown-tokens", String(tokens));
     headers.set("x-content-type-options", "nosniff");
-    // Pass through cache-control if upstream set one; otherwise be
-    // conservative.
+    // Pass through cache-control if upstream set one; otherwise default
+    // to the HTML bucket per dvi-25f cache-control-policy.md (markdown
+    // renditions are content variants of HTML pages).
     const cacheControl = mdResp.headers.get("cache-control");
-    headers.set("cache-control", cacheControl || "public, max-age=300");
+    headers.set("cache-control", cacheControl || "private, no-store, must-revalidate");
     if (body !== null) {
       headers.set("content-length", String(contentLength));
     }
