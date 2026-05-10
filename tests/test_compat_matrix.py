@@ -255,3 +255,51 @@ def test_v3_path_records_routing_decision(patched_panel):
     # 'themes contains pricing' fires.
     assert "pricing" in intro_entry["branch"]
     assert intro_entry["next"] == "probe_pricing"
+
+
+# Regression: hq-fjdx — linear v3 instruments (no route_when, no depends_on)
+# previously terminated after round 1 because the runtime fallback only
+# honored explicit depends_on chains, while the parser's reachability check
+# already permits positional fallthrough. Runtime now mirrors the parser.
+V3_LINEAR_INSTRUMENT = {
+    "version": 3,
+    "rounds": [
+        {"name": "first_impressions", "questions": [{"text": "Q1"}]},
+        {"name": "brand_fit", "questions": [{"text": "Q2"}]},
+        {"name": "ia_hierarchy", "questions": [{"text": "Q3"}]},
+        {"name": "about_page", "questions": [{"text": "Q4"}]},
+        {"name": "concrete_changes", "questions": [{"text": "Q5"}]},
+    ],
+}
+
+
+def test_v3_linear_rounds_run_all_via_positional_fallthrough(patched_panel):
+    """Linear v3: every round runs even with no route_when/depends_on."""
+    result = run_multi_round_panel(
+        client=object(),
+        personas=PERSONAS,
+        instrument=parse_instrument(V3_LINEAR_INSTRUMENT),
+        model="stub",
+        system_prompt_fn=lambda p: "",
+        question_prompt_fn=lambda q: q.get("text", ""),
+        synthesize_round_fn=_stub_synthesize_round,
+    )
+    executed = [r.name for r in result.rounds]
+    assert executed == [
+        "first_impressions",
+        "brand_fit",
+        "ia_hierarchy",
+        "about_page",
+        "concrete_changes",
+    ]
+    # Path log must mark each non-terminal next correctly and end with __end__.
+    nexts = [p["next"] for p in result.path]
+    assert nexts == [
+        "brand_fit",
+        "ia_hierarchy",
+        "about_page",
+        "concrete_changes",
+        "__end__",
+    ]
+    assert all(p["branch"] == "linear" for p in result.path)
+    assert result.terminal_round == "concrete_changes"

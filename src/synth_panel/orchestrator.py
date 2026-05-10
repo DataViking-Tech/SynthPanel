@@ -1666,14 +1666,22 @@ def _round_lookup(instrument: Instrument) -> dict[str, Round]:
 
 
 def _next_via_depends_on(instrument: Instrument, current: str) -> str:
-    """Linear-chain fallback for v2 rounds without route_when.
+    """Linear-chain fallback for rounds without route_when.
 
-    Returns the next round whose ``depends_on`` is ``current``, or
-    ``__end__`` if there is no successor.
+    Resolution order, mirroring parser reachability semantics
+    (``_reachability_warnings`` in ``instrument.py``):
+
+    1. A round whose ``depends_on`` names ``current`` (v2 explicit chaining).
+    2. The next positional round in ``instrument.rounds`` (v3 linear
+       fallthrough — the implicit linear edge the parser already honors).
+    3. ``__end__`` when ``current`` is the last round.
     """
     for r in instrument.rounds:
         if r.depends_on == current:
             return r.name
+    for i, r in enumerate(instrument.rounds):
+        if r.name == current and i + 1 < len(instrument.rounds):
+            return instrument.rounds[i + 1].name
     return END_SENTINEL
 
 
