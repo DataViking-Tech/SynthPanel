@@ -349,9 +349,10 @@ class TestRunPanelExtractSchema:
 
             hints = get_type_hints(run_panel)
             args = get_args(hints["extract_schema"])
-            assert any(arg is BaseModel or (isinstance(arg, type) and issubclass(arg, BaseModel)) or arg == type[BaseModel] for arg in args), (
-                f"BaseModel not in extract_schema annotation args: {args}"
-            )
+            assert any(
+                arg is BaseModel or (isinstance(arg, type) and issubclass(arg, BaseModel)) or arg == type[BaseModel]
+                for arg in args
+            ), f"BaseModel not in extract_schema annotation args: {args}"
         except (TypeError, NameError):
             # Fallback: stringified annotation must mention BaseModel.
             assert "BaseModel" in str(param.annotation)
