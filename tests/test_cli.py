@@ -1731,7 +1731,14 @@ class TestDefaultModelResolution:
     def test_resolve_default_model_falls_back_to_sonnet_when_no_creds(self, monkeypatch):
         from synth_panel.cli.commands import _resolve_default_model
 
-        for env in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "XAI_API_KEY"):
+        for env in (
+            "ANTHROPIC_API_KEY",
+            "OPENAI_API_KEY",
+            "GEMINI_API_KEY",
+            "GOOGLE_API_KEY",
+            "XAI_API_KEY",
+            "OPENROUTER_API_KEY",
+        ):
             monkeypatch.delenv(env, raising=False)
         alias, source = _resolve_default_model()
         assert alias == "sonnet"
