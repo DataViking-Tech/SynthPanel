@@ -8,6 +8,121 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 (Empty — next-cycle work lands here.)
 
+## [1.0.6] - 2026-05-10
+
+Cross-town friction-sweep cycle. Three independent dogfoods (jotunheim,
+midgard, yggdrasil) on v1.0.4 → v1.0.5 surfaced a tight cluster of
+orchestrator-dispatch and ergonomics bugs that this release closes.
+Plus the cadence itself is now codified in
+`docs/release-dogfood-protocol.md` so future releases lock in the
+property: three towns sweeping independently catch three different
+classes of friction.
+
+No API break — every v1.0.5 caller works unchanged.
+
+### Fixed
+
+- **Linear v3 multi-round panels now fall through positionally**
+  (hq-fjdx). Previously, v3 instruments without explicit `route_when`
+  clauses terminated after round 1 — `path` returned a single entry
+  with `next: __end__`, `question_count: 1`, and rounds 2-N were
+  silently skipped. The synthesis layer masked the bug by going broad
+  in its single response, so callers saw a successful-looking run that
+  had executed 1/N of their instrument. Now a v3 round with no
+  explicit routing falls through to the next round in declaration
+  order. CI integration test (hq-83ye) pins the contract.
+
+- **Legacy single-round path resolves bank-ref attachments**
+  (hq-ilke). v1 instruments with bank-ref attachment shape
+  (`attachments: [synthbench_site]` referencing a `bank.attachments[]`
+  entry) silently dropped the attachment payload —
+  `_resolve_question_attachment_refs` was wired into
+  `run_multi_round_panel` but not into the legacy single-round path
+  that v1 instruments use. Bank-refs fell out of the
+  `dict_attachments` filter, attachments arrived empty, and synthesis
+  ran on a hallucinated empty page. Now both dispatch paths resolve
+  bank-refs identically. Plus parse-time rejection of the failure
+  mode so authors fail fast.
+
+- **Ensemble panel runs with `--blend` emit synthesis**
+  (hq-hjq8). Previously, ensemble mode (multiple `--models a,b` with
+  no per-model weights) returned `synthesis: None`,
+  `total_cost: None`, `model: None` while single-model and
+  weighted-split (`a:0.5,b:0.5`) emitted the full synthesis block.
+  Asymmetry hurt dashboard builders. Now `--blend` properly composes
+  the per-model results into a top-level synthesis with weighted
+  agreement scoring; cost rolls up; per-model `cost` field also now
+  populated.
+
+- **OpenRouter cost-table refreshed** (hq-xq36). v1.0.4 reported
+  `openrouter/anthropic/claude-haiku-4.5` (the README headline model)
+  at 99.4% drift from provider-reported cost — local table was
+  ~180× too high. Same drift on `openrouter/google/gemini-2.5-flash`
+  (~55% off). Refreshed against OR's `/v1/models` endpoint; added
+  `scripts/refresh_or_cost_table.py` + a CI freshness gate so the
+  table fails build if >30 days stale.
+
+- **`pack export -o /path` auto-creates missing parent directories**
+  (hq-pmi1). Previously errored deep in pathlib; now walks the path
+  and `mkdir -p`s the parent before writing.
+
+### Added
+
+- **CI integration test for MCP-routed v3 multi-round panels**
+  (hq-83ye). Asserts `path` length, `question_count`, per-round
+  result shape, and cost rollup match instrument structure. Mock-LLM
+  responses; runs across the full Python matrix. Catches the hq-fjdx
+  class of regression at the boundary that surfaced it (MCP wrapper).
+
+- **`docs/known-patterns/openrouter-byok-visual-review.md`** —
+  midgard mayor's cross-town docs lift, merged earlier this cycle
+  (PR #447, still REVIEW_REQUIRED at v1.0.6 cut). Documents the
+  inline-HTML pattern for visual review of UI/HTML content via
+  OpenRouter.
+
+- **`docs/release-dogfood-protocol.md`** (PR #449, merged). Codifies
+  the cross-town wave-style friction-sweep cadence that produced
+  this release. Three independent dogfoods caught three different
+  classes of friction; the protocol locks the property in. Authored
+  by yggdrasil mayor.
+
+- **`examples/instruments/with-attachments.yaml`** + cookbook page
+  (hq-h5j2). Concrete starter for the `image / url / html`
+  attachment shapes — first-contact friction was that there was no
+  copy-pasteable example in the repo despite the README pitching
+  attachments as a primary affordance.
+
+### Changed
+
+- **README response-shape docs** (hq-lux3). README now clearly
+  separates the MCP `run_panel` verdict envelope (with `convergence`
+  scalar) from the CLI `panel run --output-format json` shape (with
+  `synthesis` block). Previously read like the same contract. Flags
+  `panel_verdict` as a future feature for parity if/when it ships.
+
+### Notes
+
+- The cross-rig pattern note for this cycle: orchestrator dispatch
+  paths silently degrade when a feature isn't wired into every
+  entrypoint. v1 single-round path skipped the attachment resolver;
+  MCP v3 multi-round path terminated after round 1. Same smell,
+  different surface. The v1.0.6 fix scope deliberately covers BOTH
+  paths in the new CI integration test (hq-83ye), and v1.0.7 will
+  continue auditing dispatch-path symmetry.
+
+- Bun 1.3.14 segfault that affected polecat productivity during this
+  cycle is upstream (anthropics/claude-code#22632). Mitigation
+  remains: pin Claude Code to 2.1.110 (Bun 1.3.13) +
+  `DISABLE_AUTOUPDATER=1`. See jotunheim hq-dpm1 for the watch-item
+  tracking when 1.3.15+ ships.
+
+### Friction-sweep contributors (this release)
+
+`yggdrasil`, `midgard`, `jotunheim`. Bead IDs: `hq-fjdx`, `hq-ilke`,
+`hq-hjq8`, `hq-xq36`, `hq-83ye`, `hq-lux3`, `hq-h5j2`, `hq-pmi1`.
+Sister-bug pattern callout: orchestrator dispatch silently degrades
+when features aren't wired into every entrypoint.
+
 ## [1.0.5] - 2026-05-10
 
 OpenRouter multimodal transport fix (the big one) + caller-API hardening
