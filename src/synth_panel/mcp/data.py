@@ -546,6 +546,7 @@ def get_panel_result(result_id: str, *, load_attachments: bool = False) -> dict[
     data = json.loads(p.read_text(encoding="utf-8"))
     data["id"] = result_id
     if load_attachments:
+        from synth_panel.attachments.models import AttachmentRef
         from synth_panel.attachments.store import refs_path
 
         rp = refs_path(_results_dir(), result_id)
@@ -555,7 +556,16 @@ def get_panel_result(result_id: str, *, load_attachments: bool = False) -> dict[
             except (OSError, json.JSONDecodeError):
                 refs_raw = None
             if isinstance(refs_raw, dict):
-                data["attachments"] = refs_raw
+                # v1.0.4: validate each entry through AttachmentRef so
+                # drift across versions surfaces as a field-path-aware
+                # ValidationError instead of dict-key-missing downstream.
+                # Returned shape stays dict-of-dict for back-compat with
+                # existing consumers (analysis/inspect.py et al.).
+                validated: dict[str, dict[str, Any]] = {}
+                for ref_id, raw in refs_raw.items():
+                    ref = AttachmentRef.model_validate(raw)
+                    validated[ref_id] = ref.model_dump(mode="json", exclude_none=True)
+                data["attachments"] = validated
                 data["_attachments_loaded"] = True
             else:
                 data["_attachments_loaded"] = False
@@ -652,10 +662,22 @@ def save_panel_result(
     p.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
     if has_attachments:
+        from synth_panel.attachments.models import AttachmentRef
         from synth_panel.attachments.store import refs_path
+
+        # v1.0.4: validate each entry through AttachmentRef so malformed
+        # refs fail at write time (named field path) rather than later
+        # at readback. The serialized shape — model_dump(mode="json",
+        # exclude_none=True) — matches the v1.0.3 wire format byte-for-byte
+        # for refs the SDK emits today.
+        serialized: dict[str, dict[str, Any]] = {}
+        assert attachments is not None  # narrowed by has_attachments
+        for ref_id, raw in attachments.items():
+            ref = raw if isinstance(raw, AttachmentRef) else AttachmentRef.model_validate(raw)
+            serialized[ref_id] = ref.model_dump(mode="json", exclude_none=True)
 
         rp = refs_path(_results_dir(), rid)
         rp.parent.mkdir(parents=True, exist_ok=True)
-        rp.write_text(json.dumps(attachments, indent=2) + "\n", encoding="utf-8")
+        rp.write_text(json.dumps(serialized, indent=2) + "\n", encoding="utf-8")
 
     return rid
