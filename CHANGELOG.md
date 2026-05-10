@@ -8,6 +8,100 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 (Empty — next-cycle work lands here.)
 
+## [1.0.2] - 2026-05-09
+
+Hotfix release: closes the four remaining v1.0.x multimodal-attachments
+wiring gaps surfaced during the 2026-05-09 dogfood panel and tracked in
+hq-2yc6 (G2/G5/G6/G7). Combined with v1.0.1 (G1+G3), the multimodal
+attachments feature is now fully production-ready end-to-end without
+quality/efficiency caveats: bank-referenced URL attachments fetch and
+reach the model with content; large multimodal panels persist their
+synthesis to disk; attachment payloads land in content-addressable
+sidecar storage instead of inflating result.json with inline base64;
+panel-shared attachments lift to the cached prefix instead of being
+re-emitted per question.
+
+All four are bugfix-shaped — additive on top of v1.0.1, no API breaks,
+no data-model changes. Tracking epic: hq-w7om.
+
+### Fixed
+
+- **G2 — `panel_shared_attachments` lift in run_multi_round_panel**
+  (hq-ovxl). The SDK's `Instrument.attachments` bank was parse-validated
+  and resolved per-question via the v1.0.1 G3 fix, but the explicit
+  shared-prefix optimization never engaged — every question paid the
+  per-question attachment cost even when bank entries were reused.
+  `_compute_panel_shared(round_questions, bank)` now lifts any bank
+  entry referenced by ≥2 questions to `panel_shared_attachments`,
+  threaded through `run_multi_round_panel` → `run_panel_parallel` so
+  the canonical block-emission order (shared docs → shared images →
+  per-question → text → cache marker) fires correctly. Cache hit rates
+  visible in stratum_fp logs now reflect actual sharing. Single-use
+  bank entries stay per-question; explicit `shared: true` flag on bank
+  entries reserved for v1.1.0 if a use case surfaces.
+- **G5 — URLBlock lowering at frame stage** (hq-8iz3). URL attachments
+  produced `URLBlock` plan nodes that never resolved through the
+  hq-gmju fetcher in the panel-running path; URLBlocks reached
+  serialization unhandled and silently dropped. A new frame-stage
+  `lower_url_blocks(blocks, fetch_cache)` step runs before wire
+  emission: each URLBlock dispatches through the hq-gmju content
+  ladder per `attachment_intent` (text → trafilatura, visual →
+  Playwright screenshot, both → emit both), reusing fetches across
+  personas via a per-run in-memory L1 cache backed by the existing
+  on-disk content-addressable cache at `~/.synthpanel/cache/url/`.
+  SSRF perimeter (RFC1918, IMDS, DNS rebinding mitigation) preserved;
+  per-attachment `on_failure` policy honoured. Wire serializers
+  (`anthropic.py`, `_openai_format.py`) no longer encounter URLBlock —
+  lowering runs first.
+- **G6 — synthesis persisted on attachment-bearing panels** (hq-2p32).
+  Larger multimodal panels lost the synthesis from saved `result.json`
+  even though synthesis ran and the cost was reflected in `total_cost`.
+  Root cause: the multi-round path in `sdk.run_panel` invoked
+  `save_panel_result(...)` without forwarding `mr.final_synthesis`.
+  Smaller text-only panels happened to traverse a different save path
+  that already passed it. Fix threads `synthesis=mr.final_synthesis`
+  uniformly through both code paths. Existing text-only panel
+  synthesis save unaffected.
+- **G7 — CAS attachment persistence wired from SDK** (hq-hjk8). Per
+  the hq-cqt5 design, attachment payloads should land in a
+  content-addressable sidecar (`~/.synthpanel/attachments/<sha256[0:2]>/
+  <sha256>.<ext>`) with per-run `<result-id>.attachments/refs.json`
+  carrying typed `AttachmentRef` records — bytes never inline. v1.0.1
+  saved a 79 MB `result.json` with all base64 inlined and no sidecar.
+  New `_extract_attachment_refs(instrument)` helper walks the bank,
+  writes blobs via `synth_panel.attachments.store.write_blob`, builds
+  AttachmentRefs, and `sdk.run_panel` threads the dict to
+  `save_panel_result(attachments=...)`. `result_format_version` now
+  bumps to `"1.1"` when any attachment is present. Cross-run dedup
+  works (rerunning a panel reuses CAS blobs). Existing readers
+  (cost_summary, analyze, inspect) unaffected; new opt-in hydration
+  via `get_panel_result(load_attachments=True)`.
+
+### Tests
+
+- `tests/test_attachments_v1_0_2_panel_shared.py` — G2 coverage
+- `tests/test_fetch_lower.py` — G5 URLBlock lowering coverage
+- `tests/test_sdk_attachment_extraction.py` — G7 CAS extraction coverage
+- G6 covered by extending existing persistence tests
+
+### Empirical validation
+
+15-persona × 3-question × 10-image dogfood panel with the canonical
+bank-ref pattern on `openrouter/anthropic/claude-sonnet-4.5`:
+content-aware feedback from every persona; result.json now compact
+(refs only) with CAS sidecar populated; synthesis present in saved
+result; URL attachment fetches once per panel run with content
+reaching the model.
+
+### Known v1.0.x limitations still open (planned for v1.1.0)
+
+- Pydantic adoption for response-structure validation — async-wisp
+  consult with midgard mayor (boardroom project) complete; phased
+  plan recorded.
+- Explicit `shared: true` flag on bank entries — currently inferred
+  from ≥2 references; explicit opt-in deferred until a use case
+  surfaces.
+
 ## [1.0.1] - 2026-05-09
 
 Hotfix release: closes two wiring gaps in the v1.0.0 multimodal-attachments
