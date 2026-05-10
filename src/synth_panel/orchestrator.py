@@ -60,6 +60,8 @@ _STRATA_CAP = 5
 def _resolve_question_attachment_refs(
     questions: list[dict[str, Any]],
     bank: dict[str, dict[str, Any]] | None,
+    *,
+    exclude_refs: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Resolve bank-ref strings in ``question.attachments`` to inline dicts.
 
@@ -85,6 +87,13 @@ def _resolve_question_attachment_refs(
     Unresolved refs raise ``ValueError`` — the parser already enforces
     reachability at parse time, so reaching this state implies an internal
     inconsistency between parse and runtime, not a user error.
+
+    ``exclude_refs`` (hq-ovxl / G2) drops any bank-ref string in that set
+    from per-question attachment lists before resolution. The G2 lift moves
+    cross-question shared bank entries onto ``panel_shared_attachments``;
+    excluding them here prevents the same payload from being emitted twice
+    (once shared, once per-question) by :func:`build_question_blocks`.
+    Inline dicts are never excluded — only bank-ref strings.
     """
     if not bank:
         # No bank to resolve against; pass through unchanged. Inline dicts
@@ -92,6 +101,8 @@ def _resolve_question_attachment_refs(
         # filter and produce empty per-persona attachments. That's the
         # legacy v0.12.0 behaviour and we preserve it.
         return list(questions)
+
+    excluded: set[str] = exclude_refs or set()
 
     resolved: list[dict[str, Any]] = []
     for q in questions:
@@ -106,6 +117,10 @@ def _resolve_question_attachment_refs(
         new_refs: list[dict[str, Any]] = []
         for ref in refs:
             if isinstance(ref, str):
+                if ref in excluded:
+                    # Lifted to panel_shared_attachments; skip per-question
+                    # emission to avoid double-blocks.
+                    continue
                 if ref not in bank:
                     raise ValueError(
                         f"attachment ref {ref!r} does not resolve to a bank entry (bank keys: {sorted(bank.keys())!r})"
@@ -120,6 +135,57 @@ def _resolve_question_attachment_refs(
         new_q["attachments"] = new_refs
         resolved.append(new_q)
     return resolved
+
+
+def _compute_panel_shared(
+    questions: list[dict[str, Any]],
+    bank: dict[str, dict[str, Any]] | None,
+) -> tuple[list[dict[str, Any]], set[str]]:
+    """Identify bank entries shared by ≥2 questions in this round (hq-ovxl).
+
+    Returns ``(panel_shared_attachments, shared_ref_ids)``:
+
+    * ``panel_shared_attachments`` — list of deep-copied bank entries to
+      emit once before the cache_control marker (canonical block order
+      hq-0pbp), so the prefix is byte-identical across every question that
+      references them and Anthropic's prefix cache hits on the second
+      panelist + question pair.
+    * ``shared_ref_ids`` — the set of bank ref-ids that were lifted, used
+      by :func:`_resolve_question_attachment_refs`'s ``exclude_refs``
+      parameter to strip them from per-question lists (otherwise the same
+      payload emits twice — once shared, once per-question).
+
+    Heuristic (per the v1.0.2 plan): an entry is panel-shared iff it is
+    referenced as a **bank-ref string** by ≥2 questions in this round.
+    Inline dicts (``{"type": "image", ...}``) are *never* lifted — they
+    have no stable identity to dedupe against and the author chose
+    per-question placement deliberately. Single-use bank entries also
+    stay per-question; lifting them would cost a wasted cache write.
+
+    The explicit ``shared: true`` flag (heuristic (b) in the design) is
+    deferred to v1.1.0; this counts-based rule is the right zero-config
+    default for the dogfood instruments shipped today.
+    """
+    if not bank:
+        return [], set()
+
+    ref_counts: dict[str, int] = {}
+    for q in questions:
+        if not isinstance(q, dict):
+            continue
+        seen_in_q: set[str] = set()
+        for ref in q.get("attachments", []) or []:
+            if isinstance(ref, str) and ref in bank and ref not in seen_in_q:
+                # Count each bank-ref at most once per question — duplicate
+                # references inside a single question don't make it shared.
+                ref_counts[ref] = ref_counts.get(ref, 0) + 1
+                seen_in_q.add(ref)
+
+    shared_ids = {rid for rid, count in ref_counts.items() if count >= 2}
+    # Preserve insertion order (Python dict ordering) so the shared-block
+    # list is deterministic across runs — fingerprints stay stable.
+    panel_shared = [dict(bank[rid]) for rid in ref_counts if rid in shared_ids]
+    return panel_shared, shared_ids
 
 
 def _enforce_strata_cap(
@@ -1629,7 +1695,17 @@ def run_multi_round_panel(
         # only the question text. The bank lives on ``instrument.attachments``;
         # this is the natural resolution site since we have the Instrument
         # object in scope here.
-        resolved_questions = _resolve_question_attachment_refs(current.questions, instrument.attachments)
+        #
+        # G2 (hq-ovxl): lift bank entries referenced by ≥2 questions in this
+        # round onto ``panel_shared_attachments`` so they emit once before
+        # the cache_control marker (hq-0pbp canonical order). Lifted refs are
+        # then excluded from per-question resolution to avoid double-emission.
+        panel_shared, shared_ref_ids = _compute_panel_shared(current.questions, instrument.attachments)
+        resolved_questions = _resolve_question_attachment_refs(
+            current.questions,
+            instrument.attachments,
+            exclude_refs=shared_ref_ids,
+        )
 
         panelist_results, _registry, sessions = run_panel_parallel(
             client=client,
@@ -1646,6 +1722,7 @@ def run_multi_round_panel(
             top_p=top_p,
             seed=seed,
             persona_models=persona_models,
+            panel_shared_attachments=panel_shared or None,
         )
 
         synthesis = synthesize_round_fn(client, panelist_results, current.questions, model=model)

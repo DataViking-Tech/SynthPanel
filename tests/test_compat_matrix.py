@@ -80,6 +80,7 @@ def patched_panel(monkeypatch):
         top_p=None,
         seed=None,
         persona_models=None,
+        panel_shared_attachments=None,
     ):
         results = [
             PanelistResult(
