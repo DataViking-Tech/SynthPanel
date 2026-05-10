@@ -337,6 +337,120 @@ def _coerce_questions(questions: list[str] | list[dict[str, Any]] | str) -> list
     return out
 
 
+def _extract_attachment_refs(
+    instrument_obj: Instrument | None,
+    flat_results: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Persist response-borne attachment payloads to CAS and rewrite refs.
+
+    Walks ``instrument_obj.attachments`` (the bank) first to reserve the
+    stable ``att-bank-<id>`` ref id for any base64-source bank entry, then
+    walks each panelist's ``responses[i]["attachments"]`` list, dedupes
+    payloads by sha256, writes bytes through
+    :func:`synth_panel.attachments.store.write_blob`, and replaces the
+    inline dicts with ref-id strings (mutating *flat_results* in place).
+    Returns the ``{ref_id: AttachmentRef}`` map for
+    :func:`save_panel_result(..., attachments=...)`.
+
+    Only ``image`` and ``document`` attachments with a ``base64`` source —
+    the ones blowing up ``result.json`` (per hq-hjk8) — are pulled out.
+    URL-source / file-source images and ``url`` / ``html`` types have no
+    inline blob to dedupe; we leave those entries untouched in the
+    response stream so the readback path stays a no-op for them.
+    """
+    import base64
+    import hashlib
+
+    from synth_panel.attachments import write_blob
+
+    refs: dict[str, dict[str, Any]] = {}
+    sha_to_id: dict[str, str] = {}
+
+    _IMAGE_EXT = {
+        "image/png": ".png",
+        "image/jpeg": ".jpg",
+        "image/gif": ".gif",
+        "image/webp": ".webp",
+    }
+
+    def _to_blob(att: dict[str, Any]) -> tuple[bytes | None, str, str, str]:
+        atype = att.get("type")
+        source = att.get("source") if isinstance(att.get("source"), dict) else None
+        if atype == "image" and source and source.get("type") == "base64":
+            data = source.get("data")
+            if not isinstance(data, str) or not data:
+                return None, "", "", ""
+            try:
+                blob = base64.b64decode(data, validate=False)
+            except (ValueError, TypeError):
+                return None, "", "", ""
+            media_type = att.get("media_type", "image/png")
+            return blob, _IMAGE_EXT.get(media_type, ".bin"), media_type, "image"
+        if atype == "document" and source and source.get("type") == "base64":
+            data = source.get("data")
+            if not isinstance(data, str) or not data:
+                return None, "", "", ""
+            try:
+                blob = base64.b64decode(data, validate=False)
+            except (ValueError, TypeError):
+                return None, "", "", ""
+            media_type = att.get("media_type", "application/pdf")
+            return blob, ".pdf", media_type, "pdf"
+        return None, "", "", ""
+
+    def _register(att: dict[str, Any], preferred_id: str) -> str | None:
+        blob, ext, content_type, kind = _to_blob(att)
+        if blob is None:
+            return None
+        sha = hashlib.sha256(blob).hexdigest()
+        if sha in sha_to_id:
+            return sha_to_id[sha]
+        ref_id = preferred_id
+        if ref_id in refs:
+            n = 2
+            while f"{ref_id}-{n}" in refs:
+                n += 1
+            ref_id = f"{ref_id}-{n}"
+        write_blob(blob, ext=ext)
+        refs[ref_id] = {
+            "id": ref_id,
+            "kind": kind,
+            "sha256": sha,
+            "content_type": content_type,
+            "byte_size": len(blob),
+        }
+        sha_to_id[sha] = ref_id
+        return ref_id
+
+    if instrument_obj is not None:
+        for bank_id, att in (instrument_obj.attachments or {}).items():
+            if isinstance(att, dict):
+                _register(att, f"att-bank-{bank_id}")
+
+    for rd in flat_results:
+        responses = rd.get("responses") if isinstance(rd, dict) else None
+        if not isinstance(responses, list):
+            continue
+        for q_idx, resp in enumerate(responses):
+            if not isinstance(resp, dict):
+                continue
+            atts = resp.get("attachments")
+            if not isinstance(atts, list):
+                continue
+            new_atts: list[Any] = []
+            for a_idx, att in enumerate(atts):
+                if isinstance(att, str):
+                    new_atts.append(att)
+                    continue
+                if not isinstance(att, dict):
+                    new_atts.append(att)
+                    continue
+                rid = _register(att, f"att-q{q_idx}-{a_idx}")
+                new_atts.append(rid if rid is not None else att)
+            resp["attachments"] = new_atts
+    return refs
+
+
 def _build_panel_result_from_single_round(
     result_id: str,
     model: str,
@@ -847,6 +961,11 @@ def run_panel(
             if mr.final_synthesis is not None and hasattr(mr.final_synthesis, "to_dict")
             else None
         )
+        # hq-hjk8: pull inline attachment payloads out of responses and
+        # into CAS before persisting; without this, ``result.json`` carries
+        # base64 blobs (79 MB at 15p x 10 images in the 2026-05-09 dogfood).
+        attachment_refs = _extract_attachment_refs(instrument_obj, flat_results)
+
         result_id = save_panel_result(
             results=flat_results,
             model=model,
@@ -855,6 +974,7 @@ def run_panel(
             persona_count=len(merged),
             question_count=total_question_count,
             synthesis=final_synth_dict,
+            attachments=attachment_refs or None,
         )
         return _build_panel_result_from_multi_round(
             result_id,
@@ -937,6 +1057,9 @@ def run_panel(
     )
 
     variant_count = variant_data["variant_count"] if variant_data else 0
+    # hq-hjk8: same CAS extraction for the flat-questions path. No
+    # instrument bank in scope here, so all refs land as ``att-q<i>-<j>``.
+    attachment_refs = _extract_attachment_refs(None, result_dicts)
     result_id = save_panel_result(
         results=result_dicts,
         model=model,
@@ -946,6 +1069,7 @@ def run_panel(
         question_count=len(normalised_questions),
         variant_count=variant_count,
         synthesis=synthesis_dict,
+        attachments=attachment_refs or None,
     )
 
     synth_model_for_warning = synthesis_dict.get("model") if synthesis_dict else None
