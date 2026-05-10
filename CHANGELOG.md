@@ -8,6 +8,80 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 (Empty — next-cycle work lands here.)
 
+## [1.0.4] - 2026-05-10
+
+Pydantic Phase 2 (caller-facing) + AttachmentRef migration + pre-flight
+vision-capability gate. Brings the typed-Pydantic ergonomics from Phase 1
+all the way to the SDK boundary so callers can pass their own
+`response_schema=MyPydanticClass` and receive validated typed objects
+back, promotes `AttachmentRef` from `TypedDict` to `BaseModel` for strict
+runtime validation, and adds a pre-flight gate that fails fast with a
+clear error when a caller attaches images to a known text-only model
+(instead of silently burning the call and getting "I don't see an image"
+from the persona).
+
+No API break — every v1.0.3 caller works unchanged. The
+`extract_schema` parameter now accepts `type[BaseModel] | dict | str |
+None`, the `attachments` parameter still accepts plain dicts (auto-coerced
+to `AttachmentRef` BaseModel internally).
+
+### Added
+
+- **Caller-facing `extract_schema=MyPydanticClass`** (hq-r39v).
+  `synth_panel.sdk.run_panel(..., extract_schema=MyModel)` accepts a
+  Pydantic `BaseModel` subclass directly. Each persona response is
+  validated via `MyModel.model_validate_json(text)` and the typed
+  instance is threaded through extraction, synthesis, and the final
+  result. `ValidationError` surfaces on schema violations with the
+  field path. Existing callers (registered string names, raw JSON
+  Schema dicts, `None`) work unchanged via the dispatch in
+  `synth_panel._runners.resolve_extract_schema`. README has a new
+  "Typed extraction with Pydantic (1.0.4)" subsection with the
+  caller-facing example.
+
+- **Pre-flight vision-capability gate** (hq-vw6o) at
+  `synth_panel.llm.capabilities`. `LLMClient.send` and
+  `LLMClient.stream` now scan `CompletionRequest.content` for
+  `ImageBlock` / `DocumentBlock` after `_prepare` (alias resolution)
+  and raise `LLMError(BAD_REQUEST)` when the resolved model matches a
+  known text-only pattern (e.g., `claude-3.5-haiku`,
+  `claude-3-haiku`). Wired after alias resolution so OpenRouter
+  routes like `openrouter/anthropic/claude-3.5-haiku` are gated
+  correctly. Pattern list guards against false-positive on Haiku 4.5
+  / Sonnet / Opus (all vision-capable). Caller now gets a clear
+  error path instead of "NO IMAGE RECEIVED" from the persona.
+
+  **Caveat:** the gate is a UX improvement for known text-only
+  models, *not* a transport-layer fix. Vision-capable models on
+  OpenRouter's Anthropic routes still drop image content blocks
+  ~100% of the time per midgard mayor's deterministic repro
+  (cross-town, 2026-05-10) — tracked separately as `hq-m333` for a
+  future v1.0.x or v1.1.0.
+
+### Changed
+
+- **`AttachmentRef` promoted `TypedDict` → `BaseModel`** (hq-nuz9).
+  `synth_panel.attachments.AttachmentRef` is now a Pydantic model
+  with strict field validation (`model_config = {"strict": True,
+  "extra": "forbid"}`). All call sites that previously passed plain
+  dicts continue to work via Pydantic's `BaseModel.model_validate`
+  on input boundaries. Internal codepaths now use attribute access
+  (`ref.media_type`) instead of dict-key access (`ref["media_type"]`).
+  Catches typos in caller payloads at the boundary instead of
+  KeyErrors deep in serialization.
+
+### Site / Docs
+
+- **Cross-property brand unification** (hq-qxpe). DataViking-family
+  unified footer + header back-link added to all 6 site/ surfaces
+  (index, blog post, MCP card, recommended-models, calibration,
+  panel-run docs). Shipped alongside the dataviking.tech IA
+  restructure (MTG + Living Stone tucked under "Other Projects")
+  and the canonical token spec extracted from dataviking-site
+  (`docs/brand.md`). Synthpanel keeps its terminal-green accent
+  (defensible per-product); structural unification carries the
+  cohesion. Pure site/ + docs change — does not affect the wheel.
+
 ## [1.0.3] - 2026-05-10
 
 Pydantic Phase 1 (additive). Adopts `pydantic>=2.7,<3` as a base

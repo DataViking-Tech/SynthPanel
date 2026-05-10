@@ -140,9 +140,7 @@ class TestAssertSupportsAttachments:
         assert_supports_attachments(req)
 
     def test_image_on_openrouter_haiku_4_5_passes(self) -> None:
-        req = _request(
-            "openrouter/anthropic/claude-haiku-4.5", [_image_block()]
-        )
+        req = _request("openrouter/anthropic/claude-haiku-4.5", [_image_block()])
         assert_supports_attachments(req)
 
     def test_empty_messages_passes(self) -> None:
