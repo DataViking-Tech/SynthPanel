@@ -98,8 +98,7 @@ def test_global_default_cache_control_is_html_bucket() -> None:
     blocks = _parse_headers_file(HEADERS_PATH.read_text())
     cc = _cache_control(blocks, "/*")
     assert cc == "private, no-store, must-revalidate", (
-        f"global /* Cache-Control must be the HTML bucket "
-        f"'private, no-store, must-revalidate' per dvi-25f, got {cc!r}"
+        f"global /* Cache-Control must be the HTML bucket 'private, no-store, must-revalidate' per dvi-25f, got {cc!r}"
     )
 
 
@@ -114,9 +113,7 @@ def test_api_json_endpoints_have_cacheable_api_bucket() -> None:
         "/.well-known/agent-skills/index.json",
     ):
         cc = _cache_control(blocks, path)
-        assert cc == expected, (
-            f"{path} Cache-Control must be {expected!r} per dvi-25f cacheable-API bucket, got {cc!r}"
-        )
+        assert cc == expected, f"{path} Cache-Control must be {expected!r} per dvi-25f cacheable-API bucket, got {cc!r}"
 
 
 def test_unhashed_static_extensions_have_5min_hedge() -> None:
