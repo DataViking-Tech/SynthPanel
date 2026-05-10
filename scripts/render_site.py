@@ -12,6 +12,7 @@ from tests.
 
 from __future__ import annotations
 
+import datetime as _dt
 import re
 import sys
 from pathlib import Path
@@ -55,8 +56,16 @@ def _substitute(template: str, context: dict[str, str]) -> str:
 def render(*, write: bool = False) -> str:
     version = _read_version()
     release_date = _read_release_date(version)
+    current_year = str(_dt.date.today().year)
     template = TEMPLATE_PATH.read_text()
-    rendered = _substitute(template, {"version": version, "release_date": release_date})
+    rendered = _substitute(
+        template,
+        {
+            "version": version,
+            "release_date": release_date,
+            "current_year": current_year,
+        },
+    )
     if write:
         OUTPUT_PATH.write_text(rendered)
     return rendered

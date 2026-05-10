@@ -1,6 +1,8 @@
 # panel run Reference — synthpanel · Run synthetic focus groups with any LLM
 
- Docs · panel run
+[DataViking](https://dataviking.tech)
+
+Docs · panel run
 
 # panel run reference
 

@@ -1,6 +1,8 @@
 # Recommended Models — synthpanel · SynthBench-validated model picks
 
- Docs · Recommended Models
+[DataViking](https://dataviking.tech)
+
+Docs · Recommended Models
 
 # Recommended models
 

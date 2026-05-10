@@ -1,6 +1,8 @@
 # MCP Server — synthpanel · Run synthetic focus groups from your AI editor
 
- MCP Server · stdio
+[DataViking](https://dataviking.tech)
+
+MCP Server · stdio
 
 # synthpanel MCP server
 

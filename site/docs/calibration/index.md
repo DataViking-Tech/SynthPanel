@@ -1,6 +1,8 @@
 # Pack Calibration — synthpanel · Run synthetic focus groups with any LLM
 
- Docs · Pack Calibration
+[DataViking](https://dataviking.tech)
+
+Docs · Pack Calibration
 
 # Pack calibration
 

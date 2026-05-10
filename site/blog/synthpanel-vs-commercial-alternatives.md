@@ -1,6 +1,8 @@
 # SynthPanel vs Synthetic Users vs FocusPanel.ai — When Open-Source MCP Beats the SaaS
 
- Positioning · 2026-04-15 · ~7 min read
+[DataViking](https://dataviking.tech)
+
+Positioning · 2026-04-15 · ~7 min read
 
 # SynthPanel vs Synthetic Users vs FocusPanel.ai — When Open-Source MCP Beats the SaaS
 
