@@ -2706,7 +2706,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         from synth_panel.mcp.data import save_panel_result
 
         # Determine instrument name (pack name or filename stem)
-        inst_name: str | None = None
+        inst_name = None
         inst_arg = getattr(args, "instrument", None)
         if inst_arg:
             inst_path = Path(inst_arg)
