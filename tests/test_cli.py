@@ -2315,6 +2315,19 @@ class TestPackCommands:
         code = main(["pack", "export", "nope"])
         assert code == 1
 
+    def test_pack_export_creates_missing_parent_dirs(self, capsys):
+        """hq-pmi1: -o /path/to/missing/foo.yaml must mkdir -p the parent
+        rather than crashing in pathlib.write_text with FileNotFoundError."""
+        from synth_panel.mcp.data import save_persona_pack
+
+        save_persona_pack("Nested Export", [{"name": "Mira"}], pack_id="nexp")
+        outfile = self._tmp / "nested" / "deeper" / "out.yaml"
+        assert not outfile.parent.exists()
+        code = main(["pack", "export", "nexp", "-o", str(outfile)])
+        assert code == 0
+        assert outfile.exists()
+        assert "Mira" in outfile.read_text()
+
     def test_pack_show_prints_yaml_to_stdout(self, capsys):
         """sp-oem: `pack show <id>` is an alias for stdout export."""
         from synth_panel.mcp.data import save_persona_pack

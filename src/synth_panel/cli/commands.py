@@ -3684,7 +3684,9 @@ def handle_pack_export(args: argparse.Namespace, fmt: OutputFormat) -> int:
     content = yaml.dump(export_data, default_flow_style=False)
 
     if args.output:
-        Path(args.output).write_text(content, encoding="utf-8")
+        out_path = Path(args.output)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(content, encoding="utf-8")
         if fmt is OutputFormat.TEXT:
             print(f"Exported pack '{pack.get('name', args.pack_id)}' to {args.output}")
         else:
