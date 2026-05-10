@@ -1532,6 +1532,39 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             panelist_per_model=ens_per_model_meta,
         )
         emit(fmt, message="Ensemble complete", extra=output)
+
+        # hq-0pnq: --save was a silent no-op in the ensemble path because
+        # this branch returned before the persistence block at the end of
+        # handle_panel_run(). Flatten per-model panelist results into the
+        # standard saved-result shape so consumers (`synthpanel inspect`,
+        # `synthpanel analyze`) see ensemble runs the same way they see
+        # single-model runs.
+        if getattr(args, "save", False):
+            from synth_panel.mcp.data import save_panel_result
+
+            inst_name: str | None = None
+            inst_arg = getattr(args, "instrument", None)
+            if inst_arg:
+                inst_path = Path(inst_arg)
+                inst_name = inst_path.stem if inst_path.exists() else inst_arg
+
+            ensemble_results: list[dict[str, Any]] = []
+            for mr in ens_result.model_results:
+                for pr in mr.panelist_results:
+                    ensemble_results.append(_fmt_panelist(pr, mr.model))
+
+            result_id = save_panel_result(
+                results=ensemble_results,
+                model=ensemble_models[0],
+                total_usage=ens_result.total_usage.to_dict(),
+                total_cost=ens_result.total_cost.format_usd(),
+                persona_count=ens_result.persona_count,
+                question_count=ens_result.question_count,
+                instrument_name=inst_name,
+                models=list(ensemble_models),
+            )
+            print(f"Result saved: {result_id}", file=sys.stderr)
+
         return 0
 
     # ── sp-inline-calibration (sp-a6jc): --calibrate-against validation ──

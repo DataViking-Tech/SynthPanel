@@ -1482,6 +1482,79 @@ class TestPanelRunSave:
         args = parser.parse_args(["panel", "run", "--personas", "p.yaml", "--instrument", "i.yaml"])
         assert args.save is False
 
+    @patch("synth_panel.ensemble.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_save_flag_writes_result_in_ensemble_mode(self, mock_client_cls, mock_rpp, capsys, tmp_path, monkeypatch):
+        """hq-0pnq: --save must persist a result file in ensemble (--models a,b) mode.
+
+        Before the fix, the ensemble code path returned exit 0 without ever
+        reaching the persistence block at the end of handle_panel_run(),
+        so ``--save`` was a silent no-op for any multi-model panel.
+        """
+        from synth_panel.cost import TokenUsage as CostTokenUsage
+        from synth_panel.orchestrator import PanelistResult
+
+        def _fake_run_parallel(**kwargs):
+            model = kwargs["model"]
+            personas = kwargs["personas"]
+            results = [
+                PanelistResult(
+                    persona_name=p["name"],
+                    responses=[{"question": "Q1", "response": f"answer from {model}", "error": False}],
+                    usage=CostTokenUsage(input_tokens=100, output_tokens=50),
+                    model=model,
+                )
+                for p in personas
+            ]
+            sessions = {p["name"]: MagicMock() for p in personas}
+            return results, MagicMock(), sessions
+
+        mock_rpp.side_effect = _fake_run_parallel
+
+        monkeypatch.setenv("SYNTH_PANEL_DATA_DIR", str(tmp_path / "data"))
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n    age: 30\n  - name: Bob\n    age: 25\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: What do you think?\n")
+
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--models",
+                "haiku,sonnet",
+                "--save",
+            ]
+        )
+        assert code == 0
+        captured = capsys.readouterr()
+        assert "Result saved: result-" in captured.err, (
+            f"--save did not print result ID for ensemble run. stderr was:\n{captured.err}"
+        )
+
+        result_id = None
+        for line in captured.err.splitlines():
+            if line.startswith("Result saved: "):
+                result_id = line.split("Result saved: ")[1].strip()
+                break
+        assert result_id is not None
+
+        result_file = tmp_path / "data" / "results" / f"{result_id}.json"
+        assert result_file.exists(), f"Expected saved file at {result_file}"
+
+        data = json.loads(result_file.read_text())
+        assert data["persona_count"] == 2
+        assert data["question_count"] == 1
+        assert data["models"] == ["haiku", "sonnet"]
+        assert len(data["results"]) == 4  # 2 personas × 2 models
+        models_seen = {r.get("model") for r in data["results"]}
+        assert models_seen == {"haiku", "sonnet"}
+
 
 # --- sp-5on.5: panel synthesize re-synthesis subcommand -----------------
 
