@@ -26,22 +26,41 @@ call:
   }
 }
 
-// Response
+// Response (same envelope from both `run_panel` and `panel run --output-format json`)
 {
-  "headline": "Cohort splits on $79; price is the dominant objection.",
-  "convergence": 0.74,
-  "dissent_count": 3,
-  "flags": [{ "code": "small_n", "severity": "warn" }],
-  "schema_version": "1.0.0",
+  "result_id": "result-20260510-abc123",
+  "model": "claude-haiku-4-5",
+  "synthesis": {
+    "summary": "Cohort splits on $79; price is the dominant objection.",
+    "themes": [...],
+    "agreements": [...],
+    "disagreements": [...],
+    "surprises": [...],
+    "recommendation": "..."
+  },
+  "rounds": [{ "name": "default", "results": [...], "synthesis": null }],
+  "path": [],
+  "warnings": [],
+  "total_cost": "$0.0142",
+  "total_usage": { "input_tokens": 4231, "output_tokens": 1102, ... },
   ...
 }
 ```
 
-You get a verdict envelope: a **0–1 agreement score your agent can threshold
-on**, dissenting verbatims, and demographic flags (closed enum, severity-tagged
-— branch on them). **Bring your own LLM key — Claude, OpenAI, Gemini, or
-local.** Drops into Claude Code, Cursor, Windsurf, LangChain, CrewAI, OpenAI
-Agents SDK.
+You get a structured `synthesis` block — themes, agreements, disagreements,
+surprises, and a single recommendation line your agent can act on — plus the
+full per-panelist transcript under `rounds[].results[]` and per-turn cost
+telemetry. **Bring your own LLM key — Claude, OpenAI, Gemini, or local.**
+Drops into Claude Code, Cursor, Windsurf, LangChain, CrewAI, OpenAI Agents
+SDK.
+
+> **Note (v1.0.5):** the v1.0.0 `panel_verdict` envelope (`headline`,
+> `convergence`, `dissent_count`, `flags[]`, `schema_version`) is defined in
+> [`schemas/v1.0.0.json`](src/synth_panel/schemas/v1.0.0.json) and validated by
+> the response gate, but is **not yet emitted on the success path** by either
+> `run_panel` or `panel run`. Wiring is tracked separately; until it lands,
+> consume the `synthesis` block above. Error responses already use the typed
+> envelope (`error_code`, `schema_version`, `retry_safe`).
 
 ```bash
 pip install synthpanel
@@ -110,9 +129,11 @@ run without one.
 }
 ```
 
-Branch on `verdict.flags[]` (closed enum, severity-tagged) and threshold on
-`verdict.convergence` (0–1). See [docs/response-contract.md](docs/response-contract.md)
-for the full envelope.
+Read `synthesis.recommendation` for the headline call, `synthesis.disagreements`
+for dissent, and `rounds[].results[]` for the per-panelist transcript. See
+[docs/response-contract.md](docs/response-contract.md) for the full v1.0.0
+envelope (note: `panel_verdict` fields like `convergence` and `flags[]` are
+defined but not yet emitted on the success path — see the note in the lede).
 
 ## Human Operator Quick Start
 
