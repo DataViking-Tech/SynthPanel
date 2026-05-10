@@ -1197,3 +1197,342 @@ class TestExtendPanelSynthesisLoudness:
         assert isinstance(err, dict), "synthesis_error must be a dict on the envelope"
         assert err.get("error_type") == "synthesis_api_error"
         assert "upstream 500" in err.get("message", "")
+
+
+# ---------------------------------------------------------------------------
+# v3 multi-round panel runs through the MCP wire boundary (hq-83ye)
+#
+# Pins the contract that ``mcp.call_tool("run_panel", ...)`` with a v3
+# instrument runs *every* declared round and serializes the per-round
+# results into the response envelope. Until v1.0.5 (hq-fjdx) the
+# orchestrator silently terminated linear v3 runs after round 1 and the
+# synthesis layer masked it because a single broad LLM response covers
+# many topics holistically. This shipped through every v1.0.x release
+# because no CI test exercised the *MCP-routed* multi-round path.
+#
+# The stubs below replace the LLM-touching seam — ``run_panel_parallel``
+# and ``synthesize_panel`` — so the orchestrator + MCP wire layers run
+# end-to-end on synthetic data. Anything between the wire boundary and
+# the LLM provider is real code.
+# ---------------------------------------------------------------------------
+
+
+def _stub_panelist_results_factory(default_themes: list[str] | None = None):
+    """Return a stub for ``synth_panel.orchestrator.run_panel_parallel``.
+
+    Each call produces one ``PanelistResult`` per persona with one
+    response per question and a small non-zero usage so the cost rollup
+    has something to aggregate across rounds.
+    """
+    from synth_panel.cost import TokenUsage
+    from synth_panel.orchestrator import PanelistResult
+
+    def _fake_run_panel_parallel(
+        client,
+        personas,
+        questions,
+        model,
+        system_prompt_fn,
+        question_prompt_fn,
+        max_workers=None,
+        response_schema=None,
+        sessions=None,
+        extract_schema=None,
+        temperature=None,
+        top_p=None,
+        seed=None,
+        persona_models=None,
+        panel_shared_attachments=None,
+    ):
+        results = [
+            PanelistResult(
+                persona_name=p.get("name", "anon"),
+                responses=[{"question": q.get("text", ""), "response": "ok"} for q in questions],
+                usage=TokenUsage(input_tokens=5, output_tokens=3),
+                model=(persona_models or {}).get(p.get("name", "anon"), model),
+            )
+            for p in personas
+        ]
+        new_sessions = dict(sessions or {})
+        for p in personas:
+            new_sessions.setdefault(p.get("name", "anon"), object())
+        return results, {}, new_sessions
+
+    return _fake_run_panel_parallel
+
+
+def _stub_synthesize_factory(themes: list[str] | None = None):
+    """Return a stub for the ``synthesize_panel`` import in ``_runners``.
+
+    The orchestrator's router consumes ``themes`` from the synthesis
+    output, so each test customizes the themes to drive a specific path.
+    """
+    from synth_panel.cost import TokenUsage as CostTokenUsage
+    from synth_panel.synthesis import SynthesisResult
+
+    themes = list(themes or ["pricing pain"])
+
+    def _fake_synthesize_panel(
+        client,
+        panelist_results,
+        questions,
+        *,
+        model=None,
+        panelist_model=None,
+        custom_prompt=None,
+        temperature=None,
+        seed=None,
+        **_kwargs,
+    ):
+        return SynthesisResult(
+            summary="stub summary",
+            themes=list(themes),
+            agreements=[],
+            disagreements=[],
+            surprises=[],
+            recommendation="stub recommendation",
+            usage=CostTokenUsage(input_tokens=2, output_tokens=1),
+            model=model or panelist_model or "stub-model",
+        )
+
+    return _fake_synthesize_panel
+
+
+class _StubMcpContext:
+    """Minimal Context double for direct invocation of MCP tools.
+
+    ``mcp.call_tool`` only injects a real Context inside an active
+    request, so direct unit tests against the tool function pass this
+    stub instead. The orchestrator only uses ``report_progress``; other
+    Context methods are intentionally unimplemented so missed coverage
+    fails loudly.
+    """
+
+    async def report_progress(self, *_args, **_kwargs):
+        return None
+
+
+class TestRunPanelMultiRoundV3:
+    """End-to-end MCP wire tests for v3 multi-round panel runs (hq-83ye).
+
+    These tests do not mock ``_run_panel_async_instrument`` — the whole
+    point of this gap is that prior tests stopped at the wire layer and
+    never exercised the orchestrator's per-round loop through the MCP
+    tool. The tool function is invoked directly with a stub Context
+    because ``mcp.call_tool`` requires an active request to inject one.
+    Everything from the tool entry point down to (but excluding) the
+    LLM call is real code here.
+    """
+
+    PERSONAS = [{"name": "Alice", "background": "x"}, {"name": "Bob", "background": "y"}]
+
+    V3_BRANCHING = {
+        "version": 3,
+        "rounds": [
+            {
+                "name": "intro",
+                "questions": [{"text": "What hurts?"}],
+                "route_when": [
+                    {
+                        "if": {"field": "themes", "op": "contains", "value": "pricing"},
+                        "goto": "probe_pricing",
+                    },
+                    {"else": "wrap_up"},
+                ],
+            },
+            {
+                "name": "probe_pricing",
+                "questions": [{"text": "What would feel fair to pay?"}],
+            },
+            {"name": "wrap_up", "questions": [{"text": "Final thoughts?"}]},
+        ],
+    }
+
+    V3_LINEAR = {
+        "version": 3,
+        "rounds": [
+            {"name": "first_impressions", "questions": [{"text": "Q1"}]},
+            {"name": "brand_fit", "questions": [{"text": "Q2"}]},
+            {"name": "ia_hierarchy", "questions": [{"text": "Q3"}]},
+        ],
+    }
+
+    @pytest.mark.asyncio
+    async def test_branching_v3_runs_three_rounds_through_mcp_wire(self):
+        """3-round v3 with route_when: MCP envelope reflects every round.
+
+        Pins the per-round shape callers depend on:
+        ``rounds`` length matches the path, ``path`` records the routing
+        decision for each non-terminal round, ``terminal_round`` is the
+        last executed round (not the syntactic last round in the file),
+        and ``question_count`` is the sum across executed rounds.
+        """
+        with (
+            patch(
+                "synth_panel.orchestrator.run_panel_parallel",
+                side_effect=_stub_panelist_results_factory(),
+            ),
+            patch(
+                "synth_panel._runners.synthesize_panel",
+                side_effect=_stub_synthesize_factory(themes=["pricing pain"]),
+            ),
+            patch("synth_panel.mcp.server._shared_client", None),
+        ):
+            from synth_panel.mcp import server as _server
+
+            raw = await _server.run_panel(
+                personas=self.PERSONAS,
+                instrument=self.V3_BRANCHING,
+                model="haiku",
+                ctx=_StubMcpContext(),
+            )
+
+        data = json.loads(raw)
+        # Path traversed all three rounds in the expected order: intro
+        # routes to probe_pricing on the 'pricing' theme, then probe_pricing
+        # falls through positionally to wrap_up.
+        assert [p["round"] for p in data["path"]] == ["intro", "probe_pricing", "wrap_up"]
+        assert data["path"][0]["next"] == "probe_pricing"
+        assert "pricing" in data["path"][0]["branch"]
+        assert data["path"][-1]["next"] == "__end__"
+
+        # rounds[] mirrors the path 1:1 — three per-round payloads, each
+        # with a synthesis dict and a usage breakdown.
+        round_names = [r["name"] for r in data["rounds"]]
+        assert round_names == ["intro", "probe_pricing", "wrap_up"]
+        for rd in data["rounds"]:
+            assert rd["synthesis"] is not None
+            assert rd["usage"]["input_tokens"] >= 0
+
+        # question_count sums the per-round questions actually executed.
+        assert data["question_count"] == 3
+        assert data["terminal_round"] == "wrap_up"
+
+        # Cost rollup reflects panelist usage across all three rounds.
+        # The stubbed PanelistResult contributes 5 input + 3 output tokens
+        # per persona per round; with 2 personas × 3 rounds + per-round
+        # synthesis (2 in / 1 out × 3) + final synthesis (2 in / 1 out)
+        # the floor for cumulative input tokens is well above zero.
+        assert data["total_usage"]["input_tokens"] > 0
+        assert data["total_usage"]["output_tokens"] > 0
+
+    @pytest.mark.asyncio
+    async def test_linear_v3_runs_all_rounds_through_mcp_wire(self):
+        """Linear v3 (no route_when, no depends_on): every round executes.
+
+        Regression for hq-fjdx surfaced through the MCP boundary. Before
+        the orchestrator fix, the MCP wrapper happily returned a single-
+        round payload for a 3-round linear instrument and the synthesis
+        layer hid the truncation. This test would have caught the bug.
+        """
+        with (
+            patch(
+                "synth_panel.orchestrator.run_panel_parallel",
+                side_effect=_stub_panelist_results_factory(),
+            ),
+            patch(
+                "synth_panel._runners.synthesize_panel",
+                side_effect=_stub_synthesize_factory(),
+            ),
+            patch("synth_panel.mcp.server._shared_client", None),
+        ):
+            from synth_panel.mcp import server as _server
+
+            raw = await _server.run_panel(
+                personas=self.PERSONAS,
+                instrument=self.V3_LINEAR,
+                model="haiku",
+                ctx=_StubMcpContext(),
+            )
+
+        data = json.loads(raw)
+        executed = [r["name"] for r in data["rounds"]]
+        assert executed == ["first_impressions", "brand_fit", "ia_hierarchy"]
+
+        # Linear path: each non-terminal next is the positional successor,
+        # last entry routes to the __end__ sentinel, branch tag is "linear".
+        nexts = [p["next"] for p in data["path"]]
+        assert nexts == ["brand_fit", "ia_hierarchy", "__end__"]
+        assert all(p["branch"] == "linear" for p in data["path"])
+        assert data["terminal_round"] == "ia_hierarchy"
+        assert data["question_count"] == 3
+
+    @pytest.mark.asyncio
+    async def test_v3_round_with_zero_panelist_responses_pins_envelope_shape(self):
+        """Pin: a round that returns zero panelist responses still emits
+        a well-formed envelope and the run continues to the next round.
+
+        Today's behavior (pre-fix for any future zero-panelist hardening):
+        the round records an empty ``results`` list, synthesis runs on
+        the empty list, and the path log advances normally. If we ever
+        decide to raise on this case, this test's assertion needs to
+        flip — but until then, callers can rely on the envelope shape.
+        """
+        from synth_panel.cost import TokenUsage
+
+        def _empty_then_normal(
+            client,
+            personas,
+            questions,
+            model,
+            system_prompt_fn,
+            question_prompt_fn,
+            max_workers=None,
+            response_schema=None,
+            sessions=None,
+            extract_schema=None,
+            temperature=None,
+            top_p=None,
+            seed=None,
+            persona_models=None,
+            panel_shared_attachments=None,
+        ):
+            from synth_panel.orchestrator import PanelistResult
+
+            # First round: zero panelist responses (the failure surface).
+            # Subsequent rounds: normal stub results so the test pins
+            # behavior across the boundary, not just at the empty round.
+            if not getattr(_empty_then_normal, "_called", False):
+                _empty_then_normal._called = True
+                return [], {}, dict(sessions or {})
+            results = [
+                PanelistResult(
+                    persona_name=p.get("name", "anon"),
+                    responses=[{"question": q.get("text", ""), "response": "ok"} for q in questions],
+                    usage=TokenUsage(input_tokens=5, output_tokens=3),
+                    model=model,
+                )
+                for p in personas
+            ]
+            return results, {}, dict(sessions or {})
+
+        with (
+            patch(
+                "synth_panel.orchestrator.run_panel_parallel",
+                side_effect=_empty_then_normal,
+            ),
+            patch(
+                "synth_panel._runners.synthesize_panel",
+                side_effect=_stub_synthesize_factory(),
+            ),
+            patch("synth_panel.mcp.server._shared_client", None),
+        ):
+            from synth_panel.mcp import server as _server
+
+            raw = await _server.run_panel(
+                personas=self.PERSONAS,
+                instrument=self.V3_LINEAR,
+                model="haiku",
+                ctx=_StubMcpContext(),
+            )
+
+        data = json.loads(raw)
+        # Envelope is well-formed even with an empty first round.
+        assert "rounds" in data and "path" in data
+        # The empty first round serialises with results=[].
+        first_round = data["rounds"][0]
+        assert first_round["name"] == "first_impressions"
+        assert first_round["results"] == []
+        # The run did not abort — subsequent rounds still ran.
+        assert len(data["rounds"]) >= 2
+        assert data["rounds"][1]["results"], "follow-on rounds still produce panelist results"

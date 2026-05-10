@@ -1251,3 +1251,196 @@ class TestConditionalFollowUps:
         assert responses[1]["question"] == "Why positive?"
         assert responses[2].get("skipped_by_condition") is True
         assert responses[2]["question"] == "Why negative?"
+
+
+# ---------------------------------------------------------------------------
+# v3 multi-round panel runs through the SDK boundary (hq-83ye)
+#
+# Companion to ``TestRunPanelMultiRoundV3`` in test_mcp_server.py: the
+# same shape, but driven via ``synth_panel.sdk.run_panel`` instead of the
+# MCP wire layer. If the bug is at the orchestrator level, both surfaces
+# fail; if it's at the MCP wrapper, only the MCP test fails. Splitting
+# the coverage isolates the bisect.
+# ---------------------------------------------------------------------------
+
+
+def _sdk_stub_run_panel_parallel(
+    client,
+    personas,
+    questions,
+    model,
+    system_prompt_fn,
+    question_prompt_fn,
+    max_workers=None,
+    response_schema=None,
+    sessions=None,
+    extract_schema=None,
+    temperature=None,
+    top_p=None,
+    seed=None,
+    persona_models=None,
+    panel_shared_attachments=None,
+):
+    """Minimal stub for the LLM-touching seam used by run_multi_round_panel."""
+    from synth_panel.cost import TokenUsage as CostTokenUsage
+    from synth_panel.orchestrator import PanelistResult
+
+    results = [
+        PanelistResult(
+            persona_name=p.get("name", "anon"),
+            responses=[{"question": q.get("text", ""), "response": "ok"} for q in questions],
+            usage=CostTokenUsage(input_tokens=4, output_tokens=2),
+            model=(persona_models or {}).get(p.get("name", "anon"), model),
+        )
+        for p in personas
+    ]
+    return results, {}, dict(sessions or {})
+
+
+def _sdk_stub_synthesize_panel(
+    client,
+    panelist_results,
+    questions,
+    *,
+    model=None,
+    panelist_model=None,
+    custom_prompt=None,
+    temperature=None,
+    seed=None,
+    **_kwargs,
+):
+    from synth_panel.cost import TokenUsage as CostTokenUsage
+    from synth_panel.synthesis import SynthesisResult
+
+    return SynthesisResult(
+        summary="stub",
+        themes=["pricing pain"],
+        agreements=[],
+        disagreements=[],
+        surprises=[],
+        recommendation="ok",
+        usage=CostTokenUsage(input_tokens=2, output_tokens=1),
+        model=model or panelist_model or "stub",
+    )
+
+
+class TestSDKRunPanelMultiRoundV3:
+    """v3 multi-round panel runs via :func:`synth_panel.sdk.run_panel`."""
+
+    PERSONAS = [{"name": "Alice"}, {"name": "Bob"}]
+
+    V3_BRANCHING = {
+        "version": 3,
+        "rounds": [
+            {
+                "name": "intro",
+                "questions": [{"text": "What hurts?"}],
+                "route_when": [
+                    {
+                        "if": {"field": "themes", "op": "contains", "value": "pricing"},
+                        "goto": "probe_pricing",
+                    },
+                    {"else": "wrap_up"},
+                ],
+            },
+            {
+                "name": "probe_pricing",
+                "questions": [{"text": "What would feel fair to pay?"}],
+            },
+            {"name": "wrap_up", "questions": [{"text": "Final thoughts?"}]},
+        ],
+    }
+
+    V3_LINEAR = {
+        "version": 3,
+        "rounds": [
+            {"name": "first_impressions", "questions": [{"text": "Q1"}]},
+            {"name": "brand_fit", "questions": [{"text": "Q2"}]},
+            {"name": "ia_hierarchy", "questions": [{"text": "Q3"}]},
+        ],
+    }
+
+    def _patch_runtime(self):
+        """Stub the LLM-touching seam used by run_multi_round_panel.
+
+        ``run_panel_parallel`` is called from the orchestrator module and
+        ``synthesize_panel`` is the import in ``_runners`` (driven by
+        ``run_multi_round_sync``'s synthesize_round_fn closure).
+        """
+        from unittest.mock import patch as _patch
+
+        return [
+            _patch(
+                "synth_panel.orchestrator.run_panel_parallel",
+                side_effect=_sdk_stub_run_panel_parallel,
+            ),
+            _patch(
+                "synth_panel._runners.synthesize_panel",
+                side_effect=_sdk_stub_synthesize_panel,
+            ),
+            _patch("synth_panel.sdk.LLMClient"),
+        ]
+
+    def test_branching_v3_runs_three_rounds_via_sdk(self, tmp_path, monkeypatch):
+        """SDK regression: 3-round v3 with route_when traverses all rounds."""
+        monkeypatch.setenv("SYNTH_PANEL_DATA_DIR", str(tmp_path))
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-placeholder")
+
+        from synth_panel import run_panel
+
+        patches = self._patch_runtime()
+        for p in patches:
+            p.start()
+        try:
+            result = run_panel(
+                personas=self.PERSONAS,
+                instrument=self.V3_BRANCHING,
+                model="haiku",
+            )
+        finally:
+            for p in reversed(patches):
+                p.stop()
+
+        assert [p["round"] for p in result.path] == ["intro", "probe_pricing", "wrap_up"]
+        assert result.path[0]["next"] == "probe_pricing"
+        assert result.path[-1]["next"] == "__end__"
+        assert [r["name"] for r in result.rounds] == ["intro", "probe_pricing", "wrap_up"]
+        assert result.terminal_round == "wrap_up"
+        assert result.question_count == 3
+
+    def test_linear_v3_runs_all_rounds_via_sdk(self, tmp_path, monkeypatch):
+        """SDK regression for hq-fjdx: linear v3 runs every round.
+
+        The orchestrator-side fix already pinned the SDK behavior in
+        ``test_compat_matrix.py``; this test exercises the *public* SDK
+        entry (``synth_panel.sdk.run_panel``) so the contract is asserted
+        at the boundary callers actually consume — not just at
+        ``run_multi_round_panel`` directly.
+        """
+        monkeypatch.setenv("SYNTH_PANEL_DATA_DIR", str(tmp_path))
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-placeholder")
+
+        from synth_panel import run_panel
+
+        patches = self._patch_runtime()
+        for p in patches:
+            p.start()
+        try:
+            result = run_panel(
+                personas=self.PERSONAS,
+                instrument=self.V3_LINEAR,
+                model="haiku",
+            )
+        finally:
+            for p in reversed(patches):
+                p.stop()
+
+        assert [r["name"] for r in result.rounds] == [
+            "first_impressions",
+            "brand_fit",
+            "ia_hierarchy",
+        ]
+        assert [p["next"] for p in result.path] == ["brand_fit", "ia_hierarchy", "__end__"]
+        assert all(p["branch"] == "linear" for p in result.path)
+        assert result.terminal_round == "ia_hierarchy"
+        assert result.question_count == 3
