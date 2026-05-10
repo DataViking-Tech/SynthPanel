@@ -596,6 +596,7 @@ def save_panel_result(
     variants_config: dict[str, Any] | None = None,
     models: list[str] | None = None,
     attachments: dict[str, dict[str, Any]] | None = None,
+    synthesis: dict[str, Any] | None = None,
 ) -> str:
     """Save panel results and return the result ID.
 
@@ -612,6 +613,12 @@ def save_panel_result(
       readback layers can branch on the schema version. Bytes always
       live in CAS (see :mod:`synth_panel.attachments.store`); only
       refs land here.
+    * ``synthesis``: serialized ``SynthesisResult.to_dict()`` payload
+      (summary/themes/agreements/disagreements/surprises/recommendation
+      plus usage/cost/model). Persisted at the top level so
+      :func:`get_panel_result` and :mod:`analysis.inspect` see it
+      transparently. Omitting this field is the legacy shape; callers
+      that ran synthesis should always thread it through.
 
     Per-result entries in *results* may contain ``_variant_of`` and
     ``_model`` fields; per-response dicts may contain an ``extraction``
@@ -640,6 +647,8 @@ def save_panel_result(
         data["variants_config"] = variants_config
     if models is not None:
         data["models"] = models
+    if synthesis is not None:
+        data["synthesis"] = synthesis
     p.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
     if has_attachments:

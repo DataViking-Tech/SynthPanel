@@ -661,6 +661,7 @@ def quick_poll(
         total_cost=total_cost.format_usd(),
         persona_count=len(merged),
         question_count=1,
+        synthesis=synthesis_dict,
     )
 
     return PollResult(
@@ -841,6 +842,11 @@ def run_panel(
 
         flat_results = [format_panelist_result(pr, model) for pr in mr.rounds[-1].panelist_results] if mr.rounds else []
 
+        final_synth_dict = (
+            mr.final_synthesis.to_dict()
+            if mr.final_synthesis is not None and hasattr(mr.final_synthesis, "to_dict")
+            else None
+        )
         result_id = save_panel_result(
             results=flat_results,
             model=model,
@@ -848,6 +854,7 @@ def run_panel(
             total_cost=total_cost.format_usd(),
             persona_count=len(merged),
             question_count=total_question_count,
+            synthesis=final_synth_dict,
         )
         return _build_panel_result_from_multi_round(
             result_id,
@@ -938,6 +945,7 @@ def run_panel(
         persona_count=len(merged),
         question_count=len(normalised_questions),
         variant_count=variant_count,
+        synthesis=synthesis_dict,
     )
 
     synth_model_for_warning = synthesis_dict.get("model") if synthesis_dict else None

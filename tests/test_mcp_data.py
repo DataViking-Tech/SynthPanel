@@ -418,6 +418,84 @@ class TestPanelResultSchemaExpansion:
         assert "instrument_name" not in listing[0]
         assert "models" not in listing[0]
 
+    def test_synthesis_round_trip(self):
+        """hq-2p32: synthesis kwarg is persisted at top level and round-trips."""
+        synthesis = {
+            "summary": "panelists liked option B",
+            "themes": ["pricing", "ergonomics"],
+            "agreements": ["B feels fair"],
+            "disagreements": ["color choice"],
+            "surprises": ["nobody mentioned weight"],
+            "recommendation": "ship B at $29",
+            "usage": {"input_tokens": 2000, "output_tokens": 600},
+            "cost": "$0.0907",
+            "model": "claude-sonnet-4-6",
+            "prompt_version": 5,
+        }
+        rid = save_panel_result(
+            results=[{"persona": "Alice", "responses": []}],
+            model="sonnet",
+            total_usage={"input_tokens": 100, "output_tokens": 50},
+            total_cost="$0.10",
+            persona_count=1,
+            question_count=2,
+            synthesis=synthesis,
+        )
+        loaded = get_panel_result(rid)
+        assert loaded["synthesis"] == synthesis
+
+    def test_synthesis_round_trip_with_attachments(self):
+        """hq-2p32: synthesis persists alongside attachment refs (the bug shape)."""
+        synthesis = {
+            "summary": "image-bearing panel synthesis",
+            "themes": ["visual", "trust"],
+            "agreements": [],
+            "disagreements": [],
+            "surprises": [],
+            "recommendation": "use clearer labels",
+            "usage": {"input_tokens": 5000, "output_tokens": 800},
+            "cost": "$0.0907",
+            "model": "claude-sonnet-4-6",
+            "prompt_version": 5,
+        }
+        attachments = {
+            "att-q0-0": {
+                "id": "att-q0-0",
+                "kind": "image",
+                "sha256": "0" * 64,
+                "content_type": "image/png",
+                "byte_size": 1024,
+            }
+        }
+        rid = save_panel_result(
+            results=[{"persona": "Alice", "responses": []}],
+            model="sonnet",
+            total_usage={"input_tokens": 5100, "output_tokens": 850},
+            total_cost="$0.11",
+            persona_count=1,
+            question_count=3,
+            attachments=attachments,
+            synthesis=synthesis,
+        )
+        loaded = get_panel_result(rid)
+        # Attachment-bearing save bumps schema to 1.1 — synthesis must
+        # still ride along on the same JSON.
+        assert loaded["result_format_version"] == "1.1"
+        assert loaded["synthesis"] == synthesis
+
+    def test_synthesis_omitted_when_none(self):
+        """Default (no synthesis arg) keeps the legacy shape."""
+        rid = save_panel_result(
+            results=[],
+            model="haiku",
+            total_usage={},
+            total_cost="$0.00",
+            persona_count=0,
+            question_count=0,
+        )
+        loaded = get_panel_result(rid)
+        assert "synthesis" not in loaded
+
     def test_full_schema_save_load(self):
         """End-to-end round-trip with all new fields populated."""
         questions = [

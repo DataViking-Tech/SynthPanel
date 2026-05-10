@@ -2697,6 +2697,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             question_count=len(questions),
             instrument_name=inst_name,
             models=all_models,
+            synthesis=synthesis_dict,
         )
         print(f"Result saved: {result_id}", file=sys.stderr)
 
