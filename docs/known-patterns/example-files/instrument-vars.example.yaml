@@ -1,0 +1,63 @@
+
+name: boardroom-visual-review-vars
+version: 1
+description: Visual review via inline HTML template substitution.
+author: mayor
+instrument:
+  version: 3
+  rounds:
+  - name: first_impressions
+    questions:
+    - text: 'You are reviewing the rendered UI of an internal Boardroom ACK page used
+        to approve LLM-generated implementation specs. Below is its complete HTML+CSS
+        source — read it carefully, mentally render it, then react.
+
+
+        ---
+
+        {ack_html}
+
+        ---
+
+
+        Reconstruct the visual experience: layout, hierarchy, color, density. What
+        does this page communicate, and to whom?'
+    - text: On a scale of 1-10, how visually pleasant would the page above be when
+        rendered? Brief reasoning anchored to specific CSS choices (font stack, colors,
+        spacing, border-radius).
+  - name: comprehension
+    questions:
+    - text: In the page above, the buttons at the bottom are labeled Approve, Reject,
+        and Re-queue. Without explanation, what would each one do in your mental model?
+        Are any ambiguous?
+    - text: In the page above, the middle block (`pre.spec`) renders preformatted
+        monospace text with literal markdown headers (the actual string `# Context`
+        etc., not rendered headings). Is that the right presentation, or would you
+        expect rendered headings/lists?
+  - name: list_view
+    questions:
+    - text: 'Here is the complete HTML+CSS for the sessions list page in the same
+        Boardroom UI:
+
+
+        ---
+
+        {list_html}
+
+        ---
+
+
+        If this were your dashboard, would the layout help you find a specific past
+        Board Meeting? What would you change?'
+  - name: brand_fit
+    questions:
+    - text: 'Across both pages above (ACK + sessions list): DataViking is a small
+        AI/synthetic-research startup. The brand should feel sharp, technical, and
+        trustworthy — not enterprise CRM, not consumer SaaS. Does this UI hit that
+        target? If not, what specific moves (font, color, density, ornament) would
+        shift it?'
+  - name: concrete_changes
+    questions:
+    - text: Give three concrete CSS-level changes (specific properties + values, not
+        vague directions) that would noticeably improve the visual quality of these
+        screens. Order by impact-per-effort, highest first.

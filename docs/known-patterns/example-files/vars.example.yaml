@@ -1,0 +1,26 @@
+
+# vars.yaml — example
+# Use literal-block scalars (|) to preserve HTML whitespace and newlines.
+
+ack_html: |
+  <!doctype html>
+  <html lang="en">
+  <head><title>Example</title></head>
+  <body>
+    <h1>Example page</h1>
+    <p>Content here.</p>
+  </body>
+  </html>
+
+list_html: |
+  <!doctype html>
+  <html>
+  <body>
+    <table>
+      <thead><tr><th>Col1</th><th>Col2</th></tr></thead>
+      <tbody>
+        <tr><td>a</td><td>b</td></tr>
+      </tbody>
+    </table>
+  </body>
+  </html>
