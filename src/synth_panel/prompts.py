@@ -257,25 +257,51 @@ def build_question_blocks(
     the provider's auto-marker via ``request.cache_enabled``). Caller is
     responsible for the P≥2 / 1024-token-prefix predicate; this helper
     just applies the marker it's told to.
+
+    HTML attachments (hq-aaca): emitting the HTML payload as a separate
+    text content block alongside the question text caused ~50% refusal
+    rates via OpenRouter (model treated one of the two text blocks as
+    tangential). Per midgard's empirically-working pattern (0/210
+    refusals) we inline the HTML *into* the question text wrapped in a
+    delimiter, so the user message ships exactly one text block with the
+    HTML embedded as user-supplied data.
     """
     blocks: list[ContentBlock] = []
+    html_payloads: list[str] = []
     shared = list(panel_shared_attachments or [])
     per_q = list(attachments or [])
+
+    def _emit(att: dict[str, Any]) -> None:
+        if att.get("type") == "html":
+            html_text = att.get("text", "")
+            if not isinstance(html_text, str):
+                raise ValueError("html attachment requires a 'text' string")
+            if html_text:
+                html_payloads.append(html_text)
+            return
+        blocks.append(_attachment_to_block(att))
 
     # 1+2: panel-shared docs first, then panel-shared images
     shared_docs = [a for a in shared if a.get("type") == "document"]
     shared_images = [a for a in shared if a.get("type") == "image"]
     shared_other = [a for a in shared if a.get("type") not in ("document", "image")]
     for att in (*shared_docs, *shared_images, *shared_other):
-        blocks.append(_attachment_to_block(att))
+        _emit(att)
 
     # 3: per-question attachments in caller-supplied order
     for att in per_q:
-        blocks.append(_attachment_to_block(att))
+        _emit(att)
 
-    # 4: question text
+    # 4: question text — with any HTML attachments inlined as a
+    #    delimited prefix so the wire ships a single text block.
     text = question.get("text", question) if isinstance(question, dict) else str(question)
-    text_block = TextBlock(text=str(text))
+    raw_text = str(text)
+    if html_payloads:
+        prefix = "\n\n".join(f"--- HTML SOURCE ---\n{html}\n--- END HTML SOURCE ---" for html in html_payloads)
+        text_payload = f"{prefix}\n\n{raw_text}"
+    else:
+        text_payload = raw_text
+    text_block = TextBlock(text=text_payload)
 
     if cache_marker and blocks:
         # Mark the LAST attachment block (the cache breakpoint sits at the

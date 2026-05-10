@@ -102,6 +102,131 @@ class TestOpenAIFormatRegression:
 
 
 # ---------------------------------------------------------------------------
+# hq-aaca — HTML attachments inlined into question text
+# ---------------------------------------------------------------------------
+
+
+class TestHTMLAttachmentInlining:
+    """HTML attachments must inline into the question's TextBlock (hq-aaca).
+
+    Pre-fix: ``_attachment_to_block`` produced an HTMLBlock that the wire
+    serializer lowered to a separate text content block alongside the
+    question's TextBlock. Two adjacent text blocks caused ~50% refusal
+    rates via OpenRouter (model attended to one over the other). Fix
+    merges the HTML into the question text with a delimiter so the user
+    message ships a single text block.
+    """
+
+    def test_html_attachment_collapses_to_single_text_block(self):
+        from synth_panel.prompts import build_question_blocks
+
+        blocks = build_question_blocks(
+            {"text": "React to this UI."},
+            attachments=[{"type": "html", "text": "<p>hi</p>"}],
+        )
+        assert len(blocks) == 1, (
+            "html attachment must inline into the question text, not emit a separate block — see hq-aaca"
+        )
+        assert isinstance(blocks[0], TextBlock)
+        assert "<p>hi</p>" in blocks[0].text
+        assert "React to this UI." in blocks[0].text
+        # HTML must precede the question text so the model reads it as
+        # user-supplied data being asked about.
+        assert blocks[0].text.index("<p>hi</p>") < blocks[0].text.index("React to this UI.")
+
+    def test_html_attachment_uses_delimiter(self):
+        from synth_panel.prompts import build_question_blocks
+
+        blocks = build_question_blocks(
+            {"text": "Q?"},
+            attachments=[{"type": "html", "text": "<div>x</div>"}],
+        )
+        assert "--- HTML SOURCE ---" in blocks[0].text
+        assert "--- END HTML SOURCE ---" in blocks[0].text
+
+    def test_multiple_html_attachments_all_inline(self):
+        from synth_panel.prompts import build_question_blocks
+
+        blocks = build_question_blocks(
+            {"text": "Q?"},
+            attachments=[
+                {"type": "html", "text": "<a>one</a>"},
+                {"type": "html", "text": "<b>two</b>"},
+            ],
+        )
+        assert len(blocks) == 1
+        assert isinstance(blocks[0], TextBlock)
+        assert "<a>one</a>" in blocks[0].text
+        assert "<b>two</b>" in blocks[0].text
+
+    def test_html_alongside_image_keeps_image_as_block(self):
+        from synth_panel.prompts import build_question_blocks
+
+        blocks = build_question_blocks(
+            {"text": "Compare these."},
+            attachments=[
+                {"type": "image", "source": {"type": "url", "url": "http://x/a.png"}},
+                {"type": "html", "text": "<p>html payload</p>"},
+            ],
+        )
+        # ImageBlock survives as a discrete block; HTML inlines into text.
+        assert len(blocks) == 2
+        assert isinstance(blocks[0], ImageBlock)
+        assert isinstance(blocks[1], TextBlock)
+        assert "<p>html payload</p>" in blocks[1].text
+        assert "Compare these." in blocks[1].text
+
+    def test_shared_html_attachment_inlines(self):
+        from synth_panel.prompts import build_question_blocks
+
+        blocks = build_question_blocks(
+            {"text": "Q?"},
+            panel_shared_attachments=[{"type": "html", "text": "<p>shared</p>"}],
+        )
+        assert len(blocks) == 1
+        assert isinstance(blocks[0], TextBlock)
+        assert "<p>shared</p>" in blocks[0].text
+
+    def test_empty_html_text_skipped(self):
+        from synth_panel.prompts import build_question_blocks
+
+        blocks = build_question_blocks(
+            {"text": "Q?"},
+            attachments=[{"type": "html", "text": ""}],
+        )
+        # No HTML payload — collapses to the legacy single-TextBlock shape.
+        assert len(blocks) == 1
+        assert isinstance(blocks[0], TextBlock)
+        assert blocks[0].text == "Q?"
+        assert "HTML SOURCE" not in blocks[0].text
+
+    def test_non_string_html_text_raises(self):
+        from synth_panel.prompts import build_question_blocks
+
+        with pytest.raises(ValueError, match="html attachment"):
+            build_question_blocks(
+                {"text": "Q?"},
+                attachments=[{"type": "html", "text": 42}],
+            )
+
+    def test_html_inlined_text_survives_openai_serialization(self):
+        # End-to-end: build_question_blocks → _content_to_openai must
+        # produce a single text content (string fast path) carrying both
+        # the HTML and the question text.
+        from synth_panel.prompts import build_question_blocks
+
+        blocks = build_question_blocks(
+            {"text": "What do you think?"},
+            attachments=[{"type": "html", "text": "<button>Buy</button>"}],
+        )
+        out = _content_to_openai(blocks)
+        # Single TextBlock → fast path returns a plain string.
+        assert isinstance(out, str)
+        assert "<button>Buy</button>" in out
+        assert "What do you think?" in out
+
+
+# ---------------------------------------------------------------------------
 # G3 — bank-ref resolution
 # ---------------------------------------------------------------------------
 
