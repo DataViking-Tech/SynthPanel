@@ -880,3 +880,88 @@ class TestAttachments:
                     "attachments": [{"id": "hero"}],
                 }
             )
+
+    # hq-jviv: per-type extras='forbid' on the bank-attachment shape so
+    # caller typos surface at parse time instead of being silently threaded
+    # through to provider payloads via the MCP boundary.
+
+    def test_unknown_field_on_image_rejected(self):
+        with pytest.raises(InstrumentError, match=r"unknown field.*typo_field"):
+            parse_instrument(
+                {
+                    "version": 1,
+                    "questions": [{"text": "Q"}],
+                    "attachments": {
+                        "img": {
+                            "type": "image",
+                            "media_type": "image/png",
+                            "source": {"type": "base64", "data": "AAAA"},
+                            "typo_field": "should fail strict",
+                        }
+                    },
+                }
+            )
+
+    def test_unknown_field_on_url_rejected(self):
+        with pytest.raises(InstrumentError, match=r"unknown field.*srcset"):
+            parse_instrument(
+                {
+                    "version": 1,
+                    "questions": [{"text": "Q"}],
+                    "attachments": {
+                        "page": {
+                            "type": "url",
+                            "url": "https://example.com",
+                            "srcset": "oops",
+                        }
+                    },
+                }
+            )
+
+    def test_unknown_field_on_html_rejected(self):
+        with pytest.raises(InstrumentError, match=r"unknown field.*color"):
+            parse_instrument(
+                {
+                    "version": 1,
+                    "questions": [{"text": "Q"}],
+                    "attachments": {"snip": {"type": "html", "text": "<b>hi</b>", "color": "red"}},
+                }
+            )
+
+    def test_unknown_field_on_source_rejected(self):
+        with pytest.raises(InstrumentError, match=r"source has unknown field.*encoding"):
+            parse_instrument(
+                {
+                    "version": 1,
+                    "questions": [{"text": "Q"}],
+                    "attachments": {
+                        "img": {
+                            "type": "image",
+                            "media_type": "image/png",
+                            "source": {"type": "base64", "data": "AAAA", "encoding": "utf-8"},
+                        }
+                    },
+                }
+            )
+
+    def test_typo_on_inline_attachment_rejected(self):
+        # inline_attachments reuse _validate_attachment, so the same
+        # forbid-extras check must fire on inline blocks.
+        with pytest.raises(InstrumentError, match=r"unknown field.*typo_field"):
+            parse_instrument(
+                {
+                    "version": 1,
+                    "questions": [
+                        {
+                            "text": "Q",
+                            "inline_attachments": [
+                                {
+                                    "type": "html",
+                                    "text": "<i>x</i>",
+                                    "typo_field": "oops",
+                                }
+                            ],
+                        }
+                    ],
+                }
+            )

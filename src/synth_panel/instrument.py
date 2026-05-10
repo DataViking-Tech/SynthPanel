@@ -60,6 +60,25 @@ _DOCUMENT_MEDIA_TYPES: frozenset[str] = frozenset({"application/pdf"})
 
 _FETCH_MODES: frozenset[str] = frozenset({"auto", "html_text", "screenshot", "markdown"})
 
+# Per-type allowed-key allowlists for the instrument-bank attachment shape.
+# Validated with extras='forbid' semantics by _validate_attachment so caller
+# typos (e.g. "typo_field") fail loud at parse time instead of being silently
+# threaded through to provider payloads (hq-jviv).
+_ATTACHMENT_BASE_KEYS: frozenset[str] = frozenset({"type", "cache_control", "filter"})
+_ATTACHMENT_ALLOWED_KEYS: dict[str, frozenset[str]] = {
+    "image": _ATTACHMENT_BASE_KEYS | {"media_type", "source"},
+    "document": _ATTACHMENT_BASE_KEYS | {"media_type", "source"},
+    "url": _ATTACHMENT_BASE_KEYS | {"url", "fetch_mode"},
+    "html": _ATTACHMENT_BASE_KEYS | {"text"},
+}
+
+# Per-source-type allowed-key allowlists for the inner ``source`` mapping.
+_ATTACHMENT_SOURCE_ALLOWED_KEYS: dict[str, frozenset[str]] = {
+    "base64": frozenset({"type", "data"}),
+    "url": frozenset({"type", "url"}),
+    "file": frozenset({"type", "file_id"}),
+}
+
 
 @dataclass
 class Round:
@@ -211,6 +230,14 @@ def _validate_attachment_source(source: Any, *, attachment_type: str, context: s
     if not isinstance(source, dict):
         raise InstrumentError(f"{context}: '{attachment_type}' source must be a mapping, got {type(source).__name__}")
     stype = source.get("type")
+    allowed = _ATTACHMENT_SOURCE_ALLOWED_KEYS.get(stype if isinstance(stype, str) else "")
+    if allowed is not None:
+        extras = sorted(k for k in source if k not in allowed)
+        if extras:
+            raise InstrumentError(
+                f"{context}: source has unknown field(s) {extras} for source type {stype!r}; "
+                f"allowed keys are {sorted(allowed)}"
+            )
     if stype == "base64":
         data = source.get("data")
         if not isinstance(data, str) or not data:
@@ -247,6 +274,13 @@ def _validate_attachment(att_id: str, raw: Any, *, context: str) -> None:
         )
 
     loc = f"{context} attachment '{att_id}'"
+
+    allowed = _ATTACHMENT_ALLOWED_KEYS[atype]
+    extras = sorted(k for k in raw if k not in allowed)
+    if extras:
+        raise InstrumentError(
+            f"{loc}: unknown field(s) {extras} for attachment type {atype!r}; allowed keys are {sorted(allowed)}"
+        )
 
     if atype == "image":
         media_type = raw.get("media_type")

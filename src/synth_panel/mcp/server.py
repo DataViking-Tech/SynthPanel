@@ -73,7 +73,7 @@ from synth_panel.cost import (
     resolve_cost,
 )
 from synth_panel.cost import TokenUsage as CostTokenUsage
-from synth_panel.instrument import Instrument, parse_instrument
+from synth_panel.instrument import Instrument, InstrumentError, parse_instrument
 from synth_panel.llm.client import LLMClient
 from synth_panel.llm.models import (
     CompletionRequest,
@@ -1264,7 +1264,10 @@ async def run_panel(
             if instrument_pack is not None:
                 pack_body = _data_load_instrument_pack(instrument_pack)
                 raw = pack_body.get("instrument", pack_body)
-                inst = parse_instrument(raw)
+                try:
+                    inst = parse_instrument(raw)
+                except InstrumentError as exc:
+                    return json.dumps({"error": str(exc)})
                 if len(inst.rounds) > 1:
                     return json.dumps(
                         {
@@ -1279,7 +1282,10 @@ async def run_panel(
                 sampling_questions = [{"text": q["text"]} for q in inst.questions]
             elif instrument is not None:
                 raw = instrument.get("instrument", instrument)
-                inst = parse_instrument(raw)
+                try:
+                    inst = parse_instrument(raw)
+                except InstrumentError as exc:
+                    return json.dumps({"error": str(exc)})
                 if len(inst.rounds) > 1:
                     return json.dumps(
                         {
@@ -1347,15 +1353,18 @@ async def run_panel(
         ens_questions = questions or []
         if not ens_questions:
             # Instruments: extract flat questions for ensemble (v1/v2 only)
-            if instrument is not None:
-                raw = instrument.get("instrument", instrument)
-                inst = parse_instrument(raw)
-                ens_questions = [{"text": q["text"]} for q in inst.questions]
-            elif instrument_pack is not None:
-                pack_body = _data_load_instrument_pack(instrument_pack)
-                raw = pack_body.get("instrument", pack_body)
-                inst = parse_instrument(raw)
-                ens_questions = [{"text": q["text"]} for q in inst.questions]
+            try:
+                if instrument is not None:
+                    raw = instrument.get("instrument", instrument)
+                    inst = parse_instrument(raw)
+                    ens_questions = [{"text": q["text"]} for q in inst.questions]
+                elif instrument_pack is not None:
+                    pack_body = _data_load_instrument_pack(instrument_pack)
+                    raw = pack_body.get("instrument", pack_body)
+                    inst = parse_instrument(raw)
+                    ens_questions = [{"text": q["text"]} for q in inst.questions]
+            except InstrumentError as exc:
+                return json.dumps({"error": str(exc)})
         try:
             ens_result = await asyncio.to_thread(
                 _run_ensemble_sync,
@@ -1380,14 +1389,20 @@ async def run_panel(
         return json.dumps(apply_response_gate(ens_result), indent=2)
 
     # Resolve instrument source (pack > inline instrument > questions).
+    # InstrumentError → clean JSON so caller-side typos in attachment
+    # payloads (hq-jviv) surface across the wire instead of crashing the
+    # tool with a generic ToolError.
     instrument_obj: Instrument | None = None
-    if instrument_pack is not None:
-        pack_body = _data_load_instrument_pack(instrument_pack)
-        raw = pack_body.get("instrument", pack_body)
-        instrument_obj = parse_instrument(raw)
-    elif instrument is not None:
-        raw = instrument.get("instrument", instrument)
-        instrument_obj = parse_instrument(raw)
+    try:
+        if instrument_pack is not None:
+            pack_body = _data_load_instrument_pack(instrument_pack)
+            raw = pack_body.get("instrument", pack_body)
+            instrument_obj = parse_instrument(raw)
+        elif instrument is not None:
+            raw = instrument.get("instrument", instrument)
+            instrument_obj = parse_instrument(raw)
+    except InstrumentError as exc:
+        return json.dumps({"error": str(exc)})
 
     if instrument_obj is not None:
         try:

@@ -715,6 +715,44 @@ class TestRunPanelInstrument:
         data = json.loads(result[0][0].text)
         assert "error" in data
 
+    @pytest.mark.asyncio
+    async def test_attachment_typo_field_rejected_at_wire_boundary(self):
+        """hq-jviv: caller-supplied attachment typos must surface as a
+        clean error through the MCP wire boundary, not silently propagate.
+
+        The v1.0.4 hardening promised strict validation on the
+        attachment surface; before the fix this only fired on the
+        AttachmentRef CAS-ref shape (refs.json) — the *bank* attachment
+        shape that callers actually pass through ``run_panel`` accepted
+        unknown fields. This test pins the contract at the wire layer.
+        """
+        result = await mcp.call_tool(
+            "run_panel",
+            {
+                "personas": [{"name": "T", "background": "test"}],
+                "instrument": {
+                    "version": 3,
+                    "attachments": {
+                        "img": {
+                            "type": "image",
+                            "media_type": "image/png",
+                            "source": {"type": "base64", "data": "AAAA"},
+                            "typo_field": "should fail strict",
+                        }
+                    },
+                    "rounds": [
+                        {
+                            "name": "v",
+                            "questions": [{"text": "Describe.", "attachments": ["img"]}],
+                        }
+                    ],
+                },
+            },
+        )
+        data = json.loads(result[0][0].text)
+        assert "error" in data, f"Expected error, got: {data}"
+        assert "typo_field" in data["error"], f"Error must name the offending field; got: {data['error']!r}"
+
 
 # ---------------------------------------------------------------------------
 # extend_panel docstring contract
