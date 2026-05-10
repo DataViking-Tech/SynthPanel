@@ -280,6 +280,217 @@ class TestRunPanel:
         assert out.result_id
 
 
+class TestRunPanelExtractSchema:
+    """v1.0.4 P4 (hq-r39v): caller-facing ``response_schema=MyPydanticClass``.
+
+    The internal dispatch in :func:`synth_panel._runners.resolve_extract_schema`
+    landed in v1.0.3; this class pins the SDK boundary — that the type
+    annotation has widened, that a Pydantic class flows through correctly,
+    and that the back-compat shapes (string name, dict, None) still work
+    unchanged.
+    """
+
+    @staticmethod
+    def _stub_run_panel_sync():
+        from synth_panel.cost import TokenUsage
+
+        fake_usage = TokenUsage(input_tokens=1, output_tokens=1)
+        fake_cost = MagicMock()
+        fake_cost.format_usd.return_value = "$0.01"
+        fake_cost.__add__ = lambda self, other: self
+        return fake_usage, fake_cost
+
+    def test_basemodel_class_accepted_at_sdk_boundary(self):
+        """AC: ``extract_schema=MyPydanticClass`` reaches the runner as a
+        resolved envelope carrying the typed model, not as the raw class."""
+        from pydantic import BaseModel, Field
+
+        from synth_panel import run_panel
+
+        class FeatureChoice(BaseModel):
+            feature: str = Field(..., min_length=1)
+            confidence: int = Field(..., ge=1, le=5)
+
+        fake_usage, fake_cost = self._stub_run_panel_sync()
+        with (
+            patch("synth_panel.sdk.LLMClient"),
+            patch("synth_panel.sdk.run_panel_sync") as mock_runner,
+        ):
+            mock_runner.return_value = ([], [], fake_usage, fake_cost, None, None)
+            run_panel(
+                personas=[{"name": "Alice"}],
+                questions=["Which feature first?"],
+                extract_schema=FeatureChoice,
+            )
+        kwargs = mock_runner.call_args.kwargs
+        envelope = kwargs["extract_schema"]
+        assert isinstance(envelope, dict)
+        assert envelope["model"] is FeatureChoice
+        assert envelope["schema"]["type"] == "object"
+        assert "feature" in envelope["schema"]["properties"]
+        assert "confidence" in envelope["schema"]["properties"]
+
+    def test_signature_advertises_basemodel(self):
+        """Type hint at the SDK boundary must include ``type[BaseModel]`` —
+        callers (and IDE/type-checkers) should see the typed-class branch
+        without having to read the docstring."""
+        import inspect
+
+        from pydantic import BaseModel
+
+        from synth_panel import run_panel
+
+        sig = inspect.signature(run_panel)
+        param = sig.parameters["extract_schema"]
+        # The annotation is a string-evaluated PEP 604 union; just check
+        # that BaseModel appears in the resolved annotation set.
+        try:
+            from typing import get_args, get_type_hints
+
+            hints = get_type_hints(run_panel)
+            args = get_args(hints["extract_schema"])
+            assert any(arg is BaseModel or (isinstance(arg, type) and issubclass(arg, BaseModel)) or arg == type[BaseModel] for arg in args), (
+                f"BaseModel not in extract_schema annotation args: {args}"
+            )
+        except (TypeError, NameError):
+            # Fallback: stringified annotation must mention BaseModel.
+            assert "BaseModel" in str(param.annotation)
+
+    def test_string_name_still_works(self):
+        """Back-compat: a registered name is resolved into the correct
+        envelope (schema from the bundled registry, model from MODEL_REGISTRY)."""
+        from synth_panel import run_panel
+        from synth_panel.structured.models import AnnotatedChoice
+
+        fake_usage, fake_cost = self._stub_run_panel_sync()
+        with (
+            patch("synth_panel.sdk.LLMClient"),
+            patch("synth_panel.sdk.run_panel_sync") as mock_runner,
+        ):
+            mock_runner.return_value = ([], [], fake_usage, fake_cost, None, None)
+            run_panel(
+                personas=[{"name": "Alice"}],
+                questions=["pick"],
+                extract_schema="annotated_choice",
+            )
+        envelope = mock_runner.call_args.kwargs["extract_schema"]
+        assert envelope["model"] is AnnotatedChoice
+        assert envelope["schema"]["type"] == "object"
+
+    def test_dict_still_works(self):
+        """Back-compat: an inline JSON Schema dict resolves to envelope
+        with ``model=None`` and the dict carried verbatim as ``schema``."""
+        from synth_panel import run_panel
+
+        raw = {
+            "type": "object",
+            "properties": {"answer": {"type": "string"}},
+            "required": ["answer"],
+        }
+        fake_usage, fake_cost = self._stub_run_panel_sync()
+        with (
+            patch("synth_panel.sdk.LLMClient"),
+            patch("synth_panel.sdk.run_panel_sync") as mock_runner,
+        ):
+            mock_runner.return_value = ([], [], fake_usage, fake_cost, None, None)
+            run_panel(
+                personas=[{"name": "Alice"}],
+                questions=["q"],
+                extract_schema=raw,
+            )
+        envelope = mock_runner.call_args.kwargs["extract_schema"]
+        assert envelope == {"schema": raw, "model": None}
+
+    def test_none_still_passes_through(self):
+        """Back-compat: omitting ``extract_schema`` (or passing None) must
+        keep ``extract_schema=None`` on the runner — no envelope wrapping."""
+        from synth_panel import run_panel
+
+        fake_usage, fake_cost = self._stub_run_panel_sync()
+        with (
+            patch("synth_panel.sdk.LLMClient"),
+            patch("synth_panel.sdk.run_panel_sync") as mock_runner,
+        ):
+            mock_runner.return_value = ([], [], fake_usage, fake_cost, None, None)
+            run_panel(personas=[{"name": "A"}], questions=["q"])
+        assert mock_runner.call_args.kwargs["extract_schema"] is None
+
+    def test_invalid_type_raises_at_sdk_boundary(self):
+        """Anything that isn't a BaseModel subclass / dict / str / None
+        is rejected by ``resolve_extract_schema`` before the runner is
+        ever called — no LLM spend on a malformed argument."""
+        from synth_panel import run_panel
+
+        with pytest.raises(TypeError, match="extract_schema"):
+            run_panel(
+                personas=[{"name": "A"}],
+                questions=["q"],
+                extract_schema=42,  # type: ignore[arg-type]
+            )
+
+    def test_basemodel_validation_error_surfaces_via_unpack(self):
+        """ValidationError surfacing path: when the orchestrator unpacks
+        the resolved envelope and runs ``model_validate`` on a wire-valid
+        but typed-invalid payload, the field-path error is reachable —
+        this is the mechanism the orchestrator uses to populate
+        ``extraction_validation_error`` on a per-response basis (see
+        ``orchestrator.py`` around the ``_PydanticValidationError`` catch).
+        Reproduce the unpack + validate flow without the LLM in scope."""
+        from pydantic import BaseModel, Field, ValidationError
+
+        from synth_panel._runners import resolve_extract_schema
+        from synth_panel.orchestrator import _unpack_extract_schema
+
+        class TypedLikert(BaseModel):
+            rating: int = Field(..., ge=1, le=5)
+
+        envelope = resolve_extract_schema(TypedLikert)
+        json_schema, pyd_model = _unpack_extract_schema(envelope)
+        assert json_schema == envelope["schema"]
+        assert pyd_model is TypedLikert
+        # Wire-valid (matches generated JSON Schema) but breaks the typed
+        # 1..5 constraint — this is the case the surfacing path is for.
+        with pytest.raises(ValidationError) as exc_info:
+            pyd_model.model_validate({"rating": 7})
+        errors = exc_info.value.errors()
+        assert any(err["loc"] == ("rating",) for err in errors)
+
+    def test_mixed_registry_pydantic_and_named_coexist(self):
+        """A user-defined Pydantic class (not in MODEL_REGISTRY) and a
+        registered name must both work in the same process — neither
+        path leaks state into the other. This is the "mixed registry
+        use" coverage from the AC."""
+        from pydantic import BaseModel
+
+        from synth_panel import run_panel
+        from synth_panel.structured.models import AnnotatedChoice
+
+        class CustomPick(BaseModel):
+            label: str
+
+        fake_usage, fake_cost = self._stub_run_panel_sync()
+        with (
+            patch("synth_panel.sdk.LLMClient"),
+            patch("synth_panel.sdk.run_panel_sync") as mock_runner,
+        ):
+            mock_runner.return_value = ([], [], fake_usage, fake_cost, None, None)
+            run_panel(
+                personas=[{"name": "A"}],
+                questions=["q"],
+                extract_schema=CustomPick,
+            )
+            run_panel(
+                personas=[{"name": "A"}],
+                questions=["q"],
+                extract_schema="annotated_choice",
+            )
+        first_env = mock_runner.call_args_list[0].kwargs["extract_schema"]
+        second_env = mock_runner.call_args_list[1].kwargs["extract_schema"]
+        assert first_env["model"] is CustomPick
+        assert second_env["model"] is AnnotatedChoice
+        assert first_env["schema"] != second_env["schema"]
+
+
 # ---------------------------------------------------------------------------
 # list_* and get_panel_result
 # ---------------------------------------------------------------------------

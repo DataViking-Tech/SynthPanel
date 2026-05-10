@@ -528,6 +528,18 @@ def resolve_extract_schema(
       ``model_json_schema()`` and attaches the class for typed
       validation. The wire format and the typed validator are guaranteed
       to be self-consistent in this branch.
+
+    Example:
+        >>> from pydantic import BaseModel, Field
+        >>> class MyChoice(BaseModel):
+        ...     option: str = Field(..., min_length=1)
+        ...     score: int = Field(..., ge=1, le=5)
+        ...
+        >>> envelope = resolve_extract_schema(MyChoice)
+        >>> envelope["model"] is MyChoice
+        True
+        >>> envelope["schema"]["type"]
+        'object'
     """
     if value is None:
         return None

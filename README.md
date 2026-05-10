@@ -268,6 +268,41 @@ or when you want to wrap SynthPanel in a LangChain / LlamaIndex tool
 in three lines. See [`examples/sdk_usage.py`](examples/sdk_usage.py)
 for a runnable end-to-end walkthrough.
 
+### Typed extraction with Pydantic (1.0.4)
+
+`run_panel` accepts a `pydantic.BaseModel` subclass directly as
+`extract_schema=`. SynthPanel generates the wire JSON Schema via
+`model_json_schema()` and runs `model_validate` on each panelist's
+extracted payload — validation failures surface per-response as
+`extraction_validation_error` (the panel still produces a usable result
+even when the LLM emits wire-valid JSON that violates a typed
+constraint, e.g. `rating: 7` against a 1..5 `Likert`).
+
+```python
+from pydantic import BaseModel, Field
+from synth_panel import run_panel
+
+class FeatureChoice(BaseModel):
+    feature: str = Field(..., min_length=1)
+    confidence: int = Field(..., ge=1, le=5)
+
+result = run_panel(
+    pack_id="developers",
+    questions=[{"text": "Which feature should we ship first?"}],
+    extract_schema=FeatureChoice,  # typed class accepted at the SDK boundary
+)
+
+for r in result.results:
+    extracted = r["responses"][0].get("extraction")
+    if extracted is not None:
+        choice = FeatureChoice.model_validate(extracted)
+        print(choice.feature, choice.confidence)
+```
+
+The same parameter still accepts a built-in name (`"sentiment"`,
+`"likert"`, `"pick_one"`, …) or an inline JSON Schema dict — typed
+classes are an additional dispatch, not a replacement.
+
 ## MCP Server (Agent Integration)
 
 synthpanel ships an MCP server so AI agents can run synthetic focus groups as tool calls.

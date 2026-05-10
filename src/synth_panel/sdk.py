@@ -32,6 +32,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from pydantic import BaseModel
+
 from synth_panel._runners import (
     MAX_PERSONAS,
     MAX_QUESTIONS,
@@ -808,7 +810,7 @@ def run_panel(
     top_p: float | None = None,
     seed: int | None = None,
     persona_models: dict[str, str] | None = None,
-    extract_schema: str | dict[str, Any] | None = None,
+    extract_schema: type[BaseModel] | str | dict[str, Any] | None = None,
     synthesis_temperature: float | None = None,
     variants: int = 0,
 ) -> PanelResult:
@@ -844,9 +846,21 @@ def run_panel(
         top_p: Panelist nucleus sampling threshold.
         persona_models: Per-persona model overrides, e.g.
             ``{"Sarah Chen": "sonnet", "Marcus": "haiku"}``.
-        extract_schema: Post-hoc extraction schema — either a built-in
-            name (``"sentiment"``, ``"themes"``, ``"rating"``) or an
-            inline JSON Schema dict.
+        extract_schema: Post-hoc extraction schema. Accepts:
+
+            * a built-in name — ``"sentiment"``, ``"themes"``, ``"rating"``,
+              or a bundled response model (``"likert"``, ``"pick_one"``,
+              ``"yes_no"``, ``"ranking"``, ``"annotated_choice"``);
+            * an inline JSON Schema dict;
+            * a :class:`pydantic.BaseModel` subclass — the wire schema is
+              generated via ``model_json_schema()`` and the extracted
+              payload is validated through ``model_validate``. Validation
+              failures land on each response as
+              ``response["extraction_validation_error"]`` so the run still
+              produces a usable result (LLM output that wire-validates but
+              violates a typed constraint, e.g. ``rating: 7`` for a 1..5
+              Likert, surfaces the field-path error rather than crashing
+              the panel).
         synthesis_temperature: Temperature for the synthesis step,
             independent of the panelist temperature.
         variants: Number of persona variants per base persona. ``0``
@@ -863,6 +877,25 @@ def run_panel(
         ...     instrument_pack="pricing-discovery",
         ... )
         >>> print(panel.path)
+
+    Typed extraction with a Pydantic class:
+        >>> from pydantic import BaseModel, Field
+        >>> from synth_panel import run_panel
+        >>>
+        >>> class FeatureChoice(BaseModel):
+        ...     feature: str = Field(..., min_length=1)
+        ...     confidence: int = Field(..., ge=1, le=5)
+        ...
+        >>> panel = run_panel(
+        ...     pack_id="developers",
+        ...     questions=[{"text": "Which feature should we ship first?"}],
+        ...     extract_schema=FeatureChoice,
+        ... )
+        >>> for r in panel.results:
+        ...     extracted = r["responses"][0].get("extraction")
+        ...     if extracted is not None:
+        ...         choice = FeatureChoice.model_validate(extracted)
+        ...         print(choice.feature, choice.confidence)
     """
     if variants < 0 or variants > 20:
         raise ValueError("variants must be between 0 and 20.")
