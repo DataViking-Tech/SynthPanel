@@ -15,6 +15,8 @@ import logging
 from collections import Counter
 from typing import Any
 
+from pydantic import BaseModel
+
 from synth_panel.cost import ZERO_USAGE, resolve_cost
 from synth_panel.cost import TokenUsage as CostTokenUsage
 from synth_panel.instrument import Instrument
@@ -28,6 +30,8 @@ from synth_panel.orchestrator import (
 from synth_panel.perturbation import generate_panel_variants
 from synth_panel.prompts import build_question_prompt, persona_system_prompt
 from synth_panel.stats import robustness_score
+from synth_panel.structured.models import MODEL_REGISTRY
+from synth_panel.structured.schemas import _REGISTRY as _BUNDLED_SCHEMA_REGISTRY
 from synth_panel.synthesis import synthesize_panel
 
 logger = logging.getLogger(__name__)
@@ -496,21 +500,52 @@ EXTRACT_SCHEMA_REGISTRY: dict[str, dict[str, Any]] = {
 
 
 def resolve_extract_schema(
-    value: str | dict[str, Any] | None,
+    value: str | dict[str, Any] | type[BaseModel] | None,
 ) -> dict[str, Any] | None:
-    """Resolve extract_schema: pass dicts through, look up strings in the registry."""
+    """Resolve ``extract_schema`` into a ``{schema, model}`` envelope.
+
+    The return shape is::
+
+        {"schema": <JSON Schema dict>, "model": <Pydantic class | None>}
+
+    or ``None`` when the input is ``None``. Downstream code consumes the
+    ``schema`` key for the wire-level structured-output forcing and uses
+    the ``model`` key (when present) to apply a typed
+    ``model_validate`` pass on the extracted payload.
+
+    Inputs accepted:
+
+    - ``None`` → ``None``.
+    - ``str`` — looks up both registries: the post-hoc analytic registry
+      (``EXTRACT_SCHEMA_REGISTRY`` — sentiment / themes / rating) and
+      the bundled response registry (``schemas._REGISTRY`` — ranking /
+      likert / yes_no / pick_one / annotated_choice). For names in the
+      bundled registry the matching :class:`pydantic.BaseModel` from
+      :data:`MODEL_REGISTRY` is attached.
+    - ``dict`` — treated as a raw JSON Schema. ``model`` is ``None`` so
+      the post-extraction pass falls back to plain ``json.loads``.
+    - ``type[BaseModel]`` — generates the JSON Schema via
+      ``model_json_schema()`` and attaches the class for typed
+      validation. The wire format and the typed validator are guaranteed
+      to be self-consistent in this branch.
+    """
     if value is None:
         return None
+    if isinstance(value, type) and issubclass(value, BaseModel):
+        return {"schema": value.model_json_schema(), "model": value}
     if isinstance(value, dict):
-        return value
+        return {"schema": value, "model": None}
     if isinstance(value, str):
-        if value not in EXTRACT_SCHEMA_REGISTRY:
-            names = ", ".join(sorted(EXTRACT_SCHEMA_REGISTRY))
-            raise ValueError(
-                f"Unknown extract_schema name {value!r}. Available: {names}. Or pass an inline JSON Schema dict."
-            )
-        return EXTRACT_SCHEMA_REGISTRY[value]
-    raise TypeError(f"extract_schema must be a string or dict, got {type(value).__name__}")
+        if value in EXTRACT_SCHEMA_REGISTRY:
+            return {"schema": EXTRACT_SCHEMA_REGISTRY[value], "model": MODEL_REGISTRY.get(value)}
+        if value in _BUNDLED_SCHEMA_REGISTRY:
+            return {"schema": _BUNDLED_SCHEMA_REGISTRY[value], "model": MODEL_REGISTRY.get(value)}
+        names = ", ".join(sorted({*EXTRACT_SCHEMA_REGISTRY, *_BUNDLED_SCHEMA_REGISTRY}))
+        raise ValueError(
+            f"Unknown extract_schema name {value!r}. Available: {names}. "
+            "Or pass an inline JSON Schema dict, or a Pydantic BaseModel subclass."
+        )
+    raise TypeError(f"extract_schema must be a string, dict, or BaseModel subclass, got {type(value).__name__}")
 
 
 def format_panelist_result(pr: PanelistResult, model: str) -> dict[str, Any]:

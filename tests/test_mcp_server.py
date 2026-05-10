@@ -345,7 +345,13 @@ class TestRunPanelExtractSchema:
 
     @pytest.mark.asyncio
     async def test_inline_dict_schema_passed_through(self):
-        """An inline dict extract_schema is forwarded to the async runner."""
+        """An inline dict extract_schema is forwarded as the resolved envelope.
+
+        v1.0.3 P1: ``resolve_extract_schema`` now wraps every input into
+        a ``{"schema": ..., "model": ...}`` envelope so downstream code
+        can apply typed Pydantic validation when a model is available.
+        For raw dicts the model is ``None``.
+        """
         schema = {
             "type": "object",
             "properties": {"mood": {"type": "string"}},
@@ -362,7 +368,7 @@ class TestRunPanelExtractSchema:
                 },
             )
             kwargs = mock_run.call_args[1]
-            assert kwargs["extract_schema"] == schema
+            assert kwargs["extract_schema"] == {"schema": schema, "model": None}
 
     @pytest.mark.asyncio
     async def test_string_name_resolves_to_registry_schema(self):
@@ -380,7 +386,12 @@ class TestRunPanelExtractSchema:
                 },
             )
             kwargs = mock_run.call_args[1]
-            assert kwargs["extract_schema"] == EXTRACT_SCHEMA_REGISTRY["sentiment"]
+            # Resolved envelope (v1.0.3 P1). ``sentiment`` has no Pydantic
+            # mirror in MODEL_REGISTRY, so model is None.
+            assert kwargs["extract_schema"] == {
+                "schema": EXTRACT_SCHEMA_REGISTRY["sentiment"],
+                "model": None,
+            }
 
     @pytest.mark.asyncio
     async def test_unknown_name_returns_error(self):

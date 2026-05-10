@@ -36,6 +36,34 @@ from synth_panel.routing import route_round
 from synth_panel.runtime import AgentRuntime, TurnSummary
 from synth_panel.structured.output import StructuredOutputConfig, StructuredOutputEngine
 
+try:  # pydantic is a hard dep at v1.0.3; guarded for the migration window
+    from pydantic import BaseModel as _PydanticBaseModel
+    from pydantic import ValidationError as _PydanticValidationError
+except ImportError:  # pragma: no cover - exercised only pre-install
+    _PydanticBaseModel = None  # type: ignore[assignment]
+    _PydanticValidationError = Exception  # type: ignore[assignment,misc]
+
+
+def _unpack_extract_schema(
+    value: dict[str, Any] | None,
+) -> tuple[dict[str, Any] | None, type | None]:
+    """Split an ``extract_schema`` parameter into ``(json_schema, pydantic_model)``.
+
+    Accepts both the v1.0.3 resolved envelope produced by
+    :func:`synth_panel._runners.resolve_extract_schema`
+    (``{"schema": {...}, "model": Class | None}``) and the legacy raw
+    JSON Schema dict that pre-resolver call sites still pass directly.
+    The resolved envelope is identified by a top-level ``"schema"`` key
+    pointing at a dict — no JSON Schema in this codebase exposes that
+    name as a property, so the discriminator is unambiguous.
+    """
+    if value is None:
+        return None, None
+    if isinstance(value, dict) and isinstance(value.get("schema"), dict):
+        return value["schema"], value.get("model")
+    return value, None
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -997,12 +1025,18 @@ def _run_panelist(
             structured_engine = StructuredOutputEngine(client)
             structured_config = StructuredOutputConfig(schema=response_schema)
 
-        # Set up extraction engine for post-hoc structured extraction
+        # Set up extraction engine for post-hoc structured extraction.
+        # ``extract_schema`` is either the v1.0.3 resolved envelope or a
+        # legacy raw JSON Schema dict — _unpack_extract_schema normalises
+        # both forms so the wire-level structured-output engine sees a
+        # plain JSON Schema and the optional Pydantic class is held aside
+        # for the post-extraction typed validation pass below.
         extract_engine: StructuredOutputEngine | None = None
         extract_config: StructuredOutputConfig | None = None
-        if extract_schema:
+        extract_json_schema, extract_pydantic_model = _unpack_extract_schema(extract_schema)
+        if extract_json_schema:
             extract_engine = StructuredOutputEngine(client)
-            extract_config = StructuredOutputConfig(schema=extract_schema)
+            extract_config = StructuredOutputConfig(schema=extract_json_schema)
 
         for qi, question in enumerate(questions):
             question_text = question_prompt_fn(question)
@@ -1176,6 +1210,24 @@ def _run_panelist(
                             tracker.record_turn(_convert_llm_usage(extract_result.total_usage))
                             resp_dict["extraction"] = extract_result.data
                             resp_dict["extraction_is_fallback"] = extract_result.is_fallback
+                            # v1.0.3 P1: typed Pydantic validation pass.
+                            # When the caller supplied a BaseModel subclass
+                            # (or a registered name with a model in
+                            # MODEL_REGISTRY), validate the extracted dict
+                            # via ``model_validate`` so a usable
+                            # field-path error surfaces when the LLM
+                            # produced wire-valid JSON that still violates
+                            # the typed contract (e.g. ``rating: 7`` for
+                            # the 1..5 Likert).
+                            if (
+                                extract_pydantic_model is not None
+                                and not extract_result.is_fallback
+                                and isinstance(extract_result.data, dict)
+                            ):
+                                try:
+                                    extract_pydantic_model.model_validate(extract_result.data)
+                                except _PydanticValidationError as ve:
+                                    resp_dict["extraction_validation_error"] = str(ve)
                         except Exception as extract_exc:
                             resp_dict["extraction"] = None
                             resp_dict["extraction_error"] = str(extract_exc)

@@ -13,6 +13,12 @@ from __future__ import annotations
 
 from typing import Any
 
+# Re-export the typed Pydantic registry so callers can import either
+# the JSON Schema (this module) or the typed model (``models``) under
+# one roof. Wire format remains the JSON Schema dict — the Pydantic
+# models are strictly post-extraction validation.
+from synth_panel.structured.models import MODEL_REGISTRY  # noqa: F401
+
 # ---------------------------------------------------------------------------
 # Bundled schemas
 # ---------------------------------------------------------------------------
