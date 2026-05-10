@@ -8,6 +8,89 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 (Empty — next-cycle work lands here.)
 
+## [1.0.1] - 2026-05-09
+
+Hotfix release: closes two wiring gaps in the v1.0.0 multimodal-attachments
+system that were surfaced during a 2026-05-09 dogfood panel against
+dataviking.tech preview tiles. Without these fixes, image and document
+attachments silently disappeared on the OpenRouter / OpenAI-compat path,
+and the bank-ref pattern (the canonical reference shape per the v1.0.0
+data-model design) dropped at the orchestrator filter.
+
+### Fixed
+
+- **OpenAI-compat path now serialises `ImageBlock` / `DocumentBlock` /
+  `HTMLBlock`** (G1). `_content_to_openai` previously emitted only
+  `TextBlock` and `ToolInvocationBlock` branches; multimodal blocks fell
+  through unhandled — no error, no warning, just dropped. Persona responses
+  on the OpenRouter / xAI / generic OpenAI-compat path read "I don't see an
+  attached image" even when the orchestrator emitted the multimodal blocks
+  correctly. The fix emits OpenAI-style `image_url` data-URI for inline
+  base64 images, `image_url` with the literal URL for URL-source images,
+  the `file` content type for inline-base64 PDFs (per OpenAI's vision/file
+  contract), and lowers `HTMLBlock` to text so the markup reaches the
+  model verbatim. The native Anthropic provider was unaffected — the
+  bug was scoped to `_openai_format.py`. Sample post-fix verification:
+  Devon Kim accurately described a thumbnail's "yellow center circle,
+  scattered gray dots, network/orbit pattern" via Sonnet 4.5 on
+  OpenRouter.
+- **Bank-ref strings in `question.attachments` now resolve at the
+  orchestrator level** (G3). The canonical hq-xzsm data-model design
+  supports two reference shapes: bank-ref strings into the top-level
+  `Instrument.attachments` map (`["hero_creative_v3"]`) and inline dict
+  blocks (`[{"type": "image", ...}]`). The frame-stage filter at
+  `orchestrator.py:879-883` retained only dict-form refs, so bank-ref
+  strings silently dropped before reaching the multimodal block emitter
+  — every persona received only the question text. The fix adds
+  `_resolve_question_attachment_refs(questions, bank)`, called inside
+  `run_multi_round_panel` before each round dispatches, that expands
+  string refs into copies of the bank entry. Inline dicts pass through
+  unchanged; questions without attachments are no-op; absent bank
+  preserves the legacy v0.12.0 pass-through behaviour.
+
+### Tests
+
+- 13 new tests at `tests/test_attachments_v1_0_1_wiring.py` lock in both
+  fixes against silent regression: ImageBlock-with-base64,
+  ImageBlock-with-URL, DocumentBlock-emits-file-payload, HTMLBlock-lowers-
+  to-text, text-only-fast-path-preserved, regression-guard for image
+  silent-drop, bank-ref string→dict expansion, dict refs pass through,
+  unresolved bank ref raises ValueError, no-bank legacy fallback,
+  attachment-less questions unchanged, resolved dict is a defensive
+  copy (no alias bleed), non-string non-dict ref raises ValueError.
+
+### Known v1.0.x gaps still open (planned for v1.1.0)
+
+The dogfood test surfaced four additional wiring gaps that are *not*
+addressed by this hotfix and remain known-issues in v1.0.1:
+
+- **G5 — URL attachments don't lower to fetched content**. Inline
+  `{"type": "url", "url": "..."}` attachments produce `URLBlock` plan
+  nodes, but the lowering step (URLBlock → fetched markdown TextBlock or
+  screenshot ImageBlock via the hq-gmju fetcher) doesn't fire in the
+  panel-running path. Workaround: paste page contents as `html` or
+  `text` attachments until v1.1.0.
+- **G6 — Synthesis not persisted on attachment-bearing panels**. Smaller
+  text-only panels save synthesis to `result.json` correctly; large
+  multimodal panels (e.g. 15 personas × 3 questions × 10 image
+  attachments) lose the synthesis from the saved record. Synthesis still
+  runs and is returned on the `PanelResult` object — only the on-disk
+  save path is affected.
+- **G7 — CAS persistence not invoked from SDK**. The hq-cqt5 design
+  specified content-addressable sidecar storage (bytes never inline);
+  empirically a 15-persona × 10-image panel writes a 79 MB `result.json`
+  with all base64 inlined and no `~/.synthpanel/attachments/` sidecar.
+  `result_format_version` stays "1.0" instead of bumping to "1.1" when
+  attachments are present.
+- **G2 — `panel_shared_attachments` parameter not threaded through SDK**.
+  `run_panel_parallel` accepts `panel_shared_attachments=`, but the SDK's
+  `run_panel()` doesn't compute it from the instrument's bank. Bank-ref
+  resolution (G3, fixed here) makes the bank usable; the explicit
+  shared-prefix optimisation can come later.
+
+Tracking bead: hq-2yc6 (the v1.0.0 wiring-gap bug filed during the
+dogfood test). v1.1.0 will close the four gaps above.
+
 ## [1.0.0] - 2026-05-09
 
 The frozen MCP contract release. The schema at

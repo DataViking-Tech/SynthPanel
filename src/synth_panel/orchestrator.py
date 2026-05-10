@@ -55,6 +55,71 @@ class PanelPlanningError(Exception):
 _STRATA_CAP = 5
 
 
+def _resolve_question_attachment_refs(
+    questions: list[dict[str, Any]],
+    bank: dict[str, dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    """Resolve bank-ref strings in ``question.attachments`` to inline dicts.
+
+    The hq-xzsm data-model design supports two attachment-reference shapes
+    on a question:
+
+    * **Bank-ref string** — ``{"attachments": ["hero_creative_v3"]}`` — looks
+      up the named attachment in ``Instrument.attachments`` (the panel-shared
+      bank).
+    * **Inline dict** — ``{"attachments": [{"type": "image", ...}]}`` — the
+      block payload directly on the question.
+
+    The frame-stage filter at ``orchestrator.py:879-883`` (line numbers as of
+    v1.0.0) only retains dict-form refs:
+
+        dict_attachments = [a for a in raw_attachments if isinstance(a, dict)]
+
+    so bank-ref strings silently fall out before reaching the multimodal
+    block emitter. This helper resolves them up-front, replacing strings with
+    a copy of the bank entry so the rest of the orchestrator path treats every
+    attachment uniformly.
+
+    Unresolved refs raise ``ValueError`` — the parser already enforces
+    reachability at parse time, so reaching this state implies an internal
+    inconsistency between parse and runtime, not a user error.
+    """
+    if not bank:
+        # No bank to resolve against; pass through unchanged. Inline dicts
+        # remain valid; bare strings would fall through to the existing
+        # filter and produce empty per-persona attachments. That's the
+        # legacy v0.12.0 behaviour and we preserve it.
+        return list(questions)
+
+    resolved: list[dict[str, Any]] = []
+    for q in questions:
+        if not isinstance(q, dict):
+            resolved.append(q)
+            continue
+        refs = q.get("attachments")
+        if not refs:
+            resolved.append(q)
+            continue
+        # Build a new question dict with bank-strings expanded.
+        new_refs: list[dict[str, Any]] = []
+        for ref in refs:
+            if isinstance(ref, str):
+                if ref not in bank:
+                    raise ValueError(
+                        f"attachment ref {ref!r} does not resolve to a bank entry (bank keys: {sorted(bank.keys())!r})"
+                    )
+                # Copy so downstream mutations don't bleed across questions.
+                new_refs.append(dict(bank[ref]))
+            elif isinstance(ref, dict):
+                new_refs.append(ref)
+            else:
+                raise ValueError(f"attachment ref must be a string or mapping, got {type(ref).__name__}")
+        new_q = dict(q)
+        new_q["attachments"] = new_refs
+        resolved.append(new_q)
+    return resolved
+
+
 def _enforce_strata_cap(
     personas: list[dict[str, Any]],
     questions: list[dict[str, Any]],
@@ -1530,10 +1595,19 @@ def run_multi_round_panel(
         visited.add(current.name)
         logger.info("executing round '%s' (%d/%d visited)", current.name, len(visited), len(by_name))
 
+        # G3 fix: resolve bank-ref strings in question.attachments to inline
+        # dict-form before run_panel_parallel filters out non-dict refs.
+        # Without this, bank-keyed attachments (the canonical pattern per the
+        # hq-xzsm data-model design) silently dropped — every persona received
+        # only the question text. The bank lives on ``instrument.attachments``;
+        # this is the natural resolution site since we have the Instrument
+        # object in scope here.
+        resolved_questions = _resolve_question_attachment_refs(current.questions, instrument.attachments)
+
         panelist_results, _registry, sessions = run_panel_parallel(
             client=client,
             personas=personas,
-            questions=current.questions,
+            questions=resolved_questions,
             model=model,
             system_prompt_fn=system_prompt_fn,
             question_prompt_fn=question_prompt_fn,

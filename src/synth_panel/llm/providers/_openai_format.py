@@ -13,6 +13,9 @@ from synth_panel.llm.models import (
     CompletionRequest,
     CompletionResponse,
     ContentBlock,
+    DocumentBlock,
+    HTMLBlock,
+    ImageBlock,
     StopReason,
     StreamEvent,
     StreamEventType,
@@ -27,8 +30,41 @@ from synth_panel.llm.models import (
 # ---------------------------------------------------------------------------
 
 
+def _image_source_to_openai_url(source: Any, media_type: str) -> str:
+    """Convert an image source variant to an OpenAI ``image_url`` data/URI string.
+
+    OpenAI's vision-capable chat-completions API accepts
+    ``{"type": "image_url", "image_url": {"url": "<data-uri-or-https-url>"}}``.
+    Synthpanel's :class:`ImageBlock` source variants are:
+
+    * ``InlineSource`` (base64) — emit ``data:<media_type>;base64,<data>``.
+    * ``URLSource`` — emit the URL directly.
+    * ``FileRefSource`` — Anthropic Files API; not portable to OpenAI.
+      Fall back to a placeholder data-URI so the request still emits and
+      the failure surfaces in the response rather than silently dropping.
+    """
+    stype = getattr(source, "type", None) if not isinstance(source, dict) else source.get("type")
+    if stype == "base64":
+        data = getattr(source, "data", None) if not isinstance(source, dict) else source.get("data")
+        return f"data:{media_type};base64,{data}"
+    if stype == "url":
+        url = getattr(source, "url", None) if not isinstance(source, dict) else source.get("url")
+        return str(url)
+    # FileRefSource or unknown — best-effort: surface as a missing-image
+    # marker rather than silently dropping the attachment.
+    return f"data:{media_type};base64,"
+
+
 def _content_to_openai(blocks: list[ContentBlock]) -> str | list[dict[str, Any]]:
-    """Serialize content blocks to OpenAI message content format."""
+    """Serialize content blocks to OpenAI message content format.
+
+    Multimodal blocks (ImageBlock, DocumentBlock, HTMLBlock) are converted
+    to OpenAI's chat-completions vision/file content shape. Without these
+    branches the OpenAI-compat path silently dropped attachments — every
+    persona would see only the question text and respond as if no image
+    or document were attached, even when the orchestrator emitted them
+    correctly.
+    """
     # Simple case: single text block → plain string
     if len(blocks) == 1 and isinstance(blocks[0], TextBlock):
         return blocks[0].text
@@ -36,6 +72,20 @@ def _content_to_openai(blocks: list[ContentBlock]) -> str | list[dict[str, Any]]
     parts: list[dict[str, Any]] = []
     for b in blocks:
         if isinstance(b, TextBlock):
+            parts.append({"type": "text", "text": b.text})
+        elif isinstance(b, ImageBlock):
+            url = _image_source_to_openai_url(b.source, b.media_type)
+            parts.append({"type": "image_url", "image_url": {"url": url}})
+        elif isinstance(b, DocumentBlock):
+            # OpenAI's file content type accepts inline base64 PDFs as
+            # ``{"type": "file", "file": {"file_data": "data:application/pdf;base64,..."}}``.
+            # FileRefSource (Anthropic Files API) is not portable; emit
+            # a missing-payload marker so the failure surfaces.
+            url = _image_source_to_openai_url(b.source, b.media_type)
+            parts.append({"type": "file", "file": {"file_data": url}})
+        elif isinstance(b, HTMLBlock):
+            # OpenAI has no first-class HTML content type. Lower to text;
+            # the model gets the markup verbatim and can interpret it.
             parts.append({"type": "text", "text": b.text})
         elif isinstance(b, ToolInvocationBlock):
             # Tool calls are handled separately in OpenAI format
