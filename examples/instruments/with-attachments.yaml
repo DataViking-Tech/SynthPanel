@@ -1,0 +1,73 @@
+# with-attachments: starter showing the three attachment types panelists
+# can see — image (base64 inline), url (fetched at run time), and html
+# (literal block scalar inline).
+#
+# Usage:
+#   synthpanel panel run --personas examples/personas.yaml --instrument examples/instruments/with-attachments.yaml
+#
+# The attachment bank lives at the top level of the instrument and is
+# referenced from individual questions by id. Each question receives the
+# referenced blocks alongside its prompt text.
+#
+# Attachment types covered:
+#   - image: 1x1 PNG inlined as base64 (swap in your real screenshot).
+#   - url:   fetched at run time; fetch_mode controls whether the panelist
+#            sees raw HTML, extracted text, a rendered screenshot, or a
+#            markdown conversion. 'auto' picks based on provider/model.
+#   - html:  literal HTML/text inlined via YAML's '|' block scalar.
+#
+# Field reference: docs/cookbook/with-attachments.md
+instrument:
+  version: 3
+  attachments:
+    hero_screenshot:
+      type: image
+      media_type: image/png
+      # 1x1 transparent PNG — replace with the screenshot you want
+      # panelists to react to. For larger images, base64-encode the file
+      # and paste the result as a single line or wrapped block scalar.
+      source:
+        type: base64
+        data: iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=
+    landing_page:
+      type: url
+      url: https://example.com/pricing
+      # fetch_mode options: auto | html_text | screenshot | markdown.
+      # 'markdown' converts the page to markdown before showing it to the
+      # panelist — usually the cleanest signal for content-heavy pages.
+      fetch_mode: markdown
+    pricing_snippet:
+      type: html
+      # YAML literal block scalar ('|') preserves newlines and indentation,
+      # which makes it the natural shape for inline HTML fragments.
+      text: |
+        <div class="pricing">
+          <h2>Starter — $9/mo</h2>
+          <ul>
+            <li>Up to 3 projects</li>
+            <li>Community support</li>
+          </ul>
+        </div>
+  rounds:
+    - name: visual_reaction
+      questions:
+        - text: >
+            What is your first impression of the product shown in the
+            screenshot? What stands out, and what feels confusing?
+          attachments: [hero_screenshot]
+          response_schema:
+            type: text
+        - text: >
+            Looking at the live pricing page, does the value proposition
+            land for you? What would you change?
+          attachments: [landing_page]
+          response_schema:
+            type: text
+        - text: >
+            Reviewing just the Starter tier markup below, does the plan
+            feel fairly priced for what's included?
+          attachments: [pricing_snippet]
+          response_schema:
+            type: text
+      route_when:
+        - else: __end__

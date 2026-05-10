@@ -35,6 +35,14 @@ instrument files (`general_survey.yaml`, `market_research.yaml`,
 `product_feedback.yaml`) kept for backward compatibility. Prefer the
 bundled packs (`synthpanel instruments list`) for new work.
 
+## Showing panelists images, web pages, or HTML
+
+[`instruments/with-attachments.yaml`](instruments/with-attachments.yaml)
+is a copy-pasteable starter for the attachment bank — one base64 image,
+one fetched URL (`fetch_mode: markdown`), and one inline HTML snippet.
+See the [cookbook page](../docs/cookbook/with-attachments.md) for the
+full attachment-type reference.
+
 ## Running an example
 
 ```bash
