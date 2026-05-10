@@ -1386,6 +1386,7 @@ def run_panel_parallel(
     cost_gate: CostGate | None = None,
     question_budget: QuestionFailureBudget | None = None,
     panel_shared_attachments: list[dict[str, Any]] | None = None,
+    attachment_bank: dict[str, dict[str, Any]] | None = None,
     cache_tier: CacheTier = "5m",
 ) -> tuple[list[PanelistResult], WorkerRegistry, dict[str, Session]]:
     """Run all panelists in parallel and return ordered results.
@@ -1446,6 +1447,27 @@ def run_panel_parallel(
     for p in personas:
         if isinstance(p, dict) and p.get("llm_overrides"):
             validate_llm_overrides(p["llm_overrides"], persona_name=p.get("name", "Anonymous"))
+
+    # hq-ilke: legacy single-round path resolves bank-ref strings here when
+    # the caller supplies the instrument's attachment bank. Without this,
+    # ``question.attachments = ["hero_creative_v3"]`` silently fell out at the
+    # downstream dict-only filter and panelists responded as if no attachment
+    # had been provided — silent data loss with no log line. Multi-round
+    # callers (run_multi_round_panel) pre-compute panel_shared_attachments
+    # and pass that instead, so the two parameters are mutually exclusive.
+    if attachment_bank is not None:
+        if panel_shared_attachments is not None:
+            raise ValueError(
+                "run_panel_parallel: attachment_bank and panel_shared_attachments are mutually exclusive "
+                "(multi-round callers pre-compute the shared list; legacy single-round callers pass the bank)"
+            )
+        panel_shared_computed, shared_ref_ids = _compute_panel_shared(questions, attachment_bank)
+        questions = _resolve_question_attachment_refs(
+            questions,
+            attachment_bank,
+            exclude_refs=shared_ref_ids,
+        )
+        panel_shared_attachments = panel_shared_computed or None
 
     # hq-0pbp: K≤5 frame-stage gate. Refuse panels whose attachment
     # stratification produces more than 5 distinct strata before any
@@ -1929,6 +1951,7 @@ def ensemble_run(
     temperature: float | None = None,
     top_p: float | None = None,
     seed: int | None = None,
+    attachment_bank: dict[str, dict[str, Any]] | None = None,
 ) -> EnsembleResult:
     """Run the same panel with each model and compare results.
 
@@ -1955,6 +1978,7 @@ def ensemble_run(
             temperature=temperature,
             top_p=top_p,
             seed=seed,
+            attachment_bank=attachment_bank,
         )
         per_model[model_name] = results
         model_usage = ZERO_USAGE

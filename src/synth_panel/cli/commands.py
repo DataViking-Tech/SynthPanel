@@ -1489,6 +1489,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             temperature=temperature,
             top_p=top_p,
             seed=seed,
+            attachment_bank=instrument.attachments or None,
         )
         timer.stop()
 
@@ -1907,6 +1908,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             temperature=temperature,
             top_p=top_p,
             seed=seed,
+            attachment_bank=instrument.attachments or None,
         )
         # Build weights dict from the model spec
         blend_weights = {m: w for m, w in model_spec}
@@ -1961,6 +1963,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 on_panelist_complete=_on_complete if (checkpoint_writer is not None or progress is not None) else None,
                 cost_gate=cost_gate,
                 question_budget=question_budget,
+                attachment_bank=instrument.attachments or None,
             )
         except RunAbortedError as abort_exc:
             # sp-56pb: SIGINT path. Surface whatever panelists finished

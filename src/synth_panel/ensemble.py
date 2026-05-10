@@ -185,6 +185,7 @@ def ensemble_run(
     temperature: float | None = None,
     top_p: float | None = None,
     seed: int | None = None,
+    attachment_bank: dict[str, dict[str, Any]] | None = None,
 ) -> EnsembleResult:
     """Run a panel once per model and aggregate results.
 
@@ -237,6 +238,7 @@ def ensemble_run(
             temperature=temperature,
             top_p=top_p,
             seed=seed,
+            attachment_bank=attachment_bank,
         )
 
         # Aggregate usage for this model
