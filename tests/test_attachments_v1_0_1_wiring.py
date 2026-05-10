@@ -32,7 +32,6 @@ from synth_panel.llm.models import (
 from synth_panel.llm.providers._openai_format import _content_to_openai
 from synth_panel.orchestrator import _resolve_question_attachment_refs
 
-
 # ---------------------------------------------------------------------------
 # G1 — _openai_format multimodal serialisation
 # ---------------------------------------------------------------------------
