@@ -6,23 +6,79 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [Unreleased]
 
+(Empty — next-cycle work lands here.)
+
+## [1.0.5] - 2026-05-10
+
+OpenRouter multimodal transport fix (the big one) + caller-API hardening
+on the MCP boundary + persistence-CLI cleanup. Closes the v1.0.4
+dogfood-surfaced bug cluster plus the long-standing OpenRouter-routes-
+Anthropic image-drop that was masked across v1.0.0-1.0.4 by persona
+roleplay in less-constrained prompts.
+
+No API break — every v1.0.4 caller works unchanged.
+
 ### Fixed
 
 - **`openrouter/anthropic/*` images silently dropped** (hq-olrk, fixes
-  hq-m333). The OpenRouter provider used to send every request — including
-  Anthropic-upstream models — through OR's `/v1/chat/completions`
-  endpoint with OpenAI-shape multimodal blocks. For
-  `openrouter/anthropic/*` traffic, OR's downstream conversion from
-  OpenAI `image_url` to Anthropic image blocks is lossy in practice: the
-  image content silently drops during normalization, the model receives
-  text-only context, and the run looks successful (200 OK with
-  "I don't see an image"). Reproduced empirically on midgard at 15/15.
-  The fix routes `openrouter/anthropic/*` through OR's Anthropic-native
-  `/v1/messages` passthrough with an Anthropic-shape body
-  (cache-control, native multimodal blocks, `anthropic-version` header
-  all preserved). Non-Anthropic OR traffic (`openrouter/openai/*`,
-  `openrouter/google/*`, etc.) continues to use chat-completions and is
-  unaffected.
+  hq-m333). The OpenRouter provider used to send every request —
+  including Anthropic-upstream models — through OR's
+  `/v1/chat/completions` endpoint with OpenAI-shape multimodal blocks.
+  For `openrouter/anthropic/*` traffic, OR's downstream conversion from
+  OpenAI `image_url` to Anthropic image blocks is lossy in practice:
+  the image content silently drops during normalization, the model
+  receives text-only context, and the run looks successful (200 OK
+  with "I don't see an image"). Reproduced empirically on midgard at
+  **15/15**. The fix routes `openrouter/anthropic/*` through OR's
+  Anthropic-native `/v1/messages` passthrough with an Anthropic-shape
+  body (cache-control, native multimodal blocks, `anthropic-version`
+  header all preserved). Non-Anthropic OR traffic
+  (`openrouter/openai/*`, `openrouter/google/*`, etc.) continues to
+  use chat-completions and is unaffected.
+
+  Sources: OpenRouter Anthropic-passthrough docs,
+  `claude-code-router#958` (same OR-Anthropic conversion bug).
+
+- **`html` attachment type now reaches the model reliably** (hq-aaca).
+  Previously, `HTMLBlock` was emitted as a separate text content
+  block alongside the question text — two adjacent text blocks that
+  the Anthropic API treats as semantically distinct, causing ~50%
+  refusal rate via OpenRouter and inconsistent attention even on
+  direct Anthropic. Fixed: `build_question_blocks` now inlines
+  html-attachment text into the question's TextBlock with
+  `--- HTML SOURCE ---` delimiters, eliminating the two-text-block
+  shape. Wire-level HTMLBlock branches kept as defensive fallbacks.
+  8 new tests in
+  `tests/test_attachments_v1_0_1_wiring.py::TestHTMLAttachmentInlining`
+  pin the contract.
+
+- **AttachmentRef strict mode now reaches the MCP boundary**
+  (hq-jviv). The v1.0.4 hq-nuz9 work promoted AttachmentRef to a
+  strict BaseModel (`extra: forbid`) but the MCP `run_panel` handler
+  read instrument attachments as raw dicts without going through
+  `AttachmentRef.model_validate()`, so caller typos like `typo_field`
+  silently propagated through the entire pipeline (echoed back in
+  the response payload). Now: instrument-bank attachment shape
+  enforces `extras='forbid'` at the parse boundary, surfacing
+  ValidationError with the offending field name. Caller payload
+  typos fail loud, as v1.0.4 promised.
+
+- **`--save` flag now works in ensemble panel runs** (hq-0pnq).
+  `synthpanel panel run --save` returned exit 0 but never wrote to
+  `~/.synthpanel/results/`. The persistence call was wired only for
+  the single-model path; ensemble runs (`--models a,b`) hit a code
+  branch that bypassed the save step. Now both paths persist.
+
+- **MCP `run_panel` accepts `models=[...]` (ensemble) without empty
+  error** (hq-6j40). Calling `run_panel` via MCP with the `models`
+  array parameter previously returned `"Error executing tool
+  run_panel: "` (an exception with empty `str()` raised by an
+  unwired code path). Now the ensemble arguments normalize at the
+  MCP boundary: `models=[]` is treated as "no override", a
+  single-element list collapses to the singular `model` parameter,
+  and a multi-element list dispatches to the ensemble runner. Plus
+  a clearer timeout policy on the MCP wrapper so callers can
+  interrupt long ensemble runs.
 
 ### Changed
 
@@ -33,9 +89,47 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
   reachable. Anthropic serialization helpers (`build_anthropic_body`,
   `build_messages`, `build_content_blocks`, `parse_anthropic_response`,
   `parse_sse_stream`) moved into a shared
-  `synth_panel.llm.providers._anthropic_format` module; the back-compat
-  names (`_build_messages`, `_build_content_blocks`, ...) remain
-  importable from `synth_panel.llm.providers.anthropic`.
+  `synth_panel.llm.providers._anthropic_format` module; the
+  back-compat names (`_build_messages`, `_build_content_blocks`, ...)
+  remain importable from `synth_panel.llm.providers.anthropic`.
+
+### Site / Docs
+
+- **Cache-Control headers aligned with dvi-25f cross-product policy**
+  (hq-bxmp). Live audit of synthpanel.dev found drift on every
+  bucket: HTML pages served `public, max-age=0` (policy:
+  `private, no-store, must-revalidate`), well-known JSON endpoints
+  cached too long (300/3600s vs policy's 60s), and unhashed static
+  assets at 14400s vs policy's 300s. Fixed via `site/_headers` (CF
+  Pages convention) with global `/*` set to HTML bucket and
+  per-extension overrides for static assets. `site/_worker.js`
+  markdown-rendition fallback flipped to HTML bucket. 3 new pinning
+  tests in `tests/test_site_headers.py` so future edits can't
+  silently drift again.
+
+- **`docs/known-patterns/openrouter-byok-visual-review.md`** added
+  with 3 example files (instrument-vars, vars, synthesize.py).
+  Documents the inline-HTML pattern for visual review of UI/HTML
+  content via OpenRouter (BYOK) — useful when callers can't reach
+  Anthropic-direct creds, and as a reference example even after
+  hq-olrk landed since the inline-HTML pattern is still the
+  cleanest route for some UI-review workflows. Cross-town
+  contribution from midgard mayor (Co-Authored-By: midgard mayor /
+  openclaw@dataviking.tech).
+
+### Notes
+
+- The hq-olrk fix is independent of the hq-vw6o (v1.0.4) capability
+  gate — both ship correctly. Capability gate still gives clear
+  errors for known text-only models like Haiku 3.5; transport fix
+  ensures vision-capable models actually receive images via OR.
+
+- The per-rig Bun 1.3.14 segfault that affected the v1.0.5
+  development cycle (see jotunheim hq-dpm1) is unrelated to
+  synthpanel — upstream Bun runtime regression, mitigated by pinning
+  Claude Code to 2.1.110 (Bun 1.3.13). Synthpanel itself is
+  unaffected; this note is here so anyone reading the development
+  history knows why this release cycle was bumpier than usual.
 
 ## [1.0.4] - 2026-05-10
 
