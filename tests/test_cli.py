@@ -1556,6 +1556,96 @@ class TestPanelRunSave:
         assert models_seen == {"haiku", "sonnet"}
 
 
+class TestPanelRunBlendEnsemble:
+    """hq-hjq8: ``--blend`` + ensemble-shape ``--models`` must produce
+    synthesis AND blended distributions.
+
+    Before the fix, ``ensemble_mode`` short-circuited at the bare-ensemble
+    branch and returned before reaching the blend branch, so a run with
+    ``--blend --models 'a,b'`` (no colons) emitted neither a top-level
+    ``synthesis`` block nor a ``blend`` block — silently dropping the
+    documented feature.
+    """
+
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.ensemble.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_blend_with_ensemble_spec_produces_synthesis_and_blend(
+        self, mock_client_cls, mock_rpp, mock_synth, capsys, tmp_path
+    ):
+        from synth_panel.cost import TokenUsage as CostTokenUsage
+        from synth_panel.orchestrator import PanelistResult
+
+        mock_synth.return_value = _mock_synthesis_result()
+
+        def _fake_run_parallel(**kwargs):
+            model = kwargs["model"]
+            personas = kwargs["personas"]
+            results = [
+                PanelistResult(
+                    persona_name=p["name"],
+                    responses=[{"question": "Pick one", "response": "Yes", "error": False}],
+                    usage=CostTokenUsage(input_tokens=100, output_tokens=50),
+                    model=model,
+                )
+                for p in personas
+            ]
+            sessions = {p["name"]: MagicMock() for p in personas}
+            return results, MagicMock(), sessions
+
+        mock_rpp.side_effect = _fake_run_parallel
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n    age: 30\n  - name: Bob\n    age: 25\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: Pick one\n      options: [Yes, No]\n")
+
+        code = main(
+            [
+                "--output-format",
+                "json",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--models",
+                "haiku,sonnet",
+                "--blend",
+            ]
+        )
+        assert code == 0
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+
+        # The fix: synthesis runs even when --blend pairs with an
+        # ensemble-shape (no-colon) --models spec.
+        assert data.get("synthesis") is not None, f"top-level synthesis missing; keys={sorted(data.keys())}"
+        assert data["synthesis"]["summary"] == "Test synthesis summary"
+
+        # The fix: blend distributions are surfaced when --blend is active,
+        # not silently dropped by the ensemble short-circuit.
+        assert "blend" in data, f"top-level blend missing; keys={sorted(data.keys())}"
+        blend = data["blend"]
+        assert blend["models"] == ["haiku", "sonnet"]
+        # parse_models_spec assigns weight=1.0 to each entry of an
+        # ensemble-shape spec; blend_distributions normalizes to 0.5/0.5.
+        assert blend["weights"] == {"haiku": 0.5, "sonnet": 0.5}
+        assert len(blend["questions"]) == 1
+        bq = blend["questions"][0]
+        assert bq["per_model"].keys() == {"haiku", "sonnet"}
+        assert bq["distribution"]  # non-empty: every panelist answered "Yes"
+
+        # Per-model rollup is preserved through the blend path.
+        assert data["per_model_results"] is not None
+        assert set(data["per_model_results"].keys()) == {"haiku", "sonnet"}
+        for model_key in ("haiku", "sonnet"):
+            entry = data["per_model_results"][model_key]
+            assert entry["results"], f"{model_key} produced no results"
+            assert "cost" in entry and "usage" in entry
+
+
 # --- sp-5on.5: panel synthesize re-synthesis subcommand -----------------
 
 

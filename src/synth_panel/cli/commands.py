@@ -1467,7 +1467,13 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             question_budget_value = parsed_float
 
     # ── Ensemble mode: run with each model, compare across models ────────
-    if ensemble_mode:
+    # hq-hjq8: blend_mode wins. ``--blend`` with an ensemble-shape spec
+    # (``a,b`` no colons) sets BOTH flags, but the user's intent is the
+    # weight-averaged blend output documented in docs/ensemble.md, not the
+    # bare per-model rollup that returns here. Falling through to the blend
+    # branch below produces synthesis + blended distributions; the bare
+    # ensemble path skips both.
+    if ensemble_mode and not blend_mode:
         from synth_panel.ensemble import build_ensemble_output, ensemble_run
 
         ensemble_models = [m for m, _w in model_spec]
@@ -1878,6 +1884,11 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     # sp-56pb: initialized pre-branch so the aggregator block after the
     # blend vs. standard if/else can reference it unconditionally.
     sigint_halted = False
+    # hq-hjq8: pre-initialize so the post-branch aggregator code (banners,
+    # JSON ``extra`` keys) can reference it on the blend path too. Only the
+    # standard ``else`` branch instantiates a real budget; blend bypasses
+    # the orchestrator entirely so there is nothing to gate.
+    question_budget: QuestionFailureBudget | None = None
 
     if blend_mode and model_spec:
         # ── Blend mode: run full panel once per model, then blend ────
@@ -1925,7 +1936,6 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         # sp-xw2z6o: per-question failure budget. Sized against the panelists
         # being dispatched (same as the cost gate) so the fractional form
         # tracks the actual run, not the resumed historical total.
-        question_budget: QuestionFailureBudget | None = None
         if question_budget_value is not None and active_personas:
             question_budget = QuestionFailureBudget(
                 budget=question_budget_value,
