@@ -8,6 +8,7 @@ import time
 from collections.abc import Iterator
 
 from synth_panel.llm.aliases import get_base_url_override, resolve_alias
+from synth_panel.llm.capabilities import assert_supports_attachments
 from synth_panel.llm.errors import LLMError, LLMErrorCategory
 from synth_panel.llm.models import CompletionRequest, CompletionResponse, StreamEvent
 from synth_panel.llm.providers.anthropic import ANTHROPIC_CONFIG, AnthropicProvider
@@ -217,6 +218,7 @@ class LLMClient:
     def send(self, request: CompletionRequest) -> CompletionResponse:
         """Send a blocking completion request with automatic retry."""
         request = self._prepare(request)
+        assert_supports_attachments(request)
         provider = self._resolve_provider(request.model)
         self._check_seed_support(request, provider)
         logger.debug("send model=%s max_tokens=%d", request.model, request.max_tokens)
@@ -246,6 +248,7 @@ class LLMClient:
     def stream(self, request: CompletionRequest) -> Iterator[StreamEvent]:
         """Send a streaming request. Retry is NOT applied to streams."""
         request = self._prepare(request)
+        assert_supports_attachments(request)
         provider = self._resolve_provider(request.model)
         self._check_seed_support(request, provider)
         return provider.stream(request)

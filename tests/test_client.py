@@ -12,6 +12,8 @@ from synth_panel.llm.errors import LLMError, LLMErrorCategory
 from synth_panel.llm.models import (
     CompletionRequest,
     CompletionResponse,
+    ImageBlock,
+    InlineSource,
     InputMessage,
     TextBlock,
     TokenUsage,
@@ -210,3 +212,36 @@ class TestRetry:
                 client.send(_simple_request())
             assert exc_info.value.category == LLMErrorCategory.RETRIES_EXHAUSTED
             assert mock_provider.send.call_count == 2  # 1 initial + 1 retry
+
+
+class TestVisionCapabilityGate:
+    """Pre-flight gate fires inside LLMClient.send before HTTP is issued (hq-vw6o)."""
+
+    def test_image_on_haiku_3_5_short_circuits_before_provider(self):
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "sk-or-test"}):
+            client = LLMClient()
+            mock_provider = MagicMock()
+            client._provider_cache["anthropic/claude-3.5-haiku"] = mock_provider
+
+            req = CompletionRequest(
+                model="openrouter/anthropic/claude-3.5-haiku",
+                max_tokens=64,
+                messages=[
+                    InputMessage(
+                        role="user",
+                        content=[
+                            TextBlock(text="describe"),
+                            ImageBlock(
+                                source=InlineSource(data="abcd"),
+                                media_type="image/png",
+                            ),
+                        ],
+                    )
+                ],
+            )
+            with pytest.raises(LLMError) as exc_info:
+                client.send(req)
+            assert exc_info.value.category == LLMErrorCategory.BAD_REQUEST
+            # Provider must NOT be called — the burn the bead documents
+            # only happens once HTTP leaves the client.
+            assert mock_provider.send.call_count == 0
