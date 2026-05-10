@@ -8,6 +8,85 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 (Empty — next-cycle work lands here.)
 
+## [1.0.3] - 2026-05-10
+
+Pydantic Phase 1 (additive). Adopts `pydantic>=2.7,<3` as a base
+dependency and adds typed response models alongside the existing JSON
+Schema dicts, with a parallel registry and an `extract_schema`
+dispatch that accepts `type[BaseModel] | dict | str`. Internal
+synthesis layer reads typed objects post-extraction; map-reduce
+partials validate at the map boundary so single-persona schema flake
+fails loud instead of producing empty themes. No API break — every
+v1.0.2 caller works unchanged.
+
+Pydantic Phase 1 patterns adopted directly from midgard mayor's
+boardroom production code (cross-town consult 2026-05-09): v2.7+
+pin, `model_validate_json` C-fast-path on parse boundaries, `Literal`
+for state enums (caught real polecat hallucinations in their work),
+`Field(ge=, le=, gt=, min_length=)` constraints. Hand-written wire
+schemas remain the v1.0.0-frozen MCP contract; `model_json_schema()`
+output is verified against the static schemas via a CI gate (P3) so
+Pydantic minor-version drift can't silently change what we emit on
+the wire.
+
+Phase 2 (caller-facing `response_schema=MyPydanticClass` API +
+AttachmentRef migration) is deferred to v1.1.0+ per the agreed phased
+plan — keeps the v1.0 MCP wire frozen on JSON Schema.
+
+### Added
+
+- **Pydantic models for the 5 existing structured-output schemas**
+  (hq-e25n) at `synth_panel.structured.models`: `PickOne`, `Likert`,
+  `YesNo`, `Ranking`, `AnnotatedChoice`. Each uses `Literal` for
+  closed enums, `Field(ge=, le=, gt=, min_length=)` for numeric and
+  string constraints, and `model_validate_json` (C-fast-path) on the
+  parse boundary. `MODEL_REGISTRY: dict[str, type[BaseModel]]`
+  provides static lookup keyed by the same names as the existing
+  JSON Schema registry.
+- **`extract_schema` dispatch accepts `type[BaseModel] | dict | str`**
+  (hq-e25n). `synth_panel._runners.resolve_extract_schema` now
+  recognises all three input shapes and threads a `(schema, model)`
+  pair downstream so structured-output extraction can call
+  `Model.model_validate_json(text)` when a typed model is provided
+  (clear ValidationError with field path on schema violations) or
+  fall back to dict-only validation when only a JSON Schema dict is
+  available. Existing callers (registered names, raw dicts, no
+  schema) work unchanged.
+- **Synthesis layer typed-attribute access** (hq-swzx). `synthesis.py`
+  and `_runners.py` map-reduce paths now use `_typed_or_dict(extr,
+  attr)` helper so persona extractions read as `r.choice` (when
+  Pydantic) or `r["choice"]` (legacy dict) without dict-key
+  fragility. Map-reduce partials validate at the map boundary via
+  `PartialSummary.model_validate(m)`; a single-persona map flake now
+  raises a clear `ValidationError` instead of silently producing
+  empty themes downstream.
+
+### Tests
+
+- **Pydantic minor-version drift CI gate** (hq-fmo0) at
+  `tests/test_pydantic_roundtrip.py`. Asserts that
+  `model_json_schema(M)` matches the static `*_SCHEMA` dict
+  structurally for each of the 5 schema-model pairs (property names,
+  required list, type per property). Catches any silent drift in
+  Pydantic's JSON-Schema output across minor versions (e.g.,
+  `additionalProperties` defaults shifted 2.5→2.6 per midgard's
+  empirical signal). Plus `test_pydantic_version_pinned` enforces
+  `pydantic>=2.7` at runtime.
+
+### Dependencies
+
+- `pydantic>=2.7,<3` added to base `dependencies` in `pyproject.toml`
+  (not optional — synthpanel needs it on every install). +5 MB wheel
+  footprint, fine for a Python tool that runs locally.
+
+### Out of scope (deferred)
+
+- Pydantic for `AttachmentRef` (currently TypedDict; v1.0.x bake
+  before promoting)
+- Caller-facing `response_schema=MyPydanticClass` (Phase 3, v2.0.0)
+- Replacing dataclass `ContentBlock` union with Pydantic
+- Wire-format change (v1.0.0 frozen MCP contract stays JSON Schema)
+
 ## [1.0.2] - 2026-05-09
 
 Hotfix release: closes the four remaining v1.0.x multimodal-attachments

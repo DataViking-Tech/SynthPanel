@@ -40,13 +40,13 @@ try:  # pydantic is a hard dep at v1.0.3; guarded for the migration window
     from pydantic import BaseModel as _PydanticBaseModel
     from pydantic import ValidationError as _PydanticValidationError
 except ImportError:  # pragma: no cover - exercised only pre-install
-    _PydanticBaseModel = None  # type: ignore[assignment]
+    _PydanticBaseModel = None  # type: ignore[assignment,misc]
     _PydanticValidationError = Exception  # type: ignore[assignment,misc]
 
 
 def _unpack_extract_schema(
     value: dict[str, Any] | None,
-) -> tuple[dict[str, Any] | None, type | None]:
+) -> tuple[dict[str, Any] | None, type[Any] | None]:
     """Split an ``extract_schema`` parameter into ``(json_schema, pydantic_model)``.
 
     Accepts both the v1.0.3 resolved envelope produced by
@@ -1225,7 +1225,12 @@ def _run_panelist(
                                 and isinstance(extract_result.data, dict)
                             ):
                                 try:
-                                    extract_pydantic_model.model_validate(extract_result.data)
+                                    # extract_pydantic_model is annotated as type[Any] for
+                                    # the import-fallback path; in practice it's always a
+                                    # Pydantic BaseModel subclass when non-None.
+                                    extract_pydantic_model.model_validate(  # type: ignore[attr-defined]
+                                        extract_result.data
+                                    )
                                 except _PydanticValidationError as ve:
                                     resp_dict["extraction_validation_error"] = str(ve)
                         except Exception as extract_exc:
