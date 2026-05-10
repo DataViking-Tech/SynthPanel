@@ -12,26 +12,48 @@ from synth_panel.llm.errors import LLMError, LLMErrorCategory, llm_error_from_re
 from synth_panel.llm.models import (
     CompletionRequest,
     CompletionResponse,
-    ContentBlock,
-    DocumentBlock,
-    FileRefSource,
-    HTMLBlock,
-    ImageBlock,
-    InlineSource,
-    StopReason,
     StreamEvent,
-    StreamEventType,
-    TextBlock,
-    ThinkingBlock,
-    TokenUsage,
-    ToolChoiceKind,
-    ToolInvocationBlock,
-    URLBlock,
-    URLSource,
+)
+from synth_panel.llm.providers._anthropic_format import (
+    ANTHROPIC_API_VERSION as _ANTHROPIC_API_VERSION,
+)
+from synth_panel.llm.providers._anthropic_format import (
+    build_anthropic_body as _build_anthropic_body,
+)
+from synth_panel.llm.providers._anthropic_format import (
+    build_content_blocks as _build_content_blocks,
+)
+from synth_panel.llm.providers._anthropic_format import (
+    build_messages as _build_messages,
+)
+from synth_panel.llm.providers._anthropic_format import (
+    build_source as _build_source,
+)
+from synth_panel.llm.providers._anthropic_format import (
+    build_tool_choice as _build_tool_choice,
+)
+from synth_panel.llm.providers._anthropic_format import (
+    build_tools as _build_tools,
+)
+from synth_panel.llm.providers._anthropic_format import (
+    parse_anthropic_response as _parse_anthropic_response,
+)
+from synth_panel.llm.providers._anthropic_format import (
+    parse_content_block as _parse_content_block,
+)
+from synth_panel.llm.providers._anthropic_format import (
+    parse_sse_stream as _parse_sse_stream,
+)
+from synth_panel.llm.providers._anthropic_format import (
+    parse_stop_reason as _parse_stop_reason,
+)
+from synth_panel.llm.providers._anthropic_format import (
+    parse_usage as _parse_usage,
+)
+from synth_panel.llm.providers._anthropic_format import (
+    sse_payload_to_event as _sse_payload_to_event,
 )
 from synth_panel.llm.providers.base import LLMProvider, ProviderConfig
-
-_ANTHROPIC_API_VERSION = "2023-06-01"
 
 ANTHROPIC_CONFIG = ProviderConfig(
     api_key_env="ANTHROPIC_API_KEY",
@@ -42,165 +64,23 @@ ANTHROPIC_CONFIG = ProviderConfig(
 )
 
 
-def _build_tool_choice(request: CompletionRequest) -> dict[str, Any] | None:
-    if request.tool_choice is None:
-        return None
-    tc = request.tool_choice
-    if tc.kind == ToolChoiceKind.AUTO:
-        return {"type": "auto"}
-    if tc.kind == ToolChoiceKind.ANY:
-        return {"type": "any"}
-    return {"type": "tool", "name": tc.name}
-
-
-def _build_source(src: Any, *, media_type: str) -> dict[str, Any]:
-    """Serialize an attachment source (tagged-union) to Anthropic API shape."""
-    if isinstance(src, InlineSource):
-        return {"type": "base64", "media_type": media_type, "data": src.data}
-    if isinstance(src, URLSource):
-        return {"type": "url", "url": src.url}
-    if isinstance(src, FileRefSource):
-        return {"type": "file", "file_id": src.file_id}
-    raise TypeError(f"Unrecognized attachment source: {type(src).__name__}")
-
-
-def _build_content_blocks(blocks: list[ContentBlock]) -> list[dict[str, Any]]:
-    """Serialize content blocks to Anthropic API format.
-
-    Image and document blocks lower to the native ``{"type": "image"|"document",
-    "source": {...}}`` shape. ``HTMLBlock`` lowers to a TextBlock at the wire.
-    ``URLBlock`` is a pre-fetch stub owned by the URL fetcher (hq-hqlp); it
-    must be lowered to a concrete block before reaching this function, so we
-    raise rather than silently dropping it.
-    """
-    out: list[dict[str, Any]] = []
-    for b in blocks:
-        if isinstance(b, TextBlock):
-            out.append({"type": "text", "text": b.text})
-        elif isinstance(b, ToolInvocationBlock):
-            out.append(
-                {
-                    "type": "tool_use",
-                    "id": b.id,
-                    "name": b.name,
-                    "input": b.input,
-                }
-            )
-        elif isinstance(b, ImageBlock):
-            entry: dict[str, Any] = {
-                "type": "image",
-                "source": _build_source(b.source, media_type=b.media_type),
-            }
-            if b.cache_control is not None:
-                entry["cache_control"] = {"type": b.cache_control}
-            out.append(entry)
-        elif isinstance(b, DocumentBlock):
-            entry = {
-                "type": "document",
-                "source": _build_source(b.source, media_type=b.media_type),
-            }
-            if b.cache_control is not None:
-                entry["cache_control"] = {"type": b.cache_control}
-            out.append(entry)
-        elif isinstance(b, HTMLBlock):
-            entry = {"type": "text", "text": b.text}
-            if b.cache_control is not None:
-                entry["cache_control"] = {"type": b.cache_control}
-            out.append(entry)
-        elif isinstance(b, URLBlock):
-            raise ValueError(
-                f"URLBlock(url={b.url!r}) reached the wire serializer; "
-                "URL blocks must be lowered by the fetcher (hq-hqlp) before send"
-            )
-        elif hasattr(b, "tool_use_id"):  # ToolResultBlock
-            content = [{"type": "text", "text": c.text} for c in b.content]
-            out.append(
-                {
-                    "type": "tool_result",
-                    "tool_use_id": b.tool_use_id,
-                    "content": content,
-                    "is_error": b.is_error,
-                }
-            )
-    return out
-
-
-def _build_messages(request: CompletionRequest) -> list[dict[str, Any]]:
-    """Convert InputMessages to Anthropic API format.
-
-    When ``request.cache_enabled`` is True (default), automatically marks
-    the trailing text block of the last user message with
-    ``cache_control: ephemeral`` so single-turn callers get prefix
-    caching for free. With ``cache_enabled`` False (hq-0pbp: P=1 panels
-    or sub-minimum prefixes), no auto marker is added — explicit
-    per-block ``cache_control`` set by the caller is preserved either way.
-    """
-    last_user_idx = -1
-    for i, msg in enumerate(request.messages):
-        if msg.role == "user":
-            last_user_idx = i
-
-    result = []
-    for i, msg in enumerate(request.messages):
-        content = _build_content_blocks(msg.content)
-        if request.cache_enabled and i == last_user_idx and content:
-            already_marked = any("cache_control" in b for b in content)
-            if not already_marked:
-                for j in range(len(content) - 1, -1, -1):
-                    if content[j].get("type") == "text":
-                        content[j] = {**content[j], "cache_control": {"type": "ephemeral"}}
-                        break
-        result.append({"role": msg.role, "content": content})
-    return result
-
-
-def _build_tools(request: CompletionRequest) -> list[dict[str, Any]] | None:
-    if not request.tools:
-        return None
-    return [
-        {
-            "name": t.name,
-            "description": t.description or "",
-            "input_schema": t.input_schema,
-        }
-        for t in request.tools
-    ]
-
-
-def _parse_content_block(raw: dict[str, Any]) -> ContentBlock:
-    btype = raw.get("type")
-    if btype == "text":
-        return TextBlock(text=raw["text"])
-    if btype == "tool_use":
-        return ToolInvocationBlock(
-            id=raw["id"],
-            name=raw["name"],
-            input=raw.get("input", {}),
-        )
-    if btype == "thinking":
-        return ThinkingBlock(
-            thinking=raw.get("thinking", ""),
-            signature=raw.get("signature"),
-        )
-    return TextBlock(text=json.dumps(raw))
-
-
-def _parse_usage(raw: dict[str, Any]) -> TokenUsage:
-    return TokenUsage(
-        input_tokens=raw.get("input_tokens", 0),
-        output_tokens=raw.get("output_tokens", 0),
-        cache_write_tokens=raw.get("cache_creation_input_tokens", 0),
-        cache_read_tokens=raw.get("cache_read_input_tokens", 0),
-    )
-
-
-def _parse_stop_reason(raw: str | None) -> StopReason | None:
-    if raw is None:
-        return None
-    try:
-        return StopReason(raw)
-    except ValueError:
-        return StopReason.END_TURN
+__all__ = [
+    "ANTHROPIC_CONFIG",
+    "_ANTHROPIC_API_VERSION",
+    "AnthropicProvider",
+    "_build_anthropic_body",
+    "_build_content_blocks",
+    "_build_messages",
+    "_build_source",
+    "_build_tool_choice",
+    "_build_tools",
+    "_parse_anthropic_response",
+    "_parse_content_block",
+    "_parse_sse_stream",
+    "_parse_stop_reason",
+    "_parse_usage",
+    "_sse_payload_to_event",
+]
 
 
 class AnthropicProvider(LLMProvider):
@@ -220,29 +100,7 @@ class AnthropicProvider(LLMProvider):
         }
 
     def _build_body(self, request: CompletionRequest) -> dict[str, Any]:
-        body: dict[str, Any] = {
-            "model": request.model,
-            "max_tokens": request.max_tokens,
-            "messages": _build_messages(request),
-        }
-        if request.system:
-            sys_block: dict[str, Any] = {"type": "text", "text": request.system}
-            if request.cache_enabled:
-                sys_block["cache_control"] = {"type": "ephemeral"}
-            body["system"] = [sys_block]
-        tools = _build_tools(request)
-        if tools is not None:
-            body["tools"] = tools
-        tc = _build_tool_choice(request)
-        if tc is not None:
-            body["tool_choice"] = tc
-        if request.stream:
-            body["stream"] = True
-        if request.temperature is not None:
-            body["temperature"] = request.temperature
-        if request.top_p is not None:
-            body["top_p"] = request.top_p
-        return body
+        return _build_anthropic_body(request)
 
     def send(self, request: CompletionRequest) -> CompletionResponse:
         url = f"{self._base_url}/v1/messages"
@@ -273,14 +131,7 @@ class AnthropicProvider(LLMProvider):
                 cause=exc,
             ) from exc
 
-        content = [_parse_content_block(b) for b in data.get("content", [])]
-        return CompletionResponse(
-            id=data.get("id", ""),
-            model=data.get("model", request.model),
-            content=content,
-            stop_reason=_parse_stop_reason(data.get("stop_reason")),
-            usage=_parse_usage(data.get("usage", {})),
-        )
+        return _parse_anthropic_response(data, request.model)
 
     def stream(self, request: CompletionRequest) -> Iterator[StreamEvent]:
         # Anthropic's API has no ``seed`` parameter (sy-cxp); the
@@ -319,41 +170,3 @@ class AnthropicProvider(LLMProvider):
                 LLMErrorCategory.TRANSPORT,
                 cause=exc,
             ) from exc
-
-
-def _parse_sse_stream(lines: Iterator[str]) -> Iterator[StreamEvent]:
-    """Parse Anthropic SSE stream into StreamEvents."""
-    data_buf: list[str] = []
-    for line in lines:
-        if line.startswith("data: "):
-            data_buf.append(line[6:])
-        elif line == "" and data_buf:
-            raw_data = "\n".join(data_buf)
-            data_buf.clear()
-            if raw_data.strip() == "[DONE]":
-                return
-            try:
-                payload = json.loads(raw_data)
-            except json.JSONDecodeError:
-                continue
-            event = _sse_payload_to_event(payload)
-            if event is not None:
-                yield event
-        elif line.startswith(":"):
-            # Comment / keepalive — discard
-            continue
-
-
-def _sse_payload_to_event(payload: dict[str, Any]) -> StreamEvent | None:
-    etype = payload.get("type", "")
-    try:
-        event_type = StreamEventType(etype)
-    except ValueError:
-        return None
-    if event_type == StreamEventType.PING:
-        return None
-    return StreamEvent(
-        type=event_type,
-        index=payload.get("index"),
-        data=payload,
-    )

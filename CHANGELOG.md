@@ -6,7 +6,36 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [Unreleased]
 
-(Empty — next-cycle work lands here.)
+### Fixed
+
+- **`openrouter/anthropic/*` images silently dropped** (hq-olrk, fixes
+  hq-m333). The OpenRouter provider used to send every request — including
+  Anthropic-upstream models — through OR's `/v1/chat/completions`
+  endpoint with OpenAI-shape multimodal blocks. For
+  `openrouter/anthropic/*` traffic, OR's downstream conversion from
+  OpenAI `image_url` to Anthropic image blocks is lossy in practice: the
+  image content silently drops during normalization, the model receives
+  text-only context, and the run looks successful (200 OK with
+  "I don't see an image"). Reproduced empirically on midgard at 15/15.
+  The fix routes `openrouter/anthropic/*` through OR's Anthropic-native
+  `/v1/messages` passthrough with an Anthropic-shape body
+  (cache-control, native multimodal blocks, `anthropic-version` header
+  all preserved). Non-Anthropic OR traffic (`openrouter/openai/*`,
+  `openrouter/google/*`, etc.) continues to use chat-completions and is
+  unaffected.
+
+### Changed
+
+- **OpenRouter provider transport is now dual.** `openrouter/anthropic/*`
+  models POST to `{base_url}/v1/messages` with Anthropic-shape body;
+  everything else keeps `{base_url}/v1/chat/completions`. Callers that
+  set a custom `OPENROUTER_BASE_URL` should ensure both paths are
+  reachable. Anthropic serialization helpers (`build_anthropic_body`,
+  `build_messages`, `build_content_blocks`, `parse_anthropic_response`,
+  `parse_sse_stream`) moved into a shared
+  `synth_panel.llm.providers._anthropic_format` module; the back-compat
+  names (`_build_messages`, `_build_content_blocks`, ...) remain
+  importable from `synth_panel.llm.providers.anthropic`.
 
 ## [1.0.4] - 2026-05-10
 

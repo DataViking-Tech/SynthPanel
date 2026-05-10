@@ -1,6 +1,15 @@
-"""OpenRouter provider (OpenAI-compatible).
+"""OpenRouter provider.
 
-Routes requests to any model via OpenRouter's unified API.
+Routes requests to any model via OpenRouter's unified API. Most upstream
+providers are reached via OR's OpenAI-compatible chat-completions endpoint.
+
+For ``openrouter/anthropic/*`` traffic, the chat-completions path is
+**unsafe** for multimodal: OR's downstream conversion from OpenAI
+``image_url`` blocks to Anthropic image blocks silently drops the image
+during normalization (hq-m333). To keep multimodal blocks intact, we
+route Anthropic-bound traffic through OR's Anthropic-native
+``/v1/messages`` passthrough with an Anthropic-shape body.
+
 Requires OPENROUTER_API_KEY.
 """
 
@@ -16,6 +25,14 @@ from synth_panel.llm.models import (
     CompletionRequest,
     CompletionResponse,
     StreamEvent,
+)
+from synth_panel.llm.providers._anthropic_format import (
+    ANTHROPIC_API_VERSION,
+    build_anthropic_body,
+    parse_anthropic_response,
+)
+from synth_panel.llm.providers._anthropic_format import (
+    parse_sse_stream as parse_anthropic_sse_stream,
 )
 from synth_panel.llm.providers._openai_format import (
     build_openai_body,
@@ -92,8 +109,57 @@ def _openrouter_error_from_response(resp: httpx.Response) -> LLMError:
     )
 
 
+def _strip_or_prefix(model: str) -> str:
+    """Strip the ``openrouter/`` routing prefix so the API sees the
+    upstream model ID (e.g. ``anthropic/claude-sonnet-4.5``)."""
+    for prefix in OPENROUTER_CONFIG.model_prefixes:
+        if model.startswith(prefix):
+            return model[len(prefix) :]
+    return model
+
+
+def _is_anthropic_routed(stripped_model: str) -> bool:
+    """Whether this model routes through Anthropic upstream on OpenRouter.
+
+    The ``openrouter/anthropic/*`` namespace is OR's convention for
+    Anthropic-upstream models. We branch off this prefix to use OR's
+    Anthropic Messages passthrough rather than the OpenAI-shape
+    chat-completions endpoint (hq-olrk).
+    """
+    return stripped_model.startswith("anthropic/")
+
+
+def _rebind_model(request: CompletionRequest, new_model: str) -> CompletionRequest:
+    """Return a copy of ``request`` with ``model`` replaced.
+
+    Other call sites already do this inline; centralised here so both
+    transport paths (chat-completions and messages-passthrough) remain
+    consistent in which fields they preserve.
+    """
+    return CompletionRequest(
+        model=new_model,
+        max_tokens=request.max_tokens,
+        messages=request.messages,
+        system=request.system,
+        tools=request.tools,
+        tool_choice=request.tool_choice,
+        stream=request.stream,
+        temperature=request.temperature,
+        top_p=request.top_p,
+        seed=request.seed,
+        cache_enabled=request.cache_enabled,
+    )
+
+
 class OpenRouterProvider(LLMProvider):
-    """OpenRouter provider (OpenAI-compatible chat completions)."""
+    """OpenRouter provider with dual transport.
+
+    * ``openrouter/anthropic/*`` → OR's Anthropic Messages passthrough
+      (``/v1/messages``) with Anthropic-shape body. Preserves multimodal
+      image / document blocks that the OpenAI-shape conversion drops.
+    * Everything else → OR's OpenAI-compatible chat-completions endpoint
+      (``/v1/chat/completions``).
+    """
 
     config = OPENROUTER_CONFIG
 
@@ -101,39 +167,71 @@ class OpenRouterProvider(LLMProvider):
         self._api_key = self.config.get_api_key()
         self._base_url = self.config.get_base_url()
 
-    def _headers(self) -> dict[str, str]:
-        return {
+    def _headers(self, *, anthropic_passthrough: bool = False) -> dict[str, str]:
+        headers = {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
         }
+        if anthropic_passthrough:
+            # OR's /v1/messages passthrough emits Anthropic-native shape;
+            # send the same anthropic-version the direct provider sends so
+            # downstream features (cache_control, tool_use) line up.
+            headers["anthropic-version"] = ANTHROPIC_API_VERSION
+        return headers
 
     @staticmethod
     def _strip_prefix(model: str) -> str:
-        """Strip the ``openrouter/`` routing prefix so the API sees the
-        upstream model ID (e.g. ``anthropic/claude-3.5-haiku-20241022``)."""
-        for prefix in OPENROUTER_CONFIG.model_prefixes:
-            if model.startswith(prefix):
-                return model[len(prefix) :]
-        return model
+        return _strip_or_prefix(model)
+
+    # ------------------------------------------------------------------
+    # send()
+    # ------------------------------------------------------------------
 
     def send(self, request: CompletionRequest) -> CompletionResponse:
-        url = f"{self._base_url}/v1/chat/completions"
-        # Strip routing prefix before building the request body
-        if request.model != self._strip_prefix(request.model):
-            from synth_panel.llm.models import CompletionRequest as CR
+        stripped = self._strip_prefix(request.model)
+        if request.model != stripped:
+            request = _rebind_model(request, stripped)
 
-            request = CR(
-                model=self._strip_prefix(request.model),
-                max_tokens=request.max_tokens,
-                messages=request.messages,
-                system=request.system,
-                tools=request.tools,
-                tool_choice=request.tool_choice,
-                stream=request.stream,
-                temperature=request.temperature,
-                top_p=request.top_p,
-                seed=request.seed,
+        if _is_anthropic_routed(stripped):
+            return self._send_anthropic(request)
+        return self._send_openai(request)
+
+    def _send_anthropic(self, request: CompletionRequest) -> CompletionResponse:
+        url = f"{self._base_url}/v1/messages"
+        body = build_anthropic_body(request)
+        try:
+            resp = httpx.post(
+                url,
+                headers=self._headers(anthropic_passthrough=True),
+                json=body,
+                timeout=120.0,
             )
+        except httpx.HTTPError as exc:
+            raise LLMError(
+                f"Transport error: {exc}",
+                LLMErrorCategory.TRANSPORT,
+                cause=exc,
+            ) from exc
+
+        if resp.status_code != 200:
+            raise _openrouter_error_from_response(resp)
+
+        try:
+            data = resp.json()
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise LLMError(
+                "Failed to parse OpenRouter Anthropic-passthrough response",
+                LLMErrorCategory.DESERIALIZATION,
+                cause=exc,
+            ) from exc
+
+        # Mirror _send_openai: pass the stripped upstream id as the
+        # fallback model. OR's response echoes the same form, so both
+        # transports produce a consistent ``response.model`` shape.
+        return parse_anthropic_response(data, request.model)
+
+    def _send_openai(self, request: CompletionRequest) -> CompletionResponse:
+        url = f"{self._base_url}/v1/chat/completions"
         body = build_openai_body(request)
         # Ask OpenRouter to always return the detailed usage block (including
         # token counts and native cost). Without this flag, some upstream
@@ -163,24 +261,58 @@ class OpenRouterProvider(LLMProvider):
 
         return parse_openai_response(data, request.model)
 
-    def stream(self, request: CompletionRequest) -> Iterator[StreamEvent]:
-        url = f"{self._base_url}/v1/chat/completions"
-        # Strip routing prefix before building the request body
-        if request.model != self._strip_prefix(request.model):
-            from synth_panel.llm.models import CompletionRequest as CR
+    # ------------------------------------------------------------------
+    # stream()
+    # ------------------------------------------------------------------
 
-            request = CR(
-                model=self._strip_prefix(request.model),
-                max_tokens=request.max_tokens,
-                messages=request.messages,
-                system=request.system,
-                tools=request.tools,
-                tool_choice=request.tool_choice,
-                stream=True,
-                temperature=request.temperature,
-                top_p=request.top_p,
-                seed=request.seed,
-            )
+    def stream(self, request: CompletionRequest) -> Iterator[StreamEvent]:
+        stripped = self._strip_prefix(request.model)
+        if request.model != stripped:
+            request = _rebind_model(request, stripped)
+
+        if _is_anthropic_routed(stripped):
+            yield from self._stream_anthropic(request)
+        else:
+            yield from self._stream_openai(request)
+
+    def _stream_anthropic(self, request: CompletionRequest) -> Iterator[StreamEvent]:
+        # Force stream=True; drop seed (Anthropic Messages API has no seed,
+        # mirroring the direct provider's behaviour in anthropic.py).
+        request = CompletionRequest(
+            model=request.model,
+            max_tokens=request.max_tokens,
+            messages=request.messages,
+            system=request.system,
+            tools=request.tools,
+            tool_choice=request.tool_choice,
+            stream=True,
+            temperature=request.temperature,
+            top_p=request.top_p,
+            cache_enabled=request.cache_enabled,
+        )
+        url = f"{self._base_url}/v1/messages"
+        body = build_anthropic_body(request)
+        try:
+            with httpx.stream(
+                "POST",
+                url,
+                headers=self._headers(anthropic_passthrough=True),
+                json=body,
+                timeout=120.0,
+            ) as resp:
+                if resp.status_code != 200:
+                    resp.read()
+                    raise _openrouter_error_from_response(resp)
+                yield from parse_anthropic_sse_stream(resp.iter_lines())
+        except httpx.HTTPError as exc:
+            raise LLMError(
+                f"Transport error during stream: {exc}",
+                LLMErrorCategory.TRANSPORT,
+                cause=exc,
+            ) from exc
+
+    def _stream_openai(self, request: CompletionRequest) -> Iterator[StreamEvent]:
+        url = f"{self._base_url}/v1/chat/completions"
         body = build_openai_body(request, stream=True)
         # Mirror send(): ensure OpenRouter emits usage details in the final
         # stream chunk so synthpanel can track cost accurately.

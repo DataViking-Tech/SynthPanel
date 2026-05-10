@@ -1269,7 +1269,12 @@ class TestOpenRouterProvider:
         assert body.get("usage") == {"include": True}
 
     def test_usage_captured_from_response(self):
-        """sp-2xy: usage returned by OpenRouter must propagate into the CompletionResponse."""
+        """sp-2xy: usage returned by OpenRouter must propagate into the CompletionResponse.
+
+        Uses ``openrouter/openai/gpt-4o`` because hq-olrk routed
+        ``openrouter/anthropic/*`` traffic away from chat-completions onto
+        OR's Anthropic Messages passthrough (different response shape).
+        """
         from synth_panel.llm.providers.openrouter import OpenRouterProvider
 
         payload = _openai_json_response("hello")
@@ -1278,7 +1283,7 @@ class TestOpenRouterProvider:
         with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}, clear=False):
             provider = OpenRouterProvider()
         with patch("httpx.post", return_value=mock_resp):
-            result = provider.send(_simple_request("openrouter/anthropic/claude-haiku-4-5"))
+            result = provider.send(_simple_request("openrouter/openai/gpt-4o"))
         assert result.usage.input_tokens == 1234
         assert result.usage.output_tokens == 56
 
@@ -1292,7 +1297,7 @@ class TestOpenRouterProvider:
         with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}, clear=False):
             provider = OpenRouterProvider()
         with patch("httpx.post", return_value=mock_resp):
-            result = provider.send(_simple_request("openrouter/anthropic/claude-haiku-4-5"))
+            result = provider.send(_simple_request("openrouter/openai/gpt-4o"))
         # Zero usage is the correct fallback — no AttributeError, no silent crash.
         assert result.usage.input_tokens == 0
         assert result.usage.output_tokens == 0
@@ -1308,7 +1313,7 @@ class TestOpenRouterProvider:
         with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}, clear=False):
             provider = OpenRouterProvider()
         with patch("httpx.post", return_value=mock_resp):
-            result = provider.send(_simple_request("openrouter/anthropic/claude-haiku-4-5"))
+            result = provider.send(_simple_request("openrouter/openai/gpt-4o"))
         assert result.usage.input_tokens == 0
         assert result.usage.output_tokens == 0
 
