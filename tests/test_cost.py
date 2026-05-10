@@ -122,6 +122,23 @@ class TestPricingLookup:
         cost = estimate_cost(usage, pricing)
         assert cost.total_cost == pytest.approx(0.01296, abs=1e-4)
 
+    def test_gemini_2_5_flash_matches_openrouter(self):
+        """Regression for hq-xq36: ``openrouter/google/gemini-2.5-flash`` must
+        bill at 2.5-Flash rates ($0.30/$2.50), not the legacy 1.5-Flash rates
+        ($0.15/$0.60). The reported failure was local=$0.004152 vs
+        provider=$0.009288 (ratio=55.3%) for an ~24.7k/757-token turn; with
+        the refreshed table the local estimate must now line up with the
+        provider value to within the 20% divergence-warning threshold.
+        """
+        usage = TokenUsage(input_tokens=24650, output_tokens=757)
+        pricing, est = lookup_pricing("openrouter/google/gemini-2.5-flash")
+        assert est is False
+        assert pricing is GEMINI_FLASH_PRICING
+        cost = estimate_cost(usage, pricing)
+        # Provider-reported: $0.009288. Allow ±5% for token-count rounding
+        # in the bug report; this stays well inside the 20% warn ratio.
+        assert cost.total_cost == pytest.approx(0.009288, rel=0.05)
+
     @pytest.mark.parametrize(
         "model, expected",
         [

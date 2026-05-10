@@ -125,7 +125,10 @@ class ModelPricing:
 
 
 # Known pricing tiers from SPEC.md §7.
-# pricing snapshot_date: 2026-04-21
+# pricing snapshot_date: 2026-05-10
+# Drift verified against ``https://openrouter.ai/api/v1/models``;
+# scripts/refresh_or_cost_table.py compares this table against the
+# upstream feed and exits non-zero on >25% drift.
 HAIKU_PRICING = ModelPricing(
     input_cost_per_million=1.00,
     output_cost_per_million=5.00,
@@ -151,11 +154,16 @@ OPUS_PRICING = ModelPricing(
     cache_read_cost_per_million=1.50,
 )
 
+# hq-xq36: prior rates ($0.15/$0.60) were Gemini 1.5 Flash, leaving
+# ``openrouter/google/gemini-2.5-flash`` understated by ~55% (provider
+# was ~2.24x local). 2.5 Flash currently bills $0.30/M input, $2.50/M
+# output, with cached-input at $0.03/M and context-cache writes at
+# $0.0833/M (per OR /v1/models, 2026-05-10).
 GEMINI_FLASH_PRICING = ModelPricing(
-    input_cost_per_million=0.15,
-    output_cost_per_million=0.60,
-    cache_creation_cost_per_million=0.19,
-    cache_read_cost_per_million=0.04,
+    input_cost_per_million=0.30,
+    output_cost_per_million=2.50,
+    cache_creation_cost_per_million=0.0833,
+    cache_read_cost_per_million=0.03,
 )
 
 # Gemini 2.5 Flash-Lite (OpenRouter: ``google/gemini-2.5-flash-lite``).
@@ -170,11 +178,14 @@ GEMINI_FLASH_LITE_PRICING = ModelPricing(
     cache_read_cost_per_million=0.025,
 )
 
+# hq-xq36: Gemini 2.5 Pro cache rates were stale (cache_write $1.56,
+# cache_read $0.31 — likely carried over from Pro 1.0). Current OR
+# rates: cache_write $0.375/M, cache_read $0.125/M.
 GEMINI_PRO_PRICING = ModelPricing(
     input_cost_per_million=1.25,
     output_cost_per_million=10.00,
-    cache_creation_cost_per_million=1.56,
-    cache_read_cost_per_million=0.31,
+    cache_creation_cost_per_million=0.375,
+    cache_read_cost_per_million=0.125,
 )
 
 # OpenAI gpt-5-mini (also served via OpenRouter as ``openai/gpt-5-mini``).
@@ -215,35 +226,41 @@ GPT_4_1_MINI_PRICING = ModelPricing(
     cache_read_cost_per_million=0.10,
 )
 
-# DeepSeek Chat V3 (OpenRouter: ``deepseek/deepseek-chat-v3``, ``deepseek-chat-v3.1``).
-# OpenRouter rates: $0.27/M input, $1.10/M output, $0.07/M cache read.
-# Covers the v3 family via the ``deepseek-chat`` substring; R1 is priced separately
-# (not included here — different product tier).
+# DeepSeek Chat V3 (OpenRouter: ``deepseek/deepseek-chat-v3.1``; the
+# bare ``deepseek-chat-v3`` route now redirects to v3.1). OR feed
+# (2026-05-10): $0.15/M input, $0.75/M output. Cache rates not
+# published — defaulted to input rate for cache_write (no-savings
+# baseline) and zero for cache_read (DeepSeek does not currently emit
+# cache_read tokens through OR). Covers the v3 family via the
+# ``deepseek-chat`` substring; R1 is priced separately.
 DEEPSEEK_CHAT_PRICING = ModelPricing(
-    input_cost_per_million=0.27,
-    output_cost_per_million=1.10,
-    cache_creation_cost_per_million=0.27,
-    cache_read_cost_per_million=0.07,
+    input_cost_per_million=0.15,
+    output_cost_per_million=0.75,
+    cache_creation_cost_per_million=0.15,
+    cache_read_cost_per_million=0.15,
 )
 
 # DeepSeek V3.2 (OpenRouter: ``deepseek/deepseek-v3.2``). Successor family to
 # deepseek-chat-v3; OpenRouter drops the ``-chat-`` infix, so the older
 # ``deepseek-chat`` substring no longer matches.
-# Rates: $0.252/M input, $0.378/M output. Cache not published — input rate.
+# OR feed (2026-05-10): $0.252/M input, $0.378/M output, cache_read
+# $0.0252/M. Prior cache_read of $0.252 was a 10x overstatement.
 DEEPSEEK_V3_2_PRICING = ModelPricing(
     input_cost_per_million=0.252,
     output_cost_per_million=0.378,
     cache_creation_cost_per_million=0.252,
-    cache_read_cost_per_million=0.252,
+    cache_read_cost_per_million=0.0252,
 )
 
 # DeepSeek V3.2 Speciale (OpenRouter: ``deepseek/deepseek-v3.2-speciale``).
-# Higher-tier sibling of v3.2. Rates: $0.40/M input, $1.20/M output.
+# Higher-tier sibling of v3.2. OR feed (2026-05-10): $0.287/M input,
+# $0.431/M output, cache_read $0.058/M. Prior rates ($0.40/$1.20)
+# overstated cost ~3x.
 DEEPSEEK_V3_2_SPECIALE_PRICING = ModelPricing(
-    input_cost_per_million=0.40,
-    output_cost_per_million=1.20,
-    cache_creation_cost_per_million=0.40,
-    cache_read_cost_per_million=0.40,
+    input_cost_per_million=0.287,
+    output_cost_per_million=0.431,
+    cache_creation_cost_per_million=0.287,
+    cache_read_cost_per_million=0.058,
 )
 
 # DeepSeek V3.2 Experimental (OpenRouter: ``deepseek/deepseek-v3.2-exp``).
@@ -284,22 +301,25 @@ QWEN3_MAX_PRICING = ModelPricing(
     cache_read_cost_per_million=0.78,
 )
 
-# Mistral Medium 3 (OpenRouter: ``mistralai/mistral-medium-3``).
-# Published rates: $0.40/M input, $2.00/M output. Cache rates not published.
+# Mistral Medium 3 (OpenRouter: ``mistralai/mistral-medium-3``). OR
+# feed (2026-05-10): $0.40/M input, $2.00/M output, cache_read
+# $0.04/M.
 MISTRAL_MEDIUM_PRICING = ModelPricing(
     input_cost_per_million=0.40,
     output_cost_per_million=2.00,
     cache_creation_cost_per_million=0.40,
-    cache_read_cost_per_million=0.40,
+    cache_read_cost_per_million=0.04,
 )
 
 # Meta Llama 3.3 70B Instruct (OpenRouter: ``meta-llama/llama-3.3-70b-instruct``).
-# Typical OpenRouter rate: $0.23/M input, $0.40/M output. Cache rates not published.
+# OR feed (2026-05-10): $0.10/M input, $0.32/M output. Prior rates
+# ($0.23/$0.40) overstated cost ~2x — OR's blended provider rate has
+# dropped as more low-cost providers came online.
 LLAMA_3_3_70B_PRICING = ModelPricing(
-    input_cost_per_million=0.23,
-    output_cost_per_million=0.40,
-    cache_creation_cost_per_million=0.23,
-    cache_read_cost_per_million=0.23,
+    input_cost_per_million=0.10,
+    output_cost_per_million=0.32,
+    cache_creation_cost_per_million=0.10,
+    cache_read_cost_per_million=0.10,
 )
 
 DEFAULT_PRICING = SONNET_PRICING
