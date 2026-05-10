@@ -456,8 +456,12 @@ class TestRunPanelModels:
             assert data["models"] == ["haiku", "sonnet"]
 
     @pytest.mark.asyncio
-    async def test_single_model_list_uses_normal_path(self):
-        """A models list with <2 entries falls through to the normal path."""
+    async def test_single_model_list_promotes_to_model(self):
+        """hq-6j40: ``models=[X]`` is forgiving-promoted to ``model=X``.
+
+        Without promotion the caller's model is silently dropped and the
+        request runs against the MCP default — billing the wrong provider.
+        """
         with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = {"results": []}
             await mcp.call_tool(
@@ -465,10 +469,81 @@ class TestRunPanelModels:
                 {
                     "personas": [{"name": "Alice"}],
                     "questions": [{"text": "Hello?"}],
-                    "models": ["haiku"],
+                    "models": ["openrouter/anthropic/claude-sonnet-4.5"],
                 },
             )
             mock_run.assert_called_once()
+            # Third positional arg of _run_panel_async is ``model``.
+            args = mock_run.call_args.args
+            assert args[2] == "openrouter/anthropic/claude-sonnet-4.5"
+
+    @pytest.mark.asyncio
+    async def test_empty_models_list_returns_typed_error(self):
+        """hq-6j40: ``models=[]`` is a caller bug — surface it explicitly."""
+        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+            result = await mcp.call_tool(
+                "run_panel",
+                {
+                    "personas": [{"name": "Alice"}],
+                    "questions": [{"text": "Hello?"}],
+                    "models": [],
+                },
+            )
+            mock_run.assert_not_called()
+            data = json.loads(result[0][0].text)
+            assert data["error_code"] == "INVALID_TOOL_ARG"
+            assert data["field_path"] == "models"
+            assert "at least one" in data["error"]
+
+    @pytest.mark.asyncio
+    async def test_model_and_models_mutually_exclusive(self):
+        """hq-6j40: setting both ``model`` and ``models`` is ambiguous."""
+        with (
+            patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run,
+            patch("synth_panel.mcp.server._run_ensemble_sync") as mock_ens,
+        ):
+            result = await mcp.call_tool(
+                "run_panel",
+                {
+                    "personas": [{"name": "Alice"}],
+                    "questions": [{"text": "Hello?"}],
+                    "model": "haiku",
+                    "models": ["sonnet", "haiku"],
+                },
+            )
+            mock_run.assert_not_called()
+            mock_ens.assert_not_called()
+            data = json.loads(result[0][0].text)
+            assert data["error_code"] == "INVALID_TOOL_ARG"
+            assert "mutually exclusive" in data["error"]
+
+    @pytest.mark.asyncio
+    async def test_panel_timeout_returns_clear_envelope(self):
+        """hq-6j40: ``asyncio.TimeoutError`` must surface as a clear envelope.
+
+        Without an explicit catch, ``wait_for`` raises ``TimeoutError``
+        with empty ``str(exc)`` and FastMCP relays
+        ``"Error executing tool run_panel: "`` with no context.
+        """
+        import asyncio
+
+        async def _boom(*_a, **_kw):
+            raise asyncio.TimeoutError
+
+        with patch("synth_panel.mcp.server._run_panel_async", side_effect=_boom):
+            result = await mcp.call_tool(
+                "run_panel",
+                {
+                    "personas": [{"name": "Alice"}],
+                    "questions": [{"text": "Hello?"}],
+                    "model": "haiku",
+                },
+            )
+            data = json.loads(result[0][0].text)
+            assert data["error_code"] == "PANEL_TIMEOUT"
+            assert "timed out" in data["error"]
+            assert data["timeout_seconds"] > 0
+            assert data["error"]  # never empty
 
 
 # ---------------------------------------------------------------------------

@@ -130,7 +130,7 @@ from synth_panel.orchestrator import (
     run_panel_parallel,
 )
 from synth_panel.prompts import build_question_prompt, persona_system_prompt
-from synth_panel.structured.validate import apply_response_gate, validate_request
+from synth_panel.structured.validate import ErrorEnvelope, apply_response_gate, validate_request
 from synth_panel.synthesis import synthesize_panel
 
 logger = logging.getLogger(__name__)
@@ -272,6 +272,104 @@ def _reject_weighted_model_spec(
             )
         }
     )
+
+
+def _invalid_tool_arg(message: str, *, field_path: str | None = None) -> str:
+    """Build a typed ``INVALID_TOOL_ARG`` envelope for an MCP boundary error.
+
+    Mirrors the v1.0.0 ErrorEnvelope shape (``error_code``, ``message``,
+    optional ``field_path``, ``schema_version``, ``retry_safe``) and also
+    carries a top-level ``error`` field so existing callers that read the
+    plain-text message keep working.
+    """
+    env = ErrorEnvelope(
+        error_code="INVALID_TOOL_ARG",
+        message=message,
+        field_path=field_path,
+        schema_version="1.0.0",
+        retry_safe=True,
+    ).to_dict()
+    env["error"] = message
+    return json.dumps(env)
+
+
+def _panel_timeout_envelope(
+    *,
+    personas: int,
+    model: str,
+    questions: int | None = None,
+    rounds: int | None = None,
+    variants: int = 0,
+) -> str:
+    """Build a clear timeout envelope so MCP clients see *why* the call failed.
+
+    Without this, an :class:`asyncio.TimeoutError` raised by ``wait_for``
+    bubbles up to FastMCP with an empty ``str(exc)`` and the client sees
+    ``Error executing tool run_panel:`` with no context (hq-6j40).
+    """
+    if rounds is not None:
+        budget_s = PANELIST_TIMEOUT * max(personas, 1) * max(rounds, 1)
+        shape = f"personas={personas} rounds={rounds}"
+    else:
+        budget_s = PANELIST_TIMEOUT * max(personas, 1) * (1 + variants)
+        shape = f"personas={personas} questions={questions} variants={variants}"
+    msg = (
+        f"Panel run timed out after {budget_s}s ({shape}, model={model!r}). "
+        "The provider did not respond within the per-panelist budget. "
+        "Retry with fewer personas/questions, a faster model, or check provider health."
+    )
+    env = {
+        "error": msg,
+        "error_code": "PANEL_TIMEOUT",
+        "schema_version": "1.0.0",
+        "retry_safe": True,
+        "timeout_seconds": budget_s,
+    }
+    return json.dumps(env, indent=2)
+
+
+def _normalize_models_param(
+    *,
+    model: str | None,
+    models: list[str] | None,
+) -> tuple[str | None, list[str] | None] | str:
+    """Normalize ``model`` / ``models`` at the MCP boundary.
+
+    Returns either the normalized ``(model, models)`` tuple or a
+    JSON-serialised typed error envelope.
+
+    Rules:
+    * Both ``model`` and a non-empty ``models`` set → mutually-exclusive
+      error.
+    * ``models=[]`` → empty-list error (caller almost certainly meant to
+      omit the parameter).
+    * ``len(models) == 1`` → forgiving promote: ``model = models[0]`` and
+      ``models = None`` so the call routes through the single-model path
+      instead of the (length-2-only) ensemble path. Without this promotion
+      the caller's chosen model would be silently swapped for the default
+      and the request would be billed against the wrong provider.
+    * ``len(models) >= 2`` → ensemble path, unchanged.
+    * ``models is None`` → pass-through.
+    """
+    if models is not None:
+        if not isinstance(models, list):
+            return _invalid_tool_arg(
+                f"'models' must be a list of model aliases (got {type(models).__name__}).",
+                field_path="models",
+            )
+        if len(models) == 0:
+            return _invalid_tool_arg(
+                "'models' must contain at least one model alias, or be omitted.",
+                field_path="models",
+            )
+        if model is not None and len(models) >= 1:
+            return _invalid_tool_arg(
+                "'model' and 'models' are mutually exclusive — pass one or the other, not both.",
+                field_path="models",
+            )
+        if len(models) == 1:
+            return (models[0], None)
+    return (model, models)
 
 
 def _validate_decision_request(tool: str, decision_being_informed: str | None) -> str | None:
@@ -1111,6 +1209,10 @@ async def run_panel(
     )
     if spec_error is not None:
         return spec_error
+    normalized = _normalize_models_param(model=model, models=models)
+    if isinstance(normalized, str):
+        return normalized
+    model, models = normalized
     model = model or _resolve_mcp_default_model()
     variants_k = variants or 0
     if variants_k < 0 or variants_k > 20:
@@ -1314,6 +1416,18 @@ async def run_panel(
                 },
                 indent=2,
             )
+        except asyncio.TimeoutError:
+            logger.error(
+                "run_panel instrument: timed out (personas=%d rounds=%d model=%s)",
+                len(merged),
+                len(instrument_obj.rounds),
+                model,
+            )
+            return _panel_timeout_envelope(
+                personas=len(merged),
+                rounds=len(instrument_obj.rounds),
+                model=model,
+            )
         return json.dumps(apply_response_gate(result), indent=2)
 
     if not questions:
@@ -1345,6 +1459,20 @@ async def run_panel(
                 "total_failure": exc.diagnostic,
             },
             indent=2,
+        )
+    except asyncio.TimeoutError:
+        logger.error(
+            "run_panel: timed out (personas=%d questions=%d model=%s variants=%d)",
+            len(merged),
+            len(questions),
+            model,
+            variants_k,
+        )
+        return _panel_timeout_envelope(
+            personas=len(merged),
+            questions=len(questions),
+            variants=variants_k,
+            model=model,
         )
     return json.dumps(apply_response_gate(result), indent=2)
 
