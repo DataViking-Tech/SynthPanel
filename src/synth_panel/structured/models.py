@@ -82,6 +82,25 @@ class AnnotatedChoice(BaseModel):
     attachment_id: str = ""
 
 
+class PartialSummary(BaseModel):
+    """Per-question map-phase synthesis partial (v1.0.3 P2).
+
+    Mirrors the content fields of :class:`synth_panel.synthesis.SynthesisResult`
+    so the map-reduce strategy can validate each partial at the map
+    boundary before feeding it to the reduce stage. Schema drift in a
+    single map call surfaces as a :class:`pydantic.ValidationError`
+    instead of silently propagating empty themes through to the final
+    synthesis.
+    """
+
+    summary: str
+    themes: list[str]
+    agreements: list[str]
+    disagreements: list[str]
+    surprises: list[str]
+    recommendation: str
+
+
 MODEL_REGISTRY: dict[str, type[BaseModel]] = {
     "ranking": Ranking,
     "likert": Likert,
@@ -102,6 +121,7 @@ __all__ = [
     "MODEL_REGISTRY",
     "AnnotatedChoice",
     "Likert",
+    "PartialSummary",
     "PickOne",
     "RankedItem",
     "Ranking",

@@ -24,6 +24,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Any
 
+from pydantic import BaseModel
+from pydantic import ValidationError as _PydanticValidationError
+
 from synth_panel.cost import (
     ZERO_USAGE,
     CostEstimate,
@@ -37,6 +40,7 @@ from synth_panel.llm.models import InputMessage, TextBlock
 from synth_panel.llm.models import TokenUsage as LLMTokenUsage
 from synth_panel.prompts import SYNTHESIS_PROMPT, SYNTHESIS_PROMPT_VERSION
 from synth_panel.structured import StructuredOutputConfig, StructuredOutputEngine
+from synth_panel.structured.models import PartialSummary
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +49,54 @@ STRATEGY_SINGLE = "single"
 STRATEGY_MAP_REDUCE = "map-reduce"
 STRATEGY_AUTO = "auto"
 SYNTHESIS_STRATEGIES = (STRATEGY_SINGLE, STRATEGY_MAP_REDUCE, STRATEGY_AUTO)
+
+
+def _typed_or_dict(extr: Any, attr: str) -> Any:
+    """Read *attr* from *extr* whether it's a Pydantic model or a dict.
+
+    v1.0.3 P2 lets ``extract_schema=`` resolve a Pydantic ``BaseModel``
+    subclass; when it does, the orchestrator may attach a typed instance
+    on ``responses[i]["extraction"]`` instead of the raw dict the
+    pre-typed code path produced. Callers that consume extraction
+    payloads should route every read through this helper so they accept
+    both shapes — the typed form (new) and the dict form (legacy /
+    fallback when no model was registered for the schema name).
+
+    Returns ``None`` when *extr* is neither a ``BaseModel`` nor a
+    ``dict``, or when the named attribute is absent. Callers that need
+    a hard failure on a missing field should explicitly check for
+    ``None``.
+    """
+    if isinstance(extr, BaseModel):
+        return getattr(extr, attr, None)
+    if isinstance(extr, dict):
+        return extr.get(attr)
+    return None
+
+
+class MapPhaseFailure(RuntimeError):
+    """A map-phase partial in :func:`synthesize_panel_mapreduce` is unusable.
+
+    Raised at the map boundary (before the reduce call fans out) when a
+    per-question map result is either an explicit fallback
+    (``is_fallback=True``) or fails typed validation against
+    :class:`synth_panel.structured.models.PartialSummary`. Surfacing the
+    failure here turns a previously-silent "reduce got empty themes"
+    flow into a loud, actionable error naming the offending question.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        question_index: int,
+        is_fallback: bool = False,
+        validation_error: _PydanticValidationError | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.question_index = question_index
+        self.is_fallback = is_fallback
+        self.validation_error = validation_error
 
 
 def _convert_llm_usage(llm_usage: LLMTokenUsage) -> TokenUsage:
@@ -972,6 +1024,44 @@ def synthesize_panel_mapreduce(
     assert all(m is not None for m in map_meta)
     completed_maps: list[SynthesisResult] = [r for r in map_results if r is not None]
     completed_meta: list[dict[str, Any]] = [m for m in map_meta if m is not None]
+
+    # v1.0.3 P2: typed validation at the map boundary. Every partial is
+    # routed through :class:`PartialSummary.model_validate` so schema
+    # drift in a single map call surfaces as a clear ValidationError
+    # instead of silently feeding empty themes to reduce. An explicit
+    # ``is_fallback=True`` map (the synthesizer already detected its
+    # own failure) raises the same error class so the caller's
+    # ``synthesis_error`` envelope can name the offending question.
+    typed_partials: list[PartialSummary] = []
+    for i, res in enumerate(completed_maps):
+        if res.is_fallback:
+            raise MapPhaseFailure(
+                f"map-reduce question {i} map call returned a fallback "
+                f"(error={res.error!r}); reduce stage cannot proceed with a "
+                "degenerate partial. Rerun with a different synthesis model "
+                "or reduce panel size for this question.",
+                question_index=i,
+                is_fallback=True,
+            )
+        try:
+            typed_partials.append(
+                PartialSummary.model_validate(
+                    {
+                        "summary": res.summary,
+                        "themes": res.themes,
+                        "agreements": res.agreements,
+                        "disagreements": res.disagreements,
+                        "surprises": res.surprises,
+                        "recommendation": res.recommendation,
+                    }
+                )
+            )
+        except _PydanticValidationError as ve:
+            raise MapPhaseFailure(
+                f"map-reduce question {i} partial failed typed validation: {ve}",
+                question_index=i,
+                validation_error=ve,
+            ) from ve
 
     # Reduce phase
     synthetic_panelists = _build_synthetic_reduce_panelists(completed_maps, questions)
