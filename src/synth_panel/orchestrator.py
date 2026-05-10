@@ -106,17 +106,14 @@ def _resolve_question_attachment_refs(
             if isinstance(ref, str):
                 if ref not in bank:
                     raise ValueError(
-                        f"attachment ref {ref!r} does not resolve to a bank entry "
-                        f"(bank keys: {sorted(bank.keys())!r})"
+                        f"attachment ref {ref!r} does not resolve to a bank entry (bank keys: {sorted(bank.keys())!r})"
                     )
                 # Copy so downstream mutations don't bleed across questions.
                 new_refs.append(dict(bank[ref]))
             elif isinstance(ref, dict):
                 new_refs.append(ref)
             else:
-                raise ValueError(
-                    f"attachment ref must be a string or mapping, got {type(ref).__name__}"
-                )
+                raise ValueError(f"attachment ref must be a string or mapping, got {type(ref).__name__}")
         new_q = dict(q)
         new_q["attachments"] = new_refs
         resolved.append(new_q)
@@ -1605,9 +1602,7 @@ def run_multi_round_panel(
         # only the question text. The bank lives on ``instrument.attachments``;
         # this is the natural resolution site since we have the Instrument
         # object in scope here.
-        resolved_questions = _resolve_question_attachment_refs(
-            current.questions, instrument.attachments
-        )
+        resolved_questions = _resolve_question_attachment_refs(current.questions, instrument.attachments)
 
         panelist_results, _registry, sessions = run_panel_parallel(
             client=client,

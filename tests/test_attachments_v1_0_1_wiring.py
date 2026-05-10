@@ -17,6 +17,7 @@ A regression on either bug means panels appear to run successfully but
 return persona responses that ignore the attachments — silent failure with
 no signal in tokens, latency, or warnings.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -108,20 +109,23 @@ class TestOpenAIFormatRegression:
 class TestResolveBankRefs:
     def test_string_ref_resolves_to_inline_dict(self):
         bank = {
-            "hero1": {"type": "image", "media_type": "image/png",
-                      "source": {"type": "base64", "data": "AAA"}},
+            "hero1": {"type": "image", "media_type": "image/png", "source": {"type": "base64", "data": "AAA"}},
         }
         questions = [{"text": "react", "attachments": ["hero1"]}]
         out = _resolve_question_attachment_refs(questions, bank)
         assert len(out) == 1
         assert out[0]["attachments"] == [
-            {"type": "image", "media_type": "image/png",
-             "source": {"type": "base64", "data": "AAA"}}
+            {"type": "image", "media_type": "image/png", "source": {"type": "base64", "data": "AAA"}}
         ]
 
     def test_dict_ref_passes_through_unchanged(self):
-        bank = {"hero1": {"type": "image", "media_type": "image/png",
-                          "source": {"type": "url", "url": "https://x.test/img"}}}
+        bank = {
+            "hero1": {
+                "type": "image",
+                "media_type": "image/png",
+                "source": {"type": "url", "url": "https://x.test/img"},
+            }
+        }
         inline = {"type": "html", "text": "<p>inline</p>"}
         questions = [{"text": "mix", "attachments": ["hero1", inline]}]
         out = _resolve_question_attachment_refs(questions, bank)
@@ -138,8 +142,14 @@ class TestResolveBankRefs:
 
     def test_no_bank_passes_questions_through(self):
         # Legacy v0.12.0 instruments without bank: behaviour preserved.
-        qs = [{"text": "q", "attachments": [{"type": "image", "media_type": "image/png",
-                                              "source": {"type": "base64", "data": "A"}}]}]
+        qs = [
+            {
+                "text": "q",
+                "attachments": [
+                    {"type": "image", "media_type": "image/png", "source": {"type": "base64", "data": "A"}}
+                ],
+            }
+        ]
         out = _resolve_question_attachment_refs(qs, None)
         assert out == qs
 
@@ -150,12 +160,9 @@ class TestResolveBankRefs:
 
     def test_resolved_dict_is_a_copy_not_alias(self):
         # Mutations to a resolved attachment must not bleed back to the bank.
-        bank_entry = {"type": "image", "media_type": "image/png",
-                      "source": {"type": "base64", "data": "data"}}
+        bank_entry = {"type": "image", "media_type": "image/png", "source": {"type": "base64", "data": "data"}}
         bank = {"img": bank_entry}
-        out = _resolve_question_attachment_refs(
-            [{"text": "x", "attachments": ["img"]}], bank
-        )
+        out = _resolve_question_attachment_refs([{"text": "x", "attachments": ["img"]}], bank)
         out[0]["attachments"][0]["mutated"] = True
         assert "mutated" not in bank_entry
 
