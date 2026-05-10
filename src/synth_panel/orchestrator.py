@@ -23,9 +23,11 @@ from synth_panel.attachments.filter import count_strata
 from synth_panel.conditions import evaluate_condition, normalize_follow_up
 from synth_panel.convergence import ConvergenceTracker, extract_categorical_responses
 from synth_panel.cost import ZERO_USAGE, CostGate, TokenUsage, UsageTracker, resolve_cost
+from synth_panel.fetch.cache import CacheL1, UrlCache
+from synth_panel.fetch.lower import lower_url_blocks
 from synth_panel.instrument import END_SENTINEL, Instrument, Round
 from synth_panel.llm.client import LLMClient
-from synth_panel.llm.models import ContentBlock, InputMessage, TextBlock
+from synth_panel.llm.models import ContentBlock, InputMessage, TextBlock, URLBlock
 from synth_panel.llm.models import TokenUsage as LLMTokenUsage
 from synth_panel.persistence import Session
 from synth_panel.prompts import build_question_blocks
@@ -868,6 +870,8 @@ def _run_panelist(
     panel_shared_attachments: list[dict[str, Any]] | None = None,
     stratum_population: int = 1,
     request_id: str | None = None,
+    url_cache_l1: CacheL1 | None = None,
+    url_cache_disk: UrlCache | None = None,
 ) -> tuple[PanelistResult, Session]:
     """Execute a single panelist's full interview. Runs in a worker thread.
 
@@ -1020,6 +1024,20 @@ def _run_panelist(
             # Otherwise the legacy single-text path is used so non-attachment
             # call sites stay untouched.
             has_attachments = bool(attachments_for_persona) or bool(panel_shared_attachments)
+
+            # hq-8iz3: frame-stage URLBlock lowering. Resolve any pre-fetch
+            # URL stubs to concrete TextBlock / ImageBlock entries via the
+            # hq-gmju content ladder. Runs after the cache fingerprint is
+            # computed (so two panelists pointing at the same URL hit the
+            # same stratum) and before serialization (so URLBlock never
+            # reaches the wire).
+            if has_attachments and any(isinstance(b, URLBlock) for b in user_blocks):
+                user_blocks = lower_url_blocks(
+                    user_blocks,
+                    l1=url_cache_l1,
+                    cache=url_cache_disk,
+                )
+
             turn_input: str | list[ContentBlock] = user_blocks if has_attachments else question_text
 
             try:
@@ -1326,6 +1344,13 @@ def run_panel_parallel(
     sentiment_cache: dict[str, str] = {}
     sentiment_cache_lock = threading.Lock()
     request_id = uuid.uuid4().hex[:12]
+
+    # hq-8iz3: per-run URL fetch cache. The L1 is in-memory and shared
+    # across all panelists in this run so the same URL is fetched at
+    # most once regardless of stratum. The disk-backed UrlCache layers
+    # cross-run dedup on top (default root: ~/.synthpanel/cache/url).
+    url_cache_l1 = CacheL1()
+    url_cache_disk = UrlCache()
     # hq-0pbp: P=1 panels skip caching entirely (D-phase hq-cxth §6 bypass).
     cache_enabled_for_run = len(personas) >= _MIN_STRATUM_POP_FOR_CACHE
     logger.info(
@@ -1394,6 +1419,8 @@ def run_panel_parallel(
                 panel_shared_attachments,
                 min_stratum_pop,
                 request_id,
+                url_cache_l1,
+                url_cache_disk,
             )
             future_to_index[future] = idx
 
