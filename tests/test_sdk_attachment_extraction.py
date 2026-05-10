@@ -239,9 +239,7 @@ class TestExtractRefs:
     def test_string_refs_already_present_pass_through(self, isolated_data: Path):
         # A pre-extracted ref-id should be preserved verbatim — the helper
         # is idempotent on already-rewritten responses.
-        flat_results = [
-            {"persona": "Alice", "responses": [{"question": "Q", "attachments": ["att-bank-hero"]}]}
-        ]
+        flat_results = [{"persona": "Alice", "responses": [{"question": "Q", "attachments": ["att-bank-hero"]}]}]
         refs = _extract_attachment_refs(None, flat_results)
         assert refs == {}
         assert flat_results[0]["responses"][0]["attachments"] == ["att-bank-hero"]
