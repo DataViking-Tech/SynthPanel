@@ -33,7 +33,9 @@ from synth_panel.cost import (
     ZERO_USAGE,
     CostEstimate,
     TokenUsage,
+    actual_cost_usd,
     estimate_cost,
+    local_estimate_usd,
     lookup_pricing,
 )
 from synth_panel.llm.aliases import resolve_alias
@@ -286,6 +288,29 @@ class SynthesisResult:
     # when non-empty so the serialized shape is unchanged for healthy runs.
     warnings: list[str] = field(default_factory=list)
 
+    @property
+    def cost_estimated_usd(self) -> float:
+        """Local-pricing-table estimate for this synthesis's judge call(s) (sy-ye1).
+
+        Always computed from ``self.usage`` against the local pricing
+        table. For map-reduce strategies, ``self.usage`` already sums
+        every map call + the reduce call, so this returns the combined
+        synthesis-tier estimate. Pair with :pyattr:`cost_actual_usd` to
+        compare estimate vs. real bill.
+        """
+        return local_estimate_usd(self.usage, self.model)
+
+    @property
+    def cost_actual_usd(self) -> float | None:
+        """Provider-reported actual USD for this synthesis's judge call(s) (sy-ye1).
+
+        Sum of ``usage.provider_reported_cost`` across map+reduce calls.
+        ``None`` when the judge model is a direct provider (Anthropic,
+        OpenAI, Google) that does not return per-call cost — distinct
+        from $0.00.
+        """
+        return actual_cost_usd(self.usage)
+
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a plain dict."""
         d: dict[str, Any] = {
@@ -297,6 +322,14 @@ class SynthesisResult:
             "recommendation": self.recommendation,
             "usage": self.usage.to_dict(),
             "cost": self.cost.format_usd(),
+            # sy-ye1: explicit estimate-vs-actual surface so downstream
+            # budget reconciliation does not have to infer which kind of
+            # number ``cost`` is. ``cost_estimated_usd`` is always the
+            # local-pricing-table estimate; ``cost_actual_usd`` is the
+            # provider-reported number, or null when the upstream call
+            # did not return a cost.
+            "cost_estimated_usd": round(self.cost_estimated_usd, 6),
+            "cost_actual_usd": (round(self.cost_actual_usd, 6) if self.cost_actual_usd is not None else None),
             "model": self.model,
             "prompt_version": self.synthesis_prompt_version,
         }
@@ -1404,10 +1437,16 @@ def synthesize_panel_mapreduce(
     for i, (res, meta) in enumerate(zip(completed_maps, completed_meta)):
         total_usage = total_usage + res.usage
         total_cost = total_cost + res.cost
+        # sy-ye1: surface estimate + actual side-by-side per map call so
+        # audits can spot the (rare) case of a single question whose
+        # provider bill diverges from the local estimate.
+        map_actual = res.cost_actual_usd
         entry: dict[str, Any] = {
             "question_index": i,
             "tokens": res.usage.total_tokens,
             "cost_usd": round(res.cost.total_cost, 6),
+            "cost_estimated_usd": round(res.cost_estimated_usd, 6),
+            "cost_actual_usd": (round(map_actual, 6) if map_actual is not None else None),
             "is_fallback": res.is_fallback,
         }
         # sp-4g6a: surface per-question overflow handling in the breakdown
@@ -1423,9 +1462,14 @@ def synthesize_panel_mapreduce(
         map_breakdown.append(entry)
     total_usage = total_usage + reduce_result.usage
     total_cost = total_cost + reduce_result.cost
+    reduce_actual = reduce_result.cost_actual_usd
     reduce_breakdown: dict[str, Any] = {
         "tokens": reduce_result.usage.total_tokens,
         "cost_usd": round(reduce_result.cost.total_cost, 6),
+        # sy-ye1: split the reduce-phase cost the same way as map entries
+        # so consumers see both numbers across the whole map-reduce chain.
+        "cost_estimated_usd": round(reduce_result.cost_estimated_usd, 6),
+        "cost_actual_usd": (round(reduce_actual, 6) if reduce_actual is not None else None),
         "is_fallback": reduce_result.is_fallback,
     }
 

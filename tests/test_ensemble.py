@@ -853,6 +853,9 @@ class TestBuildEnsembleOutput:
         assert set(out.keys()) == {
             "per_model_results",
             "cost_breakdown",
+            "cost_estimated_usd",
+            "cost_actual_usd",
+            "per_model_breakdown",
             "models",
             "total_usage",
             "warnings",
