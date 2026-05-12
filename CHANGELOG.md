@@ -8,6 +8,67 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 (Empty — next-cycle work lands here.)
 
+## [1.2.0] - 2026-05-12
+
+`synth_panel.ensemble.synthesize_panel` gains a pyodide-safe / async-DI
+surface so consumers running on Cloudflare Python Workers (pyodide) — or
+any environment where threading.Lock / Semaphore / ThreadPoolExecutor
+can't run — can drive the judge call through their own async LLM client
+end-to-end. The original v1.1.0 sync surface is preserved: every existing
+caller behaves identically when they don't pass the new kwargs.
+
+This is an additive minor release. No breaking changes.
+
+### Added
+
+- **`synthesize_panel(..., judge_enabled=False)`** (sy-huo). Skips the
+  judge LLM call entirely and returns a degenerate
+  :class:`SynthesisResult` with empty LLM-derived fields. No thread
+  spawn, no fetch deps, no LLM cost. Useful for consumers that only
+  need the panelist responses and want to opt out of the extra judge
+  cost — or that are running in environments where the threading-based
+  client can't execute at all.
+
+- **`synthesize_panel(..., llm_client=<AsyncLLMClient>)`** (sy-huo).
+  When provided alongside `judge_enabled=True` (the default), the
+  function returns a coroutine that drives the judge call through the
+  injected async client instead of synthpanel's internal threading-based
+  `LLMClient`. Caller must `await` the result. Required for pyodide /
+  Cloudflare Workers where threading primitives are unavailable.
+
+- **`synthesize_panel(..., pyodide_safe_mode=True)`** (sy-huo). Hard
+  guard: raises `ValueError` if the call would fall through to the
+  internal threading-based client. Requires either
+  `judge_enabled=False` or `llm_client=<AsyncLLMClient>`.
+
+- **`AsyncLLMClient` Protocol** (sy-huo). Minimal runtime-checkable
+  Protocol — one method (`async complete(*, prompt, model, max_tokens)`)
+  returning an `AsyncCompletion`. Any consumer's async LLM stack can
+  satisfy it with a 10-line adapter. Exposed as
+  `synth_panel.ensemble.AsyncLLMClient`.
+
+- **`AsyncCompletion` dataclass** (sy-huo). The result type for
+  `AsyncLLMClient.complete()` — `text: str`, `usage: TokenUsage | None`.
+  Exposed as `synth_panel.ensemble.AsyncCompletion`.
+
+### Changed
+
+- The `client` positional argument of `synthesize_panel` now accepts
+  `None` (typed as `LLMClient | None`). Callers using the new
+  `judge_enabled=False` or `llm_client=` paths can pass `None` for
+  `client`. Existing callers passing a real `LLMClient` are unchanged.
+
+### Compatibility
+
+- Default behavior of `synthesize_panel(client, panelist_results,
+  questions)` is identical to v1.1.0 — sync return, internal client,
+  judge enabled.
+
+- `ensemble_run` and `run_panel_parallel` still spawn threads
+  internally; they remain unsuitable for pyodide. Workers consumers
+  should produce panelist data through their own async stack and then
+  call `synthesize_panel` with the new kwargs for the judge step.
+
 ## [1.1.0] - 2026-05-12
 
 `synth_panel.ensemble` is now the supported public API for the ensemble
