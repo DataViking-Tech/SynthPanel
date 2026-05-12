@@ -19,10 +19,12 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sys
+from collections.abc import Coroutine
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel
 from pydantic import ValidationError as _PydanticValidationError
@@ -49,6 +51,75 @@ STRATEGY_SINGLE = "single"
 STRATEGY_MAP_REDUCE = "map-reduce"
 STRATEGY_AUTO = "auto"
 SYNTHESIS_STRATEGIES = (STRATEGY_SINGLE, STRATEGY_MAP_REDUCE, STRATEGY_AUTO)
+
+
+# ---------------------------------------------------------------------------
+# sy-huo: pyodide_safe_mode — async LLM DI for Cloudflare Python Workers.
+# ---------------------------------------------------------------------------
+#
+# Synthpanel's default LLMClient uses threading.Lock + Semaphore + a
+# token-bucket. None of those run under pyodide (Cloudflare's Python Worker
+# runtime). To let boardroom-style consumers reuse their own async OpenRouter
+# / Anthropic client end-to-end, ``synthesize_panel`` accepts an injected
+# async client conforming to :class:`AsyncLLMClient` via ``llm_client=``.
+#
+# The protocol is intentionally narrow — one method, two required kwargs,
+# a single text response — so any consumer can satisfy it with a 10-line
+# adapter around their existing async stack.
+
+
+@dataclass
+class AsyncCompletion:
+    """Result returned by :meth:`AsyncLLMClient.complete`.
+
+    Attributes:
+        text: The model's raw text output. Synthpanel will attempt to
+            parse a JSON object matching the synthesis schema; on parse
+            failure a :class:`SynthesisResult` with ``is_fallback=True``
+            is returned.
+        usage: Optional token accounting. When ``None``, :data:`ZERO_USAGE`
+            is recorded — cost figures will read $0.00 unless the consumer
+            populates usage itself.
+    """
+
+    text: str
+    usage: TokenUsage | None = None
+
+
+@runtime_checkable
+class AsyncLLMClient(Protocol):
+    """Minimal async LLM client protocol for :func:`synthesize_panel` DI.
+
+    Consumers implementing this protocol can be injected via the
+    ``llm_client=`` kwarg on :func:`synthesize_panel`. When provided
+    (and ``judge_enabled=True``), synthpanel skips its own provider
+    resolution and routes the judge call through the consumer's async
+    client — critical for Cloudflare Python Workers (pyodide) where
+    synth_panel's threading primitives don't run.
+
+    The protocol is intentionally narrow:
+
+    * ``complete`` is an async method.
+    * It receives the full prompt and resolved model alias as keyword
+      arguments. ``max_tokens`` is forwarded for clients that honor it;
+      clients that don't may ignore it.
+    * It returns an :class:`AsyncCompletion` carrying the raw text
+      output and optional token usage.
+
+    Synthpanel asks the model to emit a single JSON object matching the
+    internal synthesis schema; the consumer's client does NOT need to
+    implement tool-use forcing. Synthpanel handles JSON parsing and
+    falls back to an ``is_fallback=True`` :class:`SynthesisResult` if
+    parsing fails.
+    """
+
+    async def complete(
+        self,
+        *,
+        prompt: str,
+        model: str,
+        max_tokens: int = 4096,
+    ) -> AsyncCompletion: ...
 
 
 def _typed_or_dict(extr: Any, attr: str) -> Any:
@@ -293,7 +364,7 @@ def _print_cost_estimate(
 
 
 def synthesize_panel(
-    client: LLMClient,
+    client: LLMClient | None,
     panelist_results: list[Any],
     questions: list[dict[str, Any]],
     *,
@@ -304,11 +375,15 @@ def synthesize_panel(
     temperature: float | None = None,
     top_p: float | None = None,
     seed: int | None = None,
-) -> SynthesisResult:
+    pyodide_safe_mode: bool = False,
+    llm_client: AsyncLLMClient | None = None,
+    judge_enabled: bool = True,
+) -> SynthesisResult | Coroutine[Any, Any, SynthesisResult]:
     """Synthesize panelist responses into a structured research finding.
 
     Args:
-        client: LLM client for the synthesis call.
+        client: LLM client for the synthesis call. May be ``None`` when
+            ``judge_enabled=False`` or when ``llm_client`` is provided.
         panelist_results: List of PanelistResult from run_panel_parallel.
         questions: The questions that were asked.
         model: Explicit model for synthesis (e.g. --synthesis-model).
@@ -319,10 +394,69 @@ def synthesize_panel(
             cost estimate printed to stderr.
         temperature: Sampling temperature for the synthesis call.
         top_p: Nucleus sampling cutoff for the synthesis call.
+        pyodide_safe_mode: When ``True``, refuse code paths that spawn
+            threads or import C-extension fetch deps. Requires either
+            ``judge_enabled=False`` or ``llm_client=<AsyncLLMClient>``.
+            Added in v1.2.0 (sy-huo) for Cloudflare Python Workers
+            (pyodide) compatibility.
+        llm_client: Optional async client conforming to
+            :class:`AsyncLLMClient`. When provided AND
+            ``judge_enabled=True``, synthpanel skips its own provider
+            resolution + threading-based client and routes the judge
+            call through the injected async client. **The function then
+            returns an awaitable** — callers must ``await`` the result.
+        judge_enabled: When ``False``, skip the judge LLM call entirely
+            and return a degenerate :class:`SynthesisResult` with empty
+            LLM-derived fields. Cost stays at zero. Default ``True``
+            preserves v1.1.0 behavior.
 
     Returns:
-        SynthesisResult with structured findings and cost tracking.
+        :class:`SynthesisResult` (sync) for the default and
+        ``judge_enabled=False`` paths. When ``llm_client`` is provided
+        and ``judge_enabled=True``, returns a coroutine that resolves
+        to a :class:`SynthesisResult` — callers must ``await`` it.
     """
+    # sy-huo: degenerate path — skip the judge LLM call entirely. No
+    # client.send(), no thread spawn, no fetch deps imported. Returns
+    # synchronously so callers in pyodide / CF Workers can use a single
+    # code path without bridging to asyncio just to disable synthesis.
+    if not judge_enabled:
+        return _synthesize_panel_no_judge(
+            panelist_results,
+            questions,
+            model=model,
+            panelist_model=panelist_model,
+        )
+
+    # sy-huo: async DI path — consumer injected an async client (their
+    # own OpenRouter / Anthropic / etc. stack). Skip internal provider
+    # resolution and return a coroutine so the consumer's existing event
+    # loop drives the call. Required for pyodide where threading.Lock /
+    # ThreadPoolExecutor / Semaphore do not run.
+    if llm_client is not None:
+        return _synthesize_panel_async(
+            panelist_results,
+            questions,
+            llm_client=llm_client,
+            model=model,
+            panelist_model=panelist_model,
+            custom_prompt=custom_prompt,
+        )
+
+    # sy-huo: pyodide_safe_mode guard — once we get here, the call would
+    # use the internal threading-based client. Refuse loudly rather than
+    # silently spawning a thread the runtime can't actually run.
+    if pyodide_safe_mode:
+        raise ValueError(
+            "synthesize_panel(..., pyodide_safe_mode=True) requires either "
+            "judge_enabled=False or llm_client=<AsyncLLMClient>. The internal "
+            "synth_panel LLMClient uses threading.Lock / Semaphore which "
+            "do not run under pyodide / Cloudflare Python Workers."
+        )
+
+    if client is None:
+        raise ValueError("synthesize_panel: client is required when judge_enabled=True and llm_client is not provided.")
+
     resolved_model = model or panelist_model or _DEFAULT_MODEL
     prompt_text = custom_prompt or SYNTHESIS_PROMPT
 
@@ -431,6 +565,191 @@ def synthesize_panel(
         cost=cost,
         model=resolved_model,
         warnings=warnings,
+    )
+
+
+# ---------------------------------------------------------------------------
+# sy-huo: pyodide-safe helpers — degenerate (no judge) + async DI paths.
+# ---------------------------------------------------------------------------
+
+
+def _synthesize_panel_no_judge(
+    panelist_results: list[Any],
+    questions: list[dict[str, Any]],
+    *,
+    model: str | None = None,
+    panelist_model: str | None = None,
+) -> SynthesisResult:
+    """Return a degenerate :class:`SynthesisResult` without calling an LLM.
+
+    Used when ``judge_enabled=False``. Records the panelist + question
+    counts in the summary for traceability but leaves every LLM-derived
+    field empty so downstream consumers don't mistake an unsynthesized
+    panel for one with empty findings.
+
+    Pyodide-safe: no thread spawn, no fetch deps imported, no LLM call.
+    """
+    resolved_model = model or panelist_model or _DEFAULT_MODEL
+    n_panelists = len(panelist_results)
+    n_questions = len(questions)
+    summary = (
+        f"Judge disabled (judge_enabled=False). {n_panelists} panelist(s) "
+        f"answered {n_questions} question(s); raw responses preserved in the "
+        "underlying PanelistResult objects."
+    )
+    return SynthesisResult(
+        summary=summary,
+        themes=[],
+        agreements=[],
+        disagreements=[],
+        surprises=[],
+        recommendation="",
+        usage=ZERO_USAGE,
+        cost=CostEstimate(),
+        model=resolved_model,
+    )
+
+
+# Schema-hint suffix appended to the synthesis prompt when running through
+# an injected async client. Tool-use forcing isn't part of the injected
+# protocol — consumers point synthpanel at any text-completion endpoint —
+# so we explicitly request a JSON object matching the synthesis schema.
+_ASYNC_JSON_SUFFIX = (
+    "\n\n---\n"
+    "Return ONLY a valid JSON object matching this exact schema, with no "
+    "prose, no commentary, and no markdown fences:\n\n"
+    "{\n"
+    '  "summary": "<2-4 sentence summary>",\n'
+    '  "themes": ["<theme>", ...],\n'
+    '  "agreements": ["<agreement>", ...],\n'
+    '  "disagreements": ["<disagreement>", ...],\n'
+    '  "surprises": ["<surprise>", ...],\n'
+    '  "recommendation": "<actionable recommendation>"\n'
+    "}"
+)
+
+
+def _parse_async_synthesis_json(text: str) -> dict[str, Any] | None:
+    """Best-effort JSON extraction from an async client's text response.
+
+    Tolerates a leading ```json fence (some models still emit them despite
+    instructions), trailing prose, or a JSON object embedded in the middle
+    of text. Returns ``None`` when no parseable JSON object is found.
+    """
+    cleaned = text.strip()
+
+    # Strip code fences if present.
+    fence = re.match(r"^```(?:json)?\s*\n?(.*?)\n?```\s*$", cleaned, re.DOTALL)
+    if fence:
+        cleaned = fence.group(1).strip()
+
+    # Try direct parse first.
+    try:
+        parsed = json.loads(cleaned)
+        if isinstance(parsed, dict):
+            return parsed
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    # Fall back to scanning for the first balanced {...} block.
+    start = cleaned.find("{")
+    if start < 0:
+        return None
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(cleaned)):
+        ch = cleaned[i]
+        if escape:
+            escape = False
+            continue
+        if ch == "\\":
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    parsed = json.loads(cleaned[start : i + 1])
+                    if isinstance(parsed, dict):
+                        return parsed
+                except (json.JSONDecodeError, ValueError):
+                    return None
+    return None
+
+
+async def _synthesize_panel_async(
+    panelist_results: list[Any],
+    questions: list[dict[str, Any]],
+    *,
+    llm_client: AsyncLLMClient,
+    model: str | None = None,
+    panelist_model: str | None = None,
+    custom_prompt: str | None = None,
+) -> SynthesisResult:
+    """Async synthesis path that drives a consumer-supplied async LLM client.
+
+    Skips ``StructuredOutputEngine`` (which relies on the threading-based
+    :class:`LLMClient`) and asks the injected client to emit a JSON object
+    matching the synthesis schema. Returns a fallback result on parse
+    failure rather than raising, so a flaky async client doesn't bubble
+    out of synthesis into the consumer's request handler.
+
+    Pyodide-safe: no threading, no Semaphore, no internal provider stack.
+    """
+    resolved_model = model or panelist_model or _DEFAULT_MODEL
+    prompt_text = custom_prompt or SYNTHESIS_PROMPT
+    panelist_data = _format_panelist_data(panelist_results, questions)
+    full_prompt = f"{prompt_text}\n\n{panelist_data}{_ASYNC_JSON_SUFFIX}"
+
+    completion = await llm_client.complete(
+        prompt=full_prompt,
+        model=resolved_model,
+        max_tokens=_MAX_TOKENS,
+    )
+
+    text = completion.text or ""
+    usage = completion.usage if completion.usage is not None else ZERO_USAGE
+    pricing, _ = lookup_pricing(resolved_model)
+    cost = estimate_cost(usage, pricing)
+
+    data = _parse_async_synthesis_json(text)
+    if data is None:
+        return SynthesisResult(
+            summary="Synthesis failed — injected async client returned non-JSON output.",
+            themes=[],
+            agreements=[],
+            disagreements=[],
+            surprises=[],
+            recommendation="",
+            usage=usage,
+            cost=cost,
+            model=resolved_model,
+            is_fallback=True,
+            error="async_client_returned_unparseable_output",
+        )
+
+    def _list_field(key: str) -> list[str]:
+        val = data.get(key)
+        return val if isinstance(val, list) else []
+
+    return SynthesisResult(
+        summary=str(data.get("summary", "")),
+        themes=_list_field("themes"),
+        agreements=_list_field("agreements"),
+        disagreements=_list_field("disagreements"),
+        surprises=_list_field("surprises"),
+        recommendation=str(data.get("recommendation", "")),
+        usage=usage,
+        cost=cost,
+        model=resolved_model,
     )
 
 

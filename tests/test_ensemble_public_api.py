@@ -182,3 +182,53 @@ def test_no_private_names_in_all() -> None:
 
     private = [name for name in ens.__all__ if name.startswith("_")]
     assert not private, f"__all__ must not list private names: {private}"
+
+
+# ---------------------------------------------------------------------------
+# v1.2.0 (sy-huo) — pyodide_safe_mode / async-DI public surface.
+#
+# These contracts pin the kwargs and protocol shape that boardroom + other
+# Cloudflare Python Worker consumers rely on. If anyone reshapes
+# synthesize_panel without updating this test, the boardroom contract
+# breaks silently — which is exactly the failure mode we want to make
+# loud.
+# ---------------------------------------------------------------------------
+
+
+def test_synthesize_panel_accepts_pyodide_kwargs() -> None:
+    """The new pyodide-safe kwargs are part of the public synthesize_panel contract."""
+    from synth_panel.ensemble import synthesize_panel
+
+    sig = inspect.signature(synthesize_panel)
+    for kwarg in ("pyodide_safe_mode", "llm_client", "judge_enabled"):
+        assert kwarg in sig.parameters, (
+            f"synthesize_panel(..., {kwarg}=) is a public v1.2.0 contract — "
+            "pyodide / CF Workers consumers depend on this surface"
+        )
+
+    # Defaults must preserve v1.1.0 behavior: judge stays enabled, no
+    # async client injected, no pyodide guard active.
+    assert sig.parameters["pyodide_safe_mode"].default is False
+    assert sig.parameters["llm_client"].default is None
+    assert sig.parameters["judge_enabled"].default is True
+
+
+def test_async_llm_client_protocol_exposed() -> None:
+    """AsyncLLMClient + AsyncCompletion are the public DI surface."""
+    from synth_panel.ensemble import AsyncCompletion, AsyncLLMClient
+
+    # AsyncLLMClient must be a runtime-checkable Protocol so consumers
+    # can isinstance-check their adapters in tests.
+    assert hasattr(AsyncLLMClient, "complete"), "AsyncLLMClient must define a complete() method"
+
+    # AsyncCompletion must be a dataclass with at least `text` and `usage`.
+    fields = {f for f in AsyncCompletion.__dataclass_fields__}
+    assert "text" in fields
+    assert "usage" in fields
+
+
+def test_pyodide_surface_listed_in_all() -> None:
+    import synth_panel.ensemble as ens
+
+    for name in ("AsyncCompletion", "AsyncLLMClient"):
+        assert name in ens.__all__, f"{name} must be in __all__ for v1.2.0"

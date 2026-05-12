@@ -70,7 +70,53 @@ Example
 
     # Or feed the panelist responses to a single judge model:
     panelist_results = [pr for mr in ens.model_results for pr in mr.panelist_results]
-    judged = synthesize_panel(panelist_results, questions=questions, client=client)
+    judged = synthesize_panel(client, panelist_results, questions=questions)
+
+Pyodide / Cloudflare Python Workers
+-----------------------------------
+
+Synthpanel's default :class:`LLMClient` uses ``threading.Lock`` +
+``Semaphore``, which don't run under pyodide. The v1.2.0 (sy-huo)
+``synthesize_panel`` surface adds two opt-in modes for Workers-style
+consumers:
+
+* ``judge_enabled=False`` — skip the judge LLM call entirely; returns a
+  degenerate :class:`SynthesisResult` synchronously. No thread spawn,
+  no LLM cost.
+
+* ``llm_client=<AsyncLLMClient>`` — inject a consumer-owned async LLM
+  client (one method: ``async complete(*, prompt, model, max_tokens)``).
+  The function then returns a coroutine the consumer's event loop
+  drives. Useful when the consumer (e.g. boardroom on CF Workers)
+  already maintains an async LLM stack and just wants synthpanel to
+  do the judge prompt + JSON parse.
+
+.. code-block:: python
+
+    from synth_panel.ensemble import (
+        AsyncCompletion, AsyncLLMClient, synthesize_panel,
+    )
+
+    class WorkersLLMAdapter:
+        async def complete(self, *, prompt, model, max_tokens=4096):
+            text = await my_openrouter_client.send(prompt, model=model)
+            return AsyncCompletion(text=text)
+
+    # judge_enabled=False — no LLM call at all.
+    judged = synthesize_panel(
+        None, panelist_results, questions, judge_enabled=False,
+    )
+
+    # judge_enabled=True with injected async client — awaitable.
+    judged = await synthesize_panel(
+        None, panelist_results, questions,
+        pyodide_safe_mode=True,
+        llm_client=WorkersLLMAdapter(),
+    )
+
+Note: :func:`ensemble_run` still uses ``ThreadPoolExecutor`` internally;
+Workers consumers should produce panelist data through their own async
+stack and call :func:`synthesize_panel` for the judge step only.
 """
 
 from __future__ import annotations
@@ -101,6 +147,8 @@ from synth_panel.synthesis import (
     STRATEGY_MAP_REDUCE,
     STRATEGY_SINGLE,
     SYNTHESIS_STRATEGIES,
+    AsyncCompletion,
+    AsyncLLMClient,
     MapChunkOverflowError,
     MapPhaseFailure,
     SynthesisResult,
@@ -115,12 +163,16 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     # Curated public surface for synth_panel.ensemble (v1.1.0, sy-0gy).
+    # v1.2.0 (sy-huo) adds AsyncCompletion + AsyncLLMClient for the
+    # pyodide_safe_mode / async-DI surface on synthesize_panel.
     # Grouped by capability in the module docstring; the list itself is
     # isort-sorted (RUF022).
     "STRATEGY_AUTO",
     "STRATEGY_MAP_REDUCE",
     "STRATEGY_SINGLE",
     "SYNTHESIS_STRATEGIES",
+    "AsyncCompletion",
+    "AsyncLLMClient",
     "BlendedQuestion",
     "BlendedResult",
     "EnsembleResult",
