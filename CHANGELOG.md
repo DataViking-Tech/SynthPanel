@@ -8,6 +8,37 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 (Empty — next-cycle work lands here.)
 
+## [1.3.0] - 2026-05-12
+
+`trafilatura` moves out of core dependencies into the new `[full]` extra so
+that bare `pip install synthpanel` becomes installable on Cloudflare Python
+Workers (pyodide) and any other runtime that can't satisfy `lxml`'s C
+extension. v1.2.0's `pyodide_safe_mode` removed the runtime cliff;
+v1.3.0 removes the import-time cliff. `synth_panel.ensemble` now imports
+cleanly with only the curated CPython set.
+
+This is an additive minor release for new installs. **Migration for v1.2.0
+users that hit URL attachments / the fetch ladder:** install with
+`pip install synthpanel[full]`. Without the extra, the trafilatura step in
+the fetch ladder silently degrades — the rest of synthpanel is unaffected.
+
+### Changed
+
+- **`trafilatura` is now optional (sy-v8z).** Moved from
+  `[project.dependencies]` to `[project.optional-dependencies]` under the
+  new `full` extra. Bare `pip install synthpanel` no longer pulls
+  `trafilatura` or its transitive `lxml` C extension. Consumers that need
+  the URL-attachment fetch ladder install `pip install synthpanel[full]`.
+  The fetch ladder already lazy-imports trafilatura and degrades gracefully
+  to the screenshot path when it is missing, so existing callers that
+  install the extra see no behavior change.
+
+### Added
+
+- **`full` optional-dependencies extra.** Currently just `trafilatura>=1.10`;
+  reserved as the umbrella extra for any future C-extension-pulling
+  dependency that has to stay opt-in for pyodide compatibility.
+
 ## [1.2.0] - 2026-05-12
 
 `synth_panel.ensemble.synthesize_panel` gains a pyodide-safe / async-DI
