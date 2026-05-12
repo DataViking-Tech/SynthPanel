@@ -8,6 +8,55 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 (Empty — next-cycle work lands here.)
 
+## [1.4.0] - 2026-05-12
+
+OpenRouter cost actuals are now surfaced explicitly alongside the local
+pricing-table estimate on every public result schema. Consumers building
+audit / budget-reconciliation pipelines (e.g. boardroom's `BudgetGuard`)
+no longer need to inspect raw `usage.provider_reported_cost` themselves
+or guess whether the existing `cost` field is "the bill" or "the guess".
+This is purely additive — no existing field changes semantics, and
+direct providers (Anthropic / OpenAI / Google) that do not return per-call
+cost continue to populate the estimate side with the actual side `null`.
+
+### Added
+
+- **`cost_estimated_usd` + `cost_actual_usd` on `EnsembleResult`,
+  `ModelRunResult`, and `SynthesisResult` (sy-ye1).** Both are computed
+  properties — `cost_estimated_usd` always reflects the local pricing
+  table for the run's token totals, and `cost_actual_usd` is the sum of
+  `usage.provider_reported_cost` (or `None` when no upstream call
+  returned a cost). Pairing them lets downstream consumers reconcile
+  estimate-vs-bill without re-deriving either value.
+- **`EnsembleResult.per_model_breakdown`** — list of
+  `{model, tokens_prompt, tokens_completion, tokens_total,
+  cost_estimated_usd, cost_actual_usd}` entries for audit-grade
+  per-model accounting. Surfaced in the public JSON payload via
+  `build_ensemble_output()` under the same key.
+- **`build_ensemble_output()` payload** now includes top-level
+  `cost_estimated_usd`, `cost_actual_usd`, and `per_model_breakdown`
+  fields alongside the existing `cost_breakdown` block.
+- **`SynthesisResult.to_dict()`** now emits `cost_estimated_usd` and
+  `cost_actual_usd` alongside the existing `cost` field.
+- **Map-reduce breakdowns** (`map_cost_breakdown`,
+  `reduce_cost_breakdown`) now carry `cost_estimated_usd` and
+  `cost_actual_usd` on every per-question and reduce-phase entry.
+- **`synth_panel.cost.local_estimate_usd(usage, model)`** and
+  **`actual_cost_usd(usage)`** — the small helpers that power the new
+  fields; available for callers building their own cost surfaces.
+
+### Notes
+
+- The existing `cost: CostEstimate` field on both result types is
+  unchanged. For `SynthesisResult` it remains the local estimate; for
+  `EnsembleResult` / `ModelRunResult` it remains the provider-resolved
+  value (actual if available, else estimate). The new explicit fields
+  are the recommended surface for any new integration.
+- Mixed-provider ensembles where some calls return cost and others
+  don't will see a *partial* `cost_actual_usd` at the aggregate level;
+  inspect `per_model_breakdown` to identify which models contributed
+  the actual portion.
+
 ## [1.3.0] - 2026-05-12
 
 `trafilatura` moves out of core dependencies into the new `[full]` extra so

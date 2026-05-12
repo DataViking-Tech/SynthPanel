@@ -131,7 +131,9 @@ from synth_panel.cost import (
     ZERO_USAGE,
     CostEstimate,
     TokenUsage,
+    actual_cost_usd,
     build_cost_fallback_warnings,
+    local_estimate_usd,
     resolve_cost,
 )
 from synth_panel.llm.client import LLMClient
@@ -322,6 +324,29 @@ class ModelRunResult:
     cost: CostEstimate
     sessions: dict[str, Session]
 
+    @property
+    def cost_estimated_usd(self) -> float:
+        """Local-pricing-table estimate for this model's run (sy-ye1).
+
+        Always computed from ``self.usage`` against the local pricing
+        table — never reflects the provider-reported actual. Pair with
+        :pyattr:`cost_actual_usd` to compare estimate vs. real bill.
+        """
+        return local_estimate_usd(self.usage, self.model)
+
+    @property
+    def cost_actual_usd(self) -> float | None:
+        """Provider-reported actual USD for this model's run (sy-ye1).
+
+        Sum of ``usage.provider_reported_cost`` across all panelist calls
+        for this model. ``None`` when none of the upstream calls returned
+        a cost (direct Anthropic / OpenAI / Google) — distinct from $0.00.
+        For mixed runs where some calls returned cost and others didn't,
+        the value is a *partial* actual; see the panelist-level usages for
+        granularity.
+        """
+        return actual_cost_usd(self.usage)
+
 
 @dataclass
 class EnsembleResult:
@@ -335,6 +360,49 @@ class EnsembleResult:
     per_model_usage: dict[str, dict[str, int]]  # model -> usage dict
     persona_count: int
     question_count: int
+
+    @property
+    def cost_estimated_usd(self) -> float:
+        """Local-pricing-table estimate summed across every model (sy-ye1).
+
+        Always computed from the per-model token totals against the local
+        pricing table — never reflects provider-reported actuals. Pair
+        with :pyattr:`cost_actual_usd` to compare estimate vs. real bill.
+        """
+        return sum(mr.cost_estimated_usd for mr in self.model_results)
+
+    @property
+    def cost_actual_usd(self) -> float | None:
+        """Provider-reported actual USD across the whole ensemble (sy-ye1).
+
+        ``None`` when no upstream call returned a cost (e.g. a pure
+        direct-Anthropic ensemble). For mixed-provider ensembles where
+        some models return actuals and others don't, this is the partial
+        sum of the actuals that *were* reported — consult
+        :pyattr:`per_model_breakdown` to see which models contributed.
+        """
+        return actual_cost_usd(self.total_usage)
+
+    @property
+    def per_model_breakdown(self) -> list[dict[str, Any]]:
+        """Audit-grade per-model cost and usage breakdown (sy-ye1).
+
+        One entry per model with both the local estimate and the provider-
+        reported actual (when available), plus prompt / completion / total
+        token counts. Designed for budget reconciliation and downstream
+        audit consumers (e.g. boardroom's BudgetGuard).
+        """
+        return [
+            {
+                "model": mr.model,
+                "tokens_prompt": mr.usage.input_tokens,
+                "tokens_completion": mr.usage.output_tokens,
+                "tokens_total": mr.usage.total_tokens,
+                "cost_estimated_usd": round(mr.cost_estimated_usd, 6),
+                "cost_actual_usd": (round(mr.cost_actual_usd, 6) if mr.cost_actual_usd is not None else None),
+            }
+            for mr in self.model_results
+        ]
 
 
 def ensemble_run(
@@ -553,6 +621,15 @@ def build_ensemble_output(
             "by_model": dict(ens.per_model_cost),
             "total": ens.total_cost.format_usd(),
         },
+        # sy-ye1: explicit estimate-vs-actual surface for downstream
+        # budget reconciliation. ``cost_estimated_usd`` is always the
+        # local-pricing-table estimate; ``cost_actual_usd`` is the sum
+        # of ``provider_reported_cost`` from upstream usage blocks (None
+        # if no call returned one). ``per_model_breakdown`` exposes the
+        # same split per model plus token counts.
+        "cost_estimated_usd": round(ens.cost_estimated_usd, 6),
+        "cost_actual_usd": (round(ens.cost_actual_usd, 6) if ens.cost_actual_usd is not None else None),
+        "per_model_breakdown": ens.per_model_breakdown,
         "models": list(ens.models),
         "total_usage": ens.total_usage.to_dict(),
         "warnings": merged_warnings,

@@ -522,6 +522,33 @@ def estimate_cost(
     )
 
 
+def local_estimate_usd(usage: TokenUsage, model: str | None) -> float:
+    """Return the local-pricing-table estimate in USD for *usage* + *model*.
+
+    Always uses the local pricing table — ignores any ``provider_reported_cost``
+    on ``usage``. This is the counterpart to :func:`resolve_cost` and powers
+    the public ``cost_estimated_usd`` field on result schemas (sy-ye1) so
+    consumers can compare estimate vs. actual side-by-side.
+    """
+    pricing, _ = lookup_pricing(model)
+    return estimate_cost(usage, pricing).total_cost
+
+
+def actual_cost_usd(usage: TokenUsage) -> float | None:
+    """Return the provider-reported actual USD cost, or ``None`` if absent.
+
+    OpenRouter populates ``usage.cost`` for most upstream models when
+    ``usage.include=True`` is sent on the request. Direct providers
+    (Anthropic, OpenAI, Google) do not return a per-call dollar amount,
+    so this returns ``None`` for them. ``None`` means "no actual was
+    reported" — it is distinct from $0.00. Powers the public
+    ``cost_actual_usd`` field on result schemas (sy-ye1).
+    """
+    if usage.provider_reported_cost is None:
+        return None
+    return float(usage.provider_reported_cost)
+
+
 # Local-vs-provider divergence threshold for the sanity-check warning.
 # Below this ratio we assume the local pricing table is still calibrated;
 # above it we flag a likely stale or mis-keyed entry.
