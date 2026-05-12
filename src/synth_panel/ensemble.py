@@ -1,9 +1,76 @@
-"""Multi-model ensemble runner.
+"""Public ensemble API — multi-model panel runner, blender, judge, map-reduce.
 
-Runs the same panel N times (once per model) using existing
-run_panel_parallel(), then aggregates per-model costs via
-CostEstimate/TokenUsage.  Optionally blends response distributions
-across models for multiple-choice / structured-option questions.
+This module is the supported entry point for callers that want to run a
+panel across **multiple models** and combine their outputs. It is the
+"deliberation engine" surface intended for external consumers (e.g.
+agents that need real weighted ensemble synthesis rather than naive
+string concatenation).
+
+Primitives
+----------
+
+* **Ensemble runner** — :func:`ensemble_run` runs the same panel once
+  per model and returns per-model + aggregated cost/usage data.
+  :class:`EnsembleResult` and :class:`ModelRunResult` carry the result
+  shape.
+* **Blender** — :func:`blend_distributions` produces a weighted average
+  response distribution across models. Accepts an optional ``weights``
+  mapping for model-weighted scoring; defaults to equal weights.
+  Results are returned as :class:`BlendedResult` / :class:`BlendedQuestion`.
+* **Judge** — :func:`synthesize_panel` (re-exported from
+  :mod:`synth_panel.synthesis`) is the single-judge-LLM synthesis
+  primitive: one judge model reads every panelist's raw responses and
+  produces a canonical :class:`SynthesisResult`.
+* **Map-reduce** — :func:`synthesize_panel_mapreduce` (re-exported) is
+  the same synthesis surface partitioned across question-level map
+  calls + a reduce call. Use :func:`select_strategy` /
+  :func:`resolve_context_window` to pick the right strategy for the
+  panel size. :class:`MapPhaseFailure` and
+  :class:`MapChunkOverflowError` are the failure surfaces.
+* **Mixed-model rollup** — :func:`build_mixed_model_rollup` groups
+  panelist results by model when a *single* panel ran personas across
+  multiple models via ``persona_models`` (rather than re-running the
+  panel N times). The output shape matches :func:`build_ensemble_output`
+  so dashboards / CI gates / cost comparators consume one shape.
+* **Seed pinning** — pass ``seed=`` to :func:`ensemble_run` (or any
+  underlying primitive). The OpenRouter provider exposes
+  ``supports_seed=True`` and forwards the seed to the upstream call;
+  unsupported providers emit a one-shot warning. See
+  :class:`synth_panel.llm.models.CompletionRequest`.
+
+Stability
+---------
+
+The names listed in ``__all__`` are the supported public surface. Other
+symbols in this module (or in :mod:`synth_panel.synthesis`) are
+internal and may change without a release-notes entry.
+
+Example
+-------
+
+.. code-block:: python
+
+    from synth_panel import LLMClient
+    from synth_panel.ensemble import (
+        ensemble_run, blend_distributions, synthesize_panel,
+    )
+
+    client = LLMClient()
+    ens = ensemble_run(
+        personas=personas,
+        questions=questions,
+        models=["claude-sonnet-4-6", "gpt-5", "gemini-2.5-pro"],
+        client=client,
+        seed=42,  # deterministic on providers that support it
+    )
+
+    blended = blend_distributions(
+        ens, weights={"claude-sonnet-4-6": 2.0, "gpt-5": 1.0, "gemini-2.5-pro": 1.0}
+    )
+
+    # Or feed the panelist responses to a single judge model:
+    panelist_results = [pr for mr in ens.model_results for pr in mr.panelist_results]
+    judged = synthesize_panel(panelist_results, questions=questions, client=client)
 """
 
 from __future__ import annotations
@@ -26,7 +93,53 @@ from synth_panel.orchestrator import PanelistResult, run_panel_parallel
 from synth_panel.persistence import Session
 from synth_panel.prompts import build_question_prompt, persona_system_prompt
 
+# Judge + map-reduce primitives live in synthesis.py; re-export under the
+# ensemble namespace so external callers have a single import path for the
+# full deliberation surface. See module docstring for the contract.
+from synth_panel.synthesis import (
+    STRATEGY_AUTO,
+    STRATEGY_MAP_REDUCE,
+    STRATEGY_SINGLE,
+    SYNTHESIS_STRATEGIES,
+    MapChunkOverflowError,
+    MapPhaseFailure,
+    SynthesisResult,
+    estimate_single_pass_tokens,
+    resolve_context_window,
+    select_strategy,
+    synthesize_panel,
+    synthesize_panel_mapreduce,
+)
+
 logger = logging.getLogger(__name__)
+
+__all__ = [
+    # Curated public surface for synth_panel.ensemble (v1.1.0, sy-0gy).
+    # Grouped by capability in the module docstring; the list itself is
+    # isort-sorted (RUF022).
+    "STRATEGY_AUTO",
+    "STRATEGY_MAP_REDUCE",
+    "STRATEGY_SINGLE",
+    "SYNTHESIS_STRATEGIES",
+    "BlendedQuestion",
+    "BlendedResult",
+    "EnsembleResult",
+    "MapChunkOverflowError",
+    "MapPhaseFailure",
+    "ModelRunResult",
+    "SynthesisResult",
+    "blend_distributions",
+    "build_ensemble_incident_warnings",
+    "build_ensemble_output",
+    "build_mixed_model_rollup",
+    "collect_ensemble_incidents",
+    "ensemble_run",
+    "estimate_single_pass_tokens",
+    "resolve_context_window",
+    "select_strategy",
+    "synthesize_panel",
+    "synthesize_panel_mapreduce",
+]
 
 # Mirrors CLI `_RATE_LIMIT_ABORT_MARKERS` (sp-56pb): substring hints that an
 # error likely came from provider rate-limit / retry exhaustion. Used to flag

@@ -8,6 +8,46 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 (Empty — next-cycle work lands here.)
 
+## [1.1.0] - 2026-05-12
+
+`synth_panel.ensemble` is now the supported public API for the ensemble
+core — the full "deliberation engine" surface that external agents
+(e.g. boardroom) can import to run a panel across multiple models and
+combine their outputs with real weighted synthesis instead of naive
+string concatenation. The underlying primitives have shipped internally
+for several releases; v1.1.0 freezes their import path, adds an
+``__all__`` block enumerating the supported surface, and re-exports the
+judge + map-reduce primitives from :mod:`synth_panel.synthesis` so
+callers get one import path.
+
+No behavior change for existing callers. Every v1.0.6 import keeps
+working — this release is purely additive.
+
+### Added
+
+- **`synth_panel.ensemble` public API** (sy-0gy). The module now
+  documents and freezes the public ensemble surface:
+
+  * Ensemble runner — `ensemble_run`, `EnsembleResult`,
+    `ModelRunResult`, `build_ensemble_output`,
+    `build_mixed_model_rollup`, `collect_ensemble_incidents`,
+    `build_ensemble_incident_warnings`
+  * Blender (weighted distribution averaging across models) —
+    `blend_distributions`, `BlendedResult`, `BlendedQuestion`. Accepts
+    a `weights={model: weight}` mapping for model-weighted scoring.
+  * Judge (single-LLM canonical synthesis) — `synthesize_panel`,
+    `SynthesisResult` (re-exported from `synth_panel.synthesis`).
+  * Map-reduce synthesis — `synthesize_panel_mapreduce`,
+    `select_strategy`, `resolve_context_window`,
+    `estimate_single_pass_tokens`, `MapPhaseFailure`,
+    `MapChunkOverflowError`, strategy constants.
+  * Seed pinning — `ensemble_run(..., seed=N)` threads through to
+    `CompletionRequest.seed` for deterministic reproducibility on
+    providers that support it (e.g. OpenRouter).
+
+  The names enumerated in `synth_panel.ensemble.__all__` are the
+  supported public surface; other symbols remain internal.
+
 ## [1.0.6] - 2026-05-10
 
 Cross-town friction-sweep cycle. Three independent dogfoods (jotunheim,
