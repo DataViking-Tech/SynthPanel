@@ -28,7 +28,6 @@ dependencies = [
     "puremagic>=1.20",
     "pydantic>=2.7,<3",
     "pyyaml>=6.0",
-    "trafilatura>=1.10",
 ]
 
 [project.urls]
@@ -41,6 +40,17 @@ Changelog = "https://github.com/DataViking-Tech/SynthPanel/releases"
 Funding = "https://ko-fi.com/dataviking"
 
 [project.optional-dependencies]
+# `full` is the fetch/extract path. Pulls `trafilatura`, which transitively
+# requires `lxml` (C extension). Excluded from core deps so that bare
+# `pip install synthpanel` stays installable in pyodide / Cloudflare
+# Python Workers, where the curated CPython set doesn't include `lxml`.
+# Callers that need the URL-attachment ladder install
+# `pip install synthpanel[full]`. The fetch ladder degrades to the
+# screenshot path (or returns `None`) when trafilatura is missing, so
+# this is a soft optional — synth_panel.ensemble keeps working without it.
+full = [
+    "trafilatura>=1.10",
+]
 mcp = [
     "mcp>=1.0",
 ]
@@ -87,6 +97,9 @@ dev = [
     "tomli>=2.0; python_version<'3.11'",
     "pypdfium2>=4.30",
     "Pillow>=10.0",
+    # Pulled in so the fetch-ladder regression tests still exercise the
+    # `trafilatura` path. Production callers opt in via `synthpanel[full]`.
+    "trafilatura>=1.10",
 ]
 
 [project.scripts]

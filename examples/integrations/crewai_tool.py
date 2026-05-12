@@ -13,6 +13,7 @@ Run:
 
 from crewai import Agent, Crew, Task
 from crewai_tools import MCPServerAdapter
+
 from mcp import StdioServerParameters
 
 server_params = StdioServerParameters(command="synthpanel", args=["mcp-serve"])
