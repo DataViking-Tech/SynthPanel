@@ -1,104 +1,39 @@
 name: Publish to PyPI
 
-# sp-56u: this workflow only fires on release-shaped events (a v* tag
-# push, an explicit call from auto-tag.yml, or a human workflow_dispatch).
-# Previously it also fired on any main push touching src/** — that would
-# try to republish the same pyproject.toml version on every merge and
-# always fail, hiding the real problem that nothing was ever making it
-# to PyPI.
+# Thin wrapper around the shared DataViking python-publish workflow
+# (DataViking-Tech/dataviking-infra). This file used to inline checkout,
+# build, and PyPI upload logic; that logic now lives in the shared workflow
+# so synthpanel and other DataViking Python packages release through the
+# same pipeline (Doppler-fetched PyPI token, idempotent uploads via
+# skip-existing). Adopted in sy-4qa.
+#
+# Triggers:
+#   - push of a v*.*.* tag (auto-tag.yml creates these on PR merge, then
+#     dispatches this workflow at the tag ref)
+#   - workflow_dispatch (manual republish, useful for failure recovery)
+#
+# The `tag` workflow_dispatch input is accepted for compatibility with
+# auto-tag.yml's `gh workflow run publish.yml --ref <tag> -f tag=<tag>`
+# call. The shared workflow itself checks out whatever ref triggered it
+# (refs/tags/<tag> in both code paths), so the input value is informational
+# only — the tag ref is what determines the published artifact contents.
 on:
-  workflow_call:
-    inputs:
-      tag:
-        required: true
-        type: string
   push:
     tags:
       - "v*"
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to (re)publish (e.g. v0.4.0). Must exist in the repo."
-        required: true
+        description: "Tag to (re)publish (e.g. v1.4.1). Must exist in the repo and be selected as the workflow ref."
+        required: false
         type: string
 
-permissions:
-  contents: read
-  id-token: write
-
 jobs:
-  build-and-publish:
-    runs-on: ubuntu-latest
-    environment: pypi
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - name: Determine tag ref
-        id: ref
-        env:
-          INPUT_TAG: ${{ inputs.tag }}
-        run: |
-          set -euo pipefail
-          if [ -n "$INPUT_TAG" ]; then
-            TAG="$INPUT_TAG"
-          else
-            TAG="${GITHUB_REF#refs/tags/}"
-          fi
-          if [ -z "$TAG" ]; then
-            echo "::error::Could not determine release tag from event context"
-            exit 1
-          fi
-          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]]; then
-            echo "::error::Tag '$TAG' does not look like a semver release (vMAJOR.MINOR.PATCH[-pre])."
-            exit 1
-          fi
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Publishing tag: $TAG"
-
-      - name: Checkout at tag
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          ref: ${{ steps.ref.outputs.tag }}
-          persist-credentials: false
-
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
-        with:
-          python-version: "3.14"
-          cache: pip
-
-      - name: Update pyproject.toml version to match tag
-        env:
-          TAG: ${{ steps.ref.outputs.tag }}
-        run: |
-          set -euo pipefail
-          VERSION="${TAG#v}"
-          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" pyproject.toml
-          echo "Set version to ${VERSION}"
-          grep '^version' pyproject.toml
-
-      - name: Install build tools
-        run: pip install build
-
-      - name: Build package
-        run: python -m build
-
-      - name: Show built artifacts
-        run: ls -lh dist/
-
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
-        with:
-          attestations: false
-
-      - name: Summarize release
-        env:
-          TAG: ${{ steps.ref.outputs.tag }}
-        run: |
-          VERSION="${TAG#v}"
-          {
-            echo "## Published synthpanel ${VERSION}"
-            echo ""
-            echo "- PyPI: https://pypi.org/project/synthpanel/${VERSION}/"
-            echo "- Install: \`pip install synthpanel==${VERSION}\`"
-          } >> "$GITHUB_STEP_SUMMARY"
+  publish:
+    uses: DataViking-Tech/dataviking-infra/.github/workflows/python-publish.yml@main
+    with:
+      package_name: synthpanel
+      python_versions: '["3.12"]'
+      doppler_project: dataviking-platform
+      doppler_config: prd
+    secrets: inherit
