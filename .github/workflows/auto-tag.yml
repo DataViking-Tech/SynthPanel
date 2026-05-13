@@ -152,6 +152,45 @@ jobs:
           echo "tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
           echo "New tag: $NEW_TAG"
 
+      # Sync src/synth_panel/__version__.py (and the rendered landing page,
+      # which derives from it) to the new tag BEFORE tagging. pyproject.toml
+      # uses `version = {attr = "synth_panel.__version__.__version__"}`, so
+      # the build's package version is whatever this file says at the tagged
+      # SHA. Without this step, the tagged commit carries the previous
+      # version string and the resulting sdist/wheel is named after the
+      # previous release — which, since sy-4qa adopted python-publish.yml's
+      # `skip-existing: true`, now silently no-ops at PyPI instead of going
+      # red. See sy-r87.
+      - name: Bump __version__.py and re-render site
+        if: steps.check.outputs.skipped != 'true'
+        env:
+          NEW_TAG: ${{ steps.bump.outputs.tag }}
+        run: |
+          VERSION="${NEW_TAG#v}"
+          printf '__version__ = "%s"\n' "$VERSION" > src/synth_panel/__version__.py
+          # Keep site/index.html (committed artifact) in lockstep — otherwise
+          # the test_committed_index_matches_template_render guard fails on
+          # the next push to main. render_site.py is stdlib-only Python so it
+          # runs without a setup-python step.
+          python scripts/render_site.py
+
+      - name: Commit version bump to main
+        if: steps.check.outputs.skipped != 'true'
+        env:
+          NEW_TAG: ${{ steps.bump.outputs.tag }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/synth_panel/__version__.py site/index.html
+          if git diff --staged --quiet; then
+            echo "__version__.py and site already at ${NEW_TAG} (dev pre-bumped in PR) — nothing to commit."
+          else
+            VERSION="${NEW_TAG#v}"
+            git commit -m "chore(release): sync __version__.py to ${VERSION} (PR #${PR_NUMBER}) (sy-r87)"
+            git push origin HEAD:main
+          fi
+
       - name: Create and push tag
         if: steps.check.outputs.skipped != 'true'
         env:
@@ -162,6 +201,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           MSG=$(printf 'Release %s (PR #%s: %s)' "$NEW_TAG" "$PR_NUMBER" "$PR_TITLE")
+          # Tag the bump commit (or the unchanged HEAD if dev pre-bumped) so
+          # the publish workflow, invoked at `--ref $NEW_TAG`, sees the
+          # matching __version__.py.
           git tag -a "$NEW_TAG" -m "$MSG"
           git push origin "$NEW_TAG"
 
