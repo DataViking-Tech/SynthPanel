@@ -8,6 +8,37 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 (Empty — next-cycle work lands here.)
 
+## [1.5.0] - 2026-05-13
+
+Pyodide / Cloudflare Python Workers consumers can now import
+``synth_panel.ensemble`` without dragging ``ThreadPoolExecutor`` into
+the load chain. Boardroom (and any other Workers-style consumer that
+adopts ``synthesize_panel``) is unblocked: the ensemble surface is
+fully threadpool-free at load time, so transitively-bound ``.submit()``
+calls can no longer deadlock the Worker runtime.
+
+### Changed
+
+- **Lazy threading imports across the ensemble load chain (sy-2wa).**
+  ``synth_panel.orchestrator``, ``synth_panel.synthesis``, and
+  ``synth_panel.perturbation`` no longer bind ``ThreadPoolExecutor`` /
+  ``as_completed`` / ``threading`` at module top. The imports are
+  hoisted into the threaded entry points (``run_panel_parallel``,
+  ``synthesize_panel_mapreduce``, ``generate_panel_variants_parallel``,
+  ``WorkerRegistry.__init__``) so ``from synth_panel.ensemble import
+  synthesize_panel`` never touches ``concurrent.futures``. Boardroom's
+  22 s ``asyncio.wait_for`` fallback around ``synthesize_panel`` (PR #11)
+  can now be removed (or kept as defense-in-depth).
+
+### Added
+
+- **``tests/test_threadpool_lazy_import.py`` (sy-2wa).** CI test that
+  asserts ``concurrent.futures`` stays out of ``sys.modules`` after a
+  fresh ``synth_panel.ensemble`` load, runs the same import against a
+  poisoned ``concurrent.futures`` (any access raises), and pins the
+  ``orchestrator`` / ``synthesis`` / ``perturbation`` module namespaces
+  as ``ThreadPoolExecutor``-free.
+
 ## [1.4.0] - 2026-05-12
 
 OpenRouter cost actuals are now surfaced explicitly alongside the local

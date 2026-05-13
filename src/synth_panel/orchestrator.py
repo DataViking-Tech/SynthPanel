@@ -8,15 +8,20 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import threading
 import time as _time
 import uuid
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    # sy-2wa: type-only import; lifted to a guarded block so the real
+    # ``threading`` module never lands in synth_panel.ensemble's load
+    # chain. The annotation below is stringified at runtime via
+    # ``from __future__ import annotations``.
+    import threading
 
 from synth_panel.attachments import filter_attachments
 from synth_panel.attachments.filter import count_strata
@@ -601,6 +606,12 @@ class WorkerRegistry:
     """
 
     def __init__(self) -> None:
+        # sy-2wa: lazy threading import keeps synth_panel.ensemble loadable
+        # under pyodide (CF Python Workers). Bare `threading` is a no-op
+        # stub there; we still avoid binding it at module level so the
+        # whole load chain stays threadpool-free until a real run.
+        import threading
+
         self._lock = threading.RLock()
         self._workers: dict[str, Worker] = {}
 
@@ -1483,6 +1494,13 @@ def run_panel_parallel(
     # no-attachment panels fall back to len(personas) so the legacy
     # always-on prefix caching still applies.
     min_stratum_pop = _min_stratum_population(personas, questions)
+
+    # sy-2wa: lazy threading + concurrent.futures imports. Bound here so
+    # `from synth_panel.ensemble import synthesize_panel` never pulls
+    # ThreadPoolExecutor into the module's namespace under pyodide
+    # (CF Python Workers), where `.submit()` silently hangs.
+    import threading
+    from concurrent.futures import ThreadPoolExecutor, as_completed
 
     registry = WorkerRegistry()
     effective_workers = max_workers or len(personas)

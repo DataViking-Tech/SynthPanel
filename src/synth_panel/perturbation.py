@@ -8,7 +8,6 @@ experiment) and carries provenance metadata for downstream analysis.
 from __future__ import annotations
 
 import logging
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -327,6 +326,10 @@ def generate_panel_variants(
 
     if workers <= 1 or len(personas) <= 1:
         return [_gen(p) for p in personas]
+
+    # sy-2wa: lazy import keeps `synth_panel.ensemble` load chain
+    # threadpool-free for pyodide consumers (CF Python Workers).
+    from concurrent.futures import ThreadPoolExecutor
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = [pool.submit(_gen, p) for p in personas]

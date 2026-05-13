@@ -22,7 +22,6 @@ import logging
 import re
 import sys
 from collections.abc import Coroutine
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
@@ -1360,6 +1359,12 @@ def synthesize_panel_mapreduce(
             seed=seed,
         )
         return idx, res, meta
+
+    # sy-2wa: lazy concurrent.futures import. Keeps `from synth_panel.ensemble
+    # import synthesize_panel` ThreadPoolExecutor-free for pyodide consumers
+    # (CF Python Workers), where `.submit()` silently hangs. Map-reduce
+    # is opt-in via STRATEGY_MAP_REDUCE and never reached on pyodide.
+    from concurrent.futures import ThreadPoolExecutor, as_completed
 
     map_results: list[SynthesisResult | None] = [None] * n
     map_meta: list[dict[str, Any] | None] = [None] * n
