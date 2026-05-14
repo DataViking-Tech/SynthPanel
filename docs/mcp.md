@@ -14,7 +14,22 @@ The server communicates over stdin/stdout using JSON-RPC (the MCP protocol). It 
 
 ### Claude Code / Cursor / Windsurf
 
-Add to your MCP config (e.g., `.claude/mcp.json`, `.cursor/mcp.json`):
+The fastest path is the bundled installer (sy-skf):
+
+```bash
+synthpanel mcp install                                 # writes ~/.claude.json
+synthpanel mcp install --scope project                 # writes ./.mcp.json (checked in)
+synthpanel mcp install --target ~/.cursor/mcp.json     # any host with mcpServers
+synthpanel mcp install --env ANTHROPIC_API_KEY=sk-...  # bake credentials into the entry
+synthpanel mcp install --uninstall                     # remove the entry
+```
+
+The command merges into the host's existing `mcpServers` map, refuses to
+overwrite a clashing entry without `--force`, and writes user-scoped
+files with mode `0600`. `--dry-run` previews the change without touching
+disk.
+
+If you'd rather hand-edit, the entry it produces is:
 
 ```json
 {
