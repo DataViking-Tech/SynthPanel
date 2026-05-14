@@ -299,8 +299,37 @@
           </summary>
           <div class="mt-4 space-y-4">
             <p class="text-sm text-slate-400">
-              Easiest: add via the CLI. Works at user scope (all projects) or
-              project scope (this repo only).
+              Easiest: let synthpanel write the entry for you. Works at user
+              scope (all projects) or project scope (this repo only) and is
+              idempotent — safe to re-run after upgrades.
+            </p>
+            <div
+              class="group relative rounded-lg border border-slate-700 bg-slate-950/70 p-4 font-mono text-sm leading-relaxed shadow"
+            >
+<pre class="whitespace-pre-wrap text-slate-300"><span class="text-slate-500"># user scope — writes ~/.claude.json (mode 0600)</span>
+<span class="text-emerald-400">synthpanel mcp install</span>
+
+<span class="text-slate-500"># project scope — writes ./.mcp.json (checked into the repo)</span>
+<span class="text-emerald-400">synthpanel mcp install</span> --scope project
+
+<span class="text-slate-500"># bake credentials into the entry instead of relying on the host env</span>
+<span class="text-emerald-400">synthpanel mcp install</span> --env ANTHROPIC_API_KEY=sk-...
+
+<span class="text-slate-500"># preview without writing, or remove the entry later</span>
+<span class="text-emerald-400">synthpanel mcp install</span> --dry-run
+<span class="text-emerald-400">synthpanel mcp install</span> --uninstall</pre>
+              <button
+                type="button"
+                class="copy-btn absolute right-3 top-3 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-emerald-400/50 hover:text-emerald-300"
+                data-copy="synthpanel mcp install"
+                aria-label="Copy synthpanel mcp install command"
+              >
+                Copy
+              </button>
+            </div>
+            <p class="text-sm text-slate-400">
+              Or use Claude Code's native CLI, which writes to the same
+              <code class="text-slate-300">~/.claude.json</code> file:
             </p>
             <div
               class="group relative rounded-lg border border-slate-700 bg-slate-950/70 p-4 font-mono text-sm leading-relaxed shadow"
@@ -314,7 +343,7 @@
                 type="button"
                 class="copy-btn absolute right-3 top-3 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-emerald-400/50 hover:text-emerald-300"
                 data-copy="claude mcp add --scope user synth_panel -- synthpanel mcp-serve"
-                aria-label="Copy CLI command"
+                aria-label="Copy claude mcp add command"
               >
                 Copy
               </button>
@@ -373,7 +402,26 @@
             <p class="text-sm text-slate-400">
               Project scope:
               <code class="text-slate-300">.cursor/mcp.json</code>. User scope:
-              <code class="text-slate-300">~/.cursor/mcp.json</code>.
+              <code class="text-slate-300">~/.cursor/mcp.json</code>. The
+              <code class="text-slate-300">synthpanel mcp install</code> CLI
+              works here too — pass <code class="text-slate-300">--target</code>
+              to point at the right file:
+            </p>
+            <div
+              class="group relative rounded-lg border border-slate-700 bg-slate-950/70 p-4 font-mono text-sm leading-relaxed shadow"
+            >
+<pre class="whitespace-pre-wrap text-slate-300"><span class="text-emerald-400">synthpanel mcp install</span> --target ~/.cursor/mcp.json</pre>
+              <button
+                type="button"
+                class="copy-btn absolute right-3 top-3 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-emerald-400/50 hover:text-emerald-300"
+                data-copy="synthpanel mcp install --target ~/.cursor/mcp.json"
+                aria-label="Copy synthpanel mcp install command for Cursor"
+              >
+                Copy
+              </button>
+            </div>
+            <p class="text-sm text-slate-400">
+              Or hand-edit the JSON directly:
             </p>
             <div
               class="group relative rounded-lg border border-slate-700 bg-slate-950/70 p-4 font-mono text-sm leading-relaxed shadow"

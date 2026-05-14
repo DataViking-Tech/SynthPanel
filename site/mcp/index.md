@@ -26,7 +26,24 @@ Every editor uses the same underlying config shape — command, args, and enviro
 
 Claude Code recommended
 
-Easiest: add via the CLI. Works at user scope (all projects) or project scope (this repo only).
+Easiest: let synthpanel write the entry for you. Works at user scope (all projects) or project scope (this repo only) and is idempotent — safe to re-run after upgrades.
+
+```
+# user scope — writes ~/.claude.json (mode 0600)
+synthpanel mcp install
+
+# project scope — writes ./.mcp.json (checked into the repo)
+synthpanel mcp install --scope project
+
+# bake credentials into the entry instead of relying on the host env
+synthpanel mcp install --env ANTHROPIC_API_KEY=sk-...
+
+# preview without writing, or remove the entry later
+synthpanel mcp install --dry-run
+synthpanel mcp install --uninstall
+```
+
+Or use Claude Code's native CLI, which writes to the same `~/.claude.json` file:
 
 ```
 # user scope — available everywhere
@@ -54,7 +71,13 @@ Plugin alternative: `/plugin install synthpanel` adds the `/focus-group` skill a
 
 Cursor
 
-Project scope: `.cursor/mcp.json`. User scope: `~/.cursor/mcp.json`.
+Project scope: `.cursor/mcp.json`. User scope: `~/.cursor/mcp.json`. The `synthpanel mcp install` CLI works here too — pass `--target` to point at the right file:
+
+```
+synthpanel mcp install --target ~/.cursor/mcp.json
+```
+
+Or hand-edit the JSON directly:
 
 ```
 {
