@@ -6,7 +6,16 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [Unreleased]
 
-(Empty — next-cycle work lands here.)
+### Added
+
+- **`synthpanel mcp install` CLI (sy-skf).** Registers synthpanel as a
+  stdio MCP server in a host's JSON config — defaults to Claude Code's
+  user-scope `~/.claude.json`, with `--scope project` for `./.mcp.json`
+  and `--target` for arbitrary hosts (Cursor, Windsurf, …). Supports
+  `--env KEY=VALUE` for inline credentials, `--force` to overwrite an
+  existing entry, `--dry-run` to preview, and `--uninstall` to remove
+  the entry. Mirrors GH#463; eliminates the hand-edit-and-restart step
+  documented in the MCP README.
 
 ## [1.4.0] - 2026-05-12
 

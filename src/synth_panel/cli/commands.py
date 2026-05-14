@@ -4422,6 +4422,49 @@ def handle_mcp_serve(args: argparse.Namespace, fmt: OutputFormat) -> int:
     return 0
 
 
+def handle_mcp_install(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Register synthpanel as an MCP server in a host's JSON config (sy-skf)."""
+    from synth_panel.cli import mcp_install as helper
+
+    target = helper.resolve_target(getattr(args, "scope", "user"), getattr(args, "target", None))
+    name = getattr(args, "name", None) or helper.DEFAULT_SERVER_NAME
+    dry_run = bool(getattr(args, "dry_run", False))
+
+    try:
+        if getattr(args, "uninstall", False):
+            result = helper.uninstall(target=target, name=name, dry_run=dry_run)
+        else:
+            try:
+                env = helper.parse_env_pairs(getattr(args, "mcp_env", None))
+            except ValueError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+            command = helper.resolve_command(getattr(args, "mcp_command_override", None))
+            result = helper.install(
+                target=target,
+                name=name,
+                command=command,
+                env=env,
+                force=bool(getattr(args, "force", False)),
+                dry_run=dry_run,
+            )
+    except FileExistsError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except (ValueError, json.JSONDecodeError) as exc:
+        print(f"Error: failed to parse {target}: {exc}", file=sys.stderr)
+        return 1
+    except OSError as exc:
+        print(f"Error: failed to write {target}: {exc}", file=sys.stderr)
+        return 1
+
+    if fmt is OutputFormat.JSON:
+        print(helper.format_json(result))
+    else:
+        print(helper.format_text(result))
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # install-skills (sy-65k74)
 # ---------------------------------------------------------------------------
