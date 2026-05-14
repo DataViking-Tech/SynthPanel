@@ -590,6 +590,52 @@ today.
 
 Full spec: [`specs/sp-viz-layer/`](specs/sp-viz-layer/).
 
+## Packs: Builtin vs Registry
+
+synthpanel has two kinds of packs, and the distinction matters when you're
+searching for one:
+
+- **Builtin packs** ship inside the `synthpanel` wheel. After `pip install
+  synthpanel` they are immediately resolvable by name — no `pack import`, no
+  network. Reference them anywhere a `--personas` or `--instrument` argument
+  takes a *name* (the unified resolver also accepts a YAML path).
+- **Registry packs** are community-authored. They live in third-party GitHub
+  repos and are listed in
+  [`DataViking-Tech/synthpanel-registry`](https://github.com/DataViking-Tech/synthpanel-registry).
+  You pull them with `synthpanel pack import gh:user/repo`; once imported they
+  become resolvable by name like a builtin. See [docs/registry.md](docs/registry.md)
+  for URI forms, verification, offline cache, and the submission flow.
+
+### Builtin persona packs (10, 160 personas total)
+
+| Pack | Personas |
+|------|----------|
+| `ai-eval-buyers` | 20 |
+| `developer` | 15 |
+| `enterprise-buyer` | 15 |
+| `general-consumer` | 15 |
+| `healthcare-patient` | 15 |
+| `job-seekers` | 15 |
+| `product-research` | 20 |
+| `recruiters-talent` | 15 |
+| `startup-founder` | 15 |
+| `students` | 15 |
+
+`synthpanel pack list` (or MCP `list_persona_packs`) enumerates these plus any
+user-saved packs.
+
+### Builtin instrument packs (8, all v3 branching)
+
+`churn-diagnosis`, `feature-prioritization`, `general-survey`,
+`landing-page-comprehension`, `market-research`, `name-test`,
+`pricing-discovery`, `product-feedback`.
+
+`synthpanel instruments list` enumerates these plus any installed packs.
+
+If you searched the registry for one of the names above and came up empty,
+that's expected — they're SDK builtins, not registry entries. Use the name
+directly with `panel run --personas <name>` or `--instrument <name>`.
+
 ## Defining Personas
 
 ```yaml
@@ -686,9 +732,9 @@ synthpanel panel run \
   --instrument pricing-discovery
 ```
 
-`pricing-discovery` is one of five bundled v3 packs (`pricing-discovery`,
-`name-test`, `feature-prioritization`, `landing-page-comprehension`,
-`churn-diagnosis`). List them with `synthpanel instruments list`.
+`pricing-discovery` is one of eight bundled v3 instrument packs (see
+[Builtin instrument packs](#builtin-instrument-packs-8-all-v3-branching)
+above). List them with `synthpanel instruments list`.
 
 The output now carries a `path` array recording the routing decisions
 that actually fired:
