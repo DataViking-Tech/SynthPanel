@@ -1,8 +1,30 @@
 # Pack Registry
 
-synthpanel ships with a small set of bundled persona packs, but most interesting
-packs are written by the community. The **pack registry** is how you discover,
-pull, and publish those packs without leaving the CLI.
+## Builtin vs Registry packs
+
+synthpanel has two pack sources, and the difference matters when you're trying
+to find one:
+
+- **Builtin packs** ship inside the `synthpanel` wheel. They are resolvable by
+  name the moment `pip install synthpanel` finishes — no `pack import`, no
+  network, no registry lookup. The SDK currently bundles **10 persona packs**
+  (160 personas total: `ai-eval-buyers`, `developer`, `enterprise-buyer`,
+  `general-consumer`, `healthcare-patient`, `job-seekers`, `product-research`,
+  `recruiters-talent`, `startup-founder`, `students`) and **8 v3 branching
+  instrument packs** (`churn-diagnosis`, `feature-prioritization`,
+  `general-survey`, `landing-page-comprehension`, `market-research`,
+  `name-test`, `pricing-discovery`, `product-feedback`). See the
+  [primary README's pack overview](../README.md#packs-builtin-vs-registry)
+  for the same list with per-pack persona counts.
+- **Registry packs** are community-authored. They live in third-party GitHub
+  repos and are listed in the registry index described below. You pull them
+  with `synthpanel pack import gh:user/repo`.
+
+If you searched the registry for a builtin pack name and came up empty, that's
+expected — the registry only indexes community-authored packs. Use the builtin
+name directly with `--personas` or `--instrument`.
+
+## The registry
 
 The registry itself is a JSON index (`default.json`) hosted at
 [`DataViking-Tech/synthpanel-registry`](https://github.com/DataViking-Tech/synthpanel-registry).
