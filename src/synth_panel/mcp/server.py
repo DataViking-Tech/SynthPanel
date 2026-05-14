@@ -173,6 +173,52 @@ def _resolve_mcp_default_model() -> str:
     return MCP_DEFAULT_MODEL
 
 
+# Persona-count threshold above which the auto-resolved default model is
+# swapped for a known-fast equivalent. Mirrors GH#462 / sy-2ag: a 20-persona
+# ``run_panel`` under ``openrouter/auto`` hung >15 min because OR routed
+# every persona to an expensive workhorse; pinning haiku-4-5 cut the same
+# run to 25–40 s. Most entries in :data:`_MCP_DEFAULT_MODEL_PREFERENCE`
+# are already fast (haiku, gpt-4o-mini, gemini-2.5-flash) — only
+# ``openrouter/auto`` needs the swap today.
+LARGE_PANEL_PERSONA_THRESHOLD = 10
+
+# Slow auto-resolved default → fast equivalent for large panels. Keyed on
+# the alias returned by :func:`_resolve_mcp_default_model`; aliases that
+# are already fast (or whose routing the user controls) are absent.
+_LARGE_PANEL_FAST_MODEL_SWAP: dict[str, str] = {
+    "openrouter/auto": "openrouter/anthropic/claude-haiku-4.5",
+}
+
+
+def _resolve_mcp_default_model_for_panel(persona_count: int) -> str:
+    """Resolve the default model, preferring fast equivalents for big panels.
+
+    Wraps :func:`_resolve_mcp_default_model` and, when *persona_count*
+    is at or above :data:`LARGE_PANEL_PERSONA_THRESHOLD`, swaps the
+    resolved alias through :data:`_LARGE_PANEL_FAST_MODEL_SWAP` so a
+    20-persona ``run_panel`` under an OpenRouter-only environment
+    doesn't stall on ``openrouter/auto`` (sy-2ag / GH#462).
+
+    The swap only applies when the caller has *not* supplied an explicit
+    ``model`` argument — call sites guard on ``model is None`` before
+    reaching this function. Explicit choices are honored verbatim so a
+    user who deliberately asked for ``openrouter/auto`` still gets it.
+    """
+    base = _resolve_mcp_default_model()
+    if persona_count >= LARGE_PANEL_PERSONA_THRESHOLD:
+        swapped = _LARGE_PANEL_FAST_MODEL_SWAP.get(base)
+        if swapped is not None and swapped != base:
+            logger.info(
+                "auto-fast-model: persona_count=%d >= %d, swapping default %s → %s (sy-2ag)",
+                persona_count,
+                LARGE_PANEL_PERSONA_THRESHOLD,
+                base,
+                swapped,
+            )
+            return swapped
+    return base
+
+
 def _serialize_content_block(block: Any) -> dict[str, Any]:
     """Render a synthpanel ContentBlock as a JSON-friendly dict.
 
@@ -398,6 +444,7 @@ def _validate_decision_request(tool: str, decision_being_informed: str | None) -
 # Re-export for backward compatibility — callers patch these names.
 __all__ = [
     "EXTRACT_SCHEMA_REGISTRY",
+    "LARGE_PANEL_PERSONA_THRESHOLD",
     "MAX_PERSONAS",
     "MAX_QUESTIONS",
     "MCP_DEFAULT_MODEL",
@@ -1138,7 +1185,15 @@ async def run_panel(
             over ``questions``.
         instrument_pack: Name of an installed instrument pack.
             Takes precedence over both ``instrument`` and ``questions``.
-        model: LLM model to use. Defaults to haiku.
+        model: LLM model to use. Defaults to a cheap/fast model chosen
+            from the configured provider credentials (haiku for Anthropic,
+            gpt-4o-mini for OpenAI, etc.). When the auto-resolved default
+            would be ``openrouter/auto`` *and* the panel has at least
+            :data:`LARGE_PANEL_PERSONA_THRESHOLD` personas, the default is
+            swapped for ``openrouter/anthropic/claude-haiku-4.5`` to avoid
+            the multi-minute stalls observed under ``openrouter/auto`` on
+            large panels (sy-2ag / GH#462). Explicit values are honored
+            verbatim.
         response_schema: Optional JSON Schema for structured output. When
             provided, each panelist's responses are extracted as structured
             JSON matching this schema instead of free text.
@@ -1213,11 +1268,10 @@ async def run_panel(
     if isinstance(normalized, str):
         return normalized
     model, models = normalized
-    model = model or _resolve_mcp_default_model()
+    model_was_explicit = model is not None
     variants_k = variants or 0
     if variants_k < 0 or variants_k > 20:
         return json.dumps({"error": "variants must be between 0 and 20."})
-    logger.info("run_panel: model=%s synthesis=%s variants=%d", model, synthesis, variants_k)
 
     # Resolve extract_schema name → dict before threading to orchestrator.
     try:
@@ -1230,6 +1284,12 @@ async def run_panel(
         merged.extend(pack.get("personas", []))
     if not merged:
         return json.dumps({"error": "No personas provided. Supply personas and/or pack_id."})
+
+    # Default-model resolution is deferred until after merging so the
+    # auto-fast swap (sy-2ag) can see the true persona count.
+    if not model_was_explicit:
+        model = _resolve_mcp_default_model_for_panel(len(merged))
+    logger.info("run_panel: model=%s synthesis=%s variants=%d", model, synthesis, variants_k)
 
     # Validate personas: must be dicts with "name"
     for i, p in enumerate(merged):
@@ -1549,8 +1609,13 @@ async def run_quick_poll(
                     "personality_traits": ["analytical", "curious", "pragmatic"]
                   }
                 ]
-        model: LLM model to use. Defaults to haiku. Ignored in sampling
-            mode (the host agent picks its own model).
+        model: LLM model to use. Defaults to a cheap/fast model chosen
+            from configured provider credentials. When the auto-resolved
+            default would be ``openrouter/auto`` and the poll runs against
+            at least :data:`LARGE_PANEL_PERSONA_THRESHOLD` personas, the
+            default is swapped for ``openrouter/anthropic/claude-haiku-4.5``
+            (sy-2ag / GH#462). Ignored in sampling mode (the host agent
+            picks its own model).
         response_schema: Optional JSON Schema for structured output. When
             provided, responses are extracted as structured JSON matching
             this schema instead of free text. Not supported in sampling
@@ -1580,7 +1645,7 @@ async def run_quick_poll(
     )
     if spec_error is not None:
         return spec_error
-    model = model or _resolve_mcp_default_model()
+    model_was_explicit = model is not None
 
     if not question or not question.strip():
         return json.dumps({"error": "Question text must be a non-empty string."})
@@ -1599,6 +1664,11 @@ async def run_quick_poll(
 
     if len(personas) > MAX_PERSONAS:
         return json.dumps({"error": f"Too many personas ({len(personas)}). Maximum is {MAX_PERSONAS}."})
+
+    # Resolve default model *after* persona resolution so the auto-fast
+    # swap (sy-2ag) can see the real persona count.
+    if not model_was_explicit:
+        model = _resolve_mcp_default_model_for_panel(len(personas))
 
     decision = _decide_sampling_mode(ctx, use_sampling=use_sampling)
     logger.info("run_quick_poll: mode=%s model=%s personas=%d", decision.mode, model, len(personas))
