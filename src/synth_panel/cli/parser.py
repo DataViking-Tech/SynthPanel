@@ -1181,6 +1181,89 @@ def build_parser() -> argparse.ArgumentParser:
         help="Start the MCP server (stdio transport).",
     )
 
+    # mcp (sy-skf): author-time tooling for MCP host registration
+    mcp_parser = subparsers.add_parser(
+        "mcp",
+        help="MCP host integration: register synthpanel as an MCP server in Claude Code, Cursor, etc.",
+    )
+    mcp_subparsers = mcp_parser.add_subparsers(dest="mcp_command")
+
+    mcp_install_parser = mcp_subparsers.add_parser(
+        "install",
+        help=(
+            "Register synthpanel as an MCP server in a host's config "
+            "(default: Claude Code user config at ~/.claude.json). "
+            "Pass --uninstall to remove the entry instead of writing it."
+        ),
+    )
+    mcp_install_parser.add_argument(
+        "--uninstall",
+        action="store_true",
+        default=False,
+        help="Remove the synthpanel MCP server entry instead of installing it.",
+    )
+    mcp_install_parser.add_argument(
+        "--scope",
+        choices=["user", "project"],
+        default="user",
+        help=(
+            "Where to write the entry. 'user' (default) edits "
+            "~/.claude.json so the server is available in every Claude "
+            "Code session. 'project' edits ./.mcp.json so the entry is "
+            "checked in alongside the repo and shared with collaborators."
+        ),
+    )
+    mcp_install_parser.add_argument(
+        "--target",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Override the JSON config file path. When set, --scope is "
+            "ignored. Useful for editors other than Claude Code (e.g. "
+            "--target ~/.cursor/mcp.json)."
+        ),
+    )
+    mcp_install_parser.add_argument(
+        "--name",
+        default="synth_panel",
+        help="Name to register the server under (default: synth_panel).",
+    )
+    mcp_install_parser.add_argument(
+        "--command",
+        default=None,
+        metavar="CMD",
+        dest="mcp_command_override",
+        help=(
+            "Command the host should invoke to start the server "
+            "(default: the resolved path to the running 'synthpanel' "
+            "executable, falling back to the literal string 'synthpanel')."
+        ),
+    )
+    mcp_install_parser.add_argument(
+        "--env",
+        action="append",
+        default=None,
+        metavar="KEY=VALUE",
+        dest="mcp_env",
+        help=(
+            "Environment variable to inject into the server process. "
+            "Repeatable. Example: --env ANTHROPIC_API_KEY=sk-..."
+        ),
+    )
+    mcp_install_parser.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="Overwrite an existing server entry with the same --name without prompting.",
+    )
+    mcp_install_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        dest="dry_run",
+        help="Print the resulting JSON to stdout without modifying any files.",
+    )
+
     # plugin (sy-0rr): author-time tooling for plugin manifests
     plugin_parser = subparsers.add_parser(
         "plugin",

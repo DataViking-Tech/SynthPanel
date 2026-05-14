@@ -22,6 +22,7 @@ from synth_panel.cli.commands import (
     handle_instruments_show,
     handle_login,
     handle_logout,
+    handle_mcp_install,
     handle_mcp_serve,
     handle_pack_calibrate,
     handle_pack_diff,
@@ -144,6 +145,13 @@ def main(argv: list[str] | None = None) -> int:
         return handle_report(args, output_format)
     elif args.command == "mcp-serve":
         return handle_mcp_serve(args, output_format)
+    elif args.command == "mcp":
+        sub = getattr(args, "mcp_command", None)
+        if sub == "install":
+            return handle_mcp_install(args, output_format)
+        else:
+            parser.parse_args(["mcp", "--help"])
+            return 1
     elif args.command == "plugin":
         sub = getattr(args, "plugin_command", None)
         if sub == "lint":

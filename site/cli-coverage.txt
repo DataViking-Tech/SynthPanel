@@ -19,6 +19,7 @@ install-skills
 instruments
 login
 logout
+mcp
 mcp-serve
 pack
 panel
