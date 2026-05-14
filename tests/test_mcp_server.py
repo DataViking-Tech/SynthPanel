@@ -82,6 +82,142 @@ class TestServerRegistration:
             monkeypatch.delenv(var, raising=False)
         assert _resolve_mcp_default_model() == MCP_DEFAULT_MODEL
 
+
+class TestLargePanelFastModelSwap:
+    """sy-2ag / GH#462: auto-pick a fast model when persona_count >= 10.
+
+    Default ``openrouter/auto`` routes to slow workhorse models that
+    stall 15+ min on 20-persona panels; pinning haiku-4-5 cuts the same
+    run to 25-40s. The swap only fires for the auto-resolved default;
+    explicit model arguments are honored verbatim.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _isolate_provider_creds(self, monkeypatch):
+        for var in (
+            "ANTHROPIC_API_KEY",
+            "OPENAI_API_KEY",
+            "XAI_API_KEY",
+            "GOOGLE_API_KEY",
+            "GEMINI_API_KEY",
+            "OPENROUTER_API_KEY",
+        ):
+            monkeypatch.delenv(var, raising=False)
+
+    def test_openrouter_swapped_at_threshold(self, monkeypatch):
+        from synth_panel.mcp.server import (
+            LARGE_PANEL_PERSONA_THRESHOLD,
+            _resolve_mcp_default_model_for_panel,
+        )
+
+        monkeypatch.setenv("OPENROUTER_API_KEY", "sk-x")
+        result = _resolve_mcp_default_model_for_panel(LARGE_PANEL_PERSONA_THRESHOLD)
+        assert result == "openrouter/anthropic/claude-haiku-4.5"
+
+    def test_openrouter_swapped_above_threshold(self, monkeypatch):
+        from synth_panel.mcp.server import _resolve_mcp_default_model_for_panel
+
+        monkeypatch.setenv("OPENROUTER_API_KEY", "sk-x")
+        assert _resolve_mcp_default_model_for_panel(20) == "openrouter/anthropic/claude-haiku-4.5"
+
+    def test_openrouter_not_swapped_below_threshold(self, monkeypatch):
+        from synth_panel.mcp.server import (
+            LARGE_PANEL_PERSONA_THRESHOLD,
+            _resolve_mcp_default_model_for_panel,
+        )
+
+        monkeypatch.setenv("OPENROUTER_API_KEY", "sk-x")
+        result = _resolve_mcp_default_model_for_panel(LARGE_PANEL_PERSONA_THRESHOLD - 1)
+        assert result == "openrouter/auto"
+
+    def test_anthropic_default_not_swapped(self, monkeypatch):
+        """Haiku is already fast — no swap regardless of persona count."""
+        from synth_panel.mcp.server import _resolve_mcp_default_model_for_panel
+
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-x")
+        assert _resolve_mcp_default_model_for_panel(50) == "haiku"
+
+    def test_openai_default_not_swapped(self, monkeypatch):
+        from synth_panel.mcp.server import _resolve_mcp_default_model_for_panel
+
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-x")
+        assert _resolve_mcp_default_model_for_panel(50) == "gpt-4o-mini"
+
+    def test_gemini_default_not_swapped(self, monkeypatch):
+        from synth_panel.mcp.server import _resolve_mcp_default_model_for_panel
+
+        monkeypatch.setenv("GEMINI_API_KEY", "sk-x")
+        assert _resolve_mcp_default_model_for_panel(50) == "gemini-2.5-flash"
+
+    @pytest.mark.asyncio
+    async def test_run_panel_uses_fast_default_for_large_panel(self, monkeypatch):
+        """End-to-end: 10 personas + openrouter env → fast model passed downstream."""
+        from synth_panel.mcp.server import mcp
+
+        monkeypatch.setenv("OPENROUTER_API_KEY", "sk-x")
+        # The outer fixture sets ANTHROPIC_API_KEY — clear so OPENROUTER wins.
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+        personas = [{"name": f"P{i}"} for i in range(10)]
+        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = {"results": []}
+            await mcp.call_tool(
+                "run_panel",
+                {
+                    "personas": personas,
+                    "questions": [{"text": "Hello?"}],
+                    "synthesis": False,
+                    "decision_being_informed": "auto-fast-model smoke check",
+                },
+            )
+        # _run_panel_async signature: (personas, questions, model, ctx, ...)
+        assert mock_run.call_args[0][2] == "openrouter/anthropic/claude-haiku-4.5"
+
+    @pytest.mark.asyncio
+    async def test_run_panel_honors_explicit_openrouter_auto(self, monkeypatch):
+        """An explicit ``openrouter/auto`` is honored — only defaults swap."""
+        from synth_panel.mcp.server import mcp
+
+        monkeypatch.setenv("OPENROUTER_API_KEY", "sk-x")
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+        personas = [{"name": f"P{i}"} for i in range(15)]
+        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = {"results": []}
+            await mcp.call_tool(
+                "run_panel",
+                {
+                    "personas": personas,
+                    "questions": [{"text": "Hello?"}],
+                    "model": "openrouter/auto",
+                    "synthesis": False,
+                    "decision_being_informed": "auto-fast-model explicit check",
+                },
+            )
+        assert mock_run.call_args[0][2] == "openrouter/auto"
+
+    @pytest.mark.asyncio
+    async def test_run_panel_no_swap_below_threshold(self, monkeypatch):
+        """A 9-persona panel keeps the openrouter/auto default."""
+        from synth_panel.mcp.server import mcp
+
+        monkeypatch.setenv("OPENROUTER_API_KEY", "sk-x")
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+        personas = [{"name": f"P{i}"} for i in range(9)]
+        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = {"results": []}
+            await mcp.call_tool(
+                "run_panel",
+                {
+                    "personas": personas,
+                    "questions": [{"text": "Hello?"}],
+                    "synthesis": False,
+                    "decision_being_informed": "auto-fast-model below-threshold check",
+                },
+            )
+        assert mock_run.call_args[0][2] == "openrouter/auto"
+
     @pytest.mark.asyncio
     async def test_tools_registered(self):
         tools = await mcp.list_tools()
