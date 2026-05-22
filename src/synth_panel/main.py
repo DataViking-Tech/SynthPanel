@@ -143,6 +143,10 @@ def main(argv: list[str] | None = None) -> int:
         return handle_analyze(args, output_format)
     elif args.command == "report":
         return handle_report(args, output_format)
+    elif args.command == "poll-summary":
+        from synth_panel.cli.commands import handle_poll_summary
+
+        return handle_poll_summary(args, output_format)
     elif args.command == "mcp-serve":
         return handle_mcp_serve(args, output_format)
     elif args.command == "mcp":

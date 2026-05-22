@@ -220,6 +220,11 @@ class PollResult(_DictLikeMixin):
     # gate on validity without walking into the nested synthesis dict.
     run_invalid: bool = False
     synthesis_error: dict[str, Any] | None = None
+    # sy-4yd: deterministic structured-response rollup (vote counts,
+    # weighted scores, segment splits, top objections, recommended next
+    # test). ``None`` when synthesis disabled OR when no panelist produced
+    # a parseable structured response. See :mod:`synth_panel.poll_summary`.
+    poll_summary: dict[str, Any] | None = None
 
 
 @dataclass
@@ -285,6 +290,9 @@ class PanelResult(_DictLikeMixin):
     # sp-avmm: synthesis failure markers, mirroring PollResult.
     run_invalid: bool = False
     synthesis_error: dict[str, Any] | None = None
+    # sy-4yd: deterministic structured-response rollup. See PollResult
+    # for field semantics — same payload shape across both result types.
+    poll_summary: dict[str, Any] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -453,6 +461,44 @@ def _extract_attachment_refs(
     return refs
 
 
+def _compute_poll_summary_payload(
+    *,
+    result_dicts: list[dict[str, Any]],
+    questions: list[dict[str, Any]] | None,
+    synthesis: dict[str, Any] | None,
+    personas: list[dict[str, Any]] | None,
+    rounds: list[dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
+    """Run :func:`build_poll_summary` against a freshly produced result.
+
+    Returns the JSON-safe ``PollSummary.to_dict()`` payload or ``None``
+    when the run is empty / synthesis-free and no structured response
+    landed. Keeping this helper close to the result builders means every
+    SDK return path attaches an identical summary shape without each
+    caller re-implementing the assembly.
+
+    sy-4yd.
+    """
+    from synth_panel.poll_summary import build_poll_summary
+
+    envelope: dict[str, Any] = {
+        "results": result_dicts,
+        "synthesis": synthesis,
+    }
+    if questions is not None:
+        envelope["questions"] = questions
+    if rounds is not None:
+        envelope["rounds"] = rounds
+
+    summary = build_poll_summary(envelope, personas=personas)
+    if not summary.questions and not summary.top_objections and not summary.recommended_next_test:
+        # Degenerate run (no panelists / no responses). Returning None
+        # is more honest than emitting an empty summary that consumers
+        # might mistake for "panel answered nothing of substance".
+        return None
+    return summary.to_dict()
+
+
 def _build_panel_result_from_single_round(
     result_id: str,
     model: str,
@@ -480,6 +526,12 @@ def _build_panel_result_from_single_round(
     # structured output) at the top level so MCP consumers don't have to
     # walk into the nested synthesis dict to find them.
     synthesis_warnings = list(synthesis_dict.get("warnings") or []) if isinstance(synthesis_dict, dict) else []
+    poll_summary_payload = _compute_poll_summary_payload(
+        result_dicts=result_dicts,
+        questions=questions,
+        synthesis=synthesis_dict,
+        personas=personas,
+    )
     return PanelResult(
         result_id=result_id,
         model=model,
@@ -503,6 +555,7 @@ def _build_panel_result_from_single_round(
         metadata=metadata,
         run_invalid=bool(synthesis_error),
         synthesis_error=synthesis_error if isinstance(synthesis_error, dict) else None,
+        poll_summary=poll_summary_payload,
     )
 
 
@@ -560,6 +613,18 @@ def _build_panel_result_from_multi_round(
     if final_warnings:
         synthesis_warnings.extend(final_warnings)
 
+    # sy-4yd: walk every round (not just the terminal one) so v3 branching
+    # runs surface vote counts from any round that asked a structured
+    # question. The summary's per-question entries preserve original
+    # question ordering across rounds.
+    poll_summary_payload = _compute_poll_summary_payload(
+        result_dicts=flat_results,
+        questions=None,
+        synthesis=final_synth_dict,
+        personas=personas,
+        rounds=rounds_payload,
+    )
+
     return PanelResult(
         result_id=result_id,
         model=model,
@@ -575,6 +640,7 @@ def _build_panel_result_from_multi_round(
         terminal_round=mr.terminal_round,
         results=flat_results,
         metadata=metadata,
+        poll_summary=poll_summary_payload,
     )
 
 
@@ -780,6 +846,17 @@ def quick_poll(
         synthesis=synthesis_dict,
     )
 
+    # sy-4yd: compute the deterministic poll summary inline so callers
+    # never see a result without one. Built from the same envelope the
+    # SDK persists, so a saved-result reload via
+    # :func:`get_panel_result` reconstructs an equivalent summary.
+    poll_summary_payload = _compute_poll_summary_payload(
+        result_dicts=result_dicts,
+        questions=questions,
+        synthesis=synthesis_dict,
+        personas=merged,
+    )
+
     return PollResult(
         result_id=result_id,
         question=question,
@@ -791,6 +868,7 @@ def quick_poll(
         metadata=metadata,
         run_invalid=bool(synthesis_error),
         synthesis_error=synthesis_error if isinstance(synthesis_error, dict) else None,
+        poll_summary=poll_summary_payload,
     )
 
 

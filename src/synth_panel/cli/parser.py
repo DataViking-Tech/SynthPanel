@@ -1175,6 +1175,40 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    # poll-summary (sy-4yd): deterministic structured-response rollup
+    # for a saved panel result. Standalone command (not a `report`
+    # subaction) to keep the existing `report <result>` positional surface
+    # backwards-compatible.
+    poll_summary_parser = subparsers.add_parser(
+        "poll-summary",
+        help=(
+            "Deterministic vote-count / score / objection rollup for a saved poll. "
+            "Works on any result with at least one structured (enum/scale) question."
+        ),
+    )
+    poll_summary_parser.add_argument(
+        "result",
+        metavar="RESULT",
+        help="Panel result ID or path to a result JSON file.",
+    )
+    poll_summary_parser.add_argument(
+        "--format",
+        default="text",
+        choices=["text", "json"],
+        dest="poll_summary_format",
+        help="Output format (default: text). JSON emits the full structured payload.",
+    )
+    poll_summary_parser.add_argument(
+        "--segment-by",
+        default=None,
+        metavar="ATTRS",
+        help=(
+            "Comma-separated persona attributes to split the vote on. "
+            "Default: occupation,segment,age_band,tier. Pass an empty "
+            "string to disable segment splits."
+        ),
+    )
+
     # mcp-serve
     subparsers.add_parser(
         "mcp-serve",

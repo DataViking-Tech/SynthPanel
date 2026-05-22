@@ -781,6 +781,22 @@ async def _run_panel_async_instrument(
     cost_warnings = build_cost_fallback_warnings([*per_model_usage.keys(), synth_model_name])
     merged_warnings = list(mr.warnings) + cost_warnings
 
+    # sy-4yd: attach the deterministic structured-response summary so
+    # MCP callers can read vote counts / weighted scores / objections
+    # from the same envelope without a second tool call. Built from the
+    # final result shape (same as the SDK) so it survives readback.
+    from synth_panel.poll_summary import build_poll_summary
+
+    poll_summary_obj = build_poll_summary(
+        {"results": flat_results, "rounds": rounds_payload, "synthesis": final_synth_dict},
+        personas=personas,
+    )
+    poll_summary_payload = (
+        poll_summary_obj.to_dict()
+        if (poll_summary_obj.questions or poll_summary_obj.top_objections or poll_summary_obj.recommended_next_test)
+        else None
+    )
+
     return {
         "result_id": result_id,
         "model": model,
@@ -800,6 +816,7 @@ async def _run_panel_async_instrument(
         "per_model_results": per_model_results,
         "cost_breakdown": cost_breakdown,
         "metadata": inst_metadata,
+        "poll_summary": poll_summary_payload,
     }
 
 
@@ -930,6 +947,19 @@ async def _run_panel_async(
     synth_model_name = synthesis_dict.get("model") if synthesis_dict else None
     cost_warnings = build_cost_fallback_warnings([*per_model_usage.keys(), synth_model_name])
 
+    # sy-4yd: deterministic poll summary on the single-round envelope too.
+    from synth_panel.poll_summary import build_poll_summary
+
+    poll_summary_obj = build_poll_summary(
+        {"results": result_dicts, "questions": questions, "synthesis": synthesis_dict},
+        personas=personas,
+    )
+    poll_summary_payload = (
+        poll_summary_obj.to_dict()
+        if (poll_summary_obj.questions or poll_summary_obj.top_objections or poll_summary_obj.recommended_next_test)
+        else None
+    )
+
     result: dict[str, Any] = {
         "result_id": result_id,
         "model": model,
@@ -952,6 +982,7 @@ async def _run_panel_async(
         "per_model_results": per_model_results,
         "cost_breakdown": cost_breakdown,
         "metadata": metadata,
+        "poll_summary": poll_summary_payload,
     }
 
     # sp-avmm: synthesis failure must surface loudly at the envelope
