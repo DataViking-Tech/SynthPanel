@@ -57,12 +57,16 @@ mcp = [
 composio = [
     # Composio's experimental Toolkit API is the surface this integration
     # binds to (`composio_client.experimental.Toolkit` + `@toolkit.tool()`).
-    # That surface is still labelled experimental upstream, so we pin to
-    # the 0.5.x line we last verified the contract against. Bump the upper
-    # bound deliberately after re-running tests/test_integrations_composio.py
-    # against the new release; see docs/composio-submission.md for the
-    # troubleshooting checklist when upstream shapes drift.
-    "composio>=0.5,<0.6",
+    # That surface is still labelled experimental upstream and the adapter
+    # gates calls behind a runtime check, so a strict pin here mostly
+    # creates resolver friction without preventing breakage. The historical
+    # `composio>=0.5,<0.6` pin became unsatisfiable when upstream yanked
+    # the 0.5.x line — published composio versions now jump from 0.1.x to
+    # 0.8.x. We track the available stable line and let the adapter's
+    # `experimental.Toolkit` guard catch any drift at construction time.
+    # See docs/composio-submission.md for the upstream-drift triage
+    # checklist.
+    "composio>=0.8",
     "pydantic>=2.0,<3.0",
 ]
 convergence = [

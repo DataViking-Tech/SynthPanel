@@ -159,3 +159,45 @@ jobs:
 
       - name: Check site/CLI subcommand sync
         run: python scripts/check_site_cli_sync.py
+
+  install-smoke:
+    # Guards the source/uv install paths agents and contributors actually
+    # use. The historical `composio>=0.5,<0.6` pin silently broke when
+    # upstream yanked the 0.5.x line; this job catches that class of
+    # resolver friction before it hits a first-time contributor. Each
+    # extra is resolved in its own fresh venv so a failure points at the
+    # specific extra. See sy-4c9 / gh-470 for background.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install uv
+        run: pip install "uv>=0.4"
+
+      - name: Resolve core source install (pip)
+        run: |
+          python -m venv /tmp/venv-core
+          /tmp/venv-core/bin/pip install --upgrade pip
+          /tmp/venv-core/bin/pip install -e .
+
+      - name: Resolve core source install (uv)
+        run: |
+          uv venv /tmp/venv-core-uv
+          uv pip install --python /tmp/venv-core-uv/bin/python -e .
+
+      - name: Resolve each optional extra (uv)
+        run: |
+          set -euo pipefail
+          for extra in mcp composio convergence pdf full visual; do
+            echo "::group::extra=$extra"
+            uv venv "/tmp/venv-$extra"
+            uv pip install --python "/tmp/venv-$extra/bin/python" -e ".[$extra]"
+            echo "::endgroup::"
+          done

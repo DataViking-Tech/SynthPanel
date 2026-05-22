@@ -143,12 +143,19 @@ toolkits through Discord first:
 
 The integration binds to Composio's experimental Toolkit API surface
 (`composio_client.experimental.Toolkit` + the `@toolkit.tool()`
-decorator). That surface is still labelled experimental upstream, so we
-pin the dependency tightly in [`pyproject.toml`](../pyproject.toml)
-(currently `composio>=0.5,<0.6`). When Composio cuts a new major or
-minor release, the contract this integration relies on may change
-without an in-band signal — users will only notice when the toolkit
-fails to construct or actions don't appear in their agent's catalog.
+decorator). That surface is still labelled experimental upstream. The
+[`pyproject.toml`](../pyproject.toml) constraint is intentionally loose
+(`composio>=0.8`) because the historical `composio>=0.5,<0.6` pin
+became unsatisfiable when upstream yanked the entire 0.5.x line —
+published composio versions now jump from 0.1.x straight to 0.8.x. The
+adapter's runtime check (`experimental.Toolkit` lookup in
+[`composio.py`](../src/synth_panel/integrations/composio.py)) catches
+any upstream shape drift at construction time, so the loose pin trades
+a brittle resolver contract for a clear runtime error message. When
+Composio cuts a new major or minor release, the contract this
+integration relies on may change without an in-band signal — users
+will only notice when the toolkit fails to construct or actions don't
+appear in their agent's catalog.
 
 Use this checklist when triaging a suspected upstream-shape drift:
 
@@ -166,17 +173,23 @@ If you confirm an upstream change is intentional and behaves correctly:
    [`tests/test_integrations_composio.py`](../tests/test_integrations_composio.py)
    (the `_StubToolkit` / `_StubExperimental` classes) so the canary
    passes against the new contract.
-2. Bump the upper bound in
-   [`pyproject.toml`](../pyproject.toml) (`[project.optional-dependencies].composio`).
+2. If a tighter version range becomes necessary (e.g. to bar a known
+   broken release), narrow the floor in
+   [`pyproject.toml`](../pyproject.toml)
+   (`[project.optional-dependencies].composio`). Prefer leaving the
+   pin loose unless an actively published release is known bad — the
+   adapter's runtime guard already raises a typed error if the API has
+   drifted, and tight upper bounds tend to become unsatisfiable when
+   upstream yanks versions (as happened with the 0.5.x line).
 3. Note the verified version in this doc and re-run the integration
    tests in
    [`examples/integrations/`](../examples/integrations/) against the
    new release.
 
-If you cannot reproduce the failure with the pinned version listed in
-`pyproject.toml`, ask your user which Composio version they have
-installed (`pip show composio`) — they may have overridden the pin in
-their own environment.
+If you cannot reproduce the failure with the version of Composio you
+have installed, ask your user which version they have
+installed (`pip show composio`) — they may be on an older release than
+the floor in `pyproject.toml`.
 
 ## Why the connector code lives inside SynthPanel
 
