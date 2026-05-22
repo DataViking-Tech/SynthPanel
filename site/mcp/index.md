@@ -125,6 +125,36 @@ Zed calls them *context servers*. Open `settings.json` (cmd-,) and merge this bl
 }
 ```
 
+Hermes
+
+Hermes uses a YAML config with an `mcp_servers` map and explicit timeout fields. Add this block to your Hermes config and restart the host:
+
+```
+mcp_servers:
+  synthpanel:
+    command: "synthpanel"
+    args: ["mcp-serve"]
+    timeout: 180
+    connect_timeout: 60
+    env:
+      ANTHROPIC_API_KEY: "sk-..."
+```
+
+Or run it on demand via `uvx` without a global install:
+
+```
+mcp_servers:
+  synthpanel:
+    command: "uvx"
+    args: ["--from", "synthpanel[mcp]", "synthpanel", "mcp-serve"]
+    timeout: 180
+    connect_timeout: 60
+    env:
+      ANTHROPIC_API_KEY: "sk-..."
+```
+
+The 180s `timeout` covers a full panel run; the 60s `connect_timeout` gives the subprocess room to import the MCP SDK on first launch.
+
 Claude Desktop
 
 Edit `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS, or `%APPDATA%\Claude\claude_desktop_config.json` on Windows, then restart the app.
@@ -259,6 +289,20 @@ Panel results, persona packs, and instrument packs are stored under `~/.synthpan
 ├── packs/instruments/      # Installed instrument packs (YAML)
 └── results/                # Panel results (JSON) + session data
 ```
+
+## Troubleshooting
+
+`command not found: synthpanel`  The MCP host can't find the binary on its `PATH`. MCP subprocesses inherit the host's environment, not your shell's. Fix by installing globally (`pip install "synthpanel[mcp]"`), pointing `command` at an absolute path (e.g. `/Users/you/.venv/bin/synthpanel`), or running through `uvx` (`"command": "uvx", "args": ["--from", "synthpanel[mcp]", "synthpanel", "mcp-serve"]`). Claude Desktop on macOS is especially strict — use an absolute path or `uvx`.
+
+Server starts but no tools appear  The MCP server needs the `[mcp]` extra: `pip install "synthpanel[mcp]"`. After config edits or upgrades, fully quit and relaunch the host — tool lists are cached per server entry. Sanity-check by running `synthpanel mcp-serve` in a terminal; it should boot silently.
+
+Missing API key  The subprocess only sees env vars from the MCP `env` block. A shell-profile export does not propagate. Set the key in the `env` block, run `synthpanel login` to seed the on-disk credential store, or omit the key and let MCP *sampling* borrow the host's LLM access (Claude Desktop, Claude Code, Cursor, Windsurf).
+
+Timeouts on long panels  A 5-persona × 3-question BYOK panel takes 30–90 seconds; cross-provider ensembles can take 2–5 minutes. Raise the host's per-tool timeout (Hermes: `timeout: 300`). For exploratory work, prefer `run_quick_poll` over `run_panel`.
+
+`MISSING_DECISION` errors `run_panel`, `run_quick_poll`, and `extend_panel` require a `decision_being_informed` string (12–280 chars). This is a frozen v1.0.0 contract. `run_prompt` does not require it.
+
+Full troubleshooting reference and links into the response contract: [docs/mcp.md](https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/mcp.md#troubleshooting).
 
 ## Next steps
 
