@@ -134,9 +134,10 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-m 'not acceptance' --cov=synth_panel --cov-report=term-missing --cov-fail-under=80"
+addopts = "-m 'not acceptance and not install_smoke' --cov=synth_panel --cov-report=term-missing --cov-fail-under=80"
 markers = [
     "acceptance: live API acceptance tests (require ANTHROPIC_API_KEY)",
+    "install_smoke: slow fresh-venv install validation (sy-6kr); opt in with `-m install_smoke`",
 ]
 
 [tool.ruff]

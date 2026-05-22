@@ -137,25 +137,43 @@ defined but not yet emitted on the success path — see the note in the lede).
 
 ## Human Operator Quick Start
 
-Prefer a terminal? Same engine, CLI surface.
+Prefer a terminal? Same engine, CLI surface. Pick the install path that
+matches how you use Python tools:
+
+| Path | When | Command |
+|------|------|---------|
+| **pip** (in your project venv) | You're integrating SynthPanel as a library | `pip install synthpanel` |
+| **pip + MCP** (in your project venv) | You also want the MCP server for agent integration | `pip install 'synthpanel[mcp]'` |
+| **pipx** (global, isolated) | You want `synthpanel` on your PATH without polluting any project | `pipx install synthpanel` |
+| **uvx** (zero-install) | You just want to run it once — no install at all | `uvx --from synthpanel synthpanel --help` |
+| **source** (latest unreleased) | You want main-branch fixes ahead of the next PyPI cut | `pip install git+https://github.com/DataViking-Tech/SynthPanel.git@main` |
+
+After installing, verify the CLI is on your PATH and the runtime is sane
+*before* configuring providers:
 
 ```bash
-# Install from PyPI
-pip install synthpanel
+synthpanel --version          # smoke: package metadata + entry point dispatch
+synthpanel doctor             # diagnostic: python, deps, packs, checkpoint dir
+synthpanel whoami             # which providers (if any) have credentials
+```
 
-# For MCP server support (agent integration)
-pip install synthpanel[mcp]
+`doctor` exits non-zero with actionable guidance when something's
+missing (no provider configured, wrong Python, MCP extra absent, etc.) —
+it's the canonical "did the install land cleanly?" check, and
+`clean-install-smoke` in CI runs the same sequence against the built
+wheel on every push, so all three commands are part of the supported
+contract.
 
-# Or install from source for the latest unreleased changes
-pip install git+https://github.com/DataViking-Tech/SynthPanel.git@main
+Then provide an API key (Claude, OpenAI, Gemini, xAI, or any
+OpenAI-compatible provider) — either export it in your shell or persist
+it once via `synthpanel login`:
 
-# Provide an API key (Claude, OpenAI, Gemini, xAI, or any OpenAI-compatible provider)
-# — either export it in your shell:
+```bash
 export ANTHROPIC_API_KEY="sk-..."
-# — or persist it once with `synthpanel login` (stored at
-#   ~/.config/synthpanel/credentials.json, mode 0600):
-synthpanel login --provider anthropic --api-key sk-...
-synthpanel whoami   # see which providers have credentials available
+# or
+synthpanel login --provider anthropic --api-key sk-...    # stored at
+# ~/.config/synthpanel/credentials.json, mode 0600
+synthpanel whoami
 
 # Run a single prompt
 synthpanel prompt "What do you think of the name Traitprint for a career app?"
