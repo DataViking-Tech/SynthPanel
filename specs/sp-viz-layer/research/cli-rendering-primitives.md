@@ -107,7 +107,7 @@ def emit(fmt: OutputFormat, *, message: str, usage: dict|None, extra: dict|None,
 | Extra | Deps | Purpose |
 |---|---|---|
 | `[mcp]` | `mcp>=1.0` | MCP server, stdio transport (heavy) |
-| `[composio]` | `composio>=0.5`, `pydantic>=2.0` | Vendor tool integrations (heavy) |
+| `[composio]` | `composio>=0.8`, `pydantic>=2.0` | Vendor tool integrations (heavy) |
 | `[convergence]` | `synthbench>=0.1` | Convergence + human-baseline lookup |
 | `[dev]` | pytest, ruff, mypy, pip-audit | test/lint |
 
