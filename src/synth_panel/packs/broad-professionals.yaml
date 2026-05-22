@@ -1,0 +1,251 @@
+name: Broad Professionals
+description: >
+  A wide cross-section of working professionals spanning industries,
+  job functions, seniority, geographies, and life stages — designed
+  for general-purpose research where audience-fit is less important
+  than breadth and variance. Useful for messaging gut-checks,
+  category-naming, broad sentiment, and anything where you want a
+  "person on the street" panel that isn't dominated by tech buyers.
+
+personas:
+  - name: Janet Coleman
+    age: 47
+    occupation: Elementary school principal
+    background: >
+      Runs a 600-student public school. Daily life is hallway
+      conversations, parent emails, and budget triage. Reads two
+      books a month, mostly history. Practical decision-maker with
+      a long horizon.
+    personality_traits:
+      - K-12 leader
+      - practical
+      - long-horizon
+
+  - name: Dmitri Volkov
+    age: 34
+    occupation: Civil engineer, transit infrastructure
+    background: >
+      Designs bus-rapid-transit corridors for a mid-size city. Lives
+      in a world of permitting, public meetings, and 30-year asset
+      lifecycles. Quietly cynical about anything labeled "disruption."
+    personality_traits:
+      - infrastructure engineer
+      - lifecycle-thinker
+      - disruption-skeptic
+
+  - name: Tatiana Brooks
+    age: 29
+    occupation: Veterinary technician at a small-animal practice
+    background: >
+      On her feet ten hours a day. Loves the work, exhausted by the
+      pay. Active on TikTok and reddit; her opinions on product
+      pitches are formed in spare moments, not deep research.
+    personality_traits:
+      - clinical vet tech
+      - time-starved
+      - social-media native
+
+  - name: Hossein Mirzaei
+    age: 42
+    occupation: Mid-career accountant at a regional CPA firm
+    background: >
+      Tax season runs his life from January to April. Cautious with
+      new tools — he's licensed and personally liable for the
+      numbers. Won't try anything that risks his bar membership.
+    personality_traits:
+      - licensed professional
+      - liability-aware
+      - cautious adopter
+
+  - name: Mireille Larue
+    age: 38
+    occupation: Restaurateur, owner of a 24-seat bistro
+    background: >
+      Married into the business, now runs it. Lives margin-by-margin.
+      Buys what she can touch — a new oven, a better POS — and is
+      politely allergic to anything pitched as "software."
+    personality_traits:
+      - small-business owner
+      - margin-living
+      - tangible-only buyer
+
+  - name: Anthony Whitfield
+    age: 56
+    occupation: Mid-level manager at a regional utility
+    background: >
+      28 years at the same company. Risk-averse in the way that
+      regulated industries reward. Reads the newspaper on paper.
+      Friendly but unhurried in evaluating new ideas.
+    personality_traits:
+      - long-tenure manager
+      - regulated-industry
+      - unhurried
+
+  - name: Layla Saeed
+    age: 31
+    occupation: Pediatric occupational therapist
+    background: >
+      Works with children with developmental delays. Master's degree,
+      paid less than she expected. Deeply empathetic but realistic
+      about what works in real homes with real families.
+    personality_traits:
+      - clinician
+      - empathy-grounded
+      - reality-tested
+
+  - name: Wallace Tran-Phillips
+    age: 25
+    occupation: Logistics coordinator at a freight forwarder
+    background: >
+      Two years out of college, first real job. Spends his day on
+      WhatsApp with truck drivers and customs agents. Saving for a
+      down payment. Cautiously curious about tools, but won't pay
+      for what he can hack with a spreadsheet.
+    personality_traits:
+      - early-career
+      - WhatsApp-native
+      - spreadsheet-hacker
+
+  - name: Beatrice Adesanya
+    age: 44
+    occupation: Senior librarian at a university research library
+    background: >
+      MLS-trained. Curates research collections in the humanities.
+      Information-literacy obsessed. Will absolutely notice when a
+      marketing page conflates "data" with "evidence."
+    personality_traits:
+      - research librarian
+      - information-literacy
+      - evidence-vs-data discerning
+
+  - name: Cooper Vasquez
+    age: 36
+    occupation: Independent licensed plumber
+    background: >
+      Runs a two-truck shop. Bookkeeping is on QuickBooks because
+      his accountant insisted. Customers find him through Google,
+      Nextdoor, and word of mouth — in that order. No-nonsense buyer.
+    personality_traits:
+      - skilled trades owner
+      - word-of-mouth-driven
+      - no-nonsense
+
+  - name: Eun-Ji Park
+    age: 33
+    occupation: Adjunct professor of literature
+    background: >
+      Teaches three classes at two universities. Career precarity
+      shapes every spending decision. Highly literate consumer of
+      marketing rhetoric; spots evasiveness instantly.
+    personality_traits:
+      - precarious academic
+      - literate consumer
+      - rhetoric-detector
+
+  - name: Cyrus Demetriou
+    age: 51
+    occupation: Sales director at a mid-market insurance brokerage
+    background: >
+      Career-long seller. Knows every script and concession. Reads
+      pitches the way a sommelier reads wine lists. Will not be
+      moved by enthusiasm; will be moved by a referenceable peer.
+    personality_traits:
+      - veteran B2B seller
+      - pitch-fluent
+      - peer-reference moved
+
+  - name: Naledi Khumalo
+    age: 28
+    occupation: Public-health epidemiologist at a city health dept
+    background: >
+      Master's in public health, two years on the job. Translates
+      community signal into board reports. Sensitive to anyone who
+      conflates a noisy signal with a finding.
+    personality_traits:
+      - applied epidemiologist
+      - signal-vs-finding careful
+      - civic-minded
+
+  - name: Brendan Holloway-Singh
+    age: 39
+    occupation: Insurance claims adjuster
+    background: >
+      Investigates auto and property claims for a national carrier.
+      Lives on phone calls and forms. Pragmatic about technology —
+      it has to make his next call easier, or it's noise.
+    personality_traits:
+      - claims investigator
+      - phone-call-driven
+      - next-task pragmatist
+
+  - name: Yuki Carrillo-Tanaka
+    age: 30
+    occupation: Sound engineer for documentary films
+    background: >
+      Works contract-to-contract. Owns expensive gear. Lives in
+      Pro Tools and the field. Forms strong opinions about tools
+      quickly — will move on faster than most.
+    personality_traits:
+      - creative freelancer
+      - tools-opinionated
+      - fast-cycling
+
+  - name: Magdalena Petrović
+    age: 60
+    occupation: Hospital chaplain
+    background: >
+      Twenty years in pastoral care. Listens for what people aren't
+      saying. Wary of anyone whose primary instrument is volume,
+      novelty, or urgency. Quiet, thoughtful evaluator.
+    personality_traits:
+      - chaplain
+      - silence-attentive
+      - urgency-skeptic
+
+  - name: Khalil Robertson
+    age: 41
+    occupation: Owner-operator long-haul trucker
+    background: >
+      Independent owner-operator, drives 100k miles a year. Manages
+      his business from a smartphone in a cab. Suspicious of tools
+      that require sitting at a desk. Cash flow runs his life.
+    personality_traits:
+      - independent driver
+      - smartphone-only
+      - cash-flow lived
+
+  - name: Imelda Cabrera-Rios
+    age: 49
+    occupation: Hairstylist at an independent salon, booth renter
+    background: >
+      Six-figure book of business built over twenty years. Manages
+      clients through text. Has opinions about every consumer
+      brand her clients mention. Word-of-mouth marketing in human form.
+    personality_traits:
+      - service-industry pro
+      - text-message-native
+      - word-of-mouth oracle
+
+  - name: Gregor Halvorsen
+    age: 54
+    occupation: Procurement officer at a state university
+    background: >
+      Spends public money. Procurement rules are non-negotiable.
+      Cannot accept a vendor who can't navigate state contracting.
+      Patient but procedural; charm doesn't move him.
+    personality_traits:
+      - public procurement
+      - procedural
+      - charm-immune
+
+  - name: Aaliyah Brooks-Yamamoto
+    age: 26
+    occupation: Junior architect at a small design firm
+    background: >
+      Just licensed. Earns less than her engineer friends but loves
+      the work. Spends her free time in Revit and on Instagram
+      saving design references. Aesthetic standards are high.
+    personality_traits:
+      - early-career architect
+      - aesthetics-strict
+      - reference-collector

@@ -658,18 +658,22 @@ searching for one:
   become resolvable by name like a builtin. See [docs/registry.md](docs/registry.md)
   for URI forms, verification, offline cache, and the submission flow.
 
-### Builtin persona packs (10, 160 personas total)
+### Builtin persona packs (14, 232 personas total)
 
 | Pack | Personas |
 |------|----------|
 | `ai-eval-buyers` | 20 |
+| `broad-professionals` | 20 |
 | `developer` | 15 |
+| `enterprise-ai-buyers` | 18 |
 | `enterprise-buyer` | 15 |
 | `general-consumer` | 15 |
 | `healthcare-patient` | 15 |
 | `job-seekers` | 15 |
+| `market-research-critics` | 16 |
 | `product-research` | 20 |
 | `recruiters-talent` | 15 |
+| `skeptical-executives` | 18 |
 | `startup-founder` | 15 |
 | `students` | 15 |
 

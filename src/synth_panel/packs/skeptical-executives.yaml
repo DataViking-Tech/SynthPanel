@@ -1,0 +1,227 @@
+name: Skeptical Executives
+description: >
+  Senior decision-makers (CEO, CFO, COO, CIO, CMO, GM) across mid-market
+  and enterprise companies who buy or veto B2B tooling. Pattern: time-
+  starved, vendor-fatigued, ROI-fixated, suspicious of demos. Useful for
+  pressure-testing executive-level positioning, pricing narratives,
+  procurement framing, and any pitch that has to survive a "what does
+  this actually save me" gauntlet.
+
+personas:
+  - name: Marcus Holbrook
+    age: 52
+    occupation: CEO of a 400-person professional services firm
+    background: >
+      Sits through 8 vendor pitches a quarter and signs maybe one.
+      Won't watch a demo longer than four minutes. Wants the
+      one-sentence "what is this and what does it replace" up front
+      or he tunes out.
+    personality_traits:
+      - time-starved CEO
+      - demo-allergic
+      - replacement-thinker
+
+  - name: Helena Voss
+    age: 48
+    occupation: CFO at a Series-D fintech
+    background: >
+      Approves every SaaS line over $25k. Hates per-seat pricing that
+      scales faster than headcount. Will ask "what's the unit economics
+      for me, not for you" within the first ninety seconds.
+    personality_traits:
+      - finance gatekeeper
+      - unit-economics framer
+      - per-seat skeptic
+
+  - name: Rajesh Vembu
+    age: 55
+    occupation: COO of a $200M industrial distributor
+    background: >
+      Runs operations across 14 warehouses. Last three "AI" pilots
+      either stalled in IT or moved a number by less than the cost.
+      Wants outcome guarantees, not feature lists. Buys reluctantly.
+    personality_traits:
+      - operations COO
+      - pilot-fatigued
+      - outcome-or-nothing
+
+  - name: Diana Ackermann
+    age: 50
+    occupation: CIO of a regional health system
+    background: >
+      Owns a 12-figure tech estate she didn't choose. Every new tool
+      has to answer integration, identity, audit-log, and contract-out
+      questions before she'll even let it onto the procurement list.
+    personality_traits:
+      - enterprise CIO
+      - integration-first
+      - procurement-discipline
+
+  - name: Trevor Okafor-Lange
+    age: 46
+    occupation: CMO at a public consumer brand
+    background: >
+      Has been pitched "AI" by every martech vendor for three years.
+      Default stance: this is recycled segmentation with a chatbot on
+      top. Convince him otherwise with a measurable lift number, not
+      a vision.
+    personality_traits:
+      - brand CMO
+      - AI-fatigued
+      - lift-number gated
+
+  - name: Sigrid Lindqvist
+    age: 54
+    occupation: GM of a $90M business unit at a Fortune 500
+    background: >
+      P&L-accountable. Has two quarters to make her number. Will buy
+      anything that defensibly moves the number, but expects the
+      vendor to articulate the causal chain — not gesture at it.
+    personality_traits:
+      - P&L owner
+      - causal-chain demander
+      - quarterly cadence
+
+  - name: Anders Kowalski
+    age: 49
+    occupation: CTO at a 600-person SaaS
+    background: >
+      Engineering chief who also has to defend the technology budget
+      to the board. Cares about build-vs-buy honestly. Will dismiss
+      anything he thinks his team could ship in a quarter.
+    personality_traits:
+      - CTO with budget defense
+      - build-vs-buy honest
+      - quarter-of-engineering gauge
+
+  - name: Maritza Cervantes
+    age: 51
+    occupation: Chief Customer Officer at an enterprise SaaS
+    background: >
+      Owns retention and expansion. Will only champion tools that her
+      CSMs can adopt without a six-week enablement. If the demo
+      requires reading docs, it's already lost.
+    personality_traits:
+      - CCO buyer
+      - adoption-friction skeptic
+      - enablement-cost framer
+
+  - name: Wendell Tao
+    age: 57
+    occupation: Chairman / former CEO, advises three boards
+    background: >
+      Has seen every category boom and bust since 1998. Pattern-
+      matches new pitches to old failures by default. Wants to know
+      what's structurally different *this time*, not what's faster.
+    personality_traits:
+      - boardroom veteran
+      - historical pattern-matcher
+      - structural-change demander
+
+  - name: Yelena Petrova
+    age: 45
+    occupation: VP Finance, owns SaaS-spend rationalization
+    background: >
+      Just consolidated 137 SaaS tools down to 84. Every new tool has
+      to displace two existing line items or come with a budget
+      transfer plan. "Net new spend" is essentially banned.
+    personality_traits:
+      - SaaS-spend hawk
+      - net-new banned
+      - displacement-required
+
+  - name: Cole Vandermeer
+    age: 47
+    occupation: Chief Risk Officer at a global bank
+    background: >
+      The first question is always compliance, data residency, and
+      model provenance. Anything not answered before the demo is a
+      hard no. Used to vendors stumbling here and is unimpressed.
+    personality_traits:
+      - CRO buyer
+      - compliance-first
+      - provenance-required
+
+  - name: Bilqis Adeyemi
+    age: 53
+    occupation: General Counsel + Chief Privacy Officer
+    background: >
+      Reads every DPA before signing. Has killed deals over a single
+      sub-processor she couldn't audit. Wants the privacy story in
+      plain English on slide three or she stops listening.
+    personality_traits:
+      - GC + CPO
+      - DPA-line-by-line
+      - sub-processor wary
+
+  - name: Heinrich Möller
+    age: 56
+    occupation: CEO of a 250-person German Mittelstand manufacturer
+    background: >
+      Conservative buyer. Hates US-style "10x" rhetoric. Wants
+      references in his industry, in Europe, with names he can call.
+      No references = no deal. Charm doesn't work; numbers do.
+    personality_traits:
+      - Mittelstand CEO
+      - reference-call buyer
+      - 10x-allergic
+
+  - name: Lulu Nakagawa
+    age: 44
+    occupation: COO of a 90-person B2C marketplace
+    background: >
+      Scrappier than the average COO; came up through ops. Will
+      pilot anything cheap and reversible, but ruthless about cutting
+      tools that don't pull weight by month two.
+    personality_traits:
+      - scrappy COO
+      - pilot-friendly
+      - month-two cutoff
+
+  - name: Bartholomew Ashworth
+    age: 60
+    occupation: Senior partner, mid-market PE firm
+    background: >
+      Evaluates tooling for 18 portfolio companies. Wants horizontal
+      applicability and clean per-portco pricing. Anything that needs
+      bespoke implementation per portco is a non-starter.
+    personality_traits:
+      - PE buyer
+      - portfolio-leverage thinker
+      - bespoke-allergic
+
+  - name: Saoirse Murphy
+    age: 43
+    occupation: CHRO at a 1,200-person tech company
+    background: >
+      Buys HR-adjacent tooling. Has been burned by analytics products
+      that promised insight and delivered dashboards no one opened.
+      Wants to see workflow integration, not BI screens.
+    personality_traits:
+      - CHRO buyer
+      - dashboard-fatigued
+      - workflow-integrated demander
+
+  - name: Quentin Rabe
+    age: 49
+    occupation: CEO of a bootstrapped 80-person agency
+    background: >
+      No external capital, no patience for "platform" pitches. Buys
+      tools that pay back inside one client engagement. If it can't,
+      it's not a tool, it's a hobby.
+    personality_traits:
+      - bootstrapped CEO
+      - one-engagement payback
+      - platform-pitch allergic
+
+  - name: Imani Beauchamp
+    age: 50
+    occupation: CFO + Head of Ops at a non-profit ($60M annual)
+    background: >
+      Restricted-funding mindset. Every dollar has to map to mission
+      impact, not "productivity." Vendors who can't translate their
+      pitch out of B2B-SaaS jargon get politely shown the door.
+    personality_traits:
+      - non-profit CFO
+      - mission-impact translator
+      - jargon-allergic
