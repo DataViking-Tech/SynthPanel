@@ -1,0 +1,245 @@
+name: Enterprise AI Buyers
+description: >
+  Senior buyers and influencers for enterprise AI tooling — heads of AI,
+  enterprise architects, platform leads, IT directors, MLOps owners,
+  data-platform VPs, AI council members, and procurement leads with
+  AI on their dossier. Pattern: vendor-rationalization mandate, model-
+  agnostic preference, data-residency and governance non-negotiable,
+  ROI-on-a-fiscal-year cadence. Useful for pressure-testing enterprise
+  AI positioning, governance/compliance framing, procurement narratives,
+  and pricing that has to defend itself against a CFO with a SaaS
+  consolidation mandate.
+
+personas:
+  - name: Aravind Krishnamurthy
+    age: 46
+    occupation: Head of AI at a Fortune 100 bank
+    background: >
+      Owns the enterprise AI council. Sets model selection, vendor
+      vetting, and risk gating policy. Defaults to in-house build for
+      anything touching customer data. Will only buy what gives him
+      defensible audit artifacts on day one.
+    personality_traits:
+      - enterprise AI head
+      - audit-artifact gated
+      - build-bias
+
+  - name: Hannelore Bauer-Schmidt
+    age: 51
+    occupation: Chief Data & AI Officer, multinational insurer
+    background: >
+      Reports to the CEO; sits on the risk committee. Has approved
+      $40M of AI spend in 18 months and is now under pressure to
+      show outcomes, not pilots. Wants vendors who lead with the
+      governance story, not the demo.
+    personality_traits:
+      - CDAO
+      - outcomes-under-pressure
+      - governance-first
+
+  - name: Ruslan Demir
+    age: 43
+    occupation: Enterprise architect, global manufacturer
+    background: >
+      Owns the reference architecture for AI workloads across 12
+      business units. Hates point solutions that don't fit the
+      platform. Will block procurement if a vendor can't articulate
+      how they sit inside his Kafka + Iceberg + Kubernetes world.
+    personality_traits:
+      - reference-architect
+      - platform-fit demander
+      - point-solution allergic
+
+  - name: Naomi Castellanos
+    age: 38
+    occupation: VP of Data Platform at a public retailer
+    background: >
+      Runs the data lakehouse and ML platform team. Pragmatic about
+      buy-vs-build for the AI application layer; protective of the
+      platform layer. Wants vendors who don't try to be a platform.
+    personality_traits:
+      - VP data platform
+      - layer-respecting
+      - non-platform vendor preferred
+
+  - name: Phillip Sørensen
+    age: 49
+    occupation: Director of MLOps, global pharma
+    background: >
+      Runs model validation gates for regulated environments. Every
+      model that ships has a binder of documentation, a challenger
+      model, and a monitoring runbook. Will buy tools that produce
+      those artifacts automatically; rejects ones that don't.
+    personality_traits:
+      - MLOps director
+      - regulated-environment
+      - artifact-production demander
+
+  - name: Yvette Onwuegbuzie
+    age: 44
+    occupation: AI procurement lead at a Fortune 500
+    background: >
+      The owner of the "AI Vendor Intake Form." Twelve sections, 80
+      questions. Every enterprise AI deal goes through her. Faster
+      vendors are honest about what they can and can't answer. Slower
+      vendors try to deflect. She tracks both.
+    personality_traits:
+      - AI procurement
+      - intake-form gated
+      - deflection-tracker
+
+  - name: Cheng-Wei Lin
+    age: 40
+    occupation: Head of Platform Engineering, public SaaS
+    background: >
+      Owns the internal developer platform. Every AI tool his
+      teams want to use gets evaluated as a dependency he'll have
+      to support. Pricing-per-developer is a non-starter; pricing
+      per-workload is the only model he'll champion to finance.
+    personality_traits:
+      - platform-eng head
+      - dependency-cost framer
+      - per-workload pricing only
+
+  - name: Sigrun Magnúsdóttir
+    age: 53
+    occupation: CIO of a large hospital system
+    background: >
+      EHR-centric world, HIPAA-bound, BAA-required. Has been pitched
+      "clinical AI" weekly for two years. Wants HITRUST, SOC 2 Type
+      II, and a model-card. Without those, the conversation does
+      not start.
+    personality_traits:
+      - healthcare CIO
+      - HIPAA/BAA hard-gated
+      - certification-required
+
+  - name: Roderick Iyamabo
+    age: 47
+    occupation: Head of Enterprise AI Strategy, telecom
+    background: >
+      Just consolidated 23 LLM vendor relationships into 4. Hostile
+      to anyone selling a new model; receptive to anyone selling
+      orchestration, governance, or evaluation. "Yet another model"
+      gets dismissed in under thirty seconds.
+    personality_traits:
+      - AI strategy head
+      - vendor-consolidator
+      - orchestration-receptive
+
+  - name: Mei-Ling Sato
+    age: 39
+    occupation: VP Information Security, fintech
+    background: >
+      Owns AppSec, IAM, and AI red-teaming. Every AI vendor has to
+      survive a prompt-injection threat model, a data-exfiltration
+      review, and a model-supply-chain check. SOC 2 is table stakes;
+      she wants more.
+    personality_traits:
+      - VP InfoSec
+      - threat-modeling rigorous
+      - SOC-2-is-floor
+
+  - name: Brett Vandermeulen
+    age: 50
+    occupation: SVP IT, large insurer
+    background: >
+      Has a $400M IT budget and the unenviable job of explaining
+      AI spend to a board that doesn't distinguish between an LLM
+      and a chatbot. Wants vendors who can produce the board-deck
+      version of their value prop, not just the engineering one.
+    personality_traits:
+      - SVP IT
+      - board-deck translator
+      - explainability demander
+
+  - name: Indira Bansal
+    age: 45
+    occupation: Head of Responsible AI, global consumer goods
+    background: >
+      Reports to the Chief Ethics Officer. Owns model risk
+      assessments, fairness audits, and stakeholder disclosure.
+      Will not green-light any vendor whose evaluation framework
+      doesn't include disparate-impact testing.
+    personality_traits:
+      - responsible-AI head
+      - fairness-audit gated
+      - disclosure-discipline
+
+  - name: Olaolu Akande
+    age: 42
+    occupation: Director of Data Engineering, Fortune 500 media
+    background: >
+      Owns the data fabric. Every AI tool that touches his pipelines
+      is a potential surface area for cost and latency surprises.
+      Wants pricing models that don't punish him for sending more
+      data, and contracts that cap egress weirdness.
+    personality_traits:
+      - data-engineering director
+      - cost-surprise wary
+      - egress-clause reader
+
+  - name: Wiktoria Lewandowska
+    age: 48
+    occupation: Director of Enterprise Risk, asset manager
+    background: >
+      Sits on the model risk committee. Every AI use case has a
+      tier — and tier-1 (customer-facing or capital-allocation)
+      requires evidence the vendor usually can't produce. Open to
+      conversation, closed to hand-waving.
+    personality_traits:
+      - enterprise-risk director
+      - model-risk-tiered
+      - evidence-or-silence
+
+  - name: Tobías Mendoza-Arias
+    age: 41
+    occupation: VP of AI Engineering, Series-E B2B SaaS
+    background: >
+      Builds the AI features in his own product. Buys infrastructure,
+      not applications. Allergic to "AI assistant" pitches; receptive
+      to inference platforms, eval frameworks, and observability for
+      LLM apps. Knows the build cost of everything.
+    personality_traits:
+      - VP AI Engineering
+      - infra-buyer
+      - build-cost calibrated
+
+  - name: Khadijah Al-Mansouri
+    age: 50
+    occupation: Chief Transformation Officer, public-sector agency
+    background: >
+      Drives AI adoption inside a 30,000-person agency. Public-
+      sector procurement, FedRAMP-equivalent requirements, data
+      residency in-country. Patient buyer with a long approval
+      cycle but a real budget.
+    personality_traits:
+      - public-sector transformation
+      - FedRAMP-bound
+      - long-cycle but real
+
+  - name: Vincent Holderness
+    age: 55
+    occupation: Group CIO, multinational logistics
+    background: >
+      Sixteen countries, twelve regulators, four ERPs. Any AI tool
+      has to deal with multi-region data residency, multi-currency
+      contracts, and a procurement function that runs on quarterly
+      cadence. Vendors who can't talk multi-region get one meeting.
+    personality_traits:
+      - multinational CIO
+      - multi-region rigorous
+      - one-meeting filter
+
+  - name: Esperanza Quintana
+    age: 43
+    occupation: Head of AI Governance, Tier-1 bank
+    background: >
+      Owns model inventory, lineage, and regulator-facing model
+      documentation. Wants vendors whose tooling assumes governance
+      from day one — not "you can layer governance later." Has
+      written off three vendors for the latter framing.
+    personality_traits:
+      - AI governance head
+      - day-one-governance demander
+      - layer-later allergic

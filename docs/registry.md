@@ -7,10 +7,12 @@ to find one:
 
 - **Builtin packs** ship inside the `synthpanel` wheel. They are resolvable by
   name the moment `pip install synthpanel` finishes — no `pack import`, no
-  network, no registry lookup. The SDK currently bundles **10 persona packs**
-  (160 personas total: `ai-eval-buyers`, `developer`, `enterprise-buyer`,
-  `general-consumer`, `healthcare-patient`, `job-seekers`, `product-research`,
-  `recruiters-talent`, `startup-founder`, `students`) and **8 v3 branching
+  network, no registry lookup. The SDK currently bundles **14 persona packs**
+  (232 personas total: `ai-eval-buyers`, `broad-professionals`, `developer`,
+  `enterprise-ai-buyers`, `enterprise-buyer`, `general-consumer`,
+  `healthcare-patient`, `job-seekers`, `market-research-critics`,
+  `product-research`, `recruiters-talent`, `skeptical-executives`,
+  `startup-founder`, `students`) and **8 v3 branching
   instrument packs** (`churn-diagnosis`, `feature-prioritization`,
   `general-survey`, `landing-page-comprehension`, `market-research`,
   `name-test`, `pricing-discovery`, `product-feedback`). See the

@@ -48,6 +48,9 @@ class TestPersonaPacks:
         # sp-6wbm added four scale-up packs (job-seekers, recruiters-talent,
         # product-research, ai-eval-buyers) to lift the 24-persona ceiling
         # imposed by the original five packs. sp-b8y47x added students.
+        # sy-a0i / gh-476 added four canonical packs for common agent
+        # research jobs (skeptical-executives, market-research-critics,
+        # broad-professionals, enterprise-ai-buyers).
         assert names == {
             "developer",
             "enterprise-buyer",
@@ -59,8 +62,12 @@ class TestPersonaPacks:
             "product-research",
             "ai-eval-buyers",
             "students",
+            "skeptical-executives",
+            "market-research-critics",
+            "broad-professionals",
+            "enterprise-ai-buyers",
         }
-        assert len(builtin) == 10
+        assert len(builtin) == 14
 
     def test_sp_6wbm_scaleup_packs_load(self):
         """sp-6wbm: each new scale-up pack loads, has a non-empty

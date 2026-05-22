@@ -82,6 +82,34 @@ synthpanel panel run \
   --instrument examples/consumer-name-test/instrument.yaml
 ```
 
+## Using a builtin persona pack
+
+`--personas` accepts a bundled pack name in addition to a file path —
+which is the fastest way to start without authoring personas yourself.
+The 14 bundled packs cover most common audiences:
+
+```bash
+# Pressure-test pricing on AI/ML buyers
+synthpanel panel run --personas ai-eval-buyers --instrument pricing-discovery
+
+# Read your positioning against a hostile senior-buyer audience
+synthpanel panel run --personas skeptical-executives --instrument landing-page-comprehension
+
+# Stress-test methodology claims against professional skeptics
+synthpanel panel run --personas market-research-critics --instrument general-survey
+
+# Broad gut-check across a wide professional cross-section
+synthpanel panel run --personas broad-professionals --instrument name-test
+
+# Enterprise AI procurement framing check
+synthpanel panel run --personas enterprise-ai-buyers --instrument feature-prioritization
+```
+
+Run `synthpanel pack list` to see every installed pack and its persona
+count, or `synthpanel pack show <name>` to inspect personas before
+running. The [main README](../README.md#builtin-persona-packs-14-232-personas-total)
+lists every bundled pack with one-line audience summaries.
+
 ## Inspecting a branching instrument
 
 Render the round DAG to sanity-check routing before you spend tokens:
