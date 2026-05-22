@@ -161,12 +161,17 @@ jobs:
         run: python scripts/check_site_cli_sync.py
 
   install-smoke:
-    # Guards the source/uv install paths agents and contributors actually
-    # use. The historical `composio>=0.5,<0.6` pin silently broke when
-    # upstream yanked the 0.5.x line; this job catches that class of
-    # resolver friction before it hits a first-time contributor. Each
-    # extra is resolved in its own fresh venv so a failure points at the
-    # specific extra. See sy-4c9 / gh-470 for background.
+    # Guards the *source/uv resolution* path agents and contributors hit
+    # when they clone the repo. The historical `composio>=0.5,<0.6` pin
+    # silently broke when upstream yanked the 0.5.x line; this job
+    # catches that class of resolver friction before it hits a first-time
+    # contributor. Each extra is resolved in its own fresh venv so a
+    # failure points at the specific extra. See sy-4c9 / gh-470 for
+    # background.
+    #
+    # Complements `clean-install-smoke` / `clean-install-pipx` below
+    # (sy-6kr), which validate the *built wheel* runtime CLI from PyPI's
+    # perspective. Different failure modes — keep both.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -201,3 +206,105 @@ jobs:
             uv pip install --python "/tmp/venv-$extra/bin/python" -e ".[$extra]"
             echo "::endgroup::"
           done
+
+  clean-install-smoke:
+    # sy-6kr: prove `pip install synthpanel` (no source checkout) yields
+    # a working CLI from a fresh environment. The matrix exercises the
+    # two wheel-from-PyPI agent-onboarding paths (bare wheel, `[mcp]`
+    # extra); pipx gets its own job below. Failures here surface as
+    # dependency-resolver confusion or broken entry points to end users —
+    # we want them to fail in CI instead of in someone's first session.
+    #
+    # Complements `install-smoke` above (sy-4c9), which validates
+    # resolver behaviour across *every* extra from source. This job
+    # exercises the runtime CLI off the built wheel instead.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        install:
+          - { name: "pip (no extras)", extras: "" }
+          - { name: "pip [mcp]",       extras: "[mcp]" }
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Build wheel
+        run: |
+          pip install --upgrade build
+          python -m build --wheel
+
+      - name: Show built artifact
+        run: ls -lh dist/
+
+      - name: Fresh venv install + smoke (${{ matrix.install.name }})
+        env:
+          # Use a fake key so `doctor`'s "credentials present" check
+          # passes without ever calling a provider. The smoke commands
+          # never make network requests; we just want exit code 0.
+          ANTHROPIC_API_KEY: fake-key-for-smoke-test
+        run: |
+          set -euo pipefail
+          python -m venv /tmp/smoke
+          /tmp/smoke/bin/python -m pip install --upgrade pip
+          WHEEL=$(ls dist/synthpanel-*.whl)
+          /tmp/smoke/bin/python -m pip install "${WHEEL}${{ matrix.install.extras }}"
+
+          # No source directory is on the path — `synthpanel` resolves
+          # only via the wheel. If any of these fail, the install path
+          # is broken for new users.
+          /tmp/smoke/bin/synthpanel --version
+          /tmp/smoke/bin/synthpanel --help > /dev/null
+          /tmp/smoke/bin/synthpanel whoami
+          /tmp/smoke/bin/synthpanel doctor
+
+          # `[mcp]` matrix entry must additionally import the MCP server.
+          if [ -n "${{ matrix.install.extras }}" ]; then
+            /tmp/smoke/bin/python -c "from synth_panel.mcp.server import mcp; print('mcp server import OK')"
+          fi
+
+  clean-install-pipx:
+    # sy-6kr: pipx is the canonical "I just want the CLI globally" path
+    # for agent onboarding. Worth its own job because pipx's isolated
+    # venv layout differs from a plain `python -m venv` install, and we
+    # want to catch any pipx-only regression (entry-point shimming,
+    # data-file shipping) before it hits PyPI.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Build wheel
+        run: |
+          pip install --upgrade build
+          python -m build --wheel
+
+      - name: Install via pipx + smoke
+        env:
+          ANTHROPIC_API_KEY: fake-key-for-smoke-test
+        run: |
+          set -euo pipefail
+          pip install --upgrade pipx
+          python -m pipx ensurepath
+          WHEEL=$(ls dist/synthpanel-*.whl)
+          # `--python` keeps pipx pinned to the runner's 3.14; the default
+          # would otherwise reach for the system python.
+          python -m pipx install --python "$(which python)" "${WHEEL}"
+          # pipx installs to ~/.local/bin by default.
+          export PATH="$HOME/.local/bin:$PATH"
+          synthpanel --version
+          synthpanel --help > /dev/null
+          synthpanel whoami
+          synthpanel doctor
