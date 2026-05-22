@@ -2,6 +2,13 @@
   "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
   "skills": [
     {
+      "name": "synthpanel",
+      "type": "skill-md",
+      "description": "Director skill for SynthPanel — decide when to reach for synthetic panels (focus groups, name tests, concept tests, pricing probes, mass-appeal polls) and route to the right sub-skill, with anti-overclaiming guardrails baked in.",
+      "url": "/.well-known/agent-skills/synthpanel/SKILL.md",
+      "digest": "sha256:99bc765d5214e7875d853cbb55a4e5a7514e807768322733418bdc05974272bc"
+    },
+    {
       "name": "focus-group",
       "type": "skill-md",
       "description": "Run a synthetic focus group — define personas, craft questions, and collect structured qualitative feedback from AI panelists.",

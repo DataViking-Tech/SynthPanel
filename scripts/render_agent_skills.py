@@ -28,6 +28,7 @@ SCHEMA_URL = "https://schemas.agentskills.io/discovery/0.2.0/schema.json"
 # Stable publication order — independent of filesystem traversal so the
 # committed index.json is deterministic across platforms.
 SKILL_ORDER = (
+    "synthpanel",
     "focus-group",
     "name-test",
     "concept-test",
