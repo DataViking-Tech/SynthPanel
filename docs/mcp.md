@@ -155,6 +155,14 @@ The response envelope (`panel_verdict.json`) is closed-shape with
 
 ## Tools (12)
 
+> **Structured polling is the agent default.** Both `run_panel` and
+> `run_quick_poll` accept a `response_schema` argument (JSON Schema
+> dict) that forces structured output at generation time — no prose
+> parsing required. See [docs/structured-polling.md](structured-polling.md)
+> for the full pattern catalogue covering forced-choice, Likert,
+> tagged-themes (objections/risks), confidence, and ranking, plus a
+> runnable 35-persona prioritization example.
+
 ### Research Tools
 
 | Tool | Description |

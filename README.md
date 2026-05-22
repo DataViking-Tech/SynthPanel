@@ -135,6 +135,13 @@ for dissent, and `rounds[].results[]` for the per-panelist transcript. See
 envelope (note: `panel_verdict` fields like `convergence` and `flags[]` are
 defined but not yet emitted on the success path — see the note in the lede).
 
+**Structured polling is the agent default.** For pick-one, Likert,
+confidence, and tagged-themes questions, pass a bounded
+`response_schema` so panelists return parsed JSON, not prose. No regex,
+no post-hoc parsing. See [docs/structured-polling.md](docs/structured-polling.md)
+for the full pattern catalogue and a runnable 35-persona prioritization
+example.
+
 ## Human Operator Quick Start
 
 Prefer a terminal? Same engine, CLI surface. Pick the install path that
