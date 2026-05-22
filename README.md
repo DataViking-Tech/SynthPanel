@@ -901,6 +901,18 @@ The leaderboard is cached for 24 hours at
 [docs/recommended-models.md](docs/recommended-models.md) for the full
 rules, offline behaviour, and a use-case → top-model table.
 
+### Model packs (agent guidance)
+
+`--best-model-for` picks one model; **model packs** pick a model *mix*
+calibrated for a decision's stake — e.g. `fast-cheap-preflight` (single
+cheap model for smoke tests) vs. `balanced-research-ensemble`
+(`haiku,sonnet,gemini-2.5-flash` for "real" decisions) vs.
+`high-stakes-validation` (4-family ensemble with `--blend`). The packs are
+documented presets that compile to the existing `--models` flag — see
+[docs/model-packs.md](docs/model-packs.md) for the seven recommended
+configurations, the SynthBench finding that motivates ensembles over single
+cheap models, and a checklist for agents on matching pack to claim strength.
+
 ## Architecture
 
 synthpanel is a research harness, not an LLM wrapper. It orchestrates the research workflow:
