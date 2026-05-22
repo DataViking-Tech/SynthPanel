@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -1554,6 +1555,159 @@ class TestPanelRunSave:
         assert len(data["results"]) == 4  # 2 personas × 2 models
         models_seen = {r.get("model") for r in data["results"]}
         assert models_seen == {"haiku", "sonnet"}
+
+    # ── sy-659: --save + --output-format json surfaces a saved handle ──
+
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_save_json_output_includes_result_id_and_saved_path(
+        self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path, monkeypatch
+    ):
+        """sy-659: ``--save --output-format json`` puts the saved handle on stdout.
+
+        Agents driving follow-up commands (report/inspect/analyze) must be able
+        to read ``result_id`` + ``saved_path`` from the machine-readable stdout
+        payload without scraping the stderr "Result saved: ..." line.
+        """
+        mock_runtime = MagicMock()
+        mock_runtime.run_turn.return_value = _mock_turn_summary("answer")
+        mock_runtime_cls.return_value = mock_runtime
+        mock_synth.return_value = _mock_synthesis_result()
+
+        monkeypatch.setenv("SYNTH_PANEL_DATA_DIR", str(tmp_path / "data"))
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n    age: 30\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: What do you think?\n")
+
+        code = main(
+            [
+                "--output-format",
+                "json",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--save",
+            ]
+        )
+        assert code == 0
+        captured = capsys.readouterr()
+
+        # stdout MUST be a single JSON object carrying the handle.
+        data = json.loads(captured.out)
+        assert "result_id" in data, f"result_id missing from JSON output: {data!r}"
+        assert "saved_path" in data, f"saved_path missing from JSON output: {data!r}"
+        assert data["result_id"].startswith("result-")
+        # The path keeps pointing at the file the loader will open.
+        result_file = Path(data["saved_path"])
+        assert result_file.exists(), f"saved_path {result_file} does not exist"
+        assert result_file == tmp_path / "data" / "results" / f"{data['result_id']}.json"
+
+        # And stderr still carries the human-readable line so interactive
+        # shells aren't suddenly silent.
+        assert f"Result saved: {data['result_id']}" in captured.err
+
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_json_output_without_save_omits_result_id_and_saved_path(
+        self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path, monkeypatch
+    ):
+        """sy-659: ``--output-format json`` (no --save) must not invent a handle.
+
+        Skipping ``--save`` means nothing was persisted; the JSON output must
+        not advertise a handle that points at a file the agent can't load.
+        """
+        mock_runtime = MagicMock()
+        mock_runtime.run_turn.return_value = _mock_turn_summary("answer")
+        mock_runtime_cls.return_value = mock_runtime
+        mock_synth.return_value = _mock_synthesis_result()
+
+        monkeypatch.setenv("SYNTH_PANEL_DATA_DIR", str(tmp_path / "data"))
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n    age: 30\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: What do you think?\n")
+
+        code = main(
+            [
+                "--output-format",
+                "json",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+            ]
+        )
+        assert code == 0
+        data = json.loads(capsys.readouterr().out)
+        assert "result_id" not in data
+        assert "saved_path" not in data
+
+    @patch("synth_panel.ensemble.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_save_json_output_in_ensemble_mode_includes_handle(
+        self, mock_client_cls, mock_rpp, capsys, tmp_path, monkeypatch
+    ):
+        """sy-659: ensemble path also surfaces ``result_id`` + ``saved_path`` in JSON."""
+        from synth_panel.cost import TokenUsage as CostTokenUsage
+        from synth_panel.orchestrator import PanelistResult
+
+        def _fake_run_parallel(**kwargs):
+            model = kwargs["model"]
+            personas = kwargs["personas"]
+            results = [
+                PanelistResult(
+                    persona_name=p["name"],
+                    responses=[{"question": "Q1", "response": f"answer from {model}", "error": False}],
+                    usage=CostTokenUsage(input_tokens=100, output_tokens=50),
+                    model=model,
+                )
+                for p in personas
+            ]
+            sessions = {p["name"]: MagicMock() for p in personas}
+            return results, MagicMock(), sessions
+
+        mock_rpp.side_effect = _fake_run_parallel
+
+        monkeypatch.setenv("SYNTH_PANEL_DATA_DIR", str(tmp_path / "data"))
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n    age: 30\n  - name: Bob\n    age: 25\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: What do you think?\n")
+
+        code = main(
+            [
+                "--output-format",
+                "json",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--models",
+                "haiku,sonnet",
+                "--save",
+            ]
+        )
+        assert code == 0
+        data = json.loads(capsys.readouterr().out)
+        assert "result_id" in data
+        assert "saved_path" in data
+        assert data["result_id"].startswith("result-")
+        result_file = Path(data["saved_path"])
+        assert result_file.exists()
+        assert result_file == tmp_path / "data" / "results" / f"{data['result_id']}.json"
 
 
 class TestPanelRunBlendEnsemble:

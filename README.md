@@ -566,6 +566,25 @@ synthpanel report path/to/result.json
 synthpanel report <result-id> -o report.md
 ```
 
+Agents driving follow-up commands programmatically should combine
+`--save` with `--output-format json` — the stdout JSON payload then
+includes a `result_id` and `saved_path` for the persisted file:
+
+```bash
+synthpanel --output-format json panel run \
+  --personas examples/personas.yaml \
+  --instrument examples/survey.yaml \
+  --save \
+  | jq '{result_id, saved_path}'
+# {
+#   "result_id": "result-20260522-211748-a1b2c3",
+#   "saved_path": "/Users/you/.synthpanel/results/result-20260522-211748-a1b2c3.json"
+# }
+```
+
+The same handle is still printed as `Result saved: <result_id>` on
+stderr, so interactive callers see it without parsing JSON.
+
 Every rendered report opens with a mandatory synthetic-panel banner and
 closes with a matching footer so the output can't be mistaken for
 real-user research:

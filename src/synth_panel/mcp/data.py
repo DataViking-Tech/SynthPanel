@@ -75,6 +75,17 @@ def _results_dir() -> Path:
     return d
 
 
+def get_result_path(result_id: str) -> Path:
+    """Return the absolute filesystem path where ``result_id`` is persisted.
+
+    The path is the same one :func:`save_panel_result` writes to and
+    :func:`get_panel_result` reads from. Exposed so machine-readable CLI
+    output (``--output-format json --save``) can emit ``saved_path``
+    without scraping stderr or duplicating the layout logic.
+    """
+    return _results_dir() / f"{result_id}.json"
+
+
 # ---------------------------------------------------------------------------
 # Bundled packs (shipped with the package)
 # ---------------------------------------------------------------------------

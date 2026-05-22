@@ -388,7 +388,10 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Save panel results to ~/.synthpanel/results/ with a generated "
             "result ID. The result ID is printed to stderr on completion and "
-            "can be passed to 'synthpanel analyze <RESULT_ID>'."
+            "can be passed to 'synthpanel analyze <RESULT_ID>'. With "
+            "--output-format json, the stdout payload also includes "
+            "'result_id' and 'saved_path' so agents can drive follow-up "
+            "commands without scraping stderr."
         ),
     )
     panel_run_parser.add_argument(

@@ -1538,7 +1538,6 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             template_vars=template_vars or None,
             panelist_per_model=ens_per_model_meta,
         )
-        emit(fmt, message="Ensemble complete", extra=output)
 
         # hq-0pnq: --save was a silent no-op in the ensemble path because
         # this branch returned before the persistence block at the end of
@@ -1546,8 +1545,11 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         # standard saved-result shape so consumers (`synthpanel inspect`,
         # `synthpanel analyze`) see ensemble runs the same way they see
         # single-model runs.
+        # sy-659: persist before emit so JSON output can include
+        # ``result_id`` + ``saved_path`` without forcing agents to scrape
+        # stderr.
         if getattr(args, "save", False):
-            from synth_panel.mcp.data import save_panel_result
+            from synth_panel.mcp.data import get_result_path, save_panel_result
 
             inst_name: str | None = None
             inst_arg = getattr(args, "instrument", None)
@@ -1560,7 +1562,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 for pr in mr.panelist_results:
                     ensemble_results.append(_fmt_panelist(pr, mr.model))
 
-            result_id = save_panel_result(
+            ens_result_id = save_panel_result(
                 results=ensemble_results,
                 model=ensemble_models[0],
                 total_usage=ens_result.total_usage.to_dict(),
@@ -1570,8 +1572,11 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 instrument_name=inst_name,
                 models=list(ensemble_models),
             )
-            print(f"Result saved: {result_id}", file=sys.stderr)
+            output["result_id"] = ens_result_id
+            output["saved_path"] = str(get_result_path(ens_result_id))
+            print(f"Result saved: {ens_result_id}", file=sys.stderr)
 
+        emit(fmt, message="Ensemble complete", extra=output)
         return 0
 
     # ── sp-inline-calibration (sp-a6jc): --calibrate-against validation ──
@@ -2363,6 +2368,41 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             convergence_report["human_baseline_error"] = convergence_baseline_error
         convergence_tracker.close()
 
+    # ── sy-659: persist before output emission ───────────────────────
+    # save runs ahead of the text/json split so machine-readable output
+    # can include ``result_id`` + ``saved_path``. Stderr still gets the
+    # human-readable "Result saved" line so interactive callers see it.
+    saved_result_id: str | None = None
+    saved_result_path: str | None = None
+    if getattr(args, "save", False):
+        from synth_panel.mcp.data import get_result_path, save_panel_result
+
+        inst_name = None
+        inst_arg = getattr(args, "instrument", None)
+        if inst_arg:
+            inst_path = Path(inst_arg)
+            inst_name = inst_path.stem if inst_path.exists() else inst_arg
+
+        all_models: list[str] | None = None
+        if persona_models:
+            all_models = sorted(set(persona_models.values()))
+        elif model_spec:
+            all_models = [m for m, _w in model_spec]
+
+        saved_result_id = save_panel_result(
+            results=results,
+            model=model,
+            total_usage=total_usage.to_dict(),
+            total_cost=total_cost_est.format_usd(),
+            persona_count=len(personas),
+            question_count=len(questions),
+            instrument_name=inst_name,
+            models=all_models,
+            synthesis=synthesis_dict,
+        )
+        saved_result_path = str(get_result_path(saved_result_id))
+        print(f"Result saved: {saved_result_id}", file=sys.stderr)
+
     if fmt is OutputFormat.TEXT:
         if banner:
             print(banner, file=sys.stderr)
@@ -2666,6 +2706,11 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             }
         if run_invalid or strict_violation:
             extra["message"] = banner.replace("\n", " ").strip() if banner else "PANEL RUN INVALID"
+        # sy-659: surface saved result handle so agents can drive follow-up
+        # commands (report/inspect/analyze) without scraping stderr.
+        if saved_result_id is not None:
+            extra["result_id"] = saved_result_id
+            extra["saved_path"] = saved_result_path
         emit(fmt, message=extra.get("message", "Panel complete"), extra=extra)
 
     # ── sp-ezz: opt-in SynthBench submission ─────────────────────────
@@ -2713,39 +2758,6 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 f"Warning: SynthBench submission not accepted ({sb_result.status}): {sb_result.error}",
                 file=sys.stderr,
             )
-
-    # ── sp-7vp: auto-save results with --save ─────────────────────────
-    if getattr(args, "save", False):
-        from synth_panel.mcp.data import save_panel_result
-
-        # Determine instrument name (pack name or filename stem)
-        inst_name = None
-        inst_arg = getattr(args, "instrument", None)
-        if inst_arg:
-            inst_path = Path(inst_arg)
-            if inst_path.exists():
-                inst_name = inst_path.stem
-            else:
-                inst_name = inst_arg  # pack name
-
-        all_models: list[str] | None = None
-        if persona_models:
-            all_models = sorted(set(persona_models.values()))
-        elif model_spec:
-            all_models = [m for m, _w in model_spec]
-
-        result_id = save_panel_result(
-            results=results,
-            model=model,
-            total_usage=total_usage.to_dict(),
-            total_cost=total_cost_est.format_usd(),
-            persona_count=len(personas),
-            question_count=len(questions),
-            instrument_name=inst_name,
-            models=all_models,
-            synthesis=synthesis_dict,
-        )
-        print(f"Result saved: {result_id}", file=sys.stderr)
 
     # sp-2hg: exit non-zero when the run is invalid so automation (CI,
     # refinery, wrapper scripts) can detect silent-failure scenarios.
