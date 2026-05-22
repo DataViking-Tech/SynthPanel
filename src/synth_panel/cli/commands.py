@@ -5269,6 +5269,121 @@ def handle_report(args: argparse.Namespace, fmt: OutputFormat) -> int:
     return 0
 
 
+def handle_poll_summary(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Render the deterministic structured-response summary for a saved result.
+
+    Loads the result (ID or path), runs :func:`build_poll_summary`, then
+    emits either a human-friendly text block (default) or the full JSON
+    payload. ``--segment-by`` is split on commas; empty string disables
+    segment splits.
+
+    Exits 1 with a typed error message when the result can't be loaded
+    (mirrors ``handle_report``'s ``ReportLoadError`` parity). Exits 0
+    even when the summary is empty — an enum-free result is a valid
+    finding, not an error.
+
+    sy-4yd.
+    """
+    from synth_panel.poll_summary import build_poll_summary
+    from synth_panel.reporting import ReportLoadError, load_panel_json
+
+    try:
+        data = load_panel_json(args.result)
+    except ReportLoadError as err:
+        msg = f"Error: {err}"
+        if fmt is OutputFormat.TEXT:
+            print(msg, file=sys.stderr)
+        else:
+            emit(fmt, message=msg, extra={"error": err.code})
+        return 1
+
+    raw_segment = getattr(args, "segment_by", None)
+    if raw_segment is None:
+        segment_by = None  # use defaults
+    else:
+        # Empty string => disable explicitly; otherwise split on commas
+        # and strip whitespace so `--segment-by "occupation, tier"` works.
+        segment_by = [s.strip() for s in raw_segment.split(",") if s.strip()]
+
+    summary = build_poll_summary(data, segment_by=segment_by)
+    out_format = getattr(args, "poll_summary_format", "text")
+
+    if out_format == "json" or fmt is not OutputFormat.TEXT:
+        payload = summary.to_dict()
+        if fmt is OutputFormat.TEXT:
+            # Direct JSON output for `--format json` regardless of the
+            # top-level --output-format. Lets a user pipe to jq without
+            # also picking the global JSON envelope.
+            print(json.dumps(payload, indent=2))
+        else:
+            emit(fmt, message="poll_summary", extra=payload)
+        return 0
+
+    # Text rendering. Concise — the consumer is either a human eyeballing
+    # the panel or an agent scanning for the headline. Detailed payload
+    # always available via --format json.
+    lines: list[str] = []
+    lines.append(f"Poll summary — {summary.persona_count} panelist{'s' if summary.persona_count != 1 else ''}")
+    if not summary.questions:
+        lines.append("  (no structured questions in this result — see `synthpanel report` for the markdown report)")
+
+    for qs in summary.questions:
+        lines.append("")
+        title = qs.question[:80] + ("…" if len(qs.question) > 80 else "")
+        lines.append(f"  Q{qs.question_index}: {title}  [kind={qs.kind}, n={qs.n}]")
+        if qs.kind == "enum":
+            if qs.winner:
+                lines.append(f"    winner: {qs.winner}")
+            if qs.first_choice_counts:
+                for opt, count in qs.first_choice_counts.items():
+                    pct = (count / qs.n * 100) if qs.n else 0
+                    lines.append(f"      {opt}: {count} ({pct:.0f}%)")
+            if qs.second_choice_counts:
+                lines.append("    second choices:")
+                for opt, count in qs.second_choice_counts.items():
+                    lines.append(f"      {opt}: {count}")
+            if qs.weighted_scores:
+                lines.append("    weighted scores (avg rating per choice):")
+                for opt, score in qs.weighted_scores.items():
+                    lines.append(f"      {opt}: {score:.2f}")
+        elif qs.kind == "scale":
+            if qs.metric_average is not None:
+                lines.append(f"    average: {qs.metric_average:.2f}")
+            if qs.metric_distribution:
+                hist = ", ".join(f"{k}x{v}" for k, v in qs.metric_distribution.items())
+                lines.append(f"    distribution: {hist}")
+        if qs.n_unparseable:
+            lines.append(f"    ({qs.n_unparseable} unparseable response{'s' if qs.n_unparseable != 1 else ''})")
+
+    if summary.segment_splits:
+        lines.append("")
+        lines.append("  segment splits:")
+        for qi, attrs in summary.segment_splits.items():
+            for attr, rows in attrs.items():
+                lines.append(f"    Q{qi} by {attr}:")
+                for value, choices in rows.items():
+                    choice_str = ", ".join(f"{opt}={cnt}" for opt, cnt in choices.items())
+                    lines.append(f"      {value}: {choice_str}")
+
+    if summary.top_objections:
+        lines.append("")
+        lines.append("  top objections:")
+        for obj in summary.top_objections:
+            lines.append(f"    - {obj}")
+
+    if summary.recommended_next_test:
+        lines.append("")
+        lines.append(f"  recommended next test: {summary.recommended_next_test}")
+
+    if summary.warnings:
+        lines.append("")
+        for w in summary.warnings:
+            print(f"  warning: {w}", file=sys.stderr)
+
+    print("\n".join(lines))
+    return 0
+
+
 def _format_path(path: list[dict[str, Any]]) -> str:
     """Render an executed branching path as a single human line.
 

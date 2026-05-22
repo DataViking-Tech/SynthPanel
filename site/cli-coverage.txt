@@ -24,6 +24,7 @@ mcp-serve
 pack
 panel
 plugin
+poll-summary
 prompt
 report
 runs
