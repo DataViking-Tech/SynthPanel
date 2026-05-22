@@ -490,6 +490,40 @@ Zed uses `context_servers` (not `mcpServers`). Add to `~/.config/zed/settings.js
 </details>
 
 <details>
+<summary><b>Hermes</b></summary>
+
+Hermes uses a YAML config with `mcp_servers` and explicit timeout fields. Add this block to your Hermes config:
+
+```yaml
+mcp_servers:
+  synthpanel:
+    command: "synthpanel"
+    args: ["mcp-serve"]
+    timeout: 180
+    connect_timeout: 60
+    env:
+      ANTHROPIC_API_KEY: "sk-..."
+```
+
+Or run on demand via `uvx` without a global install:
+
+```yaml
+mcp_servers:
+  synthpanel:
+    command: "uvx"
+    args: ["--from", "synthpanel[mcp]", "synthpanel", "mcp-serve"]
+    timeout: 180
+    connect_timeout: 60
+    env:
+      ANTHROPIC_API_KEY: "sk-..."
+```
+
+The 180s `timeout` covers a full panel run; the 60s `connect_timeout`
+gives the subprocess room to import the MCP SDK on first launch.
+
+</details>
+
+<details>
 <summary><b>Claude Desktop</b></summary>
 
 Open **Settings → Developer → Edit Config** (or edit the file directly):

@@ -61,6 +61,56 @@ Prefer to install without the plugin, or use a different host? See
 steps and guidance for hosts that don't speak Claude Code's
 slash-command convention.
 
+### Hermes
+
+Hermes uses a YAML config with an `mcp_servers` map and explicit timeout
+fields. Add this block to your Hermes config:
+
+```yaml
+mcp_servers:
+  synthpanel:
+    command: "synthpanel"
+    args: ["mcp-serve"]
+    timeout: 180
+    connect_timeout: 60
+    env:
+      ANTHROPIC_API_KEY: "sk-..."
+```
+
+If you don't want to install the `synthpanel` binary globally, use
+[`uvx`](https://docs.astral.sh/uv/) to fetch and run it on demand:
+
+```yaml
+mcp_servers:
+  synthpanel:
+    command: "uvx"
+    args: ["--from", "synthpanel[mcp]", "synthpanel", "mcp-serve"]
+    timeout: 180
+    connect_timeout: 60
+    env:
+      ANTHROPIC_API_KEY: "sk-..."
+```
+
+- `timeout` (180s) covers a full panel run — panels with many personas
+  and rounds can take 60–120s in BYOK mode.
+- `connect_timeout` (60s) gives the subprocess room to import the MCP
+  Python SDK and providers on first launch.
+- Drop the `env` block entirely if your Hermes host already advertises
+  `sampling` and you want zero-config first-run (see
+  [Sampling Mode](#sampling-mode)).
+
+Restart Hermes after editing the config so the new server entry is
+picked up.
+
+### Other MCP hosts
+
+Any host that speaks the MCP stdio transport works the same way: launch
+`synthpanel mcp-serve` as a subprocess and pass provider keys through
+the environment. The Hermes block above is the canonical shape — most
+hosts map onto either that YAML form or the JSON form used by Claude
+Code / Cursor / Windsurf. If your host needs an explicit transport
+field, set it to `stdio`.
+
 ### Manual Install (Claude Code without plugin)
 
 If you configured the MCP server manually (without `/plugin install`) you can still get all commands and skills by running:
@@ -423,3 +473,98 @@ Panel results, persona packs, and instrument packs are stored under `~/.synthpan
 ├── packs/instruments/      # Installed instrument packs (YAML)
 └── results/                # Panel results (JSON) + session data
 ```
+
+## Troubleshooting
+
+### `command not found: synthpanel`
+
+The MCP host can't see the `synthpanel` binary on its `PATH`. This is
+the single most common failure mode, because MCP subprocesses inherit
+the host's PATH — not your shell's.
+
+**Fixes, in order of preference:**
+
+1. Install globally so any host can find it:
+   ```bash
+   pip install "synthpanel[mcp]"      # or pipx install "synthpanel[mcp]"
+   which synthpanel                    # confirm the binary is on PATH
+   ```
+2. Or point `command` at the absolute binary path:
+   ```jsonc
+   "command": "/Users/you/.venv/bin/synthpanel"
+   ```
+3. Or run it through `uvx` so the host fetches it on demand:
+   ```jsonc
+   "command": "uvx",
+   "args": ["--from", "synthpanel[mcp]", "synthpanel", "mcp-serve"]
+   ```
+
+Claude Desktop on macOS is particularly strict about PATH — it runs
+under launchd and does not inherit your shell environment. Use an
+absolute path or `uvx` for that host.
+
+### Server starts but no tools appear
+
+The server launched but the host isn't seeing `run_panel`,
+`run_quick_poll`, etc. in the tool picker.
+
+- **MCP extra missing.** `pip install synthpanel` alone is not enough —
+  the MCP server requires the SDK from the `[mcp]` extra:
+  ```bash
+  pip install "synthpanel[mcp]"
+  ```
+- **Stale host cache.** Some hosts cache the tool list per server entry.
+  Restart the host (full quit, not just window close) after editing
+  config or upgrading the package.
+- **Server logs.** Run `synthpanel mcp-serve` in a terminal to confirm
+  it boots and produces no errors before the host launches it.
+
+### Missing or invalid API key
+
+Symptom: tool calls return `MISSING_CREDS` or a provider-specific
+401/403 error.
+
+- The MCP subprocess only sees env vars from the host's `env` block (or
+  the host's inherited environment). Setting `ANTHROPIC_API_KEY` in
+  your shell profile does **not** automatically propagate — put it in
+  the `env` block of the MCP server entry.
+- Run `synthpanel login` to seed the on-disk credential store; the MCP
+  server reads from there as a fallback when the env is empty (see
+  [Model Resolution Order](#model-resolution-order)).
+- If your host advertises MCP `sampling` (Claude Desktop, Claude Code,
+  Cursor, Windsurf), you can omit the key entirely and synthpanel will
+  borrow the host's LLM access — see [Sampling Mode](#sampling-mode).
+
+### Timeouts on long panel runs
+
+Symptom: the host kills the subprocess mid-panel with a timeout error.
+
+- A 5-persona × 3-question BYOK panel typically takes 30–90 seconds.
+  Cross-provider ensembles and larger personas can take 2–5 minutes.
+- Raise the host's per-tool timeout. For Hermes:
+  ```yaml
+  mcp_servers:
+    synthpanel:
+      timeout: 300         # 5 min for heavy panels
+      connect_timeout: 60
+  ```
+  Other hosts use their own field names; consult the host's MCP docs.
+- For exploratory work, prefer `run_quick_poll` (single question) over
+  `run_panel` (full instrument) — it returns in seconds.
+
+### Tool calls fail with `MISSING_DECISION`
+
+Every panel-class tool (`run_panel`, `run_quick_poll`, `extend_panel`)
+**requires** a `decision_being_informed` string (12–280 chars). This
+is a frozen v1.0.0 contract requirement. See
+[Frozen v1.0.0 Contract](#frozen-v100-contract) for the rule and
+[docs/response-contract.md](response-contract.md) for the error
+envelope. `run_prompt` does not require it.
+
+### `SCHEMA_DRIFT` errors on synthesis
+
+The structured-output engine's 3-strike retry budget was exhausted.
+Either re-run the tool (transient model output drift is recoverable),
+or set `SYNTHPANEL_DRIFT_DEGRADE=1` in the MCP `env` block to get a
+degraded result with a `schema_drift` flag instead of an error — see
+[Host Integration Flags](#host-integration-flags).
