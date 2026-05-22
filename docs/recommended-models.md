@@ -96,3 +96,10 @@ CLI flag or [synthbench.org](https://synthbench.org) for current picks.
 `--best-model-for` picks a single model for the whole panel. It is
 mutually exclusive with `--models` (which splits the panel across
 multiple models) — mixing the two is rejected at parse time.
+
+For a *model mix* picker — i.e. when the answer to "which models?" is more
+than one and you want it calibrated to the decision's stake rather than a
+single SynthBench topic — see [docs/model-packs.md](model-packs.md). Packs
+like `balanced-research-ensemble` and `high-stakes-validation` exist
+precisely because the leaderboard shows ensembles outperforming single
+top-ranked models on most contested topics.

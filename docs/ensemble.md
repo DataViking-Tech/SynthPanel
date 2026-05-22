@@ -4,6 +4,12 @@ The `--models` flag has **two distinct meanings** depending on its shape.
 This page documents which shape does what, how weights map to persona
 assignments, and the edge cases operators have tripped on.
 
+> **Looking for recommended configurations?** See
+> [docs/model-packs.md](model-packs.md) for seven named presets
+> (`fast-cheap-preflight`, `balanced-research-ensemble`,
+> `skeptical-red-team-ensemble`, …) that compile to the `--models` strings
+> documented below, plus agent guidance on matching pack to decision stake.
+
 ## Two shapes of `--models`
 
 ### 1. Weighted per-persona assignment (has `:`)
