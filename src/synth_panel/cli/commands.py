@@ -5681,6 +5681,12 @@ def handle_doctor(args: argparse.Namespace, fmt: OutputFormat) -> int:
     )
 
     verbose = bool(getattr(args, "verbose", False))
+    # sy-e28: agents and clean-install CI smoke tests need to validate
+    # package health without provisioning a provider key. --install-only
+    # drops the credential check from the exit-code gate but keeps it in
+    # the report so the output still tells you whether you can actually
+    # run a panel.
+    install_only = bool(getattr(args, "install_only", False))
 
     # --- Python runtime
     py_version_str = sys.version.split()[0]
@@ -5766,7 +5772,13 @@ def handle_doctor(args: argparse.Namespace, fmt: OutputFormat) -> int:
         pack_load_errors.append(f"pack registry load failed: {exc}")
     packs_ok = not pack_load_errors
 
-    checks_ok = py_ok and not dep_errors and any_provider and ckpt_writable and packs_ok
+    # sy-e28: install_ok is the same gate as the old checks_ok minus the
+    # credential check. checks_ok stays "fully runnable" by default so
+    # the existing CI/agent contract holds; --install-only drops the
+    # credential check from checks_ok so the exit code reflects install
+    # health alone.
+    install_ok = py_ok and not dep_errors and ckpt_writable and packs_ok
+    checks_ok = install_ok and (any_provider or install_only)
 
     extra: dict[str, Any] = {
         "synthpanel_version": __version__,
@@ -5787,6 +5799,8 @@ def handle_doctor(args: argparse.Namespace, fmt: OutputFormat) -> int:
         "bundled_instrument_packs": bundled_instrument_count,
         "pack_load_errors": pack_load_errors,
         "packs_ok": packs_ok,
+        "install_only": install_only,
+        "install_ok": install_ok,
         "checks_ok": checks_ok,
     }
 
@@ -5819,7 +5833,10 @@ def handle_doctor(args: argparse.Namespace, fmt: OutputFormat) -> int:
         else:
             print(f"  {warn_mark} optional: mcp not installed (`pip install synthpanel[mcp]`)")
 
-        # Credentials (one line per provider with a key)
+        # Credentials (one line per provider with a key). In --install-only
+        # mode credential absence is reported as a warning, not an error,
+        # since the user has explicitly asked to validate install health
+        # only.
         if any_provider:
             for row in provider_rows:
                 if row["available"]:
@@ -5828,6 +5845,11 @@ def handle_doctor(args: argparse.Namespace, fmt: OutputFormat) -> int:
                     print(f"  {warn_mark} {row['env_var']}: not set ({row['provider']})")
             if verbose:
                 print(f"     credential store: {credentials_path()}")
+        elif install_only:
+            print(
+                f"  {warn_mark} credentials: none configured "
+                "(install-only mode — run `synthpanel login` before running a panel)."
+            )
         else:
             print(
                 f"  {bad_mark} No LLM credentials found (env or stored). Run `synthpanel login`.",
@@ -5861,15 +5883,19 @@ def handle_doctor(args: argparse.Namespace, fmt: OutputFormat) -> int:
             for msg in pack_load_errors:
                 print(f"  {bad_mark} {msg}", file=sys.stderr)
 
-        # Tally
+        # Tally — in --install-only mode missing credentials count as a
+        # warning rather than an error so the printed summary matches the
+        # exit code.
+        credentials_error_count = 0 if (any_provider or install_only) else 1
+        credentials_warning_count = 1 if (install_only and not any_provider) else 0
         n_err = (
             (0 if py_ok else 1)
             + len(dep_errors)
-            + (0 if any_provider else 1)
+            + credentials_error_count
             + (0 if ckpt_writable else 1)
             + len(pack_load_errors)
         )
-        n_warn = len(optional_notes)
+        n_warn = len(optional_notes) + credentials_warning_count
         if rc == 0:
             tail = f"{n_warn} warning{'s' if n_warn != 1 else ''}, 0 errors." if n_warn else "0 errors."
             print(tail)

@@ -1411,11 +1411,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show which providers have credentials available (env or stored).",
     )
 
-    subparsers.add_parser(
+    doctor_parser = subparsers.add_parser(
         "doctor",
         help=(
             "Preflight diagnostics: runtime, deps, and provider credentials "
             "(never prints secrets; exits 1 if no provider credential is configured)."
+        ),
+    )
+    doctor_parser.add_argument(
+        "--install-only",
+        action="store_true",
+        help=(
+            "Check package/install health only — exit 0 even when no provider "
+            "credential is configured. Credential status is still reported "
+            "informationally. Useful as a post-`pip install` smoke test in CI "
+            "and clean-room environments where keys haven't been provisioned yet."
         ),
     )
 
