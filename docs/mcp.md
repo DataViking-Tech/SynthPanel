@@ -28,6 +28,17 @@ The command merges into the host's existing `mcpServers` map, refuses to
 overwrite a clashing entry without `--force`, and writes user-scoped
 files with mode `0600`.
 
+The installer also refuses by default when the `mcp` optional extra
+isn't installed in the current Python env — without it,
+`synthpanel mcp-serve` would crash at launch time and the host would
+report a generic "server failed to start" with no actionable hint. The
+refusal points at the one-line fix (`pip install 'synthpanel[mcp]'`) and
+mentions the `--allow-missing-extra` escape hatch for cross-machine
+setups where the editor and the server live in different envs (sy-xyn).
+Equivalent guard runs at `mcp-serve` start so a stale host config that
+points at a bare-extras install still produces a usable error message
+instead of a Python traceback.
+
 `--dry-run` previews the change without touching disk. In text mode it
 puts the human prose on stderr and the resulting JSON config on stdout,
 so you can pipe the preview through `jq`, redirect it to a file, or feed
