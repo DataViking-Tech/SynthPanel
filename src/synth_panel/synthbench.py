@@ -93,6 +93,19 @@ class Recommendation:
     fetched_at: datetime
     cache_age_hours: float
     low_confidence: bool
+    runnable: bool = True
+    """Whether :attr:`model` is a runnable provider model id (gh-519).
+
+    SynthBench product/ensemble rows can surface a human-readable display
+    label (e.g. ``"SynthPanel (Gemini Flash Lite)"``) in their ``model``
+    field rather than a provider-runnable id. Stamping such a label onto
+    ``--model`` fails at call time with a provider "not a valid model ID"
+    error. ``recommend`` sets this to ``False`` when neither the entry's
+    model field nor an inferred config base resolves to a runnable id, so
+    the CLI can refuse with an actionable message instead of producing a
+    non-runnable selection. Defaults to ``True`` so test fixtures that
+    construct :class:`Recommendation` directly keep their prior shape.
+    """
     source: str = "live"
     """Provenance discriminator — one of :data:`RECOMMENDATION_SOURCES`.
 
@@ -546,6 +559,73 @@ def _resolve_model_string(raw: str) -> str:
     return raw
 
 
+def is_runnable_model_id(model: str) -> bool:
+    """Return ``True`` if *model* looks like a runnable provider model id.
+
+    SynthBench leaderboard rows — especially product/ensemble configs —
+    sometimes carry a human-readable display label in their ``model``
+    field (e.g. ``"SynthPanel (Gemini Flash Lite)"``) rather than a
+    provider-runnable id. A label like that, stamped onto ``--model``,
+    fails at call time with a provider "not a valid model ID" error
+    (gh-519).
+
+    The discriminator is structural rather than an allow-list: real model
+    ids (``claude-haiku-4-5-20251001``, ``gemini-2.5-flash``, ``grok-3``,
+    ``gpt-4o-mini``, ``openrouter/...``, short aliases like ``haiku``, and
+    ``ollama:``/``local:`` specs) are single whitespace-free tokens, while
+    display labels contain spaces and/or parentheses. The OpenAI-compatible
+    and local backends accept arbitrary bare ids, so enumerating known
+    prefixes would wrongly reject valid local/self-hosted models — instead
+    we reject anything empty, whitespace-bearing, or paren-bearing and
+    accept the rest.
+    """
+    if not model:
+        return False
+    text = model.strip()
+    if not text:
+        return False
+    if any(ch.isspace() for ch in text):
+        return False
+    return "(" not in text and ")" not in text
+
+
+# Canonical provider id prefixes (mirrors the ``model_prefixes`` declared on
+# each provider's ProviderConfig in synth_panel.llm.providers.*). Kept local so
+# resolving a recommendation doesn't have to import the full LLM client stack;
+# only used as a *recognition* heuristic, never for routing.
+_KNOWN_PROVIDER_PREFIXES: tuple[str, ...] = (
+    "claude-",
+    "gemini-",
+    "grok-",
+    "gpt-",
+    "openrouter/",
+)
+
+
+def _is_recognized_model_id(model: str) -> bool:
+    """Stricter than :func:`is_runnable_model_id` — used to gate config-id-derived
+    base models (gh-519).
+
+    ``_underlying_base`` extracts a token from ``config_id`` by splitting on
+    separators, which for hyphenated ids like
+    ``synthpanel-gemini-flash-lite-ba37570c`` yields a meaningless hash
+    fragment (``ba37570c``). That fragment is whitespace-free so it passes
+    :func:`is_runnable_model_id`, yet it is not a real model id. We only adopt
+    a config-derived base when it matches a known provider prefix or is a
+    registered short alias — otherwise we keep the original (display) label so
+    the caller refuses rather than swapping in garbage.
+    """
+    if not is_runnable_model_id(model):
+        return False
+    text = model.strip()
+    if any(text.startswith(prefix) for prefix in _KNOWN_PROVIDER_PREFIXES):
+        return True
+    # Registered short alias (resolve_alias maps it to a different canonical id).
+    from synth_panel.llm.aliases import resolve_alias
+
+    return resolve_alias(text) != text
+
+
 def _underlying_base(entry: dict[str, Any]) -> str | None:
     """If an entry is an ensemble/product config, try to surface a base model."""
     config_id = entry.get("config_id")
@@ -602,18 +682,26 @@ def recommend(
     framework = entry.get("framework") if isinstance(entry.get("framework"), str) else None
     is_ensemble = bool(entry.get("is_ensemble"))
 
-    # Product/ensemble configs aren't runnable as-is — fall back to an
-    # inferred base model from config_id when possible.
-    if (is_ensemble or framework == "product") and not resolved_model:
+    # Product/ensemble configs aren't runnable as-is. When the entry's
+    # model field is empty OR a non-runnable display label (gh-519: e.g.
+    # "SynthPanel (Gemini Flash Lite)"), try to infer a runnable base model
+    # from config_id instead. Only adopt the inferred base when it itself
+    # resolves to a runnable id — otherwise keep the original string so the
+    # caller can report it verbatim and refuse rather than silently swap in
+    # a config-id hash fragment.
+    if (is_ensemble or framework == "product") and not is_runnable_model_id(resolved_model):
         base = _underlying_base(entry)
         if base:
-            resolved_model = _resolve_model_string(base)
+            candidate = _resolve_model_string(base)
+            if _is_recognized_model_id(candidate):
+                resolved_model = candidate
 
+    final_model = resolved_model or raw_model
     run_count = _as_int(entry, "run_count") or 0
     cache_age_hours = max(0.0, (datetime.now(timezone.utc) - fetched_at).total_seconds() / 3600.0)
 
     return Recommendation(
-        model=resolved_model or raw_model,
+        model=final_model,
         raw_model=raw_model,
         provider=str(entry.get("provider") or ""),
         dataset=dataset,
@@ -628,5 +716,6 @@ def recommend(
         fetched_at=fetched_at,
         cache_age_hours=cache_age_hours,
         low_confidence=run_count > 0 and run_count < MIN_RUN_COUNT,
+        runnable=is_runnable_model_id(final_model),
         source=source,
     )

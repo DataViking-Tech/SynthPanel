@@ -195,6 +195,26 @@ def _apply_best_model_for(args: argparse.Namespace, spec: str) -> str | None:
         return None
 
     print(rec.format_line(), file=sys.stderr)
+
+    # gh-519: SynthBench product/ensemble rows can surface a display label
+    # (e.g. "SynthPanel (Gemini Flash Lite)") in the model field instead of
+    # a runnable provider model id. Stamping that onto --model defers the
+    # failure to call time as an opaque provider "not a valid model ID"
+    # error. Refuse here with an actionable message and fall back to the
+    # existing --model / default selection (matching the no-recommendation
+    # path), so --dry-run also makes the non-runnable pick obvious upfront.
+    if not rec.runnable:
+        print(
+            f"synthbench: recommendation '{rec.model}' is a display label, not a "
+            f"runnable model id — skipping. The top entry for '{spec}' is a "
+            f"product/ensemble config with no resolvable base model. Pass --model "
+            f"with a provider model id (e.g. claude-sonnet-4-6, gemini-2.5-flash) "
+            f"explicitly, or choose a different topic. Continuing with existing "
+            f"model selection.",
+            file=sys.stderr,
+        )
+        return None
+
     if rec.source == "bundled-snapshot":
         print(
             "synthbench: note — recommendation derived from the package-bundled "

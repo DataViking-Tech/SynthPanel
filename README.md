@@ -998,6 +998,13 @@ The leaderboard is cached for 24 hours at
 [docs/recommended-models.md](docs/recommended-models.md) for the full
 rules, offline behaviour, and a use-case → top-model table.
 
+If the top-ranked entry is a product/ensemble row that only exposes a
+display label (e.g. `SynthPanel (Gemini Flash Lite)`) rather than a
+runnable provider model id, `--best-model-for` refuses to stamp it onto
+`--model` — it prints an actionable message and falls back to your
+existing `--model`/default. Pair with `--dry-run` to see the picked
+model (and any such refusal) before any LLM call is made.
+
 ### Model packs (agent guidance)
 
 `--best-model-for` picks one model; **model packs** pick a model *mix*
