@@ -16,6 +16,15 @@ Behaviour mirrors the pack registry cache (``registry/cache.py``):
 - ``SYNTHPANEL_SYNTHBENCH_URL`` env var overrides the fetch URL (tests).
 - ``SYNTHPANEL_SYNTHBENCH_OFFLINE=1`` forces cache-only mode.
 - ``SYNTHPANEL_SYNTHBENCH_REFRESH=1`` bypasses the TTL + ETag.
+
+sy-nkh: when the live URL is unreachable AND no user cache exists,
+:func:`load_leaderboard` falls back to a bundled snapshot at
+``data/synthbench-snapshot.json``. The snapshot ships with the package
+so ``--best-model-for`` produces a real recommendation on a fresh
+install even while ``synthbench.org/data/leaderboard.json`` is 404'ing
+(GH #494). The warning message that surfaces this includes the
+``SYNTHPANEL_SYNTHBENCH_URL`` override so users with a working internal
+mirror have a clear path forward.
 """
 
 from __future__ import annotations
@@ -41,6 +50,14 @@ CACHE_TTL = timedelta(hours=24)
 FETCH_TIMEOUT = 10.0
 DEFAULT_DATASET = "globalopinionqa"
 MIN_RUN_COUNT = 3
+
+# sy-nkh: bundled snapshot path — shipped alongside the package so a
+# fresh install on a broken URL still yields a recommendation. Resolved
+# at import time from this module's directory so it works whether
+# synthpanel is installed as a wheel (data lives next to the .py files)
+# or run from a source checkout. The ``data/`` subpackage is declared
+# in pyproject.toml's ``[tool.setuptools.package-data]`` block.
+_BUNDLED_SNAPSHOT_PATH = Path(__file__).resolve().parent / "data" / "synthbench-snapshot.json"
 
 WarnFn = Callable[[str], None]
 
@@ -186,6 +203,55 @@ def _default_warn(message: str) -> None:
     print(message, file=sys.stderr)
 
 
+def _override_hint(target_url: str) -> str:
+    """Return the actionable corrective suffix for unreachable-URL warnings.
+
+    sy-nkh: the v1.5.0 warning ended with ``no recommendation`` which left
+    the user with no next move. This suffix names the env var override
+    and tags the bundled-snapshot fallback so the message is actionable
+    by itself.
+    """
+    return (
+        f"override the URL via ${SYNTHBENCH_URL_ENV} if you have a mirror — "
+        f"current default {target_url} is tracked in GH #494"
+    )
+
+
+def _load_bundled_snapshot(
+    path: Path | None = None,
+) -> tuple[dict[str, Any], datetime] | None:
+    """Read the package-bundled leaderboard snapshot (sy-nkh).
+
+    Returns ``(leaderboard, fetched_at)`` or ``None`` when the snapshot
+    file is missing or malformed. ``fetched_at`` is derived from the
+    embedded ``_meta.snapshot_date`` so cache-age accounting is
+    meaningful (users see "cached 30d ago" not "cached 0h ago" on a
+    stale bundled fallback).
+
+    The snapshot file is the last-resort fallback path. Never raises —
+    a malformed snapshot just returns ``None`` and the caller continues
+    to its no-recommendation branch.
+    """
+    target = path or _BUNDLED_SNAPSHOT_PATH
+    if not target.exists():
+        return None
+    try:
+        raw = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(raw, dict) or not isinstance(raw.get("entries"), list):
+        return None
+
+    meta = raw.get("_meta") if isinstance(raw.get("_meta"), dict) else {}
+    snapshot_iso = meta.get("snapshot_date") or raw.get("generated_at")
+    fetched = _parse_iso(str(snapshot_iso)) if isinstance(snapshot_iso, str) else None
+    if fetched is None:
+        # A snapshot without a parseable date is still usable; just
+        # stamp it at the epoch so the "stale" badge always shows.
+        fetched = datetime(2026, 4, 24, tzinfo=timezone.utc)
+    return raw, fetched
+
+
 def _fetch_http(
     url: str,
     *,
@@ -240,12 +306,15 @@ def load_leaderboard(
 ) -> LoadedLeaderboard | None:
     """Return the leaderboard dict (cache-aware). ``None`` on total failure.
 
-    - Offline: cache only, ``None`` if empty.
+    - Offline: cache only, or bundled snapshot if no cache (sy-nkh).
     - Refresh: bypass TTL + ETag, force GET.
     - Fresh cache: zero network.
     - Stale cache: conditional GET (304 → keep cache; 200 → overwrite;
       network error → warn + stale cache).
-    - No cache + network error: warn + ``None``.
+    - No cache + network error: bundled snapshot fallback + warn
+      (sy-nkh — fresh installs see a recommendation while the canonical
+      URL is 404'ing). Returns ``None`` only when even the bundled
+      snapshot is unreadable.
     """
     target_url = url or synthbench_url()
     emit = warn or _default_warn
@@ -257,6 +326,18 @@ def load_leaderboard(
     if offline_flag:
         if cached is not None:
             return LoadedLeaderboard(cached.leaderboard, cached.fetched_at)
+        # sy-nkh: offline mode previously gave up entirely without a cache;
+        # surface the bundled snapshot here too so air-gapped users get a
+        # usable recommendation on the first ever call.
+        bundled = _load_bundled_snapshot()
+        if bundled is not None:
+            data, snapshot_at = bundled
+            emit(
+                f"synthpanel: synthbench offline mode with no user cache — "
+                f"using bundled snapshot from {snapshot_at.date().isoformat()} "
+                f"(see docs/recommended-models.md)"
+            )
+            return LoadedLeaderboard(data, snapshot_at)
         return None
 
     url_matches = cached is not None and cached.source_url == target_url
@@ -275,7 +356,21 @@ def load_leaderboard(
         if cached is not None:
             emit(f"synthpanel: synthbench fetch failed ({exc}); using stale cache from {cached.fetched_at.isoformat()}")
             return LoadedLeaderboard(cached.leaderboard, cached.fetched_at)
-        emit(f"synthpanel: synthbench unavailable ({exc}); no recommendation")
+        # sy-nkh: no cache + network error → bundled snapshot fallback.
+        # The canonical URL has been 404 since v1.5.0 ship (GH #494) so
+        # without this, every fresh install's --best-model-for is a
+        # no-op. Warn loudly with the env-var override so users with a
+        # working mirror have a one-line fix.
+        bundled = _load_bundled_snapshot()
+        if bundled is not None:
+            data_snap, snapshot_at = bundled
+            emit(
+                f"synthpanel: synthbench unavailable ({exc}); "
+                f"using bundled snapshot from {snapshot_at.date().isoformat()} — "
+                f"{_override_hint(target_url)}"
+            )
+            return LoadedLeaderboard(data_snap, snapshot_at)
+        emit(f"synthpanel: synthbench unavailable ({exc}) and no bundled snapshot found; {_override_hint(target_url)}")
         return None
 
     if not_modified and cached is not None:
