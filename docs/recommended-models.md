@@ -25,8 +25,25 @@ Before the run, SynthPanel prints a recommendation line to stderr so you
 can cancel and override:
 
 ```
-synthbench: best model for globalopinionqa/Economy & Work → claude-haiku-4-5-20251001 · SPS 0.850 · JSD 0.091 · n=100 · $0.032/100q · cached 0h ago · source=synthbench.org
+synthbench: best model for globalopinionqa/Economy & Work → claude-haiku-4-5-20251001 · SPS 0.850 · JSD 0.091 · n=100 · $0.032/100q · cached 0h ago · source=live
 ```
+
+The trailing `source=` field is the **provenance discriminator** (sy-klp).
+It tells you — and any agent parsing this line — whether the
+recommendation reflects the live leaderboard, your local cache, or a
+package-bundled fallback:
+
+| `source=` value     | What it means                                                                                       | How current is the recommendation? |
+|---------------------|-----------------------------------------------------------------------------------------------------|------------------------------------|
+| `live`              | Fetched from the leaderboard URL this run — or upstream returned 304 confirming the cache is current | As of right now                    |
+| `cache`             | User's on-disk cache was fresh (< 24h), no network call made                                         | Within the last 24h                |
+| `stale-cache`       | Cache exceeded the 24h TTL and the network fetch failed; stale cache used                            | Whenever the cache was last refreshed (see `cached <N>h ago` field) |
+| `bundled-snapshot`  | No user cache and the live fetch failed (or offline mode requested without a cache) — package fallback used | The package release date (currently 2026-04-24) — *not* current |
+
+Agents should treat `live` and `cache` as authoritative, `stale-cache`
+as user-dated (caller's last successful sync), and `bundled-snapshot`
+as package-dated — same age for everyone on the same release, so the
+recommendation will drift from leaderboard reality after the snapshot.
 
 ## How it works
 
@@ -62,18 +79,70 @@ synthbench: best model for globalopinionqa/Economy & Work → claude-haiku-4-5-2
 
 ### Graceful offline behaviour
 
-- **Stale cache + network error** → stderr warning, use stale cache.
+Every degraded path tags the recommendation with a non-`live` `source=`
+discriminator (see the table above) and prints a one-line explanation
+on stderr so agents and humans can both see how degraded the answer is.
+
+- **Fresh cache hit (< 24h)** → no network. Recommendation tagged
+  `source=cache`. No stderr noise.
+- **Stale cache + 304** → conditional GET confirms cache is current.
+  Recommendation tagged `source=live` and the cache timestamp is
+  refreshed. No stderr noise.
+- **Stale cache + network error** → stderr `synthpanel: synthbench
+  fetch failed (…); using stale cache from <ISO> (source=stale-cache)`.
+  Recommendation tagged `source=stale-cache`.
 - **No cache + network error** → bundled snapshot fallback (sy-nkh):
-  stderr "synthbench unavailable — using bundled snapshot from
-  YYYY-MM-DD …" plus the `SYNTHPANEL_SYNTHBENCH_URL` override hint, then
-  a real recommendation derived from the package data.
+  stderr `synthpanel: synthbench unavailable (…); using bundled
+  snapshot from YYYY-MM-DD (source=bundled-snapshot) — override the URL
+  via $SYNTHPANEL_SYNTHBENCH_URL if you have a mirror …`. Recommendation
+  tagged `source=bundled-snapshot` and the CLI also emits a follow-up
+  note explaining the implication and the override path.
+- **Offline mode + fresh cache** → recommendation tagged
+  `source=cache`. No stderr noise.
+- **Offline mode + stale cache** → recommendation tagged
+  `source=stale-cache`. No stderr noise (offline mode is opt-in; the
+  user already knows network is disabled).
+- **Offline mode + no cache** → bundled snapshot fallback with
+  `source=bundled-snapshot`. Stderr explains the fallback once.
 - **No cache + no bundled snapshot** → stderr "synthbench unavailable",
   fall through to whatever `--model` or default was already in effect.
 - **Empty entries after filter** → same fall-through.
 
 No recommendation is ever fatal. `--best-model-for` is advisory: a bad
 network day won't take the panel down, and a 404'ing upstream URL still
-yields a sensible default via the bundled snapshot.
+yields a sensible default via the bundled snapshot — at the cost of
+freshness, which the `source=bundled-snapshot` discriminator makes
+explicit instead of pretending the data is current.
+
+### Reading the source field from code
+
+The wire field is part of the public `synth_panel.synthbench`
+surface — `Recommendation.source` and `LoadedLeaderboard.source` both
+expose the same closed enum. Allowed values are exported as
+`synth_panel.synthbench.RECOMMENDATION_SOURCES`:
+
+```python
+from synth_panel import synthbench
+
+rec = synthbench.recommend("Economy & Work")
+if rec is None:
+    ...  # leaderboard unavailable; honour the existing --model
+elif rec.source in ("live", "cache"):
+    use_with_confidence(rec.model)
+elif rec.source == "stale-cache":
+    log_warning(f"using model from cache aged {rec.cache_age_hours:.0f}h")
+    use_with_confidence(rec.model)
+elif rec.source == "bundled-snapshot":
+    log_warning(
+        f"recommendation from package snapshot dated {rec.fetched_at.date()}; "
+        "current leaderboard may have moved."
+    )
+    use_with_caveat(rec.model)
+```
+
+The same `source=` field appears at the tail of every stderr
+recommendation line (`format_line()` output), so log-scraping agents
+can extract it with one regex.
 
 ## Use-case → top-ranked model
 
