@@ -8,6 +8,16 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ### Fixed
 
+- **`pack import <registry-id>` resolves registry entries (sy-dwc, #520).**
+  When `panel run --personas <id>` misses, it suggests `pack import <id>` —
+  but that command used to fall to the local-file branch and echo the same
+  failing command back (a self-referential loop). `pack import` now treats a
+  bare slug that isn't a local file as a registry id: it resolves the entry to
+  its `gh:` source, imports it, and installs the pack under the registry id so
+  the follow-up `--personas <id>` works end to end. Ids absent from the
+  registry fall through to the existing local-file "not found" error (which
+  points at `pack search`), and path-like inputs are never sent through a
+  registry network probe.
 - **`poll-summary` respects declared question types (sy-oyl).** Open-text
   questions whose prompt or responses contain numbers (e.g. version
   strings like *"SynthPanel v1.5.1"*) are no longer misclassified as

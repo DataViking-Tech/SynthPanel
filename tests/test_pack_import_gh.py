@@ -333,3 +333,97 @@ class TestLocalPathRegression:
         # Remote-only features must not appear in the local branch.
         assert "Checksum:" not in captured.err
         assert "synthpanel registry" not in captured.err
+
+
+# ---------------------------------------------------------------------------
+# bare registry-id resolution (#520)
+# ---------------------------------------------------------------------------
+
+
+class TestBareRegistryId:
+    """`pack import <registry-id>` resolves the registry entry and imports.
+
+    Before #520 a bare id fell to the local branch, whose error told the
+    user to run `pack import <id>` — the same command that just failed
+    (self-referential). These tests pin the resolve-and-import behavior.
+    """
+
+    def test_bare_registry_id_resolves_and_imports(self, tmp_data_dir, monkeypatch, capsys):
+        """`pack import icp-demo` resolves the entry, fetches it, and imports."""
+        _seed_registry_cache(tmp_data_dir, REGISTRY_WITH_ENTRY)
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("synthpanel-pack.yaml"):
+                return httpx.Response(200, text=SAMPLE_PACK_YAML)
+            return httpx.Response(404)
+
+        _install_httpx_mock(monkeypatch, handler)
+
+        code = main(["pack", "import", "icp-demo"])
+        captured = capsys.readouterr()
+        assert code == 0, captured.err
+        assert "Imported pack" in captured.out
+        # Resolved from a registered entry: no --unverified gate, no warning.
+        assert "not in the synthpanel registry" not in captured.err
+        assert "--unverified" not in captured.err
+
+    def test_bare_registry_id_installs_under_registry_id(self, tmp_data_dir, monkeypatch):
+        """The installed pack id equals the registry id so `--personas <id>` resolves."""
+        from synth_panel.mcp.data import get_persona_pack
+
+        _seed_registry_cache(tmp_data_dir, REGISTRY_WITH_ENTRY)
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, text=SAMPLE_PACK_YAML)
+
+        _install_httpx_mock(monkeypatch, handler)
+
+        code = main(["pack", "import", "icp-demo"])
+        assert code == 0
+        # The whole point of the registry hint: `--personas icp-demo` works after.
+        pack = get_persona_pack("icp-demo")
+        names = {p.get("name") for p in pack.get("personas", [])}
+        assert names == {"Alice", "Bob"}
+
+    def test_bare_registry_id_respects_id_override(self, tmp_data_dir, monkeypatch):
+        """An explicit --id overrides the default of using the registry id."""
+        from synth_panel.mcp.data import get_persona_pack
+
+        _seed_registry_cache(tmp_data_dir, REGISTRY_WITH_ENTRY)
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, text=SAMPLE_PACK_YAML)
+
+        _install_httpx_mock(monkeypatch, handler)
+
+        code = main(["pack", "import", "icp-demo", "--id", "custom"])
+        assert code == 0
+        pack = get_persona_pack("custom")
+        assert {p.get("name") for p in pack.get("personas", [])} == {"Alice", "Bob"}
+
+    def test_unknown_bare_id_falls_through_without_self_reference(self, tmp_data_dir, capsys):
+        """An id-shaped source not in the registry errors WITHOUT echoing the
+        same `pack import <id>` command back."""
+        _seed_registry_cache(tmp_data_dir, EMPTY_REGISTRY)
+
+        code = main(["pack", "import", "no-such-pack-id"])
+        captured = capsys.readouterr()
+        assert code == 1
+        combined = captured.err + captured.out
+        # The self-referential loop (#520) must be gone.
+        assert "pack import no-such-pack-id" not in combined
+        # Generic local not-found guidance instead.
+        assert "no-such-pack-id" in combined
+
+    def test_path_like_source_is_not_treated_as_registry_id(self):
+        """Helper guard: path-like inputs never trigger a registry probe."""
+        from synth_panel.cli.commands import _looks_like_pack_id
+
+        assert _looks_like_pack_id("icp-demo") is True
+        assert _looks_like_pack_id("pricing-discovery") is True
+        assert _looks_like_pack_id("./team.yaml") is False
+        assert _looks_like_pack_id("/abs/path.yml") is False
+        assert _looks_like_pack_id("team.yaml") is False
+        assert _looks_like_pack_id("data.json") is False
+        assert _looks_like_pack_id("sub/dir") is False
+        assert _looks_like_pack_id("") is False
