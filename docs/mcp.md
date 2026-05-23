@@ -180,6 +180,11 @@ The response envelope (`panel_verdict.json`) is closed-shape with
 > tagged-themes (objections/risks), confidence, and ranking, plus a
 > runnable 35-persona prioritization example.
 
+> **Picking which `pack_id` / `model` / `models[]` to pass?** See
+> [docs/task-recommendations.md](task-recommendations.md) for the
+> task → persona pack → model config lookup with copy/paste examples
+> (positioning, GTM, pricing, trust audit, healthcare comms, hiring).
+
 ### Research Tools
 
 | Tool | Description |
