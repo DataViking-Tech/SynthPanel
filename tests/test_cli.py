@@ -361,6 +361,70 @@ class TestYAMLLoading:
         with pytest.raises(FileNotFoundError):
             _load_personas("/nonexistent/path.yaml")
 
+    def test_load_personas_resolves_bundled_pack_name(self):
+        # sy-n80 / gh-508: a bundled pack id (e.g. ``developer``)
+        # passed to --personas must resolve via get_persona_pack rather
+        # than being treated as a filesystem path.
+        personas = _load_personas("developer")
+        assert isinstance(personas, list)
+        assert len(personas) > 0
+        assert all("name" in p for p in personas)
+
+    def test_load_personas_unknown_name_error_mentions_pack_lookup(self, monkeypatch):
+        # sy-n80 / gh-508: the error message for an unresolved name has
+        # to distinguish "filesystem path" from "pack alias" so an agent
+        # can pick the right next step. Force the registry probe to
+        # return None so we exercise the generic-error branch.
+        from synth_panel.cli import commands as cmd_mod
+
+        monkeypatch.setattr(cmd_mod, "_registry_install_hint", lambda _name: None)
+        with pytest.raises(FileNotFoundError) as exc:
+            _load_personas("not-a-real-pack-name")
+        msg = str(exc.value)
+        assert "not found as file or installed pack" in msg
+        assert "pack list" in msg or "pack search" in msg
+
+    def test_load_personas_registry_pack_gets_install_hint(self, monkeypatch):
+        # sy-n80 / gh-508: when the name is a known registry pack, the
+        # error must point the caller at `synthpanel pack import <id>`.
+        from synth_panel.cli import commands as cmd_mod
+
+        monkeypatch.setattr(
+            cmd_mod,
+            "_registry_install_hint",
+            lambda name: (
+                f"{name!r} is a registry pack, not yet installed locally. "
+                f"Run `synthpanel pack import {name}` to install it, then "
+                f"re-run with `--personas {name}`."
+            ),
+        )
+        with pytest.raises(FileNotFoundError) as exc:
+            _load_personas("some-registry-pack-id")
+        msg = str(exc.value)
+        assert "registry pack" in msg
+        assert "pack import some-registry-pack-id" in msg
+
+    def test_load_personas_registry_probe_is_offline_safe(self, monkeypatch):
+        # sy-n80 / gh-508: a network failure in the registry probe must
+        # not crash; it should fall through to the generic error.
+        from synth_panel.cli import commands as cmd_mod
+
+        def _boom(_name):
+            raise RuntimeError("network down")
+
+        # _registry_install_hint catches Exception internally; verify
+        # the wrapper actually returns None on failure and we fall
+        # through to the generic "not found" error.
+        monkeypatch.setattr(
+            "synth_panel.registry.resolve_pack",
+            lambda *_a, **_kw: (_ for _ in ()).throw(RuntimeError("network down")),
+        )
+        # Direct probe returns None (offline-safe).
+        assert cmd_mod._registry_install_hint("anything") is None
+        # And the loader degrades to the generic error.
+        with pytest.raises(FileNotFoundError, match="not found as file or installed pack"):
+            _load_personas("not-a-real-pack-name")
+
     def test_merge_persona_lists_appends(self, tmp_path):
         extra = tmp_path / "extra.yaml"
         extra.write_text("personas:\n  - name: Carol\n    age: 40\n")
