@@ -159,9 +159,10 @@ After installing, verify the CLI is on your PATH and the runtime is sane
 *before* configuring providers:
 
 ```bash
-synthpanel --version          # smoke: package metadata + entry point dispatch
-synthpanel doctor             # diagnostic: python, deps, packs, checkpoint dir
-synthpanel whoami             # which providers (if any) have credentials
+synthpanel --version              # smoke: package metadata + entry point dispatch
+synthpanel doctor --install-only  # install health only — no credentials needed
+synthpanel doctor                 # full preflight (install + credentials)
+synthpanel whoami                 # which providers (if any) have credentials
 ```
 
 `doctor` exits non-zero with actionable guidance when something's
@@ -170,6 +171,14 @@ it's the canonical "did the install land cleanly?" check, and
 `clean-install-smoke` in CI runs the same sequence against the built
 wheel on every push, so all three commands are part of the supported
 contract.
+
+Use `synthpanel doctor --install-only` immediately after `pip install
+synthpanel` to validate the package, dependencies, and bundled packs
+without provisioning a provider key — exit 0 in that mode means the
+install is healthy, even when credentials are not yet configured. The
+JSON output (`--output-format json doctor --install-only`) separates
+`install_ok`, `credential_configured`, and `checks_ok` so agents and CI
+can branch on each surface independently.
 
 Then provide an API key (Claude, OpenAI, Gemini, xAI, or any
 OpenAI-compatible provider) — either export it in your shell or persist

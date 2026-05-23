@@ -262,6 +262,13 @@ jobs:
           /tmp/smoke/bin/synthpanel --version
           /tmp/smoke/bin/synthpanel --help > /dev/null
           /tmp/smoke/bin/synthpanel whoami
+
+          # sy-e28: prove the no-credentials install-only mode works in a
+          # clean wheel install. Unset the fake key for this step so it
+          # actually exercises the "credentials missing" path; exit code
+          # must still be 0 because install_ok dominates.
+          env -u ANTHROPIC_API_KEY /tmp/smoke/bin/synthpanel doctor --install-only
+
           /tmp/smoke/bin/synthpanel doctor
 
           # `[mcp]` matrix entry must additionally import the MCP server.
