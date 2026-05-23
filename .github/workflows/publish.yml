@@ -1,18 +1,18 @@
 name: Publish to PyPI
 
-# Inline release pipeline for SynthPanel. Previously reused
-# DataViking-Tech/dataviking-infra/.github/workflows/python-publish.yml@main
-# but cross-visibility reuse (SynthPanel public → dataviking-infra private)
-# is blocked by GitHub even with org-scoped Actions access. Inlined here
-# to unblock v1.5.0 release; will re-share via a public reusable workflow
-# repo later if there's enough cross-package demand.
+# Tag-triggered publish to PyPI using GitHub Trusted Publishing (OIDC).
+# No API token required — PyPI verifies the workflow identity via OIDC.
+#
+# Trusted publisher must be registered at
+# https://pypi.org/manage/project/synthpanel/settings/publishing/ with:
+#   owner       = DataViking-Tech
+#   repo        = SynthPanel
+#   workflow    = publish.yml
+#   environment = pypi
 #
 # Triggers:
 #   - push of a v*.*.* tag (auto-tag.yml creates these on PR merge)
 #   - workflow_dispatch (manual republish for failure recovery)
-#
-# Idempotent: `skip-existing: true` makes twine treat 'File already exists'
-# as success, so a retry after a successful upload lands green.
 
 on:
   push:
@@ -21,7 +21,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to (re)publish (e.g. v1.4.1). Informational — actual ref is the workflow ref."
+        description: "Tag to (re)publish (e.g. v1.5.0). Informational — actual ref is the workflow ref."
         required: false
         type: string
 
@@ -33,64 +33,47 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    name: Build (py3.12)
+  publish:
+    name: Publish to PyPI
     runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Install build tooling
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install build
+      - name: Install build tools
+        run: pip install build
 
       - name: Build sdist and wheel
         run: python -m build
 
-      - name: Upload distributions
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist-py3.12
-          path: dist/
-          if-no-files-found: error
+      - name: Show built artifacts
+        run: ls -lh dist/
 
-  publish-to-pypi:
-    name: Publish to PyPI
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download built distributions
-        uses: actions/download-artifact@v4
-        with:
-          pattern: dist-py*
-          merge-multiple: true
-          path: dist/
-
-      # Pulls PYPI_API_TOKEN (and any other secrets in the config) into
-      # $GITHUB_ENV with auto log-masking.
-      - name: Fetch PyPI token from Doppler
-        uses: dopplerhq/secrets-fetch-action@v1.3.0
-        with:
-          doppler-token: ${{ secrets.DOPPLER_PLATFORM_TOKEN }}
-          doppler-project: dataviking-platform
-          doppler-config: prd
-          inject-env-vars: 'true'
-
-      - name: Verify PYPI_API_TOKEN was fetched
-        run: |
-          if [ -z "${PYPI_API_TOKEN:-}" ]; then
-            echo "::error::PYPI_API_TOKEN is empty after Doppler fetch — check that secret exists in dataviking-platform/prd."
-            exit 1
-          fi
-
-      # `skip-existing: true` makes idempotent retries safe.
+      # Trusted Publishing — no API token needed; PyPI verifies the GitHub
+      # workflow's OIDC identity. skip-existing: true makes retries idempotent.
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          password: ${{ env.PYPI_API_TOKEN }}
           skip-existing: true
+
+      - name: Summarize
+        env:
+          REF: ${{ github.ref_name }}
+        run: |
+          {
+            echo "## Published synthpanel ${REF#v}"
+            echo ""
+            echo "- PyPI: https://pypi.org/project/synthpanel/${REF#v}/"
+            echo "- Install: \`pip install synthpanel==${REF#v}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
