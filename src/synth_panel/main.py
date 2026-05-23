@@ -6,6 +6,8 @@ slash commands, and output formatting.
 
 from __future__ import annotations
 
+import os
+import signal
 import sys
 
 from synth_panel.cli.commands import (
@@ -52,8 +54,62 @@ from synth_panel.cli.repl import run_repl
 from synth_panel.logging_config import setup_logging
 
 
+def _quiet_broken_pipe() -> None:
+    """Make `synthpanel … | head` exit silently like a regular Unix tool.
+
+    Two failure modes overlap here:
+
+    * A mid-stream write to a closed pipe raises ``BrokenPipeError`` because
+      Python overrides the default ``SIGPIPE`` disposition. Restoring
+      ``SIG_DFL`` lets the kernel just kill the process on pipe close, the
+      way ``cat`` / ``ls`` / ``--help`` from any other tool behaves.
+
+    * Even after handling the mid-stream write, the interpreter shutdown
+      flush still finds the broken pipe and prints
+      ``Exception ignored while flushing sys.stdout: BrokenPipeError``.
+      Redirecting fd 1 to ``/dev/null`` before shutdown swallows that
+      final flush. The exit-time flush hits ``/dev/null`` instead of the
+      closed pipe, so no warning escapes to stderr.
+    """
+    if hasattr(signal, "SIGPIPE"):
+        # Windows has no SIGPIPE — that's why the hasattr guard.
+        signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    try:
+        sys.stdout.flush()
+    except BrokenPipeError:
+        try:
+            devnull = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(devnull, sys.stdout.fileno())
+        except (OSError, ValueError):
+            # If stdout is detached or already closed there's nothing
+            # more we can do; the silence we wanted is already achieved.
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point. Returns exit code."""
+    if hasattr(signal, "SIGPIPE"):
+        signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    try:
+        return _main(argv)
+    except BrokenPipeError:
+        _quiet_broken_pipe()
+        # 0 — Unix convention treats SIGPIPE-killed pipelines as expected
+        # for short-circuiting consumers like `head`. argparse's `--help`
+        # already returned its work; signalling success matches `man`,
+        # `pydoc`, and other paginated tools.
+        return 0
+    finally:
+        # Even on normal exit, a buffered write may still be pending when
+        # the pipe is already closed (argparse `--help` ends in
+        # ``parser.exit(0)`` after buffered prints). Flushing here surfaces
+        # any deferred BrokenPipeError so we can swap stdout for devnull
+        # before the interpreter's own shutdown flush triggers the
+        # "Exception ignored" warning on stderr.
+        _quiet_broken_pipe()
+
+
+def _main(argv: list[str] | None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
