@@ -161,18 +161,33 @@ jobs:
       # previous release — which, since sy-4qa adopted python-publish.yml's
       # `skip-existing: true`, now silently no-ops at PyPI instead of going
       # red. See sy-r87.
-      - name: Bump __version__.py and re-render site
+      - name: Bump __version__.py and re-render every version artifact
         if: steps.check.outputs.skipped != 'true'
         env:
           NEW_TAG: ${{ steps.bump.outputs.tag }}
         run: |
           VERSION="${NEW_TAG#v}"
           printf '__version__ = "%s"\n' "$VERSION" > src/synth_panel/__version__.py
-          # Keep site/index.html (committed artifact) in lockstep — otherwise
-          # the test_committed_index_matches_template_render guard fails on
-          # the next push to main. render_site.py is stdlib-only Python so it
-          # runs without a setup-python step.
+          # Keep every committed artifact that embeds the version in
+          # lockstep. The v1.5.0 manual cut needed three follow-up PRs
+          # (#488 #489 #490) because only site/index.html was synced
+          # here. Each renderer below is stdlib-only Python so they run
+          # without a setup-python step.
+          #
+          # 1. site/index.html — landing page hero + JSON-LD.
           python scripts/render_site.py
+          # 2. site/index.md (and every other site/**/*.md) — the
+          #    content-negotiation worker serves these on Accept:
+          #    text/markdown. Drift here fails
+          #    tests/test_site_markdown.py::test_committed_markdown_matches_fresh_render.
+          python scripts/render_site_markdown.py
+          # 3. site/.well-known/mcp/server-card.json — the MCP discovery
+          #    document. Three version fields (top, serverInfo, packages[]).
+          #    Drift fails tests/test_well_known_server_card.py::test_versions_match_package_version.
+          python scripts/render_server_card.py
+          # sy-hs4: any future "render X with the version" script must be
+          # added here AND covered by tests/test_version_artifacts_in_sync.py
+          # so the next release doesn't need a manual follow-up PR.
 
       - name: Commit version bump to main
         if: steps.check.outputs.skipped != 'true'
@@ -182,12 +197,18 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/synth_panel/__version__.py site/index.html
+          # Stage every artifact the renderers touched. site/ is a glob
+          # because render_site_markdown.py may rewrite multiple .md
+          # files (docs/, blog/, mcp/, recommended-models/) on a single
+          # bump; constraining to specific paths here would silently
+          # drop a refreshed file from the bump commit.
+          git add src/synth_panel/__version__.py site/index.html site/ \
+                  site/.well-known/mcp/server-card.json
           if git diff --staged --quiet; then
-            echo "__version__.py and site already at ${NEW_TAG} (dev pre-bumped in PR) — nothing to commit."
+            echo "Version artifacts already at ${NEW_TAG} (dev pre-bumped in PR) — nothing to commit."
           else
             VERSION="${NEW_TAG#v}"
-            git commit -m "chore(release): sync __version__.py to ${VERSION} (PR #${PR_NUMBER}) (sy-r87)"
+            git commit -m "chore(release): sync __version__.py + rendered artifacts to ${VERSION} (PR #${PR_NUMBER}) (sy-hs4)"
             git push origin HEAD:main
           fi
 
