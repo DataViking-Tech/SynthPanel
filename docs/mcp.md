@@ -26,8 +26,25 @@ synthpanel mcp install --uninstall                     # remove the entry
 
 The command merges into the host's existing `mcpServers` map, refuses to
 overwrite a clashing entry without `--force`, and writes user-scoped
-files with mode `0600`. `--dry-run` previews the change without touching
-disk.
+files with mode `0600`.
+
+`--dry-run` previews the change without touching disk. In text mode it
+puts the human prose on stderr and the resulting JSON config on stdout,
+so you can pipe the preview through `jq`, redirect it to a file, or feed
+it back into the installer:
+
+```bash
+synthpanel mcp install --target ~/.cursor/mcp.json --dry-run
+# stderr: Would install MCP server 'synth_panel' in /Users/you/.cursor/mcp.json.
+# stdout: { "mcpServers": { "synth_panel": { ... } } }
+
+synthpanel mcp install --target ~/.cursor/mcp.json --dry-run 2>/dev/null \
+  | jq '.mcpServers.synth_panel'
+```
+
+In `--output-format json` mode the entire payload (action, entry, and
+the full `resulting_config`) lands on stdout as a single JSON object
+with no stderr noise — one stream, fully parseable.
 
 If you'd rather hand-edit, the entry it produces is:
 
