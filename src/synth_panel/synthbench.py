@@ -93,6 +93,16 @@ class Recommendation:
     fetched_at: datetime
     cache_age_hours: float
     low_confidence: bool
+    source: str = "live"
+    """Provenance discriminator — one of :data:`RECOMMENDATION_SOURCES`.
+
+    Agents should branch on this to decide how to phrase the
+    recommendation in downstream prose: ``live`` and ``cache`` reflect
+    current upstream data; ``stale-cache`` reflects the user's last
+    successful fetch (potentially old); ``bundled-snapshot`` reflects
+    the package release date and predates any post-release leaderboard
+    movement. See ``docs/recommended-models.md`` for the full table.
+    """
 
     def format_line(self) -> str:
         """Render a one-line summary suitable for stderr."""
@@ -109,7 +119,7 @@ class Recommendation:
             parts.append(f"${self.cost_per_100q:.3f}/100q")
         age = max(0, int(self.cache_age_hours))
         parts.append(f"cached {age}h ago")
-        parts.append("source=synthbench.org")
+        parts.append(f"source={self.source}")
         return " · ".join(parts)
 
 
@@ -290,10 +300,38 @@ def _fetch_http(
             active.close()
 
 
+RECOMMENDATION_SOURCES: tuple[str, ...] = (
+    "live",
+    "cache",
+    "stale-cache",
+    "bundled-snapshot",
+)
+"""Closed enum of provenance labels emitted alongside a recommendation.
+
+- ``live`` — the leaderboard was fetched over HTTP this run (or the
+  upstream returned 304 confirming the cached copy is still current).
+- ``cache`` — the user's on-disk cache was fresh (< ``CACHE_TTL``), so
+  no network call happened.
+- ``stale-cache`` — the user's cache exceeded its TTL and the network
+  fetch failed; the stale cache was used as a fallback.
+- ``bundled-snapshot`` — the package-bundled snapshot was used because
+  no user cache existed and the live fetch failed (or offline mode was
+  requested without a user cache).
+
+Agents inspecting the recommendation should treat ``live`` and ``cache``
+as current, ``stale-cache`` as user-dated, and ``bundled-snapshot`` as
+package-dated. See ``docs/recommended-models.md``.
+"""
+
+
 @dataclass(frozen=True)
 class LoadedLeaderboard:
     leaderboard: dict[str, Any]
     fetched_at: datetime
+    source: str = "live"
+    """One of :data:`RECOMMENDATION_SOURCES`. Defaults to ``"live"`` so
+    test fixtures that construct ``LoadedLeaderboard`` directly without
+    going through :func:`load_leaderboard` keep their existing shape."""
 
 
 def load_leaderboard(
@@ -325,7 +363,13 @@ def load_leaderboard(
 
     if offline_flag:
         if cached is not None:
-            return LoadedLeaderboard(cached.leaderboard, cached.fetched_at)
+            # Offline + cache hit: data is from the user's cache, even
+            # if it's older than CACHE_TTL — there's no way to refresh
+            # while offline. Tag as ``cache`` if it's still fresh by TTL
+            # standards, ``stale-cache`` otherwise so agents can decide
+            # whether to trust the recommendation.
+            label = "cache" if _is_fresh(cached) else "stale-cache"
+            return LoadedLeaderboard(cached.leaderboard, cached.fetched_at, source=label)
         # sy-nkh: offline mode previously gave up entirely without a cache;
         # surface the bundled snapshot here too so air-gapped users get a
         # usable recommendation on the first ever call.
@@ -335,14 +379,14 @@ def load_leaderboard(
             emit(
                 f"synthpanel: synthbench offline mode with no user cache — "
                 f"using bundled snapshot from {snapshot_at.date().isoformat()} "
-                f"(see docs/recommended-models.md)"
+                f"(source=bundled-snapshot; see docs/recommended-models.md)"
             )
-            return LoadedLeaderboard(data, snapshot_at)
+            return LoadedLeaderboard(data, snapshot_at, source="bundled-snapshot")
         return None
 
     url_matches = cached is not None and cached.source_url == target_url
     if cached is not None and url_matches and not refresh_flag and _is_fresh(cached):
-        return LoadedLeaderboard(cached.leaderboard, cached.fetched_at)
+        return LoadedLeaderboard(cached.leaderboard, cached.fetched_at, source="cache")
 
     conditional_etag: str | None = None
     if cached is not None and url_matches and not refresh_flag:
@@ -354,8 +398,11 @@ def load_leaderboard(
         )
     except SynthBenchFetchError as exc:
         if cached is not None:
-            emit(f"synthpanel: synthbench fetch failed ({exc}); using stale cache from {cached.fetched_at.isoformat()}")
-            return LoadedLeaderboard(cached.leaderboard, cached.fetched_at)
+            emit(
+                f"synthpanel: synthbench fetch failed ({exc}); using stale cache from "
+                f"{cached.fetched_at.isoformat()} (source=stale-cache)"
+            )
+            return LoadedLeaderboard(cached.leaderboard, cached.fetched_at, source="stale-cache")
         # sy-nkh: no cache + network error → bundled snapshot fallback.
         # The canonical URL has been 404 since v1.5.0 ship (GH #494) so
         # without this, every fresh install's --best-model-for is a
@@ -366,22 +413,26 @@ def load_leaderboard(
             data_snap, snapshot_at = bundled
             emit(
                 f"synthpanel: synthbench unavailable ({exc}); "
-                f"using bundled snapshot from {snapshot_at.date().isoformat()} — "
-                f"{_override_hint(target_url)}"
+                f"using bundled snapshot from {snapshot_at.date().isoformat()} "
+                f"(source=bundled-snapshot) — {_override_hint(target_url)}"
             )
-            return LoadedLeaderboard(data_snap, snapshot_at)
+            return LoadedLeaderboard(data_snap, snapshot_at, source="bundled-snapshot")
         emit(f"synthpanel: synthbench unavailable ({exc}) and no bundled snapshot found; {_override_hint(target_url)}")
         return None
 
     if not_modified and cached is not None:
+        # 304 confirms the cached copy is still authoritative as of this
+        # moment — treat as ``live`` so agents see the upstream
+        # acknowledged it, not as ``cache`` (which would imply we never
+        # talked to the upstream this run).
         now = datetime.now(timezone.utc)
         write_cache(cached.leaderboard, source_url=target_url, etag=cached.etag, fetched_at=now)
-        return LoadedLeaderboard(cached.leaderboard, now)
+        return LoadedLeaderboard(cached.leaderboard, now, source="live")
 
     assert data is not None
     now = datetime.now(timezone.utc)
     write_cache(data, source_url=target_url, etag=new_etag, fetched_at=now)
-    return LoadedLeaderboard(data, now)
+    return LoadedLeaderboard(data, now, source="live")
 
 
 # ---------- recommendation logic ----------
@@ -530,12 +581,14 @@ def recommend(
     """
     topic, dataset = parse_target(spec)
 
+    source = "live"
     if leaderboard is None:
         loaded = load_leaderboard(client=client, url=url, refresh=refresh, offline=offline, warn=warn)
         if loaded is None:
             return None
         leaderboard = loaded.leaderboard
         fetched_at = loaded.fetched_at
+        source = loaded.source
     if fetched_at is None:
         fetched_at = datetime.now(timezone.utc)
 
@@ -575,4 +628,5 @@ def recommend(
         fetched_at=fetched_at,
         cache_age_hours=cache_age_hours,
         low_confidence=run_count > 0 and run_count < MIN_RUN_COUNT,
+        source=source,
     )

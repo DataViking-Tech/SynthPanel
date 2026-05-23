@@ -256,7 +256,21 @@ def test_recommend_format_line_has_expected_pieces() -> None:
     assert "synthbench" in line
     assert "claude-haiku-4-5-20251001" in line
     assert "SPS" in line
-    assert "source=synthbench.org" in line
+    # Default for direct-leaderboard callers (no load_leaderboard hop) is "live"
+    # so existing fixtures continue to render a wire-stable source= field.
+    assert "source=live" in line
+
+
+def test_recommend_format_line_source_reflects_recommendation_source() -> None:
+    """Wire format: format_line() must surface the source the agent reads."""
+    from synth_panel.synthbench import Recommendation
+
+    base = recommend("Economy & Work", leaderboard=SAMPLE)
+    assert base is not None
+    for source in ("live", "cache", "stale-cache", "bundled-snapshot"):
+        rec = Recommendation(**{**base.__dict__, "source": source})
+        line = rec.format_line()
+        assert f"source={source}" in line, line
 
 
 # ---------- load_leaderboard (cache + network) ----------
@@ -268,6 +282,7 @@ def test_fresh_cache_hit_skips_network() -> None:
         loaded = load_leaderboard(client=client)
     assert loaded is not None
     assert loaded.leaderboard == SAMPLE
+    assert loaded.source == "cache"
 
 
 def test_stale_cache_304_keeps_cached_leaderboard() -> None:
@@ -282,6 +297,8 @@ def test_stale_cache_304_keeps_cached_leaderboard() -> None:
         loaded = load_leaderboard(client=client)
     assert loaded is not None
     assert loaded.leaderboard == SAMPLE
+    # 304 confirmed the cached copy is still current upstream — treat as live.
+    assert loaded.source == "live"
     cached = read_cache()
     assert cached is not None
     assert (datetime.now(timezone.utc) - cached.fetched_at) < timedelta(minutes=1)
@@ -299,6 +316,7 @@ def test_stale_cache_200_overwrites_with_new_payload() -> None:
         loaded = load_leaderboard(client=client)
     assert loaded is not None
     assert loaded.leaderboard == updated
+    assert loaded.source == "live"
     cached = read_cache()
     assert cached is not None
     assert cached.etag == '"new"'
@@ -316,7 +334,9 @@ def test_stale_cache_network_fail_returns_stale_with_warning() -> None:
         loaded = load_leaderboard(client=client, warn=warnings.append)
     assert loaded is not None
     assert loaded.leaderboard == SAMPLE
+    assert loaded.source == "stale-cache"
     assert any("stale cache" in w for w in warnings)
+    assert any("source=stale-cache" in w for w in warnings)
 
 
 def test_no_cache_and_fetch_fail_returns_none(no_bundled_snapshot: None) -> None:
@@ -358,6 +378,17 @@ def test_offline_env_prevents_any_network(monkeypatch: pytest.MonkeyPatch) -> No
         loaded = load_leaderboard(client=client)
     assert loaded is not None
     assert loaded.leaderboard == SAMPLE
+    # 48h-old cache + offline → stale-cache, since CACHE_TTL is 24h.
+    assert loaded.source == "stale-cache"
+
+
+def test_offline_with_fresh_cache_reports_cache_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    write_cache(SAMPLE, source_url=URL, etag='"abc"')  # default fetched_at = now
+    monkeypatch.setenv(SYNTHBENCH_OFFLINE_ENV, "1")
+    with _client(_explode) as client:
+        loaded = load_leaderboard(client=client)
+    assert loaded is not None
+    assert loaded.source == "cache"
 
 
 def test_offline_with_no_cache_returns_none(
@@ -433,7 +464,12 @@ class TestBundledSnapshotFallback:
 
         assert loaded is not None, "bundled snapshot must rescue the fresh-install path"
         assert isinstance(loaded.leaderboard.get("entries"), list)
+        assert loaded.source == "bundled-snapshot"
         assert any("bundled snapshot" in w for w in warnings), warnings
+        # Wire format: the source discriminator must appear in the
+        # warning so agents grep-parsing stderr can distinguish this
+        # path from stale-cache.
+        assert any("source=bundled-snapshot" in w for w in warnings), warnings
         # The actionable override hint travels alongside the fallback so
         # users with a working mirror know how to switch to it.
         assert any("SYNTHPANEL_SYNTHBENCH_URL" in w for w in warnings), warnings
@@ -461,6 +497,11 @@ class TestBundledSnapshotFallback:
         assert rec.model, "bundled entry must expose a non-empty model string"
         assert rec.sps > 0
         assert rec.dataset == "globalopinionqa"
+        # Provenance must propagate so format_line() / agent consumers
+        # can render the recommendation honestly instead of claiming
+        # source=synthbench.org for snapshot-derived data (sy-klp).
+        assert rec.source == "bundled-snapshot"
+        assert "source=bundled-snapshot" in rec.format_line()
 
     def test_bundled_snapshot_handles_known_topics(self) -> None:
         """Every topic mentioned in docs/recommended-models.md must
@@ -518,6 +559,7 @@ class TestBundledSnapshotFallback:
             loaded = load_leaderboard(client=client, warn=warnings.append)
         assert loaded is not None
         assert loaded.leaderboard == SAMPLE
+        assert loaded.source == "stale-cache"
         # The "stale cache" path is the explicit prior message — the
         # bundled-snapshot warning must NOT also fire.
         assert any("stale cache" in w for w in warnings)

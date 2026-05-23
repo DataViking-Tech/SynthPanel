@@ -195,6 +195,21 @@ def _apply_best_model_for(args: argparse.Namespace, spec: str) -> str | None:
         return None
 
     print(rec.format_line(), file=sys.stderr)
+    if rec.source == "bundled-snapshot":
+        print(
+            "synthbench: note — recommendation derived from the package-bundled "
+            "snapshot, not live leaderboard data. Treat as best-effort; for current "
+            f"picks once the upstream is reachable, unset ${synthbench.SYNTHBENCH_OFFLINE_ENV} "
+            f"and clear the cache, or set ${synthbench.SYNTHBENCH_URL_ENV} to a working mirror.",
+            file=sys.stderr,
+        )
+    elif rec.source == "stale-cache":
+        print(
+            "synthbench: note — recommendation from stale cache (live fetch failed). "
+            f"Set ${synthbench.SYNTHBENCH_REFRESH_ENV}=1 on the next run to retry once "
+            "the upstream is reachable.",
+            file=sys.stderr,
+        )
     if rec.low_confidence:
         print(
             f"synthbench: warning — recommendation has run_count={rec.run_count} "
