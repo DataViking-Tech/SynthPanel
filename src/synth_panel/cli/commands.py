@@ -573,10 +573,24 @@ def _load_yaml(path: str) -> Any:
             raise ValueError(f"Invalid YAML in {path}: {exc}") from exc
 
 
-def _load_personas(path: str) -> list[dict[str, Any]]:
-    """Load personas from a YAML file.
+def _load_personas(path_or_name: str) -> list[dict[str, Any]]:
+    """Load personas from a YAML file *or* an installed pack name.
 
-    Expected format::
+    Resolution order (sy-n80 / gh-508):
+
+    1. If ``path_or_name`` is an existing file, parse it as YAML.
+    2. Otherwise try :func:`get_persona_pack` — this covers both
+       user-saved packs under ``$SYNTH_PANEL_DATA_DIR/persona_packs/``
+       and bundled packs that ship in the wheel.
+    3. Otherwise consult the registry (best-effort, offline-safe): if
+       the id is a known *registry* pack, raise a targeted
+       :class:`FileNotFoundError` whose message points the caller at
+       ``synthpanel pack import <id>`` so the happy path is one
+       command away.
+    4. Otherwise raise a generic "not found as file or installed pack"
+       error that distinguishes filesystem paths from pack aliases.
+
+    Expected file format::
 
         personas:
           - name: Alice
@@ -585,12 +599,56 @@ def _load_personas(path: str) -> list[dict[str, Any]]:
             background: ...
             personality_traits: [curious, empathetic]
     """
-    data = _load_yaml(path)
+    if Path(path_or_name).exists():
+        data = _load_yaml(path_or_name)
+    else:
+        from synth_panel.mcp.data import get_persona_pack
+
+        try:
+            data = get_persona_pack(path_or_name)
+        except (FileNotFoundError, ValueError):
+            # Registry hint: distinguishing "this name is a known
+            # registry pack you haven't installed" from "this is just
+            # garbage" is the single most useful diagnostic for an
+            # agent debugging --personas. The lookup is best-effort —
+            # offline / network failures degrade silently to the
+            # generic error so we never block a user who's working
+            # locally.
+            hint = _registry_install_hint(path_or_name)
+            if hint:
+                raise FileNotFoundError(hint) from None
+            raise FileNotFoundError(
+                f"Personas not found as file or installed pack: {path_or_name!r}. "
+                f"Run `synthpanel pack list` to see installed packs, or "
+                f"`synthpanel pack search <query>` to find registry packs."
+            ) from None
+
     if isinstance(data, dict) and "personas" in data:
         return data["personas"]
     if isinstance(data, list):
         return data
     raise ValueError(f"Invalid personas file: expected 'personas' key or a list, got {type(data).__name__}")
+
+
+def _registry_install_hint(pack_id: str) -> str | None:
+    """Return an actionable message if *pack_id* is a known registry pack.
+
+    Best-effort: any failure (offline, network, registry parse) returns
+    ``None`` so the caller falls back to the generic "not found" error.
+    """
+    try:
+        from synth_panel.registry import resolve_pack
+
+        entry = resolve_pack(pack_id)
+    except Exception:
+        return None
+    if entry is None:
+        return None
+    return (
+        f"{pack_id!r} is a registry pack, not yet installed locally. "
+        f"Run `synthpanel pack import {pack_id}` to install it, then "
+        f"re-run with `--personas {pack_id}`."
+    )
 
 
 def _merge_persona_lists_with_collisions(
