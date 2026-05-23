@@ -22,6 +22,7 @@ from synth_panel.synthbench import (
     SYNTHBENCH_REFRESH_ENV,
     SYNTHBENCH_URL_ENV,
     cache_path,
+    is_runnable_model_id,
     load_leaderboard,
     parse_target,
     rank_entries,
@@ -240,6 +241,86 @@ def test_recommend_ensemble_falls_back_to_config_base(monkeypatch: pytest.Monkey
     assert rec is not None
     assert rec.is_ensemble is True
     assert rec.model == "claude-haiku-4-5-20251001"
+    assert rec.runnable is True
+
+
+@pytest.mark.parametrize(
+    "model, expected",
+    [
+        ("claude-haiku-4-5-20251001", True),
+        ("gemini-2.5-flash", True),
+        ("grok-3", True),
+        ("gpt-4o-mini", True),
+        ("openrouter/anthropic/claude-3.5", True),
+        ("haiku", True),
+        ("ollama:llama3", True),
+        ("llama-3.3-70b-instruct", True),
+        ("", False),
+        ("   ", False),
+        ("SynthPanel (Gemini Flash Lite)", False),
+        ("Gemini Flash Lite", False),
+        ("claude (sonnet)", False),
+    ],
+)
+def test_is_runnable_model_id(model: str, expected: bool) -> None:
+    assert is_runnable_model_id(model) is expected
+
+
+def test_recommend_display_label_marked_not_runnable() -> None:
+    """gh-519: a product/ensemble row whose model field is a display label
+    (and whose config_id yields no runnable base) must surface as
+    runnable=False rather than stamping a bogus model id."""
+    board = {
+        "entries": [
+            _entry(
+                model="SynthPanel (Gemini Flash Lite)",
+                sps=0.95,
+                framework="product",
+                is_ensemble=True,
+                # config_id tail is a hash fragment, not a resolvable base
+                config_id="synthpanel-gemini-flash-lite-tdefault-ba37570c",
+            )
+        ]
+    }
+    rec = recommend(":globalopinionqa", leaderboard=board)
+    assert rec is not None
+    assert rec.is_ensemble is True
+    assert rec.runnable is False
+    # The original label is preserved verbatim so the caller can report it.
+    assert rec.model == "SynthPanel (Gemini Flash Lite)"
+
+
+def test_recommend_display_label_resolves_runnable_base_from_config_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When a product/ensemble row carries a display label but the config_id
+    encodes a resolvable base model, the recommendation becomes runnable."""
+    from synth_panel.llm import aliases
+
+    monkeypatch.setattr(aliases, "_ALIASES_FILE", Path("/nonexistent/aliases.yaml"))
+    monkeypatch.delenv("SYNTHPANEL_MODEL_ALIASES", raising=False)
+    aliases._reset_cache()
+    board = {
+        "entries": [
+            _entry(
+                model="SynthPanel (Haiku)",
+                sps=0.95,
+                framework="product",
+                is_ensemble=True,
+                config_id="synthpanel:haiku",
+            )
+        ]
+    }
+    rec = recommend(":globalopinionqa", leaderboard=board)
+    assert rec is not None
+    assert rec.runnable is True
+    assert rec.model == "claude-haiku-4-5-20251001"
+
+
+def test_recommend_plain_model_is_runnable() -> None:
+    rec = recommend("Economy & Work", leaderboard=SAMPLE)
+    assert rec is not None
+    assert rec.runnable is True
 
 
 def test_recommend_low_confidence_flag() -> None:
