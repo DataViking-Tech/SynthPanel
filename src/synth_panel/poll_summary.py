@@ -924,6 +924,16 @@ def _looks_numeric(per_panelist: list[dict[str, Any]]) -> bool:
     response is a dict carrying both a categorical choice and a numeric
     confidence. Letting the confidence drive the "looks numeric" probe
     would misclassify the whole question as ``scale`` and bury the vote.
+
+    sy-oyl: this is a *classification* probe — it decides whether a
+    question without a schema is a scale. We must NOT extract numbers
+    greedily from arbitrary prose here, or any free-text answer mentioning
+    a version string ("SynthPanel v1.5.1…") gets classified as a scale
+    response. :func:`_response_is_scale_shaped` only accepts responses
+    whose entire string is a numeric scale answer (``"4"``, ``"4/5"``,
+    ``"rating: 4"``) — the post-classification scorer
+    (:func:`_extract_score`) keeps its lenient regex so legitimately-
+    classified scale runs still accept verbose answers.
     """
     numeric = 0
     seen = 0
@@ -937,9 +947,71 @@ def _looks_numeric(per_panelist: list[dict[str, Any]]) -> bool:
         # enum check downstream.
         if isinstance(rd.get("response"), dict):
             continue
-        if _extract_score(rd) is not None:
+        if _response_is_scale_shaped(rd):
             numeric += 1
     return seen > 0 and numeric / seen > 0.5
+
+
+# sy-oyl: the classification-time scale gate. A scale answer is the
+# *whole* response, not a digit buried inside a sentence. Accepted shapes:
+#
+#   "4"                  bare integer
+#   "4.5"                bare decimal
+#   "-4"                 negative scale (rare but valid for delta/Likert)
+#   "4/5"                fraction
+#   "4 out of 5"         English fraction
+#   "rating: 4"          short labelled answer
+#   "score = 4 / 5"      labelled fraction with light prose
+#
+# Rejected (the bug we're fixing):
+#
+#   "SynthPanel v1.5.1 would absolutely feel agent-ready…"  (text + version)
+#   "The fourth one, around 7/10 confidence overall."        (essay)
+#
+# The 32-character cap on the *raw* response is what enforces "this is
+# meant to be a scale, not an essay". Labels like ``score:`` / ``rating:``
+# / ``confidence:`` are stripped before the cap so the realistic short
+# forms still match.
+_SCALE_LABEL_PREFIX_RE = re.compile(
+    r"^\s*(?:rating|score|confidence|value|answer)\s*[:=]\s*",
+    re.IGNORECASE,
+)
+_SCALE_RESPONSE_RE = re.compile(
+    r"^\s*-?\d+(?:\.\d+)?(?:\s*(?:/|out\s+of)\s*\d+)?\s*$",
+    re.IGNORECASE,
+)
+
+
+def _response_is_scale_shaped(response_dict: dict[str, Any]) -> bool:
+    """True iff the response, taken whole, is a numeric scale answer (sy-oyl).
+
+    See :data:`_SCALE_RESPONSE_RE` for the accepted shapes. Numeric
+    scalars and bare ``int``/``float`` values always pass; booleans and
+    dicts always fail. String responses must match the strict pattern
+    after stripping a leading ``rating: `` / ``score = `` label and must
+    fit inside the 32-character "this is a scale answer, not prose" cap.
+
+    Extraction-only scoring (``{"extraction": {"score": 4}}``) also
+    counts — that's the canonical structured-scale shape.
+    """
+    raw = response_dict.get("response")
+    if isinstance(raw, bool):
+        # Same booleans-aren't-numbers stance as ``_coerce_number``.
+        return False
+    if isinstance(raw, (int, float)):
+        return True
+    if isinstance(raw, str):
+        stripped = _SCALE_LABEL_PREFIX_RE.sub("", raw).strip()
+        return len(stripped) <= 32 and _SCALE_RESPONSE_RE.match(stripped) is not None
+
+    # No bare scalar — look for an extracted score on a free-text response.
+    extraction = response_dict.get("extraction")
+    if isinstance(extraction, dict):
+        for key in _SCORE_KEYS:
+            v = extraction.get(key)
+            if not isinstance(v, bool) and isinstance(v, (int, float)):
+                return True
+    return False
 
 
 def _looks_enum(per_panelist: list[dict[str, Any]]) -> bool:

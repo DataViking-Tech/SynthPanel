@@ -276,6 +276,113 @@ class TestFreeTextQuestions:
         assert q0.first_choice_counts is None
         assert q0.metric_average is None
 
+    def test_text_question_with_version_string_in_response_stays_text(self) -> None:
+        """sy-oyl: free-text answers that mention a version string ('v1.5.1')
+        must not classify the question as a scale. The bug: ``_looks_numeric``
+        used the lenient ``_coerce_number`` regex which greedily pulled the
+        first digit out of any string, so every panelist's prose response
+        looked like a scale answer of ~1.0 and the question was reported as
+        ``kind=scale, average=1.50``.
+        """
+        env: dict[str, object] = {
+            "persona_count": 2,
+            # Schema explicitly says text. _detect_kind has always honored
+            # this — the regression here is that the same envelope without
+            # the schema (or with the schema stripped during persistence)
+            # was classifying as scale via inference.
+            "questions": [{"text": "Would SynthPanel v1.5.1 feel agent-ready?"}],
+            "results": [
+                {
+                    "persona": "A",
+                    "responses": [
+                        {
+                            "question": "Would SynthPanel v1.5.1 feel agent-ready?",
+                            "response": (
+                                "Yes — SynthPanel v1.5.1 has the discovery affordances "
+                                "agents need, especially MCP install."
+                            ),
+                        }
+                    ],
+                },
+                {
+                    "persona": "B",
+                    "responses": [
+                        {
+                            "question": "Would SynthPanel v1.5.1 feel agent-ready?",
+                            "response": (
+                                "Almost. v1.5.1 needs a clearer agent quickstart before I'd call it agent-ready."
+                            ),
+                        }
+                    ],
+                },
+            ],
+        }
+        summary = build_poll_summary(env)
+        q0 = summary.questions[0]
+        # The whole point: kind must be text. average/distribution must be absent.
+        assert q0.kind == "text"
+        assert q0.metric_average is None
+        assert q0.metric_distribution is None
+
+    def test_mixed_text_and_scale_only_scale_gets_average(self) -> None:
+        """sy-oyl AC: mixed-instrument runs (open-text q1 + scale q2) report
+        average/distribution only for the bounded question.
+        """
+        env: dict[str, object] = {
+            "persona_count": 3,
+            "questions": [
+                {"text": "Would SynthPanel v1.5.1 feel agent-ready?", "response_schema": {"type": "text"}},
+                {"text": "Confidence (1-5)?", "response_schema": {"type": "scale", "min": 1, "max": 5}},
+            ],
+            "results": [
+                {
+                    "persona": p,
+                    "responses": [
+                        {
+                            "question": "Would SynthPanel v1.5.1 feel agent-ready?",
+                            "response": text,
+                        },
+                        {"question": "Confidence (1-5)?", "response": str(score)},
+                    ],
+                }
+                for p, text, score in [
+                    ("A", "Yes, v1.5.1 ships the right MCP install affordances.", 5),
+                    ("B", "Almost — v1.5.1 still needs a clearer quickstart.", 4),
+                    ("C", "No, v1.5.1 is missing structured-polling defaults.", 3),
+                ]
+            ],
+        }
+        summary = build_poll_summary(env)
+        q0, q1 = summary.questions
+        # Open-text: no scale numbers extracted from the prose.
+        assert q0.kind == "text"
+        assert q0.metric_average is None
+        assert q0.metric_distribution is None
+        # Scale: real 1-5 confidence with the expected histogram.
+        assert q1.kind == "scale"
+        assert q1.metric_average == 4.0
+        assert q1.metric_distribution == {"3": 1, "4": 1, "5": 1}
+
+    def test_short_numeric_string_still_classifies_as_scale(self) -> None:
+        """sy-oyl: the strict-numeric gate must still accept legitimately-
+        scale-shaped string responses (``"4"``, ``"4/5"``, ``"rating: 4"``).
+        """
+        env: dict[str, object] = {
+            "persona_count": 4,
+            "questions": [{"text": "Rate the demo 1-5"}],
+            "results": [
+                {"persona": "A", "responses": [{"question": "Rate the demo 1-5", "response": "5"}]},
+                {"persona": "B", "responses": [{"question": "Rate the demo 1-5", "response": "4/5"}]},
+                {"persona": "C", "responses": [{"question": "Rate the demo 1-5", "response": "rating: 3"}]},
+                {"persona": "D", "responses": [{"question": "Rate the demo 1-5", "response": " 4 out of 5"}]},
+            ],
+        }
+        summary = build_poll_summary(env)
+        q0 = summary.questions[0]
+        assert q0.kind == "scale"
+        # (5 + 4 + 3 + 4) / 4 = 4.0
+        assert q0.metric_average == 4.0
+
 
 class TestDeterminism:
     def test_same_input_produces_byte_identical_dict(self) -> None:

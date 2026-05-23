@@ -6,6 +6,21 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [Unreleased]
 
+### Fixed
+
+- **`poll-summary` respects declared question types (sy-oyl).** Open-text
+  questions whose prompt or responses contain numbers (e.g. version
+  strings like *"SynthPanel v1.5.1"*) are no longer misclassified as
+  scale questions. The classification probe (`_looks_numeric`) now
+  requires the *whole* response to be a numeric scale answer (`"4"`,
+  `"4/5"`, `"rating: 4"`) instead of pulling the first digit out of
+  arbitrary prose. Mixed open-text + scale instruments produce
+  `metric_average` / `metric_distribution` only for the bounded
+  question. `save_panel_result` now also persists the question list
+  with its `response_schema` on the SDK's `quick_poll`, single-round,
+  and multi-round paths so a reloaded saved result carries declared
+  question types through `poll-summary`.
+
 ### Added
 
 - **`synthpanel doctor --install-only` (sy-e28).** Validates package,
