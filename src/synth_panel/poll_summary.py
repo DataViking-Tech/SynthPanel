@@ -198,6 +198,8 @@ def build_poll_summary(
     *,
     segment_by: list[str] | None = None,
     personas: list[dict[str, Any]] | None = None,
+    choice_field: str | None = None,
+    confidence_field: str | None = None,
 ) -> PollSummary:
     """Compute a :class:`PollSummary` from a saved panel result.
 
@@ -213,6 +215,16 @@ def build_poll_summary(
             persona name in each panelist response is looked up here for
             segment attributes. When omitted, attributes embedded in the
             panelist record itself are used.
+        choice_field: Explicit name of the structured field that holds
+            each panelist's primary choice (e.g. ``"choice"``,
+            ``"vote"``). When provided, overrides the auto-detection
+            done from :data:`_FIRST_CHOICE_KEYS` and the response
+            schema. Useful when an ``--schema`` panel has multiple
+            enum properties and the wrong one wins the deterministic
+            tiebreak. sy-bn7.
+        confidence_field: Explicit name of the numeric rating field
+            (e.g. ``"confidence"``, ``"score"``). Overrides
+            :data:`_SCORE_KEYS` auto-detection. sy-bn7.
 
     Returns:
         A :class:`PollSummary`. Always returns — never raises on a
@@ -240,15 +252,41 @@ def build_poll_summary(
 
     for qi, qmeta in enumerate(questions_meta):
         per_panelist = _per_panelist_view(panelists, qi)
-        kind = _detect_kind(qmeta, per_panelist)
-        qsum = _summarise_question(qi, qmeta, per_panelist, kind, summary.warnings)
+        # sy-bn7: resolve the choice/confidence field names per question
+        # so a schema-enforced ``--schema`` run with a structured
+        # response dict is recognized as enum instead of falling through
+        # to ``text``. The resolver also picks up ambiguous schemas and
+        # records a warning so the caller knows which field won the tie.
+        resolved_choice, resolved_confidence = _resolve_field_names(
+            qi,
+            qmeta,
+            per_panelist,
+            explicit_choice=choice_field,
+            explicit_confidence=confidence_field,
+            warnings=summary.warnings,
+        )
+        kind = _detect_kind(qmeta, per_panelist, choice_field=resolved_choice)
+        qsum = _summarise_question(
+            qi,
+            qmeta,
+            per_panelist,
+            kind,
+            summary.warnings,
+            choice_field=resolved_choice,
+            confidence_field=resolved_confidence,
+        )
         summary.questions.append(qsum)
 
         # Segments — only meaningful for enum questions where the choice
         # is comparable across personas. Scale questions get their own
         # average; text questions feed the objections bucket.
         if kind == "enum" and segments:
-            seg_table[str(qi)] = _segment_split(per_panelist, persona_index, segments)
+            seg_table[str(qi)] = _segment_split(
+                per_panelist,
+                persona_index,
+                segments,
+                choice_field=resolved_choice,
+            )
 
         # Objections / concerns get harvested regardless of kind so a
         # free-text follow-up can still surface trust concerns.
@@ -349,12 +387,22 @@ def _per_panelist_view(
 # ---------------------------------------------------------------------------
 
 
-def _detect_kind(qmeta: dict[str, Any], per_panelist: list[dict[str, Any]]) -> str:
+def _detect_kind(
+    qmeta: dict[str, Any],
+    per_panelist: list[dict[str, Any]],
+    *,
+    choice_field: str | None = None,
+) -> str:
     """Classify a question as enum / scale / text.
 
     Schema-driven when ``qmeta.response_schema`` is present. Otherwise
     inferred from the response shape: numeric → scale, enum-like dict
     extractions or short repeating strings → enum, anything else → text.
+
+    sy-bn7: a JSON Schema with ``type: "object"`` and a ``properties.<key>.enum``
+    field counts as enum, and any structured-response dict carrying a
+    recognized choice key in the ``response`` field (the shape ``--schema``
+    runs persist) also counts — previously these landed as ``text``.
     """
     schema = qmeta.get("response_schema")
     if isinstance(schema, dict):
@@ -368,18 +416,194 @@ def _detect_kind(qmeta: dict[str, Any], per_panelist: list[dict[str, Any]]) -> s
             # as enum for summary purposes. The schema text/extraction
             # split is an implementation detail of the orchestrator —
             # for the consumer, "what did the panel pick" is the question.
-            if _has_choice_extraction(per_panelist):
+            if _has_choice_extraction(per_panelist) or _has_choice_in_response_dict(per_panelist, choice_field):
                 return "enum"
             return "text"
+        # sy-bn7: a JSON Schema with type=object + an enum sub-property
+        # is the canonical ``--schema`` poll shape. Trust the schema and
+        # return enum without scanning responses.
+        if st == "object" and _json_schema_has_enum_field(schema, choice_field):
+            return "enum"
 
     # Inference fallback. Order matters: numeric responses (scale) take
     # precedence over short strings (which would otherwise look enum-y
     # to the second branch).
     if _looks_numeric(per_panelist):
         return "scale"
-    if _has_choice_extraction(per_panelist) or _looks_enum(per_panelist):
+    if (
+        _has_choice_extraction(per_panelist)
+        or _has_choice_in_response_dict(per_panelist, choice_field)
+        or _looks_enum(per_panelist)
+    ):
         return "enum"
     return "text"
+
+
+def _resolve_field_names(
+    qi: int,
+    qmeta: dict[str, Any],
+    per_panelist: list[dict[str, Any]],
+    *,
+    explicit_choice: str | None,
+    explicit_confidence: str | None,
+    warnings: list[str],
+) -> tuple[str | None, str | None]:
+    """Pick the choice/confidence field names for one question (sy-bn7).
+
+    Resolution order:
+
+    1. Caller-supplied ``--choice-field`` / ``--confidence-field`` wins
+       outright — no warning, even if the schema disagrees.
+    2. Otherwise: inspect ``response_schema`` for known choice/score
+       keys (JSON Schema ``properties.<key>.enum`` or ``type: number``).
+    3. Otherwise: scan the first non-null structured response dict for
+       a known key.
+
+    When a schema has multiple enum properties, the choice is the
+    first field name in :data:`_FIRST_CHOICE_KEYS` that matches, then
+    the first enum property in iteration order; the loser names land
+    in ``warnings`` so the caller knows the tiebreak ran. Returning
+    ``None`` from either slot means "no override — fall through to the
+    default behaviour".
+    """
+    schema = qmeta.get("response_schema") if isinstance(qmeta.get("response_schema"), dict) else None
+
+    if explicit_choice is not None:
+        choice = explicit_choice
+    else:
+        choice = _pick_choice_field_from_schema(schema, qi, warnings)
+        if choice is None:
+            choice = _pick_choice_field_from_responses(per_panelist)
+
+    if explicit_confidence is not None:
+        confidence = explicit_confidence
+    else:
+        confidence = _pick_confidence_field_from_schema(schema)
+        if confidence is None:
+            confidence = _pick_confidence_field_from_responses(per_panelist)
+
+    return choice, confidence
+
+
+def _json_schema_properties(schema: dict[str, Any]) -> dict[str, Any]:
+    """Return ``properties`` dict from a JSON Schema, or ``{}``."""
+    props = schema.get("properties")
+    return props if isinstance(props, dict) else {}
+
+
+def _json_schema_has_enum_field(schema: dict[str, Any], choice_field: str | None) -> bool:
+    """True iff the JSON Schema has at least one enum-typed sub-property.
+
+    When ``choice_field`` is given, restrict the check to that key —
+    a caller-supplied override must actually exist in the schema for
+    us to claim enum kind off it.
+    """
+    for name, spec in _json_schema_properties(schema).items():
+        if not isinstance(spec, dict):
+            continue
+        if choice_field is not None and name != choice_field:
+            continue
+        if isinstance(spec.get("enum"), list) and spec["enum"]:
+            return True
+    return False
+
+
+def _pick_choice_field_from_schema(
+    schema: dict[str, Any] | None,
+    qi: int,
+    warnings: list[str],
+) -> str | None:
+    """Best choice-field guess from a JSON Schema's enum properties (sy-bn7).
+
+    Deterministic tiebreak: prefer names from :data:`_FIRST_CHOICE_KEYS`
+    in declared order, then fall back to the first enum property in
+    iteration order. When more than one enum property is present and the
+    tiebreak fires, log a warning so the caller knows which field won
+    and how to override (``--choice-field``).
+    """
+    if not schema:
+        return None
+    enum_fields: list[str] = []
+    for name, spec in _json_schema_properties(schema).items():
+        if isinstance(spec, dict) and isinstance(spec.get("enum"), list) and spec["enum"]:
+            enum_fields.append(name)
+    if not enum_fields:
+        return None
+    if len(enum_fields) == 1:
+        return enum_fields[0]
+
+    # Multiple enum properties — deterministic tiebreak + warning.
+    for known in _FIRST_CHOICE_KEYS:
+        if known in enum_fields:
+            warnings.append(
+                f"Q{qi}: response_schema has multiple enum fields "
+                f"({', '.join(enum_fields)}); using {known!r} "
+                "(pass --choice-field to override)."
+            )
+            return known
+    chosen = enum_fields[0]
+    warnings.append(
+        f"Q{qi}: response_schema has multiple enum fields "
+        f"({', '.join(enum_fields)}) and none match the known choice-field "
+        f"names ({', '.join(_FIRST_CHOICE_KEYS)}); using {chosen!r} "
+        "(pass --choice-field to override)."
+    )
+    return chosen
+
+
+def _pick_confidence_field_from_schema(schema: dict[str, Any] | None) -> str | None:
+    """Best confidence/score field guess from a JSON Schema (sy-bn7).
+
+    Looks for a property whose name matches :data:`_SCORE_KEYS` AND
+    whose type is numeric (``integer`` / ``number``). Falls back to
+    the first numeric property when no known name matches.
+    """
+    if not schema:
+        return None
+    numeric_fields: list[str] = []
+    for name, spec in _json_schema_properties(schema).items():
+        if not isinstance(spec, dict):
+            continue
+        if spec.get("type") in {"integer", "number"}:
+            numeric_fields.append(name)
+    if not numeric_fields:
+        return None
+    for known in _SCORE_KEYS:
+        if known in numeric_fields:
+            return known
+    return numeric_fields[0]
+
+
+def _pick_choice_field_from_responses(per_panelist: list[dict[str, Any]]) -> str | None:
+    """Sniff the choice field name from the first dict response we find."""
+    for entry in per_panelist:
+        rd = entry["response_dict"]
+        if not isinstance(rd, dict):
+            continue
+        raw = rd.get("response")
+        if isinstance(raw, dict):
+            for key in _FIRST_CHOICE_KEYS:
+                val = raw.get(key)
+                if isinstance(val, str) and val.strip():
+                    return key
+                if isinstance(val, (int, float)) and not isinstance(val, bool):
+                    return key
+    return None
+
+
+def _pick_confidence_field_from_responses(per_panelist: list[dict[str, Any]]) -> str | None:
+    """Sniff a numeric score field name from the first dict response we find."""
+    for entry in per_panelist:
+        rd = entry["response_dict"]
+        if not isinstance(rd, dict):
+            continue
+        raw = rd.get("response")
+        if isinstance(raw, dict):
+            for key in _SCORE_KEYS:
+                val = raw.get(key)
+                if isinstance(val, (int, float)) and not isinstance(val, bool):
+                    return key
+    return None
 
 
 def _summarise_question(
@@ -388,15 +612,33 @@ def _summarise_question(
     per_panelist: list[dict[str, Any]],
     kind: str,
     warnings: list[str],
+    *,
+    choice_field: str | None = None,
+    confidence_field: str | None = None,
 ) -> QuestionSummary:
     """Build a :class:`QuestionSummary` for one question."""
     question_text = str(qmeta.get("text") or "")[:280]
     n = sum(1 for v in per_panelist if v["response_dict"] is not None)
 
     if kind == "enum":
-        return _summarise_enum(qi, question_text, per_panelist, n, warnings)
+        return _summarise_enum(
+            qi,
+            question_text,
+            per_panelist,
+            n,
+            warnings,
+            choice_field=choice_field,
+            confidence_field=confidence_field,
+        )
     if kind == "scale":
-        return _summarise_scale(qi, question_text, per_panelist, n, warnings)
+        return _summarise_scale(
+            qi,
+            question_text,
+            per_panelist,
+            n,
+            warnings,
+            confidence_field=confidence_field,
+        )
     return QuestionSummary(question=question_text, question_index=qi, kind="text", n=n)
 
 
@@ -406,18 +648,28 @@ def _summarise_enum(
     per_panelist: list[dict[str, Any]],
     n: int,
     warnings: list[str],
+    *,
+    choice_field: str | None = None,
+    confidence_field: str | None = None,
 ) -> QuestionSummary:
-    """Enum rollup: vote counts, optional second-choice + weighted scores."""
+    """Enum rollup: vote counts, optional second-choice + weighted scores.
+
+    sy-bn7: also populates ``metric_average`` (overall average across
+    every panelist who supplied a score) so enum polls with a numeric
+    confidence field surface a panel-wide confidence reading, not just
+    per-option weights.
+    """
     first: Counter[str] = Counter()
     second: Counter[str] = Counter()
     scores: dict[str, list[float]] = {}
+    all_scores: list[float] = []
     unparseable = 0
 
     for entry in per_panelist:
         rd = entry["response_dict"]
         if rd is None:
             continue
-        choice = _extract_first_choice(rd)
+        choice = _extract_first_choice(rd, choice_field=choice_field)
         if choice is None:
             unparseable += 1
             continue
@@ -425,9 +677,10 @@ def _summarise_enum(
         sc = _extract_second_choice(rd)
         if sc is not None and sc != choice:
             second[sc] += 1
-        score = _extract_score(rd)
+        score = _extract_score(rd, score_field=confidence_field)
         if score is not None:
             scores.setdefault(choice, []).append(score)
+            all_scores.append(score)
 
     if unparseable:
         warnings.append(
@@ -438,6 +691,7 @@ def _summarise_enum(
     first_counts = _sorted_counts(first)
     second_counts = _sorted_counts(second) if second else None
     weighted = {opt: round(sum(vals) / len(vals), 4) for opt, vals in scores.items() if vals} if scores else None
+    overall_avg = round(sum(all_scores) / len(all_scores), 4) if all_scores else None
     winner = next(iter(first_counts), None) if first_counts else None
 
     return QuestionSummary(
@@ -450,6 +704,7 @@ def _summarise_enum(
         second_choice_counts=second_counts,
         weighted_scores=weighted,
         winner=winner,
+        metric_average=overall_avg,
     )
 
 
@@ -459,6 +714,8 @@ def _summarise_scale(
     per_panelist: list[dict[str, Any]],
     n: int,
     warnings: list[str],
+    *,
+    confidence_field: str | None = None,
 ) -> QuestionSummary:
     """Scale rollup: mean + histogram."""
     values: list[float] = []
@@ -468,7 +725,7 @@ def _summarise_scale(
         rd = entry["response_dict"]
         if rd is None:
             continue
-        v = _extract_score(rd)
+        v = _extract_score(rd, score_field=confidence_field)
         if v is None:
             unparseable += 1
             continue
@@ -507,17 +764,31 @@ def _summarise_scale(
 # ---------------------------------------------------------------------------
 
 
-def _extract_first_choice(response_dict: dict[str, Any]) -> str | None:
+def _extract_first_choice(
+    response_dict: dict[str, Any],
+    *,
+    choice_field: str | None = None,
+) -> str | None:
     """Pull the panelist's primary choice from a response record.
 
-    Checks (in order): ``extraction`` dict for any of the known choice
-    keys, then the raw ``response`` field (which is a string for enum
-    schemas). Returns ``None`` when nothing parseable is found —
-    callers add to ``n_unparseable`` rather than guess.
+    Checks (in order): ``extraction`` dict, then the raw ``response``
+    field (string for enum schemas, dict for ``--schema`` structured
+    output, sy-bn7). When ``choice_field`` is given, that key is tried
+    first and the known-key fallback runs only if it's absent — this
+    lets ``--choice-field vote`` win over an unrelated ``answer`` key
+    that happens to be in the same dict. Returns ``None`` when nothing
+    parseable is found — callers add to ``n_unparseable`` rather than
+    guess.
     """
+    keys: tuple[str, ...]
+    if choice_field:
+        keys = (choice_field, *(k for k in _FIRST_CHOICE_KEYS if k != choice_field))
+    else:
+        keys = _FIRST_CHOICE_KEYS
+
     extraction = response_dict.get("extraction")
     if isinstance(extraction, dict):
-        for key in _FIRST_CHOICE_KEYS:
+        for key in keys:
             val = extraction.get(key)
             if isinstance(val, str) and val.strip():
                 return val.strip()
@@ -533,10 +804,12 @@ def _extract_first_choice(response_dict: dict[str, Any]) -> str | None:
         if len(text) <= 120:
             return text
     if isinstance(raw, dict):
-        for key in _FIRST_CHOICE_KEYS:
+        for key in keys:
             val = raw.get(key)
             if isinstance(val, str) and val.strip():
                 return val.strip()
+            if isinstance(val, (int, float)) and not isinstance(val, bool):
+                return str(val)
     return None
 
 
@@ -550,21 +823,45 @@ def _extract_second_choice(response_dict: dict[str, Any]) -> str | None:
     return None
 
 
-def _extract_score(response_dict: dict[str, Any]) -> float | None:
+def _extract_score(
+    response_dict: dict[str, Any],
+    *,
+    score_field: str | None = None,
+) -> float | None:
     """Coerce a numeric rating out of a response record.
 
     Returns ``None`` when nothing numeric is found. Booleans are NOT
     treated as numbers — ``True/False`` showing up here is a schema
     mismatch the caller should learn about via ``n_unparseable``.
+
+    sy-bn7: also reads ``response`` when it's a dict (the shape
+    ``--schema`` runs persist) so a ``{"choice": ..., "confidence": 4}``
+    response surfaces the confidence number. When ``score_field`` is
+    given, that key is tried first.
     """
+    keys: tuple[str, ...]
+    if score_field:
+        keys = (score_field, *(k for k in _SCORE_KEYS if k != score_field))
+    else:
+        keys = _SCORE_KEYS
+
     raw = response_dict.get("response")
-    val = _coerce_number(raw)
-    if val is not None:
-        return val
+    # Top-level numeric response wins when the whole response is a
+    # scalar (free-text scale schemas). For dict responses we look
+    # inside for a recognized score key.
+    if not isinstance(raw, dict):
+        val = _coerce_number(raw)
+        if val is not None:
+            return val
+    else:
+        for key in keys:
+            v = _coerce_number(raw.get(key))
+            if v is not None:
+                return v
 
     extraction = response_dict.get("extraction")
     if isinstance(extraction, dict):
-        for key in _SCORE_KEYS:
+        for key in keys:
             v = _coerce_number(extraction.get(key))
             if v is not None:
                 return v
@@ -619,7 +916,15 @@ def _harvest_objections(entry: dict[str, Any]) -> list[str]:
 
 
 def _looks_numeric(per_panelist: list[dict[str, Any]]) -> bool:
-    """True iff a majority of present responses parse as numbers."""
+    """True iff a majority of present top-level responses parse as numbers.
+
+    sy-bn7: only the scalar response form (or the extraction-only shape)
+    counts. A structured ``--schema`` response like
+    ``{"choice": "B", "confidence": 4}`` is NOT a scale answer — the
+    response is a dict carrying both a categorical choice and a numeric
+    confidence. Letting the confidence drive the "looks numeric" probe
+    would misclassify the whole question as ``scale`` and bury the vote.
+    """
     numeric = 0
     seen = 0
     for entry in per_panelist:
@@ -627,6 +932,11 @@ def _looks_numeric(per_panelist: list[dict[str, Any]]) -> bool:
         if rd is None:
             continue
         seen += 1
+        # Dict response → structured, not a bare numeric. Skip without
+        # incrementing numeric so the question stays available for the
+        # enum check downstream.
+        if isinstance(rd.get("response"), dict):
+            continue
         if _extract_score(rd) is not None:
             numeric += 1
     return seen > 0 and numeric / seen > 0.5
@@ -668,6 +978,33 @@ def _has_choice_extraction(per_panelist: list[dict[str, Any]]) -> bool:
     return False
 
 
+def _has_choice_in_response_dict(
+    per_panelist: list[dict[str, Any]],
+    choice_field: str | None = None,
+) -> bool:
+    """True iff any panelist's ``response`` is a dict with a choice key (sy-bn7).
+
+    This is the missing detector that was letting ``--schema`` runs fall
+    through to ``text``. When ``choice_field`` is given, only that key
+    counts; otherwise the function probes :data:`_FIRST_CHOICE_KEYS`.
+    """
+    keys: tuple[str, ...] = (choice_field,) if choice_field else _FIRST_CHOICE_KEYS
+    for entry in per_panelist:
+        rd = entry["response_dict"]
+        if not isinstance(rd, dict):
+            continue
+        raw = rd.get("response")
+        if not isinstance(raw, dict):
+            continue
+        for key in keys:
+            val = raw.get(key)
+            if isinstance(val, str) and val.strip():
+                return True
+            if isinstance(val, (int, float)) and not isinstance(val, bool):
+                return True
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Segment splits
 # ---------------------------------------------------------------------------
@@ -677,6 +1014,8 @@ def _segment_split(
     per_panelist: list[dict[str, Any]],
     persona_index: dict[str, dict[str, Any]],
     segment_attrs: list[str],
+    *,
+    choice_field: str | None = None,
 ) -> dict[str, dict[str, dict[str, int]]]:
     """Return ``attr -> attr_value -> {option: count}`` for one question.
 
@@ -693,7 +1032,7 @@ def _segment_split(
             rd = entry["response_dict"]
             if not isinstance(rd, dict):
                 continue
-            choice = _extract_first_choice(rd)
+            choice = _extract_first_choice(rd, choice_field=choice_field)
             if choice is None:
                 continue
 

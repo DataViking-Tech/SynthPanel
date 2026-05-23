@@ -5318,7 +5318,12 @@ def handle_poll_summary(args: argparse.Namespace, fmt: OutputFormat) -> int:
         # and strip whitespace so `--segment-by "occupation, tier"` works.
         segment_by = [s.strip() for s in raw_segment.split(",") if s.strip()]
 
-    summary = build_poll_summary(data, segment_by=segment_by)
+    summary = build_poll_summary(
+        data,
+        segment_by=segment_by,
+        choice_field=getattr(args, "choice_field", None),
+        confidence_field=getattr(args, "confidence_field", None),
+    )
     out_format = getattr(args, "poll_summary_format", "text")
 
     if out_format == "json" or fmt is not OutputFormat.TEXT:
@@ -5359,6 +5364,12 @@ def handle_poll_summary(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 lines.append("    weighted scores (avg rating per choice):")
                 for opt, score in qs.weighted_scores.items():
                     lines.append(f"      {opt}: {score:.2f}")
+            # sy-bn7: surface the overall confidence average for enum
+            # polls that carry a numeric score field. Distinct from
+            # weighted_scores (per-option) — answers "how confident was
+            # the panel overall?".
+            if qs.metric_average is not None:
+                lines.append(f"    overall confidence: {qs.metric_average:.2f}")
         elif qs.kind == "scale":
             if qs.metric_average is not None:
                 lines.append(f"    average: {qs.metric_average:.2f}")
