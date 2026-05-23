@@ -12,6 +12,7 @@ import json
 import os
 import shutil
 from dataclasses import dataclass
+from importlib.util import find_spec
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,15 @@ class InstallResult:
     # exactly what would be written. Also populated on the actual-write
     # path so callers in JSON mode see a uniform shape.
     resulting_config: dict[str, Any] | None = None
+    warnings: list[str] | None = None
+
+
+MCP_EXTRA_WARNING = "Optional MCP dependency is not installed; run `pip install 'synthpanel[mcp]'` before using `synthpanel mcp-serve`."
+
+
+def mcp_extra_available() -> bool:
+    """Return whether the optional MCP dependency is importable."""
+    return find_spec("mcp") is not None
 
 
 def resolve_target(scope: str, target: str | None) -> Path:
@@ -123,6 +133,7 @@ def install(
 
     existing = servers.get(name)
     new_entry = build_entry(command, env)
+    warnings = None if mcp_extra_available() else [MCP_EXTRA_WARNING]
 
     if existing == new_entry:
         # No-op: report the current on-disk config as the resulting config
@@ -134,6 +145,7 @@ def install(
             action="noop",
             entry=new_entry,
             resulting_config=config,
+            warnings=warnings,
         )
 
     is_update = name in servers
@@ -152,6 +164,7 @@ def install(
             action=action,
             entry=new_entry,
             resulting_config=config,
+            warnings=warnings,
         )
 
     _atomic_write(target, config)
@@ -162,6 +175,7 @@ def install(
         action=action,
         entry=new_entry,
         resulting_config=config,
+        warnings=warnings,
     )
 
 
@@ -241,6 +255,8 @@ def format_json(result: InstallResult) -> str:
     }
     if result.entry is not None:
         payload["entry"] = result.entry
+    if result.warnings:
+        payload["warnings"] = result.warnings
     # sy-0k2 / gh-495: expose the full resulting config when available so
     # agents can see exactly what would (or did) land on disk.
     if result.resulting_config is not None:
@@ -267,6 +283,7 @@ __all__ = [
     "format_resulting_config",
     "format_text",
     "install",
+    "mcp_extra_available",
     "parse_env_pairs",
     "resolve_command",
     "resolve_target",

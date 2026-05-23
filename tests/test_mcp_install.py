@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 import json
 import os
 import stat
@@ -108,6 +109,24 @@ class TestHelpers:
     def test_parse_env_pairs_empty(self):
         assert mcp_install.parse_env_pairs(None) == {}
         assert mcp_install.parse_env_pairs([]) == {}
+
+    def test_mcp_extra_available_uses_import_probe(self, monkeypatch):
+        monkeypatch.setattr(mcp_install, "find_spec", lambda name: object() if name == "mcp" else None)
+        assert mcp_install.mcp_extra_available() is True
+        monkeypatch.setattr(mcp_install, "find_spec", lambda _name: None)
+        assert mcp_install.mcp_extra_available() is False
+
+    def test_install_warns_when_mcp_extra_missing(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(mcp_install, "mcp_extra_available", lambda: False)
+        result = mcp_install.install(
+            target=tmp_path / "claude.json",
+            name="synth_panel",
+            command="synthpanel",
+            env={},
+            force=False,
+            dry_run=True,
+        )
+        assert result.warnings == [mcp_install.MCP_EXTRA_WARNING]
 
     def test_build_entry(self):
         entry = mcp_install.build_entry("synthpanel", {})
@@ -454,6 +473,21 @@ class TestCLI:
         assert rc == 1
         err = capsys.readouterr().err
         assert "--env" in err
+
+    def test_mcp_serve_missing_extra_is_actionable(self, capsys, monkeypatch):
+        real_import = builtins.__import__
+
+        def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+            if name == "synth_panel.mcp.server":
+                raise ModuleNotFoundError("No module named 'mcp'", name="mcp")
+            return real_import(name, globals, locals, fromlist, level)
+
+        monkeypatch.setattr(builtins, "__import__", fake_import)
+        rc = main(["mcp-serve"])
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "synthpanel[mcp]" in err
+        assert "ModuleNotFoundError" not in err
 
     def test_no_subcommand_prints_help(self, capsys):
         with pytest.raises(SystemExit):

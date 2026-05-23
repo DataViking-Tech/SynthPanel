@@ -4416,7 +4416,16 @@ def handle_pack_calibrate(args: argparse.Namespace, fmt: OutputFormat) -> int:
 
 def handle_mcp_serve(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """Start the MCP server on stdio transport."""
-    from synth_panel.mcp.server import serve
+    try:
+        from synth_panel.mcp.server import serve
+    except ModuleNotFoundError as exc:
+        if exc.name == "mcp":
+            print(
+                "Error: MCP support is not installed. Run `pip install 'synthpanel[mcp]'` and try again.",
+                file=sys.stderr,
+            )
+            return 1
+        raise
 
     serve()
     return 0
@@ -4470,11 +4479,17 @@ def handle_mcp_install(args: argparse.Namespace, fmt: OutputFormat) -> int:
         # config so callers can pipe through `jq`, diff, or write it to
         # the target themselves.
         print(helper.format_text(result), file=sys.stderr)
+        if result.warnings:
+            for warning in result.warnings:
+                print(f"Warning: {warning}", file=sys.stderr)
         rendered = helper.format_resulting_config(result)
         if rendered is not None:
             print(rendered)
     else:
         print(helper.format_text(result))
+        if result.warnings:
+            for warning in result.warnings:
+                print(f"Warning: {warning}", file=sys.stderr)
     return 0
 
 
