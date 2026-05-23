@@ -1,22 +1,19 @@
 name: Publish to PyPI
 
-# Thin wrapper around the shared DataViking python-publish workflow
-# (DataViking-Tech/dataviking-infra). This file used to inline checkout,
-# build, and PyPI upload logic; that logic now lives in the shared workflow
-# so synthpanel and other DataViking Python packages release through the
-# same pipeline (Doppler-fetched PyPI token, idempotent uploads via
-# skip-existing). Adopted in sy-4qa.
+# Inline release pipeline for SynthPanel. Previously reused
+# DataViking-Tech/dataviking-infra/.github/workflows/python-publish.yml@main
+# but cross-visibility reuse (SynthPanel public → dataviking-infra private)
+# is blocked by GitHub even with org-scoped Actions access. Inlined here
+# to unblock v1.5.0 release; will re-share via a public reusable workflow
+# repo later if there's enough cross-package demand.
 #
 # Triggers:
-#   - push of a v*.*.* tag (auto-tag.yml creates these on PR merge, then
-#     dispatches this workflow at the tag ref)
-#   - workflow_dispatch (manual republish, useful for failure recovery)
+#   - push of a v*.*.* tag (auto-tag.yml creates these on PR merge)
+#   - workflow_dispatch (manual republish for failure recovery)
 #
-# The `tag` workflow_dispatch input is accepted for compatibility with
-# auto-tag.yml's `gh workflow run publish.yml --ref <tag> -f tag=<tag>`
-# call. The shared workflow itself checks out whatever ref triggered it
-# (refs/tags/<tag> in both code paths), so the input value is informational
-# only — the tag ref is what determines the published artifact contents.
+# Idempotent: `skip-existing: true` makes twine treat 'File already exists'
+# as success, so a retry after a successful upload lands green.
+
 on:
   push:
     tags:
@@ -24,16 +21,76 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to (re)publish (e.g. v1.4.1). Must exist in the repo and be selected as the workflow ref."
+        description: "Tag to (re)publish (e.g. v1.4.1). Informational — actual ref is the workflow ref."
         required: false
         type: string
 
+permissions:
+  contents: read
+
+concurrency:
+  group: python-publish-synthpanel-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  publish:
-    uses: DataViking-Tech/dataviking-infra/.github/workflows/python-publish.yml@main
-    with:
-      package_name: synthpanel
-      python_versions: '["3.12"]'
-      doppler_project: dataviking-platform
-      doppler_config: prd
-    secrets: inherit
+  build:
+    name: Build (py3.12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-py3.12
+          path: dist/
+          if-no-files-found: error
+
+  publish-to-pypi:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download built distributions
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dist-py*
+          merge-multiple: true
+          path: dist/
+
+      # Pulls PYPI_API_TOKEN (and any other secrets in the config) into
+      # $GITHUB_ENV with auto log-masking.
+      - name: Fetch PyPI token from Doppler
+        uses: dopplerhq/secrets-fetch-action@v1.3.0
+        with:
+          doppler-token: ${{ secrets.DOPPLER_PLATFORM_TOKEN }}
+          doppler-project: dataviking-platform
+          doppler-config: prd
+          inject-env-vars: 'true'
+
+      - name: Verify PYPI_API_TOKEN was fetched
+        run: |
+          if [ -z "${PYPI_API_TOKEN:-}" ]; then
+            echo "::error::PYPI_API_TOKEN is empty after Doppler fetch — check that secret exists in dataviking-platform/prd."
+            exit 1
+          fi
+
+      # `skip-existing: true` makes idempotent retries safe.
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ env.PYPI_API_TOKEN }}
+          skip-existing: true
