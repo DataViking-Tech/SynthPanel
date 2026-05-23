@@ -44,9 +44,7 @@ def _rec(*, model: str, runnable: bool, is_ensemble: bool = False, framework: st
 
 
 def test_runnable_recommendation_is_stamped(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        synthbench, "recommend", lambda spec: _rec(model="gemini-2.5-flash", runnable=True)
-    )
+    monkeypatch.setattr(synthbench, "recommend", lambda spec: _rec(model="gemini-2.5-flash", runnable=True))
     args = argparse.Namespace(model=None)
     picked = _apply_best_model_for(args, "Technology & Digital Life")
     assert picked == "gemini-2.5-flash"
@@ -81,9 +79,7 @@ def test_nonrunnable_recommendation_is_refused_not_stamped(
     assert "--model" in err
 
 
-def test_no_recommendation_falls_through(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_no_recommendation_falls_through(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     monkeypatch.setattr(synthbench, "recommend", lambda spec: None)
     args = argparse.Namespace(model="haiku")
     picked = _apply_best_model_for(args, "Whatever")
