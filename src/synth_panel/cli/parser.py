@@ -1208,6 +1208,28 @@ def build_parser() -> argparse.ArgumentParser:
             "string to disable segment splits."
         ),
     )
+    poll_summary_parser.add_argument(
+        "--choice-field",
+        default=None,
+        metavar="NAME",
+        help=(
+            "Name of the structured field that holds each panelist's "
+            "primary choice (e.g. 'choice', 'vote', 'selection'). "
+            "Use when an --schema run has multiple enum properties and "
+            "auto-detection picks the wrong one. sy-bn7."
+        ),
+    )
+    poll_summary_parser.add_argument(
+        "--confidence-field",
+        default=None,
+        metavar="NAME",
+        help=(
+            "Name of the numeric confidence/score field "
+            "(e.g. 'confidence', 'rating', 'score'). When set, the "
+            "named field drives weighted_scores and metric_average "
+            "instead of the auto-detected score. sy-bn7."
+        ),
+    )
 
     # mcp-serve
     subparsers.add_parser(

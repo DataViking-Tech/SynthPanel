@@ -359,3 +359,169 @@ def test_question_summary_truncates_long_question_text() -> None:
     # 280 chars is the safety cap so a single bad question can't push
     # the serialized summary into MB territory.
     assert len(qs.question) <= 280
+
+
+# ---------------------------------------------------------------------------
+# sy-bn7: structured choice-field detection
+# ---------------------------------------------------------------------------
+
+
+def _structured_schema_envelope() -> dict[str, object]:
+    """Three-panelist run with --schema (JSON Schema) enforcing a structured response.
+
+    Mirrors the shape persisted by ``synthpanel panel run --schema=...``:
+    ``response`` is a dict, ``extraction`` is absent. Pre-sy-bn7 this
+    shape silently fell through to ``kind: "text"`` (the GH #496 bug).
+    """
+    schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "choice": {"type": "string", "enum": ["A", "B"]},
+            "confidence": {"type": "integer", "minimum": 1, "maximum": 5},
+            "rationale": {"type": "string"},
+        },
+        "required": ["choice", "confidence", "rationale"],
+    }
+    return {
+        "persona_count": 3,
+        "question_count": 1,
+        "questions": [{"text": "A or B?", "response_schema": schema}],
+        "results": [
+            {
+                "persona": "p1",
+                "responses": [
+                    {
+                        "question": "A or B?",
+                        "response": {"choice": "B", "confidence": 4, "rationale": "..."},
+                    }
+                ],
+            },
+            {
+                "persona": "p2",
+                "responses": [
+                    {
+                        "question": "A or B?",
+                        "response": {"choice": "B", "confidence": 5, "rationale": "..."},
+                    }
+                ],
+            },
+            {
+                "persona": "p3",
+                "responses": [
+                    {
+                        "question": "A or B?",
+                        "response": {"choice": "A", "confidence": 3, "rationale": "..."},
+                    }
+                ],
+            },
+        ],
+    }
+
+
+class TestStructuredChoiceFieldDetection:
+    """sy-bn7: ``--schema`` runs land structured dicts in ``response`` rather
+    than ``extraction``. The kind detector must recognize the JSON Schema
+    enum property AND the dict-shaped response, otherwise the poll falls
+    through to ``text`` and counts/winner come back as ``None`` (GH #496).
+    """
+
+    def test_json_schema_object_with_enum_property_detected_as_enum(self) -> None:
+        summary = build_poll_summary(_structured_schema_envelope())
+        q0 = summary.questions[0]
+        assert q0.kind == "enum"
+        assert q0.winner == "B"
+        assert q0.first_choice_counts == {"B": 2, "A": 1}
+
+    def test_structured_dict_response_without_schema_still_detected(self) -> None:
+        """Even when the persisted ``questions`` block has no response_schema
+        (legacy / minimal saves), the response-dict probe should kick in."""
+        env = _structured_schema_envelope()
+        env["questions"] = [{"text": "A or B?"}]  # strip schema
+        summary = build_poll_summary(env)
+        q0 = summary.questions[0]
+        assert q0.kind == "enum"
+        assert q0.first_choice_counts == {"B": 2, "A": 1}
+
+    def test_confidence_field_powers_overall_metric_average(self) -> None:
+        """sy-bn7: enum polls with a numeric confidence field expose
+        ``metric_average`` (panel-wide confidence) alongside the per-choice
+        weighted_scores."""
+        summary = build_poll_summary(_structured_schema_envelope())
+        q0 = summary.questions[0]
+        # (4 + 5 + 3) / 3 = 4.0
+        assert q0.metric_average == 4.0
+        # weighted_scores stay per-choice: B mean=(4+5)/2=4.5, A=3
+        assert q0.weighted_scores == {"B": 4.5, "A": 3.0}
+
+    def test_ambiguous_schema_picks_known_key_and_warns(self) -> None:
+        """When the schema has multiple enum properties, the detector
+        deterministically prefers a name from ``_FIRST_CHOICE_KEYS`` and
+        warns so the operator knows which field won the tiebreak."""
+        env = _structured_schema_envelope()
+        # Inject a second enum field that isn't in _FIRST_CHOICE_KEYS.
+        env["questions"][0]["response_schema"]["properties"]["mood"] = {  # type: ignore[index]
+            "type": "string",
+            "enum": ["calm", "annoyed"],
+        }
+        for r in env["results"]:  # type: ignore[union-attr]
+            r["responses"][0]["response"]["mood"] = "calm"
+        summary = build_poll_summary(env)
+        q0 = summary.questions[0]
+        # 'choice' is in _FIRST_CHOICE_KEYS so it wins the tiebreak.
+        assert q0.kind == "enum"
+        assert q0.first_choice_counts == {"B": 2, "A": 1}
+        # The warning announces both candidates and the chosen one.
+        assert any("multiple enum fields" in w and "'choice'" in w for w in summary.warnings), (
+            f"Expected ambiguity warning, got {summary.warnings!r}"
+        )
+
+    def test_explicit_choice_field_overrides_auto_detection(self) -> None:
+        """``--choice-field`` wins over auto-detection AND silences the
+        ambiguity warning — the caller already made the call."""
+        env = _structured_schema_envelope()
+        # Add a second enum the caller wants to vote on.
+        env["questions"][0]["response_schema"]["properties"]["mood"] = {  # type: ignore[index]
+            "type": "string",
+            "enum": ["calm", "annoyed"],
+        }
+        for r, mood in zip(env["results"], ["annoyed", "calm", "annoyed"]):  # type: ignore[arg-type]
+            r["responses"][0]["response"]["mood"] = mood
+        summary = build_poll_summary(env, choice_field="mood")
+        q0 = summary.questions[0]
+        assert q0.kind == "enum"
+        # Counts are now on `mood`, not `choice`.
+        assert q0.first_choice_counts == {"annoyed": 2, "calm": 1}
+        # No ambiguity warning — caller resolved it.
+        assert not any("multiple enum fields" in w for w in summary.warnings)
+
+    def test_explicit_confidence_field_drives_metric_average(self) -> None:
+        env = _structured_schema_envelope()
+        # Repurpose: add a second numeric field; verify --confidence-field
+        # selects which one drives the metric_average.
+        for r, urgency in zip(env["results"], [1, 2, 5]):  # type: ignore[arg-type]
+            r["responses"][0]["response"]["urgency"] = urgency
+        # Default: picks 'confidence' (in _SCORE_KEYS).
+        default_summary = build_poll_summary(env)
+        assert default_summary.questions[0].metric_average == 4.0
+        # Override: pick 'urgency' instead.
+        overridden = build_poll_summary(env, confidence_field="urgency")
+        # (1 + 2 + 5) / 3 = 2.6667 → rounded to 4dp
+        assert overridden.questions[0].metric_average == 2.6667
+
+    def test_segment_splits_respect_choice_field_override(self) -> None:
+        env = _structured_schema_envelope()
+        # Tag each panelist with an inline occupation so the split joins.
+        for r, occ in zip(env["results"], ["pm", "eng", "pm"]):  # type: ignore[arg-type]
+            r["occupation"] = occ
+        env["questions"][0]["response_schema"]["properties"]["mood"] = {  # type: ignore[index]
+            "type": "string",
+            "enum": ["calm", "annoyed"],
+        }
+        for r, mood in zip(env["results"], ["annoyed", "calm", "annoyed"]):  # type: ignore[arg-type]
+            r["responses"][0]["response"]["mood"] = mood
+        summary = build_poll_summary(env, choice_field="mood")
+        # pm: annoyed (p1) + annoyed (p3) = {annoyed: 2}
+        # eng: calm  (p2) = {calm: 1}
+        assert summary.segment_splits["0"]["occupation"]["pm"] == {"annoyed": 2}
+        assert summary.segment_splits["0"]["occupation"]["eng"] == {"calm": 1}
