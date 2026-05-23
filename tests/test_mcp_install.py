@@ -376,12 +376,77 @@ class TestCLI:
         assert "synth_panel" not in data.get("mcpServers", {})
 
     def test_dry_run_does_not_write(self, tmp_path, capsys):
+        # sy-0k2 / gh-495: dry-run human prose goes to stderr; stdout
+        # carries the generated config as pretty JSON.
         target = tmp_path / "claude.json"
         rc = main(["mcp", "install", "--target", str(target), "--dry-run"])
         assert rc == 0
         assert not target.exists()
-        out = capsys.readouterr().out
-        assert "Would install" in out
+        captured = capsys.readouterr()
+        assert "Would install" in captured.err
+        # stdout must be valid JSON so callers can `| jq` or write-it-out themselves.
+        payload = json.loads(captured.out)
+        assert payload["mcpServers"]["synth_panel"]["command"]
+        assert payload["mcpServers"]["synth_panel"]["args"] == ["mcp-serve"]
+
+    def test_dry_run_preserves_existing_servers_in_preview(self, tmp_path, capsys):
+        # sy-0k2 / gh-495: the dry-run preview must show ALL servers that
+        # would be in the file, not just the one being added.
+        target = tmp_path / "claude.json"
+        target.write_text(
+            json.dumps(
+                {
+                    "theme": "dark",
+                    "mcpServers": {"other": {"command": "other-bin", "args": []}},
+                }
+            )
+        )
+        rc = main(["mcp", "install", "--target", str(target), "--dry-run"])
+        assert rc == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["theme"] == "dark"
+        assert set(payload["mcpServers"].keys()) == {"other", "synth_panel"}
+
+    def test_dry_run_uninstall_preview_drops_entry(self, tmp_path, capsys):
+        # sy-0k2 / gh-495: uninstall dry-run preview shows the post-removal
+        # state so callers can verify what would disappear.
+        target = tmp_path / "claude.json"
+        target.write_text(
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "synth_panel": {"command": "synthpanel", "args": ["mcp-serve"]},
+                        "other": {"command": "other-bin", "args": []},
+                    }
+                }
+            )
+        )
+        rc = main(["mcp", "install", "--uninstall", "--target", str(target), "--dry-run"])
+        assert rc == 0
+        # Original file untouched.
+        on_disk = json.loads(target.read_text())
+        assert "synth_panel" in on_disk["mcpServers"]
+        # Preview reflects the post-removal state.
+        captured = capsys.readouterr()
+        assert "Would remove" in captured.err
+        preview = json.loads(captured.out)
+        assert "synth_panel" not in preview["mcpServers"]
+        assert "other" in preview["mcpServers"]
+
+    def test_dry_run_json_mode_includes_resulting_config(self, tmp_path, capsys):
+        # sy-0k2 / gh-495: in JSON mode the entire payload (line, entry,
+        # resulting_config) lands on stdout as a single object so callers
+        # can parse one stream.
+        target = tmp_path / "claude.json"
+        rc = main(["--output-format", "json", "mcp", "install", "--target", str(target), "--dry-run"])
+        assert rc == 0
+        captured = capsys.readouterr()
+        # Nothing should land on stderr in JSON mode — the contract is one stream.
+        assert captured.err == ""
+        payload = json.loads(captured.out)
+        assert payload["action"] == "would-install"
+        assert payload["entry"]["args"] == ["mcp-serve"]
+        assert "synth_panel" in payload["resulting_config"]["mcpServers"]
 
     def test_bad_env_exits_nonzero(self, tmp_path, capsys):
         target = tmp_path / "claude.json"

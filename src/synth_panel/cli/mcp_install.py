@@ -26,6 +26,11 @@ class InstallResult:
     name: str
     action: str  # "installed", "updated", "removed", "noop", "would-install", "would-update", "would-remove"
     entry: dict[str, Any] | None  # the server entry that was written (None for remove/noop)
+    # sy-0k2 / gh-495: the full config payload that would (or did) result
+    # from this call. Populated for every dry-run so `--dry-run` can print
+    # exactly what would be written. Also populated on the actual-write
+    # path so callers in JSON mode see a uniform shape.
+    resulting_config: dict[str, Any] | None = None
 
 
 def resolve_target(scope: str, target: str | None) -> Path:
@@ -120,7 +125,16 @@ def install(
     new_entry = build_entry(command, env)
 
     if existing == new_entry:
-        return InstallResult(target=target, name=name, action="noop", entry=new_entry)
+        # No-op: report the current on-disk config as the resulting config
+        # so dry-run consumers can still inspect the unchanged state.
+        config["mcpServers"] = servers
+        return InstallResult(
+            target=target,
+            name=name,
+            action="noop",
+            entry=new_entry,
+            resulting_config=config,
+        )
 
     is_update = name in servers
     if is_update and not force:
@@ -128,36 +142,78 @@ def install(
             f"MCP server {name!r} already exists in {target}. Pass --force to overwrite, or choose a different --name."
         )
 
-    if dry_run:
-        servers[name] = new_entry
-        config["mcpServers"] = servers
-        action = "would-update" if is_update else "would-install"
-        return InstallResult(target=target, name=name, action=action, entry=new_entry)
-
     servers[name] = new_entry
     config["mcpServers"] = servers
+    if dry_run:
+        action = "would-update" if is_update else "would-install"
+        return InstallResult(
+            target=target,
+            name=name,
+            action=action,
+            entry=new_entry,
+            resulting_config=config,
+        )
+
     _atomic_write(target, config)
     action = "updated" if is_update else "installed"
-    return InstallResult(target=target, name=name, action=action, entry=new_entry)
+    return InstallResult(
+        target=target,
+        name=name,
+        action=action,
+        entry=new_entry,
+        resulting_config=config,
+    )
 
 
 def uninstall(*, target: Path, name: str, dry_run: bool) -> InstallResult:
     """Remove the named server entry. No-op if it isn't present."""
     if not target.exists():
-        return InstallResult(target=target, name=name, action="noop", entry=None)
+        return InstallResult(
+            target=target,
+            name=name,
+            action="noop",
+            entry=None,
+            resulting_config={},
+        )
 
     config = _load_config(target)
     servers = config.get("mcpServers")
     if not isinstance(servers, dict) or name not in servers:
-        return InstallResult(target=target, name=name, action="noop", entry=None)
+        # Surface the unchanged config so dry-run consumers see the
+        # current state even on no-op.
+        if isinstance(servers, dict):
+            config["mcpServers"] = servers
+        return InstallResult(
+            target=target,
+            name=name,
+            action="noop",
+            entry=None,
+            resulting_config=config,
+        )
 
     if dry_run:
-        return InstallResult(target=target, name=name, action="would-remove", entry=None)
+        # Materialize the post-removal config without writing.
+        preview_servers = {k: v for k, v in servers.items() if k != name}
+        preview = dict(config)
+        preview["mcpServers"] = preview_servers
+        return InstallResult(
+            target=target,
+            name=name,
+            action="would-remove",
+            entry=None,
+            resulting_config=preview,
+        )
 
     del servers[name]
     config["mcpServers"] = servers
     _atomic_write(target, config)
-    return InstallResult(target=target, name=name, action="removed", entry=None)
+    return InstallResult(
+        target=target,
+        name=name,
+        action="removed",
+        entry=None,
+        resulting_config=config,
+    )
 
 
 def format_text(result: InstallResult) -> str:
@@ -185,7 +241,22 @@ def format_json(result: InstallResult) -> str:
     }
     if result.entry is not None:
         payload["entry"] = result.entry
+    # sy-0k2 / gh-495: expose the full resulting config when available so
+    # agents can see exactly what would (or did) land on disk.
+    if result.resulting_config is not None:
+        payload["resulting_config"] = result.resulting_config
     return json.dumps(payload)
+
+
+def format_resulting_config(result: InstallResult) -> str | None:
+    """Render the full resulting MCP config as pretty-printed JSON.
+
+    Returns ``None`` when no resulting-config snapshot is available
+    (callers should fall back to ``format_text`` in that case).
+    """
+    if result.resulting_config is None:
+        return None
+    return json.dumps(result.resulting_config, indent=2, sort_keys=False)
 
 
 __all__ = [
@@ -193,6 +264,7 @@ __all__ = [
     "InstallResult",
     "build_entry",
     "format_json",
+    "format_resulting_config",
     "format_text",
     "install",
     "parse_env_pairs",

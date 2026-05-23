@@ -4459,7 +4459,20 @@ def handle_mcp_install(args: argparse.Namespace, fmt: OutputFormat) -> int:
         return 1
 
     if fmt is OutputFormat.JSON:
+        # JSON mode already carries the resulting-config snapshot in the
+        # payload (see helper.format_json); a single line on stdout
+        # preserves the existing machine-readable contract.
         print(helper.format_json(result))
+    elif dry_run:
+        # sy-0k2 / gh-495: surface the actual config payload so dry-run
+        # output is usable by agents and shell pipelines. Human prose
+        # goes to stderr; stdout is pretty-printed JSON of the resulting
+        # config so callers can pipe through `jq`, diff, or write it to
+        # the target themselves.
+        print(helper.format_text(result), file=sys.stderr)
+        rendered = helper.format_resulting_config(result)
+        if rendered is not None:
+            print(rendered)
     else:
         print(helper.format_text(result))
     return 0
