@@ -4488,13 +4488,34 @@ def handle_pack_calibrate(args: argparse.Namespace, fmt: OutputFormat) -> int:
 
 
 def handle_mcp_serve(args: argparse.Namespace, fmt: OutputFormat) -> int:
-    """Start the MCP server on stdio transport."""
+    """Start the MCP server on stdio transport.
+
+    sy-xyn: guard the import so a base install (no ``[mcp]`` extra)
+    surfaces an actionable error instead of a raw Python traceback. This
+    matters most when the server is launched indirectly by an editor
+    host (Claude Code, Cursor) — hosts only relay stderr, and a
+    traceback there reads as a generic "server failed to start" with no
+    fix path. Probe first via :func:`mcp_install.mcp_extra_available`
+    (added in #512) and fall back to a defensive ``ModuleNotFoundError``
+    catch for partial-install edge cases.
+    """
+    from synth_panel.cli import mcp_install as helper
+
+    if not helper.mcp_extra_available():
+        print(f"Error: {helper.MISSING_MCP_EXTRA_MESSAGE}", file=sys.stderr)
+        return 1
+
     try:
         from synth_panel.mcp.server import serve
     except ModuleNotFoundError as exc:
-        if exc.name == "mcp":
+        # Defensive fallback: the find_spec probe above catches the
+        # common case (extra wasn't installed). This handles a partial
+        # install where ``mcp`` itself is importable but a submodule
+        # isn't — e.g. a wheel pinned to a pre-FastMCP version. Same
+        # actionable copy so the fix path stays one-line.
+        if exc.name and exc.name.startswith("mcp"):
             print(
-                "Error: MCP support is not installed. Run `pip install 'synthpanel[mcp]'` and try again.",
+                f"Error: {helper.MISSING_MCP_EXTRA_MESSAGE} (import error: {exc.name})",
                 file=sys.stderr,
             )
             return 1
@@ -4505,12 +4526,35 @@ def handle_mcp_serve(args: argparse.Namespace, fmt: OutputFormat) -> int:
 
 
 def handle_mcp_install(args: argparse.Namespace, fmt: OutputFormat) -> int:
-    """Register synthpanel as an MCP server in a host's JSON config (sy-skf)."""
+    """Register synthpanel as an MCP server in a host's JSON config (sy-skf).
+
+    sy-xyn: refuse by default to write a host config that points at a
+    ``synthpanel mcp-serve`` command which will fail at runtime because
+    the ``mcp`` extra isn't installed in this env. ``--uninstall`` is
+    always allowed (so users can clean up a broken config) and
+    ``--allow-missing-extra`` opts out for cross-machine workflows.
+    """
     from synth_panel.cli import mcp_install as helper
 
     target = helper.resolve_target(getattr(args, "scope", "user"), getattr(args, "target", None))
     name = getattr(args, "name", None) or helper.DEFAULT_SERVER_NAME
     dry_run = bool(getattr(args, "dry_run", False))
+    allow_missing_extra = bool(getattr(args, "allow_missing_extra", False))
+
+    # sy-xyn: pre-flight extra check. Skip for uninstall (always safe)
+    # and for callers who explicitly opted out via --allow-missing-extra.
+    # The probe (added in #512 as mcp_extra_available) tells us whether
+    # writing this config would point the host at a `synthpanel mcp-serve`
+    # that crashes at launch.
+    is_uninstall = bool(getattr(args, "uninstall", False))
+    if not is_uninstall and not allow_missing_extra and not helper.mcp_extra_available():
+        print(
+            f"Error: refusing to install MCP config — {helper.MISSING_MCP_EXTRA_MESSAGE}. "
+            "Pass --allow-missing-extra to write the config anyway "
+            "(useful when the host runs synthpanel in a different env).",
+            file=sys.stderr,
+        )
+        return 1
 
     try:
         if getattr(args, "uninstall", False):

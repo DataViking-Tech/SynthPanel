@@ -492,3 +492,103 @@ class TestCLI:
     def test_no_subcommand_prints_help(self, capsys):
         with pytest.raises(SystemExit):
             main(["mcp"])
+
+
+# ---------------------------------------------------------------------------
+# sy-xyn: mcp extra guard
+# ---------------------------------------------------------------------------
+
+
+class TestMcpExtraGuard:
+    """Pin the contract that a base install can't silently generate a
+    broken MCP config (GH #507).
+
+    The probe ``mcp_install.mcp_extra_available()`` returns True in the
+    pytest env (we install with ``pip install -e .[dev,mcp]``). To
+    exercise the missing-extra branch we monkeypatch the probe to return
+    False — this is the same shape the CI smoke job sees on a fresh
+    ``pip install synthpanel`` (no extras).
+    """
+
+    def test_install_refuses_when_extra_missing(self, tmp_path, capsys, monkeypatch):
+        monkeypatch.setattr(mcp_install, "mcp_extra_available", lambda: False)
+        target = tmp_path / "claude.json"
+
+        rc = main(["mcp", "install", "--target", str(target)])
+
+        assert rc == 1, "must refuse rather than silently write a broken config"
+        assert not target.exists(), "no file should be written when refusing"
+        err = capsys.readouterr().err
+        # Actionable copy is the whole point — the user needs a one-line fix.
+        assert "synthpanel[mcp]" in err
+        # And the corrective opt-out for the cross-machine case must be discoverable.
+        assert "--allow-missing-extra" in err
+
+    def test_install_allows_when_flag_set(self, tmp_path, monkeypatch):
+        """Cross-machine workflow: config on laptop, server on remote."""
+        monkeypatch.setattr(mcp_install, "mcp_extra_available", lambda: False)
+        target = tmp_path / "claude.json"
+
+        rc = main(["mcp", "install", "--target", str(target), "--allow-missing-extra"])
+
+        assert rc == 0
+        data = json.loads(target.read_text())
+        assert "synth_panel" in data["mcpServers"]
+
+    def test_uninstall_always_allowed(self, tmp_path, monkeypatch):
+        """Uninstall must work even when the extra is gone — it's the
+        canonical way to clean up after a partial install."""
+        monkeypatch.setattr(mcp_install, "mcp_extra_available", lambda: False)
+        target = tmp_path / "claude.json"
+        target.write_text(json.dumps({"mcpServers": {"synth_panel": {"command": "synthpanel"}}}))
+
+        rc = main(["mcp", "install", "--uninstall", "--target", str(target)])
+
+        assert rc == 0
+        data = json.loads(target.read_text())
+        assert "synth_panel" not in data.get("mcpServers", {})
+
+    def test_dry_run_also_blocked_without_flag(self, tmp_path, capsys, monkeypatch):
+        """Dry-run with a missing extra still emits a broken config that
+        an agent could naively pipe into the host's config file. Same
+        refusal as the live path."""
+        monkeypatch.setattr(mcp_install, "mcp_extra_available", lambda: False)
+        target = tmp_path / "claude.json"
+
+        rc = main(["mcp", "install", "--target", str(target), "--dry-run"])
+
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "synthpanel[mcp]" in err
+
+    def test_serve_emits_actionable_error_when_extra_missing(self, capsys, monkeypatch):
+        """`mcp-serve` must NOT produce a Python traceback. Editor hosts
+        only surface the launch command's stderr, so the message has to
+        carry the install command itself.
+
+        sy-xyn origin: GH #507 user saw a raw ModuleNotFoundError after
+        their editor launched ``synthpanel mcp-serve``.
+        """
+        monkeypatch.setattr(mcp_install, "mcp_extra_available", lambda: False)
+
+        rc = main(["mcp-serve"])
+
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "synthpanel[mcp]" in err
+        # Sanity: the traceback prefix isn't in our stderr — that's the
+        # observable difference from the v1.5.1 behaviour.
+        assert "Traceback" not in err
+        assert "ModuleNotFoundError" not in err
+
+    def test_mcp_extra_available_is_truthy_in_dev_env(self):
+        """Sanity check on the probe itself — the dev env installs the
+        extra, so the probe must return True. If this fails, every other
+        test in this file would silently be exercising the refuse branch."""
+        assert mcp_install.mcp_extra_available() is True
+
+    def test_message_is_centralised(self):
+        """One copy, one source of truth — anything that surfaces the
+        missing-extra hint reads from the same constant."""
+        assert "synthpanel[mcp]" in mcp_install.MISSING_MCP_EXTRA_MESSAGE
+        assert "pip install" in mcp_install.MISSING_MCP_EXTRA_MESSAGE

@@ -18,6 +18,21 @@ from typing import Any
 
 DEFAULT_SERVER_NAME = "synth_panel"
 
+# sy-xyn: actionable copy used by every hard-error surface that detects
+# a missing `mcp` extra (install refusal + `mcp-serve` startup guard).
+# Distinct from MCP_EXTRA_WARNING (#512) which is the SOFT warning
+# embedded in `InstallResult.warnings`. The two stay separate because
+# refusal copy + advisory copy need different framing: the refusal
+# stops the user and tells them how to proceed; the warning is the
+# nudge embedded in a result they're already consuming. Both carry
+# "synthpanel[mcp]" verbatim so the install command surfaces in
+# either context.
+MISSING_MCP_EXTRA_MESSAGE = (
+    "the 'mcp' optional dependency is not installed in this Python env. "
+    "Install it with:  pip install 'synthpanel[mcp]'  "
+    "(see docs/mcp.md for the full setup walkthrough)"
+)
+
 
 @dataclass
 class InstallResult:
@@ -35,7 +50,9 @@ class InstallResult:
     warnings: list[str] | None = None
 
 
-MCP_EXTRA_WARNING = "Optional MCP dependency is not installed; run `pip install 'synthpanel[mcp]'` before using `synthpanel mcp-serve`."
+MCP_EXTRA_WARNING = (
+    "Optional MCP dependency is not installed; run `pip install 'synthpanel[mcp]'` before using `synthpanel mcp-serve`."
+)
 
 
 def mcp_extra_available() -> bool:

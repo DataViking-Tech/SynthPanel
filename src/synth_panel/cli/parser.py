@@ -1319,6 +1319,22 @@ def build_parser() -> argparse.ArgumentParser:
         dest="dry_run",
         help="Print the resulting JSON to stdout without modifying any files.",
     )
+    mcp_install_parser.add_argument(
+        # sy-xyn: by default we refuse to write a host config that points at a
+        # `synthpanel mcp-serve` command which will fail at runtime because
+        # the `mcp` extra isn't installed. This flag opts out of that guard
+        # for the cross-machine workflow (install config on a laptop, run
+        # the server on a remote where the extra IS installed).
+        "--allow-missing-extra",
+        action="store_true",
+        default=False,
+        dest="allow_missing_extra",
+        help=(
+            "Write the host config even when the 'mcp' extra is not "
+            "installed in this Python env. Use for cross-machine setup "
+            "where the server runs in a different env than the editor."
+        ),
+    )
 
     # plugin (sy-0rr): author-time tooling for plugin manifests
     plugin_parser = subparsers.add_parser(
