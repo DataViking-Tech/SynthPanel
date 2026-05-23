@@ -36,13 +36,29 @@ unreachable, so `pack import` keeps working offline.
 
 ## Importing a Remote Pack
 
-`pack import` accepts three kinds of source:
+`pack import` accepts four kinds of source:
 
 | Source form | Example |
 |---|---|
+| Registry id | `icp-demo` |
 | `gh:user/repo[@ref][:path]` | `gh:dataviking-tech/example-pack` |
 | `https://github.com/.../blob/...` | `https://github.com/dv/pk/blob/main/synthpanel-pack.yaml` |
 | `https://raw.githubusercontent.com/...` | `https://raw.githubusercontent.com/dv/pk/main/synthpanel-pack.yaml` |
+
+### Registry ids
+
+```bash
+# Resolve a bare registry id to its source and install it
+synthpanel pack import icp-demo
+```
+
+When the source is a bare id (a slug — no path separator or `.yaml`/`.yml`/
+`.json` extension) that is **not** a local file, synthpanel looks it up in the
+registry and imports from the resolved `gh:` source. The pack installs under
+the registry id, so the command `panel run --personas <id>` suggests after a
+miss (`pack import <id>`, then `--personas <id>`) works end to end. Ids that
+aren't in the registry fall through to local-file handling and produce a
+"not found" error pointing you at `pack search`.
 
 ### `gh:` URIs
 

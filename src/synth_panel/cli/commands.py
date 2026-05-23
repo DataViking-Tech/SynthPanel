@@ -3422,11 +3422,23 @@ def handle_pack_import(args: argparse.Namespace, fmt: OutputFormat) -> int:
 
     - ``gh:user/repo[@ref][:path]`` / ``https://…`` → remote fetch path with
       registry consultation, collision checks, and ``--unverified`` gating.
+    - A bare registry id that isn't a local file → resolved against the
+      registry to its ``gh:`` source and imported via the remote path
+      (#520). This is the command ``panel run --personas <id>`` points
+      users at, so it must install the pack rather than echo itself back.
     - Anything else → local file path (existing behavior, unchanged).
     """
     source = args.source
     if source.startswith("gh:") or source.startswith("http://") or source.startswith("https://"):
         return _handle_pack_import_remote(args, fmt, source)
+    if not Path(source).exists() and _looks_like_pack_id(source):
+        gh_source = _resolve_registry_id_source(source)
+        if gh_source is not None:
+            # Keep the installed pack id equal to the registry id so the
+            # follow-up `--personas <id>` resolves, unless --id overrides.
+            if not getattr(args, "pack_id", None):
+                args.pack_id = source
+            return _handle_pack_import_remote(args, fmt, gh_source)
     return _handle_pack_import_local(args, fmt, source)
 
 
@@ -3558,6 +3570,46 @@ def _default_pack_id_from_source(source: str) -> str:
     parts = urlparse(source)
     tail = Path(parts.path).stem or parts.netloc or "pack"
     return _slugify_pack_id(tail)
+
+
+_PACK_FILE_SUFFIXES = {".yaml", ".yml", ".json"}
+
+
+def _looks_like_pack_id(source: str) -> bool:
+    """Return True when *source* looks like a bare registry/pack id (a slug).
+
+    Pack ids are slugs (``icp-demo``, ``pricing-discovery``); anything
+    with a path separator or a recognized data-file extension is a
+    filesystem path and must NOT trigger a registry network probe. This
+    keeps ``pack import ./some/file.yaml`` on the local branch.
+    """
+    if not source or "/" in source or "\\" in source:
+        return False
+    return Path(source).suffix.lower() not in _PACK_FILE_SUFFIXES
+
+
+def _resolve_registry_id_source(pack_id: str) -> str | None:
+    """Resolve a bare registry id to a ``gh:`` source spec, or ``None``.
+
+    This is what lets ``pack import <registry-id>`` actually install the
+    pack that ``panel run --personas <registry-id>`` points users at —
+    rather than echoing the same self-referential command back (#520).
+
+    Returns ``None`` when *pack_id* isn't a known registry pack or the
+    registry can't be consulted (offline, malformed entry). Best-effort:
+    any exception degrades to ``None`` so a network blip never crashes
+    the command — the caller then falls back to local-path import.
+    """
+    try:
+        from synth_panel.registry import resolve_pack
+
+        entry = resolve_pack(pack_id)
+    except Exception:
+        return None
+    if entry is None:
+        return None
+    ref = entry.ref or "main"
+    return f"gh:{entry.repo}@{ref}:{entry.path}"
 
 
 def _source_in_registry(source: str) -> bool:
