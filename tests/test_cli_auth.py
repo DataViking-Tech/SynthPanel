@@ -320,6 +320,103 @@ class TestDoctor:
         assert "checkpoint root:" in out
         assert "packs:" in out
 
+    def test_doctor_install_only_exits_zero_without_credentials(self, capsys, monkeypatch, tmp_path):
+        """--install-only (sy-e28) — install healthy, credentials missing → exit 0."""
+        for env in (
+            "ANTHROPIC_API_KEY",
+            "OPENAI_API_KEY",
+            "GEMINI_API_KEY",
+            "GOOGLE_API_KEY",
+            "XAI_API_KEY",
+            "OPENROUTER_API_KEY",
+        ):
+            monkeypatch.delenv(env, raising=False)
+        monkeypatch.delenv("SYNTHPANEL_CREDENTIALS_PATH", raising=False)
+        monkeypatch.setenv("SYNTHPANEL_CHECKPOINT_ROOT", str(tmp_path))
+        rc = main(["doctor", "--install-only"])
+        assert rc == 0
+        captured = capsys.readouterr()
+        # The error-style "No LLM credentials found" line is suppressed in
+        # install-only mode in favour of an informational warning line.
+        assert "No LLM credentials found" not in captured.err
+        assert "install-only mode" in captured.out
+        assert "0 errors." in captured.out
+
+    def test_doctor_install_only_json_separates_install_and_credentials(self, capsys, monkeypatch, tmp_path):
+        """--install-only JSON (sy-e28) splits install_ok from credential_configured."""
+        for env in (
+            "ANTHROPIC_API_KEY",
+            "OPENAI_API_KEY",
+            "GEMINI_API_KEY",
+            "GOOGLE_API_KEY",
+            "XAI_API_KEY",
+            "OPENROUTER_API_KEY",
+        ):
+            monkeypatch.delenv(env, raising=False)
+        monkeypatch.delenv("SYNTHPANEL_CREDENTIALS_PATH", raising=False)
+        monkeypatch.setenv("SYNTHPANEL_CHECKPOINT_ROOT", str(tmp_path))
+        rc = main(["--output-format", "json", "doctor", "--install-only"])
+        assert rc == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["message"] == "doctor_report"
+        assert payload["python_ok"] is True
+        assert payload["dependencies_ok"] is True
+        assert payload["packs_ok"] is True
+        assert payload["install_ok"] is True
+        # The credential surface is reported verbatim — it just doesn't
+        # block the exit code in install-only mode.
+        assert payload["credential_configured"] is False
+        assert payload["install_only"] is True
+        assert payload["checks_ok"] is True
+
+    def test_doctor_install_only_field_present_in_default_json(self, capsys, monkeypatch, tmp_path):
+        """install_ok / install_only fields appear in default JSON output too (sy-e28)."""
+        for env in (
+            "ANTHROPIC_API_KEY",
+            "OPENAI_API_KEY",
+            "GEMINI_API_KEY",
+            "GOOGLE_API_KEY",
+            "XAI_API_KEY",
+            "OPENROUTER_API_KEY",
+        ):
+            monkeypatch.delenv(env, raising=False)
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-default-mode")
+        monkeypatch.setenv("SYNTHPANEL_CHECKPOINT_ROOT", str(tmp_path))
+        rc = main(["--output-format", "json", "doctor"])
+        assert rc == 0
+        payload = json.loads(capsys.readouterr().out)
+        # Agents always get the install/credential split, regardless of mode.
+        assert payload["install_only"] is False
+        assert payload["install_ok"] is True
+        assert payload["credential_configured"] is True
+        assert payload["checks_ok"] is True
+
+    def test_doctor_install_only_still_fails_on_broken_install(self, capsys, monkeypatch, tmp_path):
+        """--install-only doesn't paper over real install breakage (sy-e28)."""
+        for env in (
+            "ANTHROPIC_API_KEY",
+            "OPENAI_API_KEY",
+            "GEMINI_API_KEY",
+            "GOOGLE_API_KEY",
+            "XAI_API_KEY",
+            "OPENROUTER_API_KEY",
+        ):
+            monkeypatch.delenv(env, raising=False)
+        monkeypatch.delenv("SYNTHPANEL_CREDENTIALS_PATH", raising=False)
+        monkeypatch.setenv("SYNTHPANEL_CHECKPOINT_ROOT", str(tmp_path))
+        # Force the bundled-pack loaders to return empty so doctor reports a
+        # pack registry failure — install_ok must follow.
+        from synth_panel.mcp import data as mcp_data
+
+        monkeypatch.setattr(mcp_data, "_bundled_packs", lambda: [])
+        monkeypatch.setattr(mcp_data, "_bundled_instrument_packs", lambda: [])
+        rc = main(["--output-format", "json", "doctor", "--install-only"])
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["packs_ok"] is False
+        assert payload["install_ok"] is False
+        assert payload["checks_ok"] is False
+        assert rc == 1
+
     def test_doctor_verbose_lists_unset_providers(self, capsys, monkeypatch, tmp_path):
         """--verbose lists every known provider env var, set or not."""
         for env in (
