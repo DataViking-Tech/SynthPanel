@@ -165,6 +165,29 @@ synthpanel doctor                 # full preflight (install + credentials)
 synthpanel whoami                 # which providers (if any) have credentials
 ```
 
+### Package vs. module name
+
+The PyPI distribution and CLI entry point are spelled **`synthpanel`** (one
+word). The importable Python module — the historical PEP 8 spelling — is
+**`synth_panel`** (two words, snake_case):
+
+```python
+import synth_panel                       # canonical
+from synth_panel import run_panel, sdk   # library use
+```
+
+```bash
+synthpanel --version          # CLI
+python -m synth_panel --version  # canonical module form
+python -m synthpanel --version   # one-word alias also works (sy-het)
+```
+
+Both spellings resolve to the same code. The one-word `synthpanel` module
+is a thin shim (`__path__` redirect + ``__main__.py``) shipped so agents
+that guess `python -m <pypi-name>` don't hit a wall. New code should still
+prefer `import synth_panel` — it's what `__all__`, the docs, and the
+schemas refer to.
+
 `doctor` exits non-zero with actionable guidance when something's
 missing (no provider configured, wrong Python, MCP extra absent, etc.) —
 it's the canonical "did the install land cleanly?" check, and
