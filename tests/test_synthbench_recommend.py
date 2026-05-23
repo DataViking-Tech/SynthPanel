@@ -103,6 +103,22 @@ def _isolate_data_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv(SYNTHBENCH_REFRESH_ENV, raising=False)
 
 
+@pytest.fixture
+def no_bundled_snapshot(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Point the bundled-snapshot path at a non-existent file.
+
+    sy-nkh: the production code falls back to a package-shipped snapshot
+    when the URL is unreachable. Tests that want to exercise the legacy
+    "no recommendation possible" branch use this fixture to disable
+    that fallback, keeping their assertions about ``None`` returns valid.
+    """
+    monkeypatch.setattr(
+        synthbench,
+        "_BUNDLED_SNAPSHOT_PATH",
+        tmp_path / "does-not-exist.json",
+    )
+
+
 def _client(handler: Callable[[httpx.Request], httpx.Response]) -> httpx.Client:
     return httpx.Client(transport=httpx.MockTransport(handler))
 
@@ -303,7 +319,10 @@ def test_stale_cache_network_fail_returns_stale_with_warning() -> None:
     assert any("stale cache" in w for w in warnings)
 
 
-def test_no_cache_and_fetch_fail_returns_none() -> None:
+def test_no_cache_and_fetch_fail_returns_none(no_bundled_snapshot: None) -> None:
+    # sy-nkh: with the bundled snapshot disabled, this reverts to the
+    # pre-fallback contract (warn + None). Used by the snapshot tests
+    # below to assert the new fallback behaviour separately.
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("offline", request=request)
 
@@ -312,9 +331,12 @@ def test_no_cache_and_fetch_fail_returns_none() -> None:
         loaded = load_leaderboard(client=client, warn=warnings.append)
     assert loaded is None
     assert any("synthbench unavailable" in w for w in warnings)
+    # sy-nkh: actionable corrective hint must surface so the user knows
+    # they can point at a mirror via SYNTHPANEL_SYNTHBENCH_URL.
+    assert any("SYNTHPANEL_SYNTHBENCH_URL" in w for w in warnings)
 
 
-def test_no_cache_and_http_404_returns_none() -> None:
+def test_no_cache_and_http_404_returns_none(no_bundled_snapshot: None) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(404)
 
@@ -338,7 +360,10 @@ def test_offline_env_prevents_any_network(monkeypatch: pytest.MonkeyPatch) -> No
     assert loaded.leaderboard == SAMPLE
 
 
-def test_offline_with_no_cache_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_offline_with_no_cache_returns_none(
+    monkeypatch: pytest.MonkeyPatch,
+    no_bundled_snapshot: None,
+) -> None:
     monkeypatch.setenv(SYNTHBENCH_OFFLINE_ENV, "1")
     with _client(_explode) as client:
         loaded = load_leaderboard(client=client)
@@ -374,7 +399,9 @@ def test_recommend_through_cache_layer() -> None:
     assert rec.cache_age_hours < 1.0
 
 
-def test_recommend_returns_none_when_leaderboard_unavailable() -> None:
+def test_recommend_returns_none_when_leaderboard_unavailable(
+    no_bundled_snapshot: None,
+) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("offline", request=request)
 
@@ -382,6 +409,129 @@ def test_recommend_returns_none_when_leaderboard_unavailable() -> None:
     with _client(handler) as client:
         rec = recommend("anything", client=client, warn=warnings.append)
     assert rec is None
+
+
+# ---------- sy-nkh: bundled snapshot fallback ----------
+
+
+class TestBundledSnapshotFallback:
+    """Pin the contract that a fresh install with a broken upstream URL
+    still produces a recommendation via the package-bundled snapshot.
+
+    GH #494 origin: ``synthbench.org/data/leaderboard.json`` has been
+    404'ing since the v1.5.0 cut. Without the bundled fallback,
+    ``--best-model-for`` is silently dead for every PyPI user.
+    """
+
+    def test_no_cache_plus_network_error_uses_bundled_snapshot(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            raise httpx.ConnectError("offline", request=request)
+
+        warnings: list[str] = []
+        with _client(handler) as client:
+            loaded = load_leaderboard(client=client, warn=warnings.append)
+
+        assert loaded is not None, "bundled snapshot must rescue the fresh-install path"
+        assert isinstance(loaded.leaderboard.get("entries"), list)
+        assert any("bundled snapshot" in w for w in warnings), warnings
+        # The actionable override hint travels alongside the fallback so
+        # users with a working mirror know how to switch to it.
+        assert any("SYNTHPANEL_SYNTHBENCH_URL" in w for w in warnings), warnings
+
+    def test_no_cache_plus_404_uses_bundled_snapshot(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(404)
+
+        warnings: list[str] = []
+        with _client(handler) as client:
+            loaded = load_leaderboard(client=client, warn=warnings.append)
+        assert loaded is not None
+        assert any("bundled snapshot" in w for w in warnings)
+
+    def test_recommendation_from_bundled_snapshot_is_usable(self) -> None:
+        """The whole point: --best-model-for must return a real, runnable model."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(404)
+
+        with _client(handler) as client:
+            rec = recommend(":globalopinionqa", client=client, warn=lambda _m: None)
+
+        assert rec is not None, "recommendation must survive a 404 default URL"
+        assert rec.model, "bundled entry must expose a non-empty model string"
+        assert rec.sps > 0
+        assert rec.dataset == "globalopinionqa"
+
+    def test_bundled_snapshot_handles_known_topics(self) -> None:
+        """Every topic mentioned in docs/recommended-models.md must
+        resolve against the bundled snapshot — otherwise the docs lie."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(404)
+
+        topics = (
+            "Economy & Work",
+            "Technology & Digital Life",
+            "Health & Science",
+        )
+        with _client(handler) as client:
+            for topic in topics:
+                rec = recommend(topic, client=client, warn=lambda _m: None)
+                assert rec is not None, f"bundled snapshot missing topic {topic!r}"
+                assert rec.topic == topic
+                assert rec.sps > 0
+
+    def test_offline_mode_uses_bundled_snapshot_when_no_cache(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Air-gapped first-time use must still produce a recommendation."""
+        monkeypatch.setenv(SYNTHBENCH_OFFLINE_ENV, "1")
+
+        warnings: list[str] = []
+        with _client(_explode) as client:
+            loaded = load_leaderboard(client=client, warn=warnings.append)
+        assert loaded is not None
+        assert any("bundled snapshot" in w for w in warnings)
+
+    def test_stale_cache_still_preferred_over_bundled_snapshot(self) -> None:
+        """A user's stale cache trumps the package snapshot even on URL failure.
+
+        Makes the cache 48h old (past the 24h TTL) so we exercise the
+        stale-cache branch, then network-fail. The cache must win
+        because it represents the user's most recently observed live
+        data — the bundled snapshot is the LAST resort, not the
+        second-to-last.
+        """
+        write_cache(
+            SAMPLE,
+            source_url=URL,
+            etag='"abc"',
+            fetched_at=datetime.now(timezone.utc) - timedelta(hours=48),
+        )
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            raise httpx.ConnectError("offline", request=request)
+
+        warnings: list[str] = []
+        with _client(handler) as client:
+            loaded = load_leaderboard(client=client, warn=warnings.append)
+        assert loaded is not None
+        assert loaded.leaderboard == SAMPLE
+        # The "stale cache" path is the explicit prior message — the
+        # bundled-snapshot warning must NOT also fire.
+        assert any("stale cache" in w for w in warnings)
+        assert not any("bundled snapshot" in w for w in warnings)
+
+    def test_bundled_snapshot_file_is_shipped(self) -> None:
+        """Sanity check on the package-data wiring — the snapshot file
+        must exist at the documented path. Catches a botched
+        package-data glob before users do."""
+        assert synthbench._BUNDLED_SNAPSHOT_PATH.exists(), (
+            f"bundled snapshot missing at {synthbench._BUNDLED_SNAPSHOT_PATH}. "
+            "Check pyproject.toml's [tool.setuptools.package-data] glob "
+            'for `synth_panel.data = ["*.json"]`.'
+        )
 
 
 # ---------- module-level constant sanity ----------

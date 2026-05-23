@@ -123,6 +123,7 @@ where = ["src"]
 "synth_panel.packs" = ["*.yaml"]
 "synth_panel.packs.instruments" = ["*.yaml"]
 "synth_panel.schemas" = ["*.json"]
+"synth_panel.data" = ["*.json"]
 "synth_panel.agent_assets" = [
     "commands/*.md",
     "skills/concept-test/*.md",

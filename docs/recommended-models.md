@@ -40,12 +40,22 @@ synthbench: best model for globalopinionqa/Economy & Work → claude-haiku-4-5-2
    table (so `"haiku"` becomes `claude-haiku-4-5-20251001`) and stamped
    onto `--model` for the rest of the pipeline.
 
+> **Note (GH #494, v1.5.1+):** The canonical leaderboard URL is currently
+> 404'ing upstream. SynthPanel ships a **bundled snapshot** (taken
+> 2026-04-24) at `synth_panel/data/synthbench-snapshot.json` and falls
+> back to it when the live URL is unreachable AND no user cache exists.
+> The fallback produces a real recommendation on stderr and tags the
+> entry as `source=bundled-snapshot`. To override with your own mirror,
+> set `SYNTHPANEL_SYNTHBENCH_URL=...`.
+
 ### Environment knobs
 
-- `SYNTHPANEL_SYNTHBENCH_URL` — override the fetch URL (useful for forks
-  or air-gapped environments).
+- `SYNTHPANEL_SYNTHBENCH_URL` — override the fetch URL (useful for
+  internal mirrors, forks, or air-gapped environments — and the
+  documented workaround for the GH #494 outage).
 - `SYNTHPANEL_SYNTHBENCH_OFFLINE=1` — never hit the network; use the
-  cache if present, otherwise skip the recommendation.
+  cache if present, otherwise the bundled snapshot, otherwise skip the
+  recommendation.
 - `SYNTHPANEL_SYNTHBENCH_REFRESH=1` — bypass the 24h TTL and force a
   fresh fetch (ignores the cached ETag).
 - `SYNTH_PANEL_DATA_DIR` — override the data dir where the cache lives.
@@ -53,12 +63,17 @@ synthbench: best model for globalopinionqa/Economy & Work → claude-haiku-4-5-2
 ### Graceful offline behaviour
 
 - **Stale cache + network error** → stderr warning, use stale cache.
-- **No cache + network error** → stderr "synthbench unavailable", fall
-  through to whatever `--model` or default was already in effect.
+- **No cache + network error** → bundled snapshot fallback (sy-nkh):
+  stderr "synthbench unavailable — using bundled snapshot from
+  YYYY-MM-DD …" plus the `SYNTHPANEL_SYNTHBENCH_URL` override hint, then
+  a real recommendation derived from the package data.
+- **No cache + no bundled snapshot** → stderr "synthbench unavailable",
+  fall through to whatever `--model` or default was already in effect.
 - **Empty entries after filter** → same fall-through.
 
 No recommendation is ever fatal. `--best-model-for` is advisory: a bad
-network day won't take the panel down.
+network day won't take the panel down, and a 404'ing upstream URL still
+yields a sensible default via the bundled snapshot.
 
 ## Use-case → top-ranked model
 
