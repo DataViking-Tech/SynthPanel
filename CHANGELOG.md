@@ -8,6 +8,16 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ### Added
 
+- **`synthpanel doctor --install-only` (sy-e28).** Validates package,
+  dependency, bundled-pack, and checkpoint-root health without requiring
+  a provider credential. Designed for clean-room CI and post-`pip install`
+  agent smoke tests where keys haven't been provisioned yet. Credential
+  status is still reported in the output; only the exit-code gate
+  changes. JSON output gains `install_ok` and `install_only` fields
+  alongside the existing `credential_configured` and `checks_ok`, so
+  agents can branch on install vs. credential health independently.
+  `clean-install-smoke` in CI exercises the new mode against the built
+  wheel with no provider env set.
 - **`synthpanel mcp install` CLI (sy-skf).** Registers synthpanel as a
   stdio MCP server in a host's JSON config — defaults to Claude Code's
   user-scope `~/.claude.json`, with `--scope project` for `./.mcp.json`
