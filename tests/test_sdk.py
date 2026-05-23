@@ -188,6 +188,41 @@ class TestQuickPoll:
         kwargs = mock_runner.call_args.kwargs
         assert kwargs["questions"] == [{"text": "Does this work?"}]
 
+    def test_persists_questions_metadata(self):
+        """sy-oyl: the saved result must carry the question (and any
+        response_schema) so poll_summary's _detect_kind can honor declared
+        types after reload. Previously this kwarg was dropped on the
+        single-question save path, so reloaded results fell back to
+        inference and misclassified text answers containing version strings
+        as scales.
+        """
+        from synth_panel import quick_poll
+        from synth_panel.cost import TokenUsage
+
+        fake_usage = TokenUsage(input_tokens=1, output_tokens=1)
+        fake_cost = MagicMock()
+        fake_cost.format_usd.return_value = "$0.01"
+        fake_cost.__add__ = lambda self, other: self
+
+        with (
+            patch("synth_panel.sdk.LLMClient"),
+            patch("synth_panel.sdk.run_panel_sync") as mock_runner,
+            patch("synth_panel.sdk.save_panel_result") as mock_save,
+        ):
+            mock_runner.return_value = (
+                [],
+                [{"persona": "A", "responses": [{"response": "ok"}], "usage": {}, "cost": "$0.01", "error": None}],
+                fake_usage,
+                fake_cost,
+                None,
+                None,
+            )
+            mock_save.return_value = "result-stub"
+            quick_poll("Does v1.5.1 feel agent-ready?", personas=[{"name": "A"}])
+
+        kwargs = mock_save.call_args.kwargs
+        assert kwargs["questions"] == [{"text": "Does v1.5.1 feel agent-ready?"}]
+
 
 class TestRunPanel:
     def test_requires_question_source(self):
@@ -228,6 +263,39 @@ class TestRunPanel:
             )
             kwargs = mock_runner.call_args.kwargs
             assert kwargs["questions"] == [{"text": "First?"}, {"text": "Second?"}]
+
+    def test_flat_questions_path_persists_questions_with_schema(self):
+        """sy-oyl: the flat ``questions=[{...}]`` save path now threads the
+        normalised question list (including ``response_schema``) into
+        ``save_panel_result`` so reloads preserve declared types.
+        """
+        from synth_panel import run_panel
+        from synth_panel.cost import TokenUsage
+
+        fake_usage = TokenUsage(input_tokens=1, output_tokens=1)
+        fake_cost = MagicMock()
+        fake_cost.format_usd.return_value = "$0.01"
+        fake_cost.__add__ = lambda self, other: self
+
+        questions_in = [
+            {"text": "Would v1.5.1 feel agent-ready?", "response_schema": {"type": "text"}},
+            {"text": "Confidence (1-5)?", "response_schema": {"type": "scale", "min": 1, "max": 5}},
+        ]
+        with (
+            patch("synth_panel.sdk.LLMClient"),
+            patch("synth_panel.sdk.run_panel_sync") as mock_runner,
+            patch("synth_panel.sdk.save_panel_result") as mock_save,
+        ):
+            mock_runner.return_value = ([], [], fake_usage, fake_cost, None, None)
+            mock_save.return_value = "result-stub"
+            run_panel(personas=[{"name": "Alice"}], questions=questions_in)
+
+        kwargs = mock_save.call_args.kwargs
+        saved_questions = kwargs["questions"]
+        assert len(saved_questions) == 2
+        # response_schema must round-trip — that's the whole point of the fix.
+        assert saved_questions[0]["response_schema"] == {"type": "text"}
+        assert saved_questions[1]["response_schema"] == {"type": "scale", "min": 1, "max": 5}
 
     def test_instrument_pack_takes_precedence_over_questions(self, monkeypatch):
         """If instrument_pack is given, questions/instrument are ignored."""

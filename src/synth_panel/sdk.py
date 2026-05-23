@@ -843,6 +843,10 @@ def quick_poll(
         total_cost=total_cost.format_usd(),
         persona_count=len(merged),
         question_count=1,
+        # sy-oyl: thread the question (and its response_schema if any)
+        # into the saved JSON so a reloaded result preserves type info
+        # for poll_summary's _detect_kind.
+        questions=questions,
         synthesis=synthesis_dict,
     )
 
@@ -1077,6 +1081,13 @@ def run_panel(
         # base64 blobs (79 MB at 15p x 10 images in the 2026-05-09 dogfood).
         attachment_refs = _extract_attachment_refs(instrument_obj, flat_results)
 
+        # sy-oyl: flatten every round's questions in declaration order so
+        # the saved JSON carries per-question response_schema metadata —
+        # poll_summary needs it to avoid classifying open-text questions
+        # as scales just because the prose mentioned a number.
+        flat_questions: list[dict[str, Any]] = []
+        for r in instrument_obj.rounds:
+            flat_questions.extend(r.questions)
         result_id = save_panel_result(
             results=flat_results,
             model=model,
@@ -1084,6 +1095,7 @@ def run_panel(
             total_cost=total_cost.format_usd(),
             persona_count=len(merged),
             question_count=total_question_count,
+            questions=flat_questions,
             synthesis=final_synth_dict,
             attachments=attachment_refs or None,
         )
@@ -1179,6 +1191,9 @@ def run_panel(
         persona_count=len(merged),
         question_count=len(normalised_questions),
         variant_count=variant_count,
+        # sy-oyl: preserve per-question response_schema so poll_summary
+        # can respect declared question types after reload.
+        questions=normalised_questions,
         synthesis=synthesis_dict,
         attachments=attachment_refs or None,
     )
