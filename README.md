@@ -685,7 +685,9 @@ searching for one:
 | `students` | 15 |
 
 `synthpanel pack list` (or MCP `list_persona_packs`) enumerates these plus any
-user-saved packs.
+user-saved packs. Picking the right pack for your task?
+See [docs/task-recommendations.md](docs/task-recommendations.md) for the
+task → pack → model-config matrix with copy/paste commands.
 
 ### Builtin instrument packs (8, all v3 branching)
 

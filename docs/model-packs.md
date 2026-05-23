@@ -4,6 +4,12 @@
 > model or model mix to run a panel through. Persona packs answer *"who
 > answers the question?"* — model packs answer *"which LLMs do the
 > answering?"*.
+>
+> **Looking for the task → pack + model lookup table?** See
+> [docs/task-recommendations.md](task-recommendations.md) — that page maps
+> common research tasks (positioning, GTM, pricing, trust audit, etc.)
+> to the persona pack *and* model pack that match. This page is the
+> deeper reference for the model packs themselves.
 
 ## TL;DR
 
