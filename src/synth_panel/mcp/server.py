@@ -759,6 +759,7 @@ async def _run_panel_async_instrument(
         persona_count=len(personas),
         question_count=total_question_count,
         synthesis=final_synth_dict,
+        metadata=inst_metadata,
     )
 
     # sp-0h9x: mirror the ensemble path's per-model rollup onto every
@@ -929,6 +930,7 @@ async def _run_panel_async(
         question_count=len(questions),
         variant_count=variant_count,
         synthesis=synthesis_dict,
+        metadata=metadata,
     )
 
     # sp-0h9x: emit per_model_results + cost_breakdown so downstream

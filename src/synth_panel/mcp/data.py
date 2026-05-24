@@ -607,6 +607,7 @@ def save_panel_result(
     models: list[str] | None = None,
     attachments: dict[str, dict[str, Any]] | None = None,
     synthesis: dict[str, Any] | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> str:
     """Save panel results and return the result ID.
 
@@ -617,6 +618,12 @@ def save_panel_result(
       ``extraction_schema``.
     * ``variants_config``: variant generation config (``n``, ``seed``).
     * ``models``: list of all model identifiers used in the run.
+    * ``metadata``: the run provenance bundle produced by
+      :func:`synth_panel.metadata.build_metadata` (version, config_hash,
+      cost/pricing snapshot, timing, models). Persisted at the top level
+      so ``synthpanel report`` can populate its provenance table for
+      saved results instead of degrading every field to ``(unknown)``
+      (#525). Omitting this field is the legacy shape.
     * ``attachments``: ``{ref_id: AttachmentRef}`` map written to a
       ``<result_id>.attachments/refs.json`` sidecar. When non-empty,
       ``result_format_version`` bumps from ``"1.0"`` to ``"1.1"`` so
@@ -659,6 +666,8 @@ def save_panel_result(
         data["models"] = models
     if synthesis is not None:
         data["synthesis"] = synthesis
+    if metadata is not None:
+        data["metadata"] = metadata
     p.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
     if has_attachments:

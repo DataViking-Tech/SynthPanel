@@ -8,6 +8,15 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ### Fixed
 
+- **Saved-result provenance is populated (sy-g1g, #525).** Every `--save`
+  artifact now embeds the run `metadata` block (synthpanel/Python version,
+  `config_hash`, and the new `cost.pricing_snapshot_date`) that
+  `build_metadata` already produced but no save path persisted. As a
+  result, `synthpanel report` for a freshly saved run no longer degrades
+  `config_hash`/`synthpanel_version`/`python_version`/`pricing_snapshot_date`
+  to `(unknown)`/`(not recorded)`. Threaded through the CLI, MCP, and SDK
+  save paths. `runs list` on an empty checkpoint store now points at
+  `synthpanel results list` so a `--save` artifact isn't mistaken for lost.
 - **`pack import <registry-id>` resolves registry entries (sy-dwc, #520).**
   When `panel run --personas <id>` misses, it suggests `pack import <id>` —
   but that command used to fall to the local-file branch and echo the same
@@ -33,6 +42,15 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ### Added
 
+- **`synthpanel results list` / `results show` (sy-g1g, #525).** Saved
+  `--save` results live in the results store (`~/.synthpanel/results`),
+  distinct from the checkpoint store that `runs list` shows — so they were
+  previously undiscoverable without a filesystem search. `results list`
+  enumerates saved results (newest first) by their stable ID; `results show
+  <id>` resolves that handle to a provenance summary and the canonical
+  `saved_path` (full result envelope + `saved_path` in JSON mode). The
+  `--save` confirmation now prints the exact follow-up commands
+  (`report` / `results show` / `results list`).
 - **`synthpanel doctor --install-only` (sy-e28).** Validates package,
   dependency, bundled-pack, and checkpoint-root health without requiring
   a provider credential. Designed for clean-room CI and post-`pip install`

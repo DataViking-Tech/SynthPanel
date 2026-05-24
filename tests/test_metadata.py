@@ -167,6 +167,24 @@ class TestBuildMetadata:
         assert cost_meta["total_cost_usd"] > 0
         assert len(cost_meta["per_model"]) == 2
 
+    def test_cost_records_pricing_snapshot_date(self):
+        # #525: saved-result provenance needs to know which price snapshot
+        # the cost estimate was computed against.
+        from synth_panel.cost import PRICING_SNAPSHOT_DATE
+
+        usage = self._make_usage()
+        cost = self._make_cost(usage)
+        meta = build_metadata(
+            panelist_model="haiku",
+            panelist_usage=usage,
+            panelist_cost=cost,
+            total_usage=usage,
+            total_cost=cost,
+            persona_count=1,
+            question_count=1,
+        )
+        assert meta["cost"]["pricing_snapshot_date"] == PRICING_SNAPSHOT_DATE
+
     def test_cost_same_model_merged(self):
         p_usage = self._make_usage(100, 50)
         s_usage = self._make_usage(200, 100)

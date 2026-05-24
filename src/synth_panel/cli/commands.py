@@ -1662,8 +1662,9 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 question_count=ens_result.question_count,
                 instrument_name=inst_name,
                 models=list(ensemble_models),
+                metadata=output["metadata"],
             )
-            print(f"Result saved: {result_id}", file=sys.stderr)
+            _print_saved_result_hint(result_id)
 
         return 0
 
@@ -2837,8 +2838,9 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             instrument_name=inst_name,
             models=all_models,
             synthesis=synthesis_dict,
+            metadata=metadata,
         )
-        print(f"Result saved: {result_id}", file=sys.stderr)
+        _print_saved_result_hint(result_id)
 
     # sp-2hg: exit non-zero when the run is invalid so automation (CI,
     # refinery, wrapper scripts) can detect silent-failure scenarios.
@@ -6118,6 +6120,21 @@ def handle_doctor(args: argparse.Namespace, fmt: OutputFormat) -> int:
     return rc
 
 
+def _print_saved_result_hint(result_id: str) -> None:
+    """Print the canonical follow-up commands for a freshly saved result.
+
+    Emitted to stderr (like the prior ``Result saved`` line) so JSON/NDJSON
+    consumers reading stdout stay unpolluted, while a human or agent gets an
+    obvious next step instead of having to scrape prose or search the
+    filesystem for the artifact (#525).
+    """
+    print(f"Result saved: {result_id}", file=sys.stderr)
+    print("Next:", file=sys.stderr)
+    print(f"  synthpanel report {result_id}          # full Markdown report", file=sys.stderr)
+    print(f"  synthpanel results show {result_id}    # raw saved result", file=sys.stderr)
+    print("  synthpanel results list                # all saved results", file=sys.stderr)
+
+
 def handle_runs_prune(args: argparse.Namespace, fmt: OutputFormat) -> int:
     """Prune stale checkpoint run directories from the checkpoint root."""
     from pathlib import Path
@@ -6182,6 +6199,11 @@ def handle_runs_list(args: argparse.Namespace, fmt: OutputFormat) -> int:
         checkpoint_root = root or default_checkpoint_root()
         if not runs:
             print(f"No runs found under {checkpoint_root}")
+            # #525: checkpoints and saved results are distinct stores.
+            # Point users who ran a panel with --save (which writes to the
+            # results store, not here) at the right list command instead of
+            # leaving them to conclude their artifact vanished.
+            print("(Saved --save results live elsewhere; try: synthpanel results list)")
             return 0
         for run in runs:
             if run.get("malformed"):
@@ -6192,6 +6214,106 @@ def handle_runs_list(args: argparse.Namespace, fmt: OutputFormat) -> int:
         return 0
 
     emit(fmt, message="runs_list", extra={"runs": runs, "count": len(runs)})
+    return 0
+
+
+def handle_results_list(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """List saved panel results (the ``--save`` artifact store).
+
+    #525: ``runs list`` only sees the checkpoint store, leaving ``--save``
+    artifacts undiscoverable without a filesystem search. This lists the
+    results store directly so a freshly saved result is rediscoverable by
+    its stable ID — the handle that ``report`` and ``results show`` accept.
+    """
+    from synth_panel.mcp.data import list_panel_results
+
+    results = list_panel_results()
+
+    if fmt is OutputFormat.TEXT:
+        if not results:
+            from synth_panel.mcp.data import _results_dir
+
+            print(f"No saved results found under {_results_dir()}")
+            return 0
+        for r in results:
+            extras = []
+            if r.get("instrument_name"):
+                extras.append(f"instrument={r['instrument_name']}")
+            extras.append(f"personas={r.get('persona_count', 0)}")
+            extras.append(f"questions={r.get('question_count', 0)}")
+            suffix = "  " + "  ".join(extras) if extras else ""
+            print(f"  {r['id']}  [{r.get('model', '?')}]  {r.get('created_at', '')}{suffix}")
+        return 0
+
+    emit(fmt, message="results_list", extra={"results": results, "count": len(results)})
+    return 0
+
+
+def handle_results_show(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Show a saved panel result by its stable ID (or path).
+
+    Resolves the handle to the saved JSON, surfacing the canonical
+    ``saved_path`` so agents never have to guess where ``--save`` wrote the
+    artifact. JSON/NDJSON modes emit the full result envelope plus
+    ``saved_path``; text mode prints a compact provenance-aware summary and
+    the follow-up ``report`` command (#525).
+    """
+    from synth_panel.mcp.data import _results_dir, get_panel_result
+
+    result_ref = args.result
+
+    # Accept a path ending in .json (parity with report/inspect) or a bare ID.
+    candidate = Path(result_ref)
+    if result_ref.endswith(".json") and candidate.exists():
+        try:
+            data = json.loads(candidate.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            msg = f"Error: not valid JSON: {result_ref}: {exc}"
+            if fmt is OutputFormat.TEXT:
+                print(msg, file=sys.stderr)
+            else:
+                emit(fmt, message=msg, extra={"error": "invalid_json"})
+            return 1
+        data.setdefault("id", candidate.stem)
+        saved_path = str(candidate)
+    else:
+        try:
+            data = get_panel_result(result_ref)
+        except FileNotFoundError:
+            msg = f"Error: saved result not found: {result_ref}"
+            if fmt is OutputFormat.TEXT:
+                print(msg, file=sys.stderr)
+            else:
+                emit(fmt, message=msg, extra={"error": "not_found"})
+            return 1
+        saved_path = str(_results_dir() / f"{data.get('id', result_ref)}.json")
+
+    if fmt is not OutputFormat.TEXT:
+        emit(fmt, message="result_show", extra={**data, "saved_path": saved_path})
+        return 0
+
+    rid = data.get("id", result_ref)
+    metadata = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
+    version = metadata.get("version") if isinstance(metadata.get("version"), dict) else {}
+    cost_meta = metadata.get("cost") if isinstance(metadata.get("cost"), dict) else {}
+
+    print(f"Result: {rid}")
+    print(f"  saved_path:         {saved_path}")
+    print(f"  created_at:         {data.get('created_at', '(unknown)')}")
+    print(f"  model:              {data.get('model', '(unknown)')}")
+    if data.get("models"):
+        print(f"  models:             {', '.join(str(m) for m in data['models'])}")
+    if data.get("instrument_name"):
+        print(f"  instrument:         {data['instrument_name']}")
+    print(f"  personas:           {data.get('persona_count', 0)}")
+    print(f"  questions:          {data.get('question_count', 0)}")
+    if data.get("total_cost"):
+        print(f"  total_cost:         {data['total_cost']}")
+    print(f"  synthpanel_version: {version.get('synthpanel', '(unknown)')}")
+    print(f"  python_version:     {version.get('python', '(unknown)')}")
+    print(f"  config_hash:        {metadata.get('config_hash', '(not recorded)')}")
+    print(f"  pricing_snapshot:   {cost_meta.get('pricing_snapshot_date', '(unknown)')}")
+    print(f"\nReport: synthpanel report {rid}")
     return 0
 
 

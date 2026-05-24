@@ -12,7 +12,7 @@ import platform
 import time
 from typing import Any
 
-from synth_panel.cost import CostEstimate, TokenUsage
+from synth_panel.cost import PRICING_SNAPSHOT_DATE, CostEstimate, TokenUsage
 from synth_panel.llm.aliases import resolve_alias
 
 
@@ -163,6 +163,10 @@ def build_metadata(
     cost: dict[str, Any] = {
         "total_tokens": total_usage.total_tokens,
         "total_cost_usd": round(total_cost.total_cost, 6),
+        # The date the bundled pricing tables were last verified. Lets a
+        # saved result record which price snapshot its USD estimates were
+        # computed against (#525 — report provenance).
+        "pricing_snapshot_date": PRICING_SNAPSHOT_DATE,
         "per_model": per_model,
     }
 

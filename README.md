@@ -643,7 +643,9 @@ Already have a saved panel result and want a readable share-out? Render
 the result to Markdown:
 
 ```bash
-# Save a run first (prints a result ID you can reference later)
+# Save a run first. --save prints the result ID plus the exact follow-up
+# commands (report / results show / results list) so there's no need to
+# scrape prose or search the filesystem for the artifact.
 synthpanel panel run \
   --personas examples/personas.yaml \
   --instrument examples/survey.yaml \
@@ -656,6 +658,23 @@ synthpanel report path/to/result.json
 # Write to a file
 synthpanel report <result-id> -o report.md
 ```
+
+#### Discovering saved results (`synthpanel results`)
+
+`--save` writes to the results store (`~/.synthpanel/results`), which is
+**distinct** from the checkpoint store that `synthpanel runs list` shows.
+To rediscover a saved run by its stable ID:
+
+```bash
+synthpanel results list             # all saved results, newest first
+synthpanel results show <result-id> # provenance + canonical saved_path
+```
+
+`results show` prints the recorded provenance (synthpanel/Python version,
+config hash, pricing snapshot date) and the canonical `saved_path`; in
+`--output-format json` it emits the full result envelope plus `saved_path`.
+Saved results now embed a `metadata` block, so `report` provenance for
+freshly saved runs is populated rather than `(unknown)`.
 
 Every rendered report opens with a mandatory synthetic-panel banner and
 closes with a matching footer so the output can't be mistaken for
