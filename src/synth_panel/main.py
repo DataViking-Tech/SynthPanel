@@ -90,7 +90,22 @@ def _quiet_broken_pipe() -> None:
 
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point. Returns exit code."""
-    if hasattr(signal, "SIGPIPE"):
+    # SIGPIPE disposition is process-global. ``main`` is the console-script
+    # entry point, but it is *also* imported and called directly by the test
+    # suite and library callers — so installing SIG_DFL unconditionally and
+    # never undoing it leaks the disposition into the calling process. A later,
+    # unrelated broken-pipe write (pytest output capture, coverage teardown, an
+    # xdist worker pipe) then takes a SIGPIPE and the whole process dies
+    # silently with exit 141. That is the non-deterministic CI killer tracked
+    # under sy-6zq / sy-1n1. Capture the prior handler so we can hand the
+    # disposition back when ``main`` returns. (Gating on ``isatty()`` would be
+    # wrong: stdout is *not* a tty exactly when piped to ``head``, which is the
+    # case the SIG_DFL restore exists to handle.)
+    prev_sigpipe = None
+    have_sigpipe = hasattr(signal, "SIGPIPE")
+    if have_sigpipe:
+        # Windows has no SIGPIPE — that's why the hasattr guard.
+        prev_sigpipe = signal.getsignal(signal.SIGPIPE)
         signal.signal(signal.SIGPIPE, signal.SIG_DFL)
     try:
         return _main(argv)
@@ -109,6 +124,14 @@ def main(argv: list[str] | None = None) -> int:
         # before the interpreter's own shutdown flush triggers the
         # "Exception ignored" warning on stderr.
         _quiet_broken_pipe()
+        # Restore the caller's SIGPIPE handler. For the real CLI process this
+        # is harmless cleanup right before exit (stdout is already pointed at
+        # /dev/null by _quiet_broken_pipe); for in-process callers it stops
+        # SIG_DFL from outliving this invocation. ``getsignal`` returns None
+        # when the prior handler was installed from non-Python code, which
+        # ``signal.signal`` cannot reinstall — skip that rare case.
+        if have_sigpipe and prev_sigpipe is not None:
+            signal.signal(signal.SIGPIPE, prev_sigpipe)
 
 
 def _main(argv: list[str] | None) -> int:
