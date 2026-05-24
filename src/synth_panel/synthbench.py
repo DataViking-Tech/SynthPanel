@@ -100,9 +100,10 @@ class Recommendation:
     label (e.g. ``"SynthPanel (Gemini Flash Lite)"``) in their ``model``
     field rather than a provider-runnable id. Stamping such a label onto
     ``--model`` fails at call time with a provider "not a valid model ID"
-    error. ``recommend`` sets this to ``False`` when neither the entry's
-    model field nor an inferred config base resolves to a runnable id, so
-    the CLI can refuse with an actionable message instead of producing a
+    error. ``recommend`` sets this to ``False`` only when none of the
+    entry's runnable ``model_id``/``provider_id`` (SynthBench #297), its
+    ``model`` field, or an inferred config base resolves to a runnable id,
+    so the CLI can refuse with an actionable message instead of producing a
     non-runnable selection. Defaults to ``True`` so test fixtures that
     construct :class:`Recommendation` directly keep their prior shape.
     """
@@ -641,6 +642,42 @@ def _underlying_base(entry: dict[str, Any]) -> str | None:
     return config_id or None
 
 
+def _runnable_id_from_row(entry: dict[str, Any]) -> str | None:
+    """Return the machine-runnable provider model id SynthBench publishes
+    alongside the display label (gh-519 retry; SynthBench #297), or ``None``.
+
+    SynthBench product/ensemble rows carry a human-readable string in
+    ``model`` (e.g. ``"SynthPanel (Gemini Flash Lite)"``) but the live
+    leaderboard now also exposes a runnable id in ``model_id`` (e.g.
+    ``"google/gemini-2.5-flash-lite"``). Preferring that id lets
+    ``--best-model-for`` substitute a real upstream model instead of
+    refusing the display label and falling through to the default model
+    (which, with only OpenRouter credentials present, lands on
+    ``openrouter/auto`` — see gh-519).
+
+    ``model_id`` is used verbatim when it already carries a provider segment
+    (contains ``/``) or is otherwise a single runnable token. When it is a
+    bare slug and a separate runnable ``provider_id`` is published, the two
+    are joined as ``"<provider_id>/<model_id>"`` to reconstruct the full
+    provider/model slug. A ``model_id`` that is itself a display label
+    (whitespace- or paren-bearing) is ignored so we never reintroduce the
+    original non-runnable-stamping failure.
+    """
+    model_id = entry.get("model_id")
+    if not isinstance(model_id, str):
+        return None
+    model_id = model_id.strip()
+    if not is_runnable_model_id(model_id):
+        return None
+    if "/" not in model_id:
+        provider_id = entry.get("provider_id")
+        if isinstance(provider_id, str):
+            pid = provider_id.strip()
+            if pid and is_runnable_model_id(pid) and "/" not in pid:
+                return f"{pid}/{model_id}"
+    return model_id
+
+
 def recommend(
     spec: str,
     *,
@@ -682,19 +719,29 @@ def recommend(
     framework = entry.get("framework") if isinstance(entry.get("framework"), str) else None
     is_ensemble = bool(entry.get("is_ensemble"))
 
-    # Product/ensemble configs aren't runnable as-is. When the entry's
-    # model field is empty OR a non-runnable display label (gh-519: e.g.
-    # "SynthPanel (Gemini Flash Lite)"), try to infer a runnable base model
-    # from config_id instead. Only adopt the inferred base when it itself
-    # resolves to a runnable id — otherwise keep the original string so the
-    # caller can report it verbatim and refuse rather than silently swap in
-    # a config-id hash fragment.
-    if (is_ensemble or framework == "product") and not is_runnable_model_id(resolved_model):
-        base = _underlying_base(entry)
-        if base:
-            candidate = _resolve_model_string(base)
-            if _is_recognized_model_id(candidate):
-                resolved_model = candidate
+    # When the entry's model field is empty OR a non-runnable display label
+    # (gh-519: e.g. "SynthPanel (Gemini Flash Lite)"), substitute a runnable
+    # provider model id instead of stamping the label onto --model.
+    #
+    # 1. Prefer the runnable id SynthBench now publishes in model_id /
+    #    provider_id (gh-519 retry; SynthBench #297). This is the authoritative
+    #    upstream id (e.g. "google/gemini-2.5-flash-lite") and applies to any
+    #    row — product/ensemble or not — that surfaces a display label.
+    # 2. Fall back to inferring a base model from config_id only when no
+    #    runnable model_id exists. Only adopt the inferred base when it itself
+    #    resolves to a runnable id — otherwise keep the original string so the
+    #    caller can report it verbatim and refuse rather than silently swap in
+    #    a config-id hash fragment.
+    if not is_runnable_model_id(resolved_model):
+        runnable_upstream = _runnable_id_from_row(entry)
+        if runnable_upstream is not None:
+            resolved_model = _resolve_model_string(runnable_upstream)
+        elif is_ensemble or framework == "product":
+            base = _underlying_base(entry)
+            if base:
+                candidate = _resolve_model_string(base)
+                if _is_recognized_model_id(candidate):
+                    resolved_model = candidate
 
     final_model = resolved_model or raw_model
     run_count = _as_int(entry, "run_count") or 0

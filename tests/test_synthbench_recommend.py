@@ -48,8 +48,10 @@ def _entry(
     cost_per_100q: float = 0.5,
     run_count: int = 5,
     config_id: str | None = None,
+    model_id: str | None = None,
+    provider_id: str | None = None,
 ) -> dict[str, Any]:
-    return {
+    entry: dict[str, Any] = {
         "config_id": config_id or f"cfg-{model}",
         "model": model,
         "provider": provider,
@@ -63,6 +65,11 @@ def _entry(
         "cost_per_100q": cost_per_100q,
         "run_count": run_count,
     }
+    if model_id is not None:
+        entry["model_id"] = model_id
+    if provider_id is not None:
+        entry["provider_id"] = provider_id
+    return entry
 
 
 SAMPLE: dict[str, Any] = {
@@ -315,6 +322,108 @@ def test_recommend_display_label_resolves_runnable_base_from_config_id(
     assert rec is not None
     assert rec.runnable is True
     assert rec.model == "claude-haiku-4-5-20251001"
+
+
+def test_recommend_prefers_runnable_model_id_over_display_label() -> None:
+    """gh-519 retry: when the display ``model`` is a label but the row exposes
+    a runnable ``model_id`` (SynthBench #297), substitute the model_id and mark
+    the recommendation runnable instead of refusing."""
+    board = {
+        "entries": [
+            _entry(
+                model="SynthPanel (Gemini Flash Lite)",
+                provider="SynthPanel (Gemini Flash Lite)",
+                model_id="google/gemini-2.5-flash-lite",
+                sps=0.95,
+                is_ensemble=False,
+            )
+        ]
+    }
+    rec = recommend(":globalopinionqa", leaderboard=board)
+    assert rec is not None
+    assert rec.model == "google/gemini-2.5-flash-lite"
+    assert rec.runnable is True
+    # The original display label is preserved as raw_model for provenance.
+    assert rec.raw_model == "SynthPanel (Gemini Flash Lite)"
+
+
+def test_recommend_model_id_wins_over_config_id_inference() -> None:
+    """A runnable model_id takes precedence over the config_id base heuristic
+    so the authoritative upstream id is used rather than a guessed tail."""
+    board = {
+        "entries": [
+            _entry(
+                model="SynthPanel (Gemini Flash Lite)",
+                model_id="google/gemini-2.5-flash-lite",
+                config_id="synthpanel:haiku",
+                sps=0.95,
+                framework="product",
+                is_ensemble=True,
+            )
+        ]
+    }
+    rec = recommend(":globalopinionqa", leaderboard=board)
+    assert rec is not None
+    assert rec.model == "google/gemini-2.5-flash-lite"
+    assert rec.runnable is True
+
+
+def test_recommend_joins_provider_id_with_bare_model_id() -> None:
+    """When model_id is a bare slug and provider_id is published separately,
+    they are joined into a full provider/model slug."""
+    board = {
+        "entries": [
+            _entry(
+                model="SynthPanel (Gemini Flash Lite)",
+                model_id="gemini-2.5-flash-lite",
+                provider_id="google",
+                sps=0.95,
+            )
+        ]
+    }
+    rec = recommend(":globalopinionqa", leaderboard=board)
+    assert rec is not None
+    assert rec.model == "google/gemini-2.5-flash-lite"
+    assert rec.runnable is True
+
+
+def test_recommend_ignores_non_runnable_model_id() -> None:
+    """A model_id that is itself a display label must not be substituted —
+    the row stays non-runnable so the CLI refuses (no gh-519 regression)."""
+    board = {
+        "entries": [
+            _entry(
+                model="SynthPanel (Gemini Flash Lite)",
+                model_id="Gemini Flash Lite (preview)",
+                config_id="synthpanel-gemini-flash-lite-ba37570c",
+                sps=0.95,
+                framework="product",
+                is_ensemble=True,
+            )
+        ]
+    }
+    rec = recommend(":globalopinionqa", leaderboard=board)
+    assert rec is not None
+    assert rec.runnable is False
+    assert rec.model == "SynthPanel (Gemini Flash Lite)"
+
+
+def test_recommend_runnable_model_field_ignores_model_id() -> None:
+    """When the display ``model`` is already runnable, it is used as-is and a
+    present model_id does not override it (no surprise reroute)."""
+    board = {
+        "entries": [
+            _entry(
+                model="gpt-4o-mini",
+                model_id="openai/gpt-4o-mini",
+                sps=0.95,
+            )
+        ]
+    }
+    rec = recommend(":globalopinionqa", leaderboard=board)
+    assert rec is not None
+    assert rec.model == "gpt-4o-mini"
+    assert rec.runnable is True
 
 
 def test_recommend_plain_model_is_runnable() -> None:

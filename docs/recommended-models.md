@@ -161,11 +161,20 @@ CLI flag or [synthbench.org](https://synthbench.org) for current picks.
 
 ## Caveats
 
-- **Ensembles & product configs.** Some leaderboard entries are
-  SynthPanel product configs (`framework=product`, `is_ensemble=true`).
-  These aren't runnable as a plain `--model` value, so SynthPanel falls
-  back to the underlying base model inferred from the entry's
-  `config_id`. A stderr note records the substitution.
+- **Display labels & runnable ids (gh-519).** Some leaderboard rows carry a
+  human-readable display label (e.g. `SynthPanel (Gemini Flash Lite)`) in
+  their `model` field rather than a runnable provider model id. SynthPanel
+  never stamps such a label onto `--model`. Instead it substitutes a runnable
+  id in this order:
+  1. The row's runnable `model_id` (e.g. `google/gemini-2.5-flash-lite`)
+     published by SynthBench — joined with `provider_id` as
+     `<provider_id>/<model_id>` when `model_id` is a bare slug.
+  2. For product/ensemble rows (`framework=product`, `is_ensemble=true`)
+     without a `model_id`, a base model inferred from the entry's `config_id`,
+     adopted only when it resolves to a recognized provider id or alias.
+  3. If neither yields a runnable id, the recommendation is **refused** with
+     an actionable stderr message and SynthPanel keeps your existing
+     `--model`/default. A stderr note records any substitution.
 - **Sparse topics.** When the top entry's `run_count < 3`, a
   low-confidence warning is emitted. Treat those recommendations as
   suggestive rather than authoritative.
