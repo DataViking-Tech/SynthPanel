@@ -10,6 +10,7 @@ class of bugs structurally impossible in CI.
 
 from __future__ import annotations
 
+import signal
 import socket
 from pathlib import Path
 
@@ -55,3 +56,35 @@ def _isolate_credentials_store(tmp_path_factory: pytest.TempPathFactory, monkeyp
     """
     sandbox: Path = tmp_path_factory.mktemp("synthpanel-creds")
     monkeypatch.setenv("SYNTHPANEL_CREDENTIALS_PATH", str(sandbox / "credentials.json"))
+
+
+@pytest.fixture(autouse=True)
+def _restore_sigpipe_disposition():
+    """Snapshot and restore the process-global SIGPIPE handler around each test.
+
+    ``synth_panel.main.main`` and its ``_quiet_broken_pipe`` helper deliberately
+    install ``SIGPIPE=SIG_DFL`` so piped CLI output (``synthpanel … | head``)
+    ends silently like a normal Unix tool. The disposition is *process-global*,
+    so a test that calls ``main()`` or ``_quiet_broken_pipe()`` can leave
+    SIG_DFL installed for the remainder of the pytest session. After that, any
+    broken-pipe write during pytest's output capture or coverage teardown is
+    delivered as SIGPIPE and silently kills the runner with exit 141 — the
+    non-deterministic CI failure tracked under sy-1n1 / sy-6zq (the matrix
+    entry that dies varies run to run because it depends on test ordering).
+
+    Restoring the prior handler after every test makes that leak structurally
+    impossible regardless of which code paths a test exercises, in the same
+    spirit as the network-block fixture above.
+    """
+    if not hasattr(signal, "SIGPIPE"):
+        # Windows has no SIGPIPE; nothing to guard.
+        yield
+        return
+    prev = signal.getsignal(signal.SIGPIPE)
+    try:
+        yield
+    finally:
+        # ``getsignal`` returns None when the handler was installed from
+        # non-Python code; ``signal.signal`` cannot reinstall that, so skip it.
+        if prev is not None:
+            signal.signal(signal.SIGPIPE, prev)
