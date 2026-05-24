@@ -659,6 +659,15 @@ synthpanel report path/to/result.json
 synthpanel report <result-id> -o report.md
 ```
 
+**Machine-readable handle (agents):** pairing `--save` with
+`--output-format json` adds two stable top-level keys to the stdout JSON —
+`result_id` (the saved handle) and `saved_path` (its absolute path). Feed
+`result_id` straight into `report`, `results show`, `analyze`, or the MCP
+tools without scraping the stderr `Result saved:` line or guessing the file
+location. The keys are present **only** when `--save` is active; a checkpointed
+run additionally surfaces its checkpoint `run_id`. The human-facing
+`Result saved:` hint still goes to stderr, keeping stdout pure JSON.
+
 #### Discovering saved results (`synthpanel results`)
 
 `--save` writes to the results store (`~/.synthpanel/results`), which is

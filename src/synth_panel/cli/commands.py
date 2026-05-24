@@ -1631,16 +1631,18 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             template_vars=template_vars or None,
             panelist_per_model=ens_per_model_meta,
         )
-        emit(fmt, message="Ensemble complete", extra=output)
-
         # hq-0pnq: --save was a silent no-op in the ensemble path because
         # this branch returned before the persistence block at the end of
         # handle_panel_run(). Flatten per-model panelist results into the
         # standard saved-result shape so consumers (`synthpanel inspect`,
         # `synthpanel analyze`) see ensemble runs the same way they see
         # single-model runs.
+        #
+        # sy-659 (#471): persist BEFORE emit so the saved-result handle +
+        # path can be injected into the JSON object agents parse from stdout.
+        ensemble_result_id: str | None = None
         if getattr(args, "save", False):
-            from synth_panel.mcp.data import save_panel_result
+            from synth_panel.mcp.data import _results_dir, save_panel_result
 
             inst_name: str | None = None
             inst_arg = getattr(args, "instrument", None)
@@ -1653,7 +1655,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 for pr in mr.panelist_results:
                     ensemble_results.append(_fmt_panelist(pr, mr.model))
 
-            result_id = save_panel_result(
+            ensemble_result_id = save_panel_result(
                 results=ensemble_results,
                 model=ensemble_models[0],
                 total_usage=ens_result.total_usage.to_dict(),
@@ -1664,7 +1666,13 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 models=list(ensemble_models),
                 metadata=output["metadata"],
             )
-            _print_saved_result_hint(result_id)
+            output["result_id"] = ensemble_result_id
+            output["saved_path"] = str(_results_dir() / f"{ensemble_result_id}.json")
+
+        emit(fmt, message="Ensemble complete", extra=output)
+
+        if ensemble_result_id is not None:
+            _print_saved_result_hint(ensemble_result_id)
 
         return 0
 
@@ -1877,6 +1885,10 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         return 1
 
     checkpoint_writer: CheckpointWriter | None = None
+    # sy-659 (#471): the checkpoint run_id, when checkpointing is active, is
+    # surfaced in JSON output so agents resuming a run have the handle without
+    # scraping stderr. Stays None for non-checkpointed runs (the common case).
+    run_id: str | None = None
     preloaded_results: list[PanelistResult] = []
     resumed_config_note: str | None = None
     active_personas = personas  # may be filtered below on resume
@@ -2457,6 +2469,47 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             convergence_report["human_baseline_error"] = convergence_baseline_error
         convergence_tracker.close()
 
+    # ── sy-659 (#471): persist --save BEFORE the text/json branch split ──
+    # The saved-result handle (result_id) and its absolute path must land in
+    # the JSON object agents parse from stdout, so the write happens here —
+    # ahead of emit() — rather than at the end of the function. The
+    # human-facing "Result saved" hint still prints after the branch (below)
+    # to preserve stderr-after-stdout ordering for TEXT-mode operators.
+    saved_result_id: str | None = None
+    saved_result_path: str | None = None
+    if getattr(args, "save", False):
+        from synth_panel.mcp.data import _results_dir, save_panel_result
+
+        # Determine instrument name (pack name or filename stem)
+        inst_name = None
+        inst_arg = getattr(args, "instrument", None)
+        if inst_arg:
+            inst_path = Path(inst_arg)
+            if inst_path.exists():
+                inst_name = inst_path.stem
+            else:
+                inst_name = inst_arg  # pack name
+
+        all_models: list[str] | None = None
+        if persona_models:
+            all_models = sorted(set(persona_models.values()))
+        elif model_spec:
+            all_models = [m for m, _w in model_spec]
+
+        saved_result_id = save_panel_result(
+            results=results,
+            model=model,
+            total_usage=total_usage.to_dict(),
+            total_cost=total_cost_est.format_usd(),
+            persona_count=len(personas),
+            question_count=len(questions),
+            instrument_name=inst_name,
+            models=all_models,
+            synthesis=synthesis_dict,
+            metadata=metadata,
+        )
+        saved_result_path = str(_results_dir() / f"{saved_result_id}.json")
+
     if fmt is OutputFormat.TEXT:
         if banner:
             print(banner, file=sys.stderr)
@@ -2760,6 +2813,16 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             }
         if run_invalid or strict_violation:
             extra["message"] = banner.replace("\n", " ").strip() if banner else "PANEL RUN INVALID"
+        # sy-659 (#471): surface the saved-result handle + path so agents
+        # running with --save --output-format json get a stable follow-up
+        # handle from stdout instead of scraping the stderr "Result saved"
+        # line. run_id is the checkpoint identity (present only when
+        # checkpointing was active).
+        if saved_result_id is not None:
+            extra["result_id"] = saved_result_id
+            extra["saved_path"] = saved_result_path
+        if run_id is not None:
+            extra["run_id"] = run_id
         emit(fmt, message=extra.get("message", "Panel complete"), extra=extra)
 
     # ── sp-ezz: opt-in SynthBench submission ─────────────────────────
@@ -2809,38 +2872,12 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             )
 
     # ── sp-7vp: auto-save results with --save ─────────────────────────
-    if getattr(args, "save", False):
-        from synth_panel.mcp.data import save_panel_result
-
-        # Determine instrument name (pack name or filename stem)
-        inst_name = None
-        inst_arg = getattr(args, "instrument", None)
-        if inst_arg:
-            inst_path = Path(inst_arg)
-            if inst_path.exists():
-                inst_name = inst_path.stem
-            else:
-                inst_name = inst_arg  # pack name
-
-        all_models: list[str] | None = None
-        if persona_models:
-            all_models = sorted(set(persona_models.values()))
-        elif model_spec:
-            all_models = [m for m, _w in model_spec]
-
-        result_id = save_panel_result(
-            results=results,
-            model=model,
-            total_usage=total_usage.to_dict(),
-            total_cost=total_cost_est.format_usd(),
-            persona_count=len(personas),
-            question_count=len(questions),
-            instrument_name=inst_name,
-            models=all_models,
-            synthesis=synthesis_dict,
-            metadata=metadata,
-        )
-        _print_saved_result_hint(result_id)
+    # sy-659 (#471): the write itself now happens before the text/json branch
+    # split (so JSON output can carry result_id + saved_path); here we only
+    # print the human-facing follow-up hint to stderr, keeping it after the
+    # stdout body for readable terminal ordering.
+    if saved_result_id is not None:
+        _print_saved_result_hint(saved_result_id)
 
     # sp-2hg: exit non-zero when the run is invalid so automation (CI,
     # refinery, wrapper scripts) can detect silent-failure scenarios.
