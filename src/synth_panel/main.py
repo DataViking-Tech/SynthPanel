@@ -43,6 +43,8 @@ from synth_panel.cli.commands import (
     handle_plugin_lint,
     handle_prompt,
     handle_report,
+    handle_results_list,
+    handle_results_show,
     handle_runs_diff,
     handle_runs_list,
     handle_runs_prune,
@@ -239,6 +241,15 @@ def _main(argv: list[str] | None) -> int:
             return handle_runs_diff(args, output_format)
         else:
             parser.parse_args(["runs", "--help"])
+            return 1
+    elif args.command == "results":
+        sub = getattr(args, "results_command", None)
+        if sub == "list":
+            return handle_results_list(args, output_format)
+        elif sub == "show":
+            return handle_results_show(args, output_format)
+        else:
+            parser.parse_args(["results", "--help"])
             return 1
     else:
         # No subcommand → interactive REPL

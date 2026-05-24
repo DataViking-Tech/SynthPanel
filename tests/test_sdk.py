@@ -166,6 +166,9 @@ class TestQuickPoll:
         fake_usage = TokenUsage(input_tokens=1, output_tokens=1)
         fake_cost = MagicMock()
         fake_cost.format_usd.return_value = "$0.01"
+        # Real float so build_metadata's round(cost.total_cost, 6) stays
+        # JSON-serializable when the metadata block is now persisted (#525).
+        fake_cost.total_cost = 0.01
         fake_cost.__add__ = lambda self, other: self
 
         with (
@@ -202,6 +205,9 @@ class TestQuickPoll:
         fake_usage = TokenUsage(input_tokens=1, output_tokens=1)
         fake_cost = MagicMock()
         fake_cost.format_usd.return_value = "$0.01"
+        # Real float so build_metadata's round(cost.total_cost, 6) stays
+        # JSON-serializable when the metadata block is now persisted (#525).
+        fake_cost.total_cost = 0.01
         fake_cost.__add__ = lambda self, other: self
 
         with (
@@ -251,6 +257,9 @@ class TestRunPanel:
         fake_usage = TokenUsage(input_tokens=1, output_tokens=1)
         fake_cost = MagicMock()
         fake_cost.format_usd.return_value = "$0.01"
+        # Real float so build_metadata's round(cost.total_cost, 6) stays
+        # JSON-serializable when the metadata block is now persisted (#525).
+        fake_cost.total_cost = 0.01
 
         with (
             patch("synth_panel.sdk.LLMClient"),
@@ -275,6 +284,9 @@ class TestRunPanel:
         fake_usage = TokenUsage(input_tokens=1, output_tokens=1)
         fake_cost = MagicMock()
         fake_cost.format_usd.return_value = "$0.01"
+        # Real float so build_metadata's round(cost.total_cost, 6) stays
+        # JSON-serializable when the metadata block is now persisted (#525).
+        fake_cost.total_cost = 0.01
         fake_cost.__add__ = lambda self, other: self
 
         questions_in = [
@@ -365,6 +377,9 @@ class TestRunPanelExtractSchema:
         fake_usage = TokenUsage(input_tokens=1, output_tokens=1)
         fake_cost = MagicMock()
         fake_cost.format_usd.return_value = "$0.01"
+        # Real float so build_metadata's round(cost.total_cost, 6) stays
+        # JSON-serializable when the metadata block is now persisted (#525).
+        fake_cost.total_cost = 0.01
         fake_cost.__add__ = lambda self, other: self
         return fake_usage, fake_cost
 

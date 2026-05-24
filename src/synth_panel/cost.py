@@ -124,6 +124,15 @@ class ModelPricing:
     cache_read_cost_per_million: float
 
 
+# Date the bundled pricing tables below were last verified against the
+# upstream OpenRouter feed. Surfaced in run provenance
+# (``metadata.cost.pricing_snapshot_date``) so saved results record which
+# price snapshot their cost estimates were computed against. Keep this in
+# sync with the ``pricing snapshot_date`` comment markers throughout the
+# pricing table and with scripts/refresh_or_cost_table.py.
+PRICING_SNAPSHOT_DATE = "2026-05-10"
+
+
 # Known pricing tiers from SPEC.md §7.
 # pricing snapshot_date: 2026-05-10
 # Drift verified against ``https://openrouter.ai/api/v1/models``;

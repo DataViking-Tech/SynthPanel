@@ -848,6 +848,7 @@ def quick_poll(
         # for poll_summary's _detect_kind.
         questions=questions,
         synthesis=synthesis_dict,
+        metadata=metadata,
     )
 
     # sy-4yd: compute the deterministic poll summary inline so callers
@@ -1098,6 +1099,7 @@ def run_panel(
             questions=flat_questions,
             synthesis=final_synth_dict,
             attachments=attachment_refs or None,
+            metadata=metadata,
         )
         return _build_panel_result_from_multi_round(
             result_id,
@@ -1196,6 +1198,7 @@ def run_panel(
         questions=normalised_questions,
         synthesis=synthesis_dict,
         attachments=attachment_refs or None,
+        metadata=metadata,
     )
 
     synth_model_for_warning = synthesis_dict.get("model") if synthesis_dict else None

@@ -1513,4 +1513,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="Second result ID or path to result JSON file.",
     )
 
+    # results — manage saved panel results (the --save artifact store)
+    results_parser = subparsers.add_parser(
+        "results",
+        help="List and inspect saved panel results (~/.synthpanel/results, written by --save).",
+    )
+    results_subparsers = results_parser.add_subparsers(dest="results_command")
+
+    # results list
+    results_subparsers.add_parser(
+        "list",
+        help="List saved panel results by stable ID (the handle report/results show accept).",
+    )
+
+    # results show
+    results_show_parser = results_subparsers.add_parser(
+        "show",
+        help="Show a saved result's provenance and canonical path by ID (or .json path).",
+    )
+    results_show_parser.add_argument(
+        "result",
+        metavar="RESULT",
+        help="Result ID (e.g. result-20260523-231433-6d1080) or path to a result JSON file.",
+    )
+
     return parser
