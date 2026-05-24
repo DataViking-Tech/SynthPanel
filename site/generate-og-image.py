@@ -15,10 +15,27 @@ tagline, matching the synthpanel.dev visual identity:
 from __future__ import annotations
 
 import os
+import re
 import sys
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _read_version() -> str:
+    # Single source of truth: src/synth_panel/__version__.py. Read it without
+    # importing the package so the card stays in lockstep with the published
+    # version even before an editable install. Matches scripts/render_site.py.
+    # Hardcoding the version here (it used to read "v0.9.1") is how the social
+    # card silently drifted off the real release — see sy-3aj / issue #524.
+    src = (REPO_ROOT / "src" / "synth_panel" / "__version__.py").read_text()
+    match = re.search(r'^__version__\s*=\s*"([^"]+)"', src, re.MULTILINE)
+    if not match:
+        raise RuntimeError(f"Could not parse __version__ from {REPO_ROOT}/src/synth_panel/__version__.py")
+    return match.group(1)
+
 
 BG = (15, 23, 42)  # slate-900  #0f172a
 FG_HI = (248, 250, 252)  # slate-50
@@ -107,7 +124,7 @@ def render(width: int, height: int, out: Path) -> None:
 
     margin_x = 88
     y = 92
-    draw_pill(draw, (margin_x, y), "v0.9.1  public beta", font_badge, EMERALD)
+    draw_pill(draw, (margin_x, y), f"v{_read_version()}  public beta", font_badge, EMERALD)
 
     title = "synthpanel"
     title_y = 176
