@@ -1,6 +1,6 @@
 # synthpanel — Run synthetic focus groups with any LLM
 
- v1.5.3 — public beta
+ v1.5.4 — public beta
 
 # synthpanel
 
