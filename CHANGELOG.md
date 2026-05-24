@@ -8,6 +8,18 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ### Fixed
 
+- **`--best-model-for` substitutes a runnable upstream `model_id` (sy-i7a,
+  #519).** When the top SynthBench row's `model` field is a display label
+  (e.g. `SynthPanel (Gemini Flash Lite)`), SynthPanel now prefers the runnable
+  id the live leaderboard publishes in `model_id` (e.g.
+  `google/gemini-2.5-flash-lite`, joined with `provider_id` when `model_id` is
+  a bare slug) instead of refusing and falling through to the default model
+  (which, with only OpenRouter credentials present, landed on
+  `openrouter/auto`). A runnable `model_id` takes precedence over the
+  `config_id` base-model heuristic; a `model_id` that is itself a display
+  label is ignored, and rows with no resolvable runnable id are still refused
+  with the existing actionable message. The picked model is visible under
+  `--dry-run`.
 - **Saved-result provenance is populated (sy-g1g, #525).** Every `--save`
   artifact now embeds the run `metadata` block (synthpanel/Python version,
   `config_hash`, and the new `cost.pricing_snapshot_date`) that

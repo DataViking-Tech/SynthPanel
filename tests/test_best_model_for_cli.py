@@ -86,3 +86,39 @@ def test_no_recommendation_falls_through(monkeypatch: pytest.MonkeyPatch, capsys
     assert picked is None
     assert args.model == "haiku"
     assert "no recommendation" in capsys.readouterr().err
+
+
+def test_display_label_with_model_id_is_stamped_end_to_end(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """gh-519 retry: a top row whose ``model`` is a display label but that
+    carries a runnable ``model_id`` (SynthBench #297) is resolved through the
+    real ``recommend`` and stamped onto ``--model`` — not refused. Previously
+    such a row fell through to the existing selection (e.g. openrouter/auto)."""
+    board = {
+        "entries": [
+            {
+                "config_id": "synthpanel-gemini-flash-lite-tdefault-ba37570c",
+                "model": "SynthPanel (Gemini Flash Lite)",
+                "model_id": "google/gemini-2.5-flash-lite",
+                "provider": "SynthPanel (Gemini Flash Lite)",
+                "dataset": "globalopinionqa",
+                "is_ensemble": False,
+                "sps": 0.901,
+                "n": 100,
+                "jsd": 0.313,
+                "topic_scores": {"Technology & Digital Life": 0.901},
+                "run_count": 100,
+            }
+        ]
+    }
+    real_recommend = synthbench.recommend
+    monkeypatch.setattr(
+        synthbench,
+        "recommend",
+        lambda spec: real_recommend(spec, leaderboard=board),
+    )
+    args = argparse.Namespace(model="openrouter/auto")
+    picked = _apply_best_model_for(args, "Technology & Digital Life:globalopinionqa")
+    assert picked == "google/gemini-2.5-flash-lite"
+    assert args.model == "google/gemini-2.5-flash-lite"
