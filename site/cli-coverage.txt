@@ -27,5 +27,6 @@ plugin
 poll-summary
 prompt
 report
+results
 runs
 whoami
