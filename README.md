@@ -91,6 +91,11 @@ Traditional focus groups cost $5,000-$15,000 and take weeks. Synthetic panels co
 
 ## Agent Quick Start
 
+> **New here?** [**docs/agent-quickstart.md**](docs/agent-quickstart.md) is the
+> full end-to-end walkthrough — install → verify → dry-run → run → 30–40 persona
+> poll → save → emit JSON, on both the CLI and MCP surfaces, with a
+> structured-output example. The snippets below are the short version.
+
 Wire the MCP server into your editor (see [Use with Claude Code / Cursor /
 Windsurf / Zed](#use-with-claude-code--cursor--windsurf--zed) below) and call
 the four research tools from agent code. Every panel-running call requires a
