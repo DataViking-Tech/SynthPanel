@@ -1290,9 +1290,11 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="CMD",
         dest="mcp_command_override",
         help=(
-            "Command the host should invoke to start the server "
-            "(default: the resolved path to the running 'synthpanel' "
-            "executable, falling back to the literal string 'synthpanel')."
+            "Command the host should invoke to start the server (default: "
+            "an absolute path to the 'synthpanel' launcher — resolved via "
+            "PATH, then the running console script or the one beside the "
+            "active interpreter so a venv whose bin is not on PATH still "
+            "works, falling back to the literal string 'synthpanel')."
         ),
     )
     mcp_install_parser.add_argument(
