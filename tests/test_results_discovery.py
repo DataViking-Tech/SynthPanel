@@ -140,3 +140,22 @@ class TestRunsListPointsAtResults:
         out = capsys.readouterr().out
         assert code == 0
         assert "synthpanel results list" in out
+
+
+class TestSavedResultHintCommands:
+    """The saved-result "Next:" block must only suggest real commands (#538)."""
+
+    def test_hint_suggests_real_commands_not_per_result_cost(self, capsys):
+        from synth_panel.cli.commands import _print_saved_result_hint
+
+        _print_saved_result_hint("result-abc123")
+        err = capsys.readouterr().err
+
+        # Real, existing commands are surfaced.
+        assert "synthpanel report result-abc123" in err
+        assert "synthpanel results show result-abc123" in err
+        assert "synthpanel results list" in err
+        # The per-run cost rollup is reachable via the real `cost summary`
+        # subcommand, not a nonexistent per-result `cost <id>` command.
+        assert "synthpanel cost summary" in err
+        assert "cost result-abc123" not in err
