@@ -229,6 +229,21 @@ def _synthesis_block(report: InspectReport, raw: dict[str, Any]) -> list[str]:
     s = report.synthesis
     if not s.ran and s.error is None and s.summary_peek is None:
         lines.append("_Not run._")
+        # #537: a flat saved result with no synthesis is a common dogfood
+        # surprise — the synthesis block (summary/themes/recommendation) is
+        # the headline value of a run. Point the user at the command that
+        # generates it for an already-saved result instead of leaving the
+        # path from "I saved a run" -> "where's my synthesis?" unexplained.
+        if not report.has_rounds_shape:
+            target = report.result_id or "<result-id>"
+            lines.append("")
+            lines.append(
+                f"> Generate it with: `synthpanel panel synthesize {target}` "
+                "(writes a synthesis sidecar). To capture synthesis inline at "
+                "run time, `panel run` synthesizes by default — pass "
+                "`--synthesis-model` to choose the model, or `--no-synthesis` "
+                "to skip it."
+            )
         return lines
     if s.error and not s.ran:
         lines.append(f"**Status:** failed — {_escape_inline(s.error)}")

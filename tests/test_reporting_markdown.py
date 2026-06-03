@@ -386,5 +386,74 @@ def test_render_synthesis_skips_empty_sections() -> None:
     assert "**Status:** ran" in md
 
 
+# ---------------------------------------------------------------------------
+# 11. Flat-saved result without synthesis explains how to generate it (#537)
+# ---------------------------------------------------------------------------
+
+
+def test_render_flat_no_synthesis_points_at_synthesize_command() -> None:
+    md, _ = _render("flat_shape.json")
+    synth_idx = md.index("## Synthesis")
+    block = md[synth_idx:]
+    # Still reports it didn't run.
+    assert "_Not run._" in block
+    # ...but no longer leaves the user stranded: the report names the command
+    # that generates synthesis for an already-saved result.
+    assert "synthpanel panel synthesize" in block
+    # flat_shape.json carries no `id`, so the placeholder is used.
+    assert "<result-id>" in block
+
+
+def test_render_flat_no_synthesis_uses_result_id_when_present() -> None:
+    raw: dict = {
+        "id": "result-20260603-abc123",
+        "model": "claude-sonnet-4-6",
+        "question_count": 1,
+        "persona_count": 1,
+        "results": [
+            {
+                "persona": "Anon",
+                "model": "claude-sonnet-4-6",
+                "responses": [{"question": "q?", "response": "a", "usage": {"input_tokens": 1, "output_tokens": 1}}],
+            }
+        ],
+    }
+    report = build_inspect_report(raw)
+    md = render_markdown(report, raw)
+    assert "synthpanel panel synthesize result-20260603-abc123" in md
+
+
+def test_render_rounds_shape_no_synthesis_omits_flat_hint() -> None:
+    # The "how to synthesize a flat save" hint is specific to flat saves; a
+    # rounds-shaped payload that genuinely didn't synthesize must not claim a
+    # flat-save remedy.
+    raw: dict = {
+        "id": "rounds-no-synth",
+        "model": "claude-sonnet-4-6",
+        "question_count": 1,
+        "persona_count": 1,
+        "rounds": [
+            {
+                "name": "default",
+                "results": [
+                    {
+                        "persona": "Anon",
+                        "model": "claude-sonnet-4-6",
+                        "responses": [
+                            {"question": "q?", "response": "a", "usage": {"input_tokens": 1, "output_tokens": 1}}
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+    report = build_inspect_report(raw)
+    md = render_markdown(report, raw)
+    synth_idx = md.index("## Synthesis")
+    block = md[synth_idx:]
+    assert "_Not run._" in block
+    assert "synthpanel panel synthesize" not in block
+
+
 if __name__ == "__main__":  # pragma: no cover - convenience
     raise SystemExit(pytest.main([__file__, "-v"]))
