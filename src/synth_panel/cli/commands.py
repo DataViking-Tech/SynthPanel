@@ -6167,9 +6167,12 @@ def _print_saved_result_hint(result_id: str) -> None:
     """
     print(f"Result saved: {result_id}", file=sys.stderr)
     print("Next:", file=sys.stderr)
-    print(f"  synthpanel report {result_id}          # full Markdown report", file=sys.stderr)
+    print(f"  synthpanel report {result_id}          # full Markdown report (incl. cost rollup)", file=sys.stderr)
     print(f"  synthpanel results show {result_id}    # raw saved result", file=sys.stderr)
     print("  synthpanel results list                # all saved results", file=sys.stderr)
+    # #538: there is no per-result `cost <id>` command — the per-run cost
+    # rollup lives in `report` above. `cost summary` aggregates across runs.
+    print("  synthpanel cost summary                # cost rollup across saved runs", file=sys.stderr)
 
 
 def handle_runs_prune(args: argparse.Namespace, fmt: OutputFormat) -> int:
