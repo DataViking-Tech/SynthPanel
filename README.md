@@ -847,6 +847,45 @@ instrument:
         type: text
 ```
 
+### Attachments — show panelists a screenshot, a live URL, a PDF, or HTML
+
+Instruments can carry an **attachment bank** so panelists react to something
+visual or external instead of (or alongside) the question text. Declare a
+top-level `attachments:` mapping on the instrument and reference entries by id
+from a question's `attachments:` list. Four types are supported:
+
+| Type | Source | Use when |
+|------|--------|----------|
+| `image` | `base64`, `url`, or `file_id` | A screenshot, mockup, or photo. |
+| `document` | `base64`, `url`, or `file_id` | A PDF (spec, brief, contract). |
+| `url` | A live URL fetched at run time | A real, currently-live page. |
+| `html` | Inline string | A literal markup fragment (pricing block, email, copy variant). |
+
+```yaml
+instrument:
+  version: 3
+  attachments:
+    landing_page:
+      type: url
+      url: https://example.com
+      fetch_mode: screenshot   # auto | html_text | markdown | screenshot
+  rounds:
+    - name: reaction
+      questions:
+        - text: "What does this studio do, and is it for someone like you?"
+          attachments: [landing_page]
+```
+
+> **Two gotchas worth knowing up front:**
+> - **`image` / `screenshot` attachments need a vision-capable model.** Text-only
+>   models (e.g. `claude-3.5-haiku`) are rejected fast with a clear error — use a
+>   multimodal model such as `claude-haiku-4.5`, `gpt-4o-mini`, or `gemini-2.0-flash`.
+> - **`fetch_mode: screenshot` requires the visual extra:** `pip install 'synthpanel[visual]'`
+>   (installs Playwright; then `python -m playwright install chromium`). Text modes
+>   (`markdown` / `html_text`) don't need it.
+
+Full guide and a runnable starter: [docs/cookbook/with-attachments.md](docs/cookbook/with-attachments.md).
+
 ## Adaptive Research (0.5.0): Branching Instruments
 
 A v3 instrument is a small DAG of *rounds*. After each round, a routing

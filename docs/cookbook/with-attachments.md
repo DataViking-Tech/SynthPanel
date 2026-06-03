@@ -68,6 +68,15 @@ instrument:
   or `markdown`. `markdown` is usually the cleanest signal for
   content-heavy pages; `screenshot` is the right choice when layout or
   visual hierarchy is the thing under test.
+- **`image` and `screenshot` attachments require a vision-capable model.**
+  Text-only models (e.g. `claude-3.5-haiku`) are rejected fast with an
+  explicit error — point `--models` at a multimodal model such as
+  `claude-haiku-4.5`, `gpt-4o-mini`, or `gemini-2.0-flash`. (`markdown` /
+  `html_text` modes return text and work with any model.)
+- **`fetch_mode: screenshot` needs the `visual` extra.** Install with
+  `pip install 'synthpanel[visual]'`, then fetch the browser once with
+  `python -m playwright install chromium`. Without it, screenshot mode
+  can't render the page. Text-only modes have no extra dependency.
 - **Inline HTML** — YAML's `|` (literal block scalar) preserves newlines
   and indentation, which is what you want for HTML fragments.
 - **Image media types** — `image/png`, `image/jpeg`, `image/gif`,
