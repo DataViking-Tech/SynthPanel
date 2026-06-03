@@ -3914,6 +3914,172 @@ class TestPanelRunDryRun:
 
     @patch("synth_panel.cli.commands.run_panel_parallel")
     @patch("synth_panel.cli.commands.LLMClient")
+    def test_dry_run_text_only_model_with_image_attachment_warns(
+        self, mock_client_cls, mock_run_panel, capsys, tmp_path
+    ):
+        """#536: an image attachment + a text-only model warns instead of OK."""
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text(
+            "instrument:\n"
+            "  attachments:\n"
+            "    hero:\n"
+            "      type: image\n"
+            "      media_type: image/png\n"
+            "      source:\n"
+            "        type: base64\n"
+            "        data: AAAA\n"
+            "  questions:\n"
+            "    - text: What do you think of this?\n"
+            "      attachments: [hero]\n"
+        )
+
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--model",
+                "claude-3-5-haiku-20241022",
+                "--dry-run",
+            ]
+        )
+        assert code == 0
+        err = capsys.readouterr().err
+        assert "Validation: OK" not in err
+        assert "Validation: WARNING" in err
+        assert "text-only" in err
+        assert "image" in err
+        mock_run_panel.assert_not_called()
+
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_dry_run_text_only_model_with_image_attachment_json(
+        self, mock_client_cls, mock_run_panel, capsys, tmp_path
+    ):
+        """#536: JSON dry-run surfaces validation=warning + vision_conflict."""
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text(
+            "instrument:\n"
+            "  attachments:\n"
+            "    hero:\n"
+            "      type: image\n"
+            "      media_type: image/png\n"
+            "      source:\n"
+            "        type: base64\n"
+            "        data: AAAA\n"
+            "  questions:\n"
+            "    - text: What do you think of this?\n"
+            "      attachments: [hero]\n"
+        )
+
+        code = main(
+            [
+                "--output-format",
+                "json",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--model",
+                "claude-3-5-haiku-20241022",
+                "--dry-run",
+            ]
+        )
+        assert code == 0
+        data = json.loads(capsys.readouterr().out)
+        assert data["validation"] == "warning"
+        assert data["vision_conflict"]["attachment_kinds"] == ["image"]
+        assert "text-only" in data["vision_conflict"]["message"]
+        mock_run_panel.assert_not_called()
+
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_dry_run_vision_model_with_image_attachment_ok(self, mock_client_cls, mock_run_panel, capsys, tmp_path):
+        """A vision-capable model + image attachment still validates OK."""
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text(
+            "instrument:\n"
+            "  attachments:\n"
+            "    hero:\n"
+            "      type: image\n"
+            "      media_type: image/png\n"
+            "      source:\n"
+            "        type: base64\n"
+            "        data: AAAA\n"
+            "  questions:\n"
+            "    - text: What do you think of this?\n"
+            "      attachments: [hero]\n"
+        )
+
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--model",
+                "sonnet",
+                "--dry-run",
+            ]
+        )
+        assert code == 0
+        err = capsys.readouterr().err
+        assert "Validation: OK" in err
+        mock_run_panel.assert_not_called()
+
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_dry_run_text_only_model_with_screenshot_url_warns(self, mock_client_cls, mock_run_panel, capsys, tmp_path):
+        """#536: a url attachment fetched as a screenshot also warns."""
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text(
+            "instrument:\n"
+            "  attachments:\n"
+            "    page:\n"
+            "      type: url\n"
+            "      url: https://example.com\n"
+            "      fetch_mode: screenshot\n"
+            "  questions:\n"
+            "    - text: What do you think of this page?\n"
+            "      attachments: [page]\n"
+        )
+
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--model",
+                "claude-3-5-haiku-20241022",
+                "--dry-run",
+            ]
+        )
+        assert code == 0
+        err = capsys.readouterr().err
+        assert "Validation: WARNING" in err
+        assert "screenshot" in err
+        mock_run_panel.assert_not_called()
+
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
     def test_dry_run_unknown_model_flags_estimated_pricing(self, mock_client_cls, mock_run_panel, capsys, tmp_path):
         """Models not in the pricing table fall back to DEFAULT_PRICING."""
         personas_file = tmp_path / "personas.yaml"

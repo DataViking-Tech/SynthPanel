@@ -874,6 +874,53 @@ def _estimate_output_tokens_per_response(question: Any) -> int:
     return _DRY_RUN_OUTPUT_TOKENS_TEXT_DEFAULT
 
 
+def _iter_instrument_attachments(instrument: Instrument):
+    """Yield every attachment dict the instrument would send to the model.
+
+    Covers the shared bank (``Instrument.attachments`` values) and every
+    per-question ``inline_attachments`` dict. Bank-ref strings in a
+    question's ``attachments`` list resolve back to bank entries, which are
+    already yielded from the bank, so we don't need to dereference them here.
+    """
+    for att in instrument.attachments.values():
+        if isinstance(att, dict):
+            yield att
+    for q in instrument.questions:
+        if not isinstance(q, dict):
+            continue
+        for att in q.get("inline_attachments") or []:
+            if isinstance(att, dict):
+                yield att
+        # Defensive: some authoring shapes inline dicts directly under
+        # `attachments` (not just bank-ref strings).
+        for att in q.get("attachments") or []:
+            if isinstance(att, dict):
+                yield att
+
+
+def _instrument_visual_attachment_kinds(instrument: Instrument) -> list[str]:
+    """Return the distinct visual-attachment kinds present in *instrument*.
+
+    A "visual" attachment is one the run-time guard
+    (:func:`assert_supports_attachments`) would reject on a text-only model:
+    ``image`` (-> ImageBlock), ``document`` (-> DocumentBlock), and ``url``
+    attachments fetched as a screenshot (``fetch_mode: screenshot``), which
+    lower to an image block. Returned in a stable order for deterministic
+    output.
+    """
+    found: set[str] = set()
+    for att in _iter_instrument_attachments(instrument):
+        atype = att.get("type")
+        if atype == "image":
+            found.add("image")
+        elif atype == "document":
+            found.add("document")
+        elif atype == "url" and att.get("fetch_mode") == "screenshot":
+            found.add("screenshot")
+    order = ["image", "document", "screenshot"]
+    return [k for k in order if k in found]
+
+
 def _emit_dry_run_preview(
     *,
     personas: list[dict[str, Any]],
@@ -923,6 +970,26 @@ def _emit_dry_run_preview(
         pricing,
     )
 
+    # #536: a real run fast-fails when image/document/screenshot attachments
+    # are routed to a text-only model (assert_supports_attachments). Mirror
+    # that guard in dry-run so validation surfaces the misconfiguration
+    # instead of reporting "OK" and letting the user burn tokens on the
+    # real run.
+    from synth_panel.llm.capabilities import model_supports_vision
+
+    visual_kinds = _instrument_visual_attachment_kinds(instrument)
+    vision_conflict = bool(visual_kinds) and not model_supports_vision(model)
+    vision_warning = None
+    if vision_conflict:
+        kinds_str = ", ".join(visual_kinds)
+        vision_warning = (
+            f"model {model!r} is text-only but the instrument has "
+            f"{kinds_str} attachment(s). A real run would fail "
+            "(or silently burn tokens returning a no-image response). "
+            "Switch to a vision-capable model (e.g. sonnet, opus, "
+            "claude-haiku-4-5) or remove the attachments."
+        )
+
     if fmt is OutputFormat.TEXT:
         print("DRY RUN — no LLM calls will be made", file=sys.stderr)
         print(f"Model: {model}", file=sys.stderr)
@@ -967,7 +1034,10 @@ def _emit_dry_run_preview(
             f"Estimated cost ({model}): ~${cost.total_cost:.4f}{cost_suffix}",
             file=sys.stderr,
         )
-        print("Validation: OK", file=sys.stderr)
+        if vision_warning:
+            print(f"Validation: WARNING — {vision_warning}", file=sys.stderr)
+        else:
+            print("Validation: OK", file=sys.stderr)
         return
 
     preview: dict[str, Any] = {
@@ -980,7 +1050,7 @@ def _emit_dry_run_preview(
         "estimated_output_tokens": estimated_output_tokens,
         "estimated_cost_usd": round(cost.total_cost, 6),
         "cost_is_estimated": pricing_is_estimated,
-        "validation": "ok",
+        "validation": "warning" if vision_warning else "ok",
         "rounds": [
             {
                 "name": r.name,
@@ -993,6 +1063,14 @@ def _emit_dry_run_preview(
     # consumers see the dropped names without parsing stderr.
     if personas_merge_used:
         preview["personas_merge_warnings"] = personas_merge_warnings or []
+    # #536: structured surface of the vision/text-only conflict so JSON
+    # consumers can gate on it without scraping the warning string.
+    if vision_warning:
+        preview["vision_conflict"] = {
+            "model": model,
+            "attachment_kinds": visual_kinds,
+            "message": vision_warning,
+        }
     emit(fmt, message="Dry-run preview", extra=preview)
 
 
