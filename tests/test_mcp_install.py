@@ -92,8 +92,56 @@ class TestHelpers:
     def test_resolve_command_explicit(self):
         assert mcp_install.resolve_command("/opt/bin/synthpanel") == "/opt/bin/synthpanel"
 
-    def test_resolve_command_falls_back_to_literal(self, monkeypatch):
+    def test_resolve_command_prefers_which(self, monkeypatch, tmp_path):
+        launcher = tmp_path / "synthpanel"
+        launcher.write_text("#!/bin/sh\n")
+        monkeypatch.setattr("synth_panel.cli.mcp_install.shutil.which", lambda _name: str(launcher))
+        assert mcp_install.resolve_command(None) == str(launcher)
+
+    def test_resolve_command_uses_venv_argv0_when_not_on_path(self, monkeypatch, tmp_path):
+        # Simulate `synthpanel mcp install` invoked from a venv whose bin is
+        # NOT on PATH: shutil.which finds nothing, but argv[0] is the
+        # absolute path to the venv console script (#539). The host must get
+        # that absolute path, not the unlaunchable literal "synthpanel".
+        venv_bin = tmp_path / "venv" / "bin"
+        venv_bin.mkdir(parents=True)
+        launcher = venv_bin / "synthpanel"
+        launcher.write_text("#!/bin/sh\n")
+
         monkeypatch.setattr("synth_panel.cli.mcp_install.shutil.which", lambda _name: None)
+        monkeypatch.setattr("synth_panel.cli.mcp_install.sys.argv", [str(launcher)])
+
+        assert mcp_install.resolve_command(None) == str(launcher)
+
+    def test_resolve_command_uses_synthpanel_next_to_interpreter(self, monkeypatch, tmp_path):
+        # No PATH hit and argv[0] is not a synthpanel launcher (e.g. invoked
+        # as `python -m synth_panel`), but a synthpanel console script lives
+        # next to sys.executable — the canonical venv layout.
+        venv_bin = tmp_path / "venv" / "bin"
+        venv_bin.mkdir(parents=True)
+        py = venv_bin / "python"
+        py.write_text("#!/bin/sh\n")
+        launcher = venv_bin / "synthpanel"
+        launcher.write_text("#!/bin/sh\n")
+
+        monkeypatch.setattr("synth_panel.cli.mcp_install.shutil.which", lambda _name: None)
+        monkeypatch.setattr("synth_panel.cli.mcp_install.sys.argv", ["python"])
+        monkeypatch.setattr("synth_panel.cli.mcp_install.sys.executable", str(py))
+
+        assert mcp_install.resolve_command(None) == str(launcher)
+
+    def test_resolve_command_falls_back_to_literal(self, monkeypatch, tmp_path):
+        # Nothing resolvable: no PATH hit, argv[0] is not a synthpanel
+        # launcher, and no synthpanel sits beside the interpreter.
+        empty_bin = tmp_path / "empty"
+        empty_bin.mkdir()
+        py = empty_bin / "python"
+        py.write_text("#!/bin/sh\n")
+
+        monkeypatch.setattr("synth_panel.cli.mcp_install.shutil.which", lambda _name: None)
+        monkeypatch.setattr("synth_panel.cli.mcp_install.sys.argv", ["pytest"])
+        monkeypatch.setattr("synth_panel.cli.mcp_install.sys.executable", str(py))
+
         assert mcp_install.resolve_command(None) == "synthpanel"
 
     def test_parse_env_pairs(self):

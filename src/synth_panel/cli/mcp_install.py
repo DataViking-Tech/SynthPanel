@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import sys
 from dataclasses import dataclass
 from importlib.util import find_spec
 from pathlib import Path
@@ -70,11 +71,60 @@ def resolve_target(scope: str, target: str | None) -> Path:
 
 
 def resolve_command(explicit: str | None) -> str:
-    """Resolve the command string the host should invoke."""
+    """Resolve the command string the host should invoke (#539).
+
+    The MCP host launches this command in its own environment, which may
+    not have the installing venv's ``bin`` on ``PATH``. A bare
+    ``"synthpanel"`` then fails to launch. Resolve a robust absolute path,
+    in order of preference:
+
+    1. an explicit ``--command`` override (used verbatim);
+    2. ``shutil.which("synthpanel")`` — the launcher on the current PATH;
+    3. the running entry point's real path (``os.path.realpath(sys.argv[0])``)
+       when it names a ``synthpanel`` launcher — this is the venv-installed
+       console script even when its ``bin`` is not on PATH;
+    4. a ``synthpanel`` executable sitting next to the running interpreter
+       (``<sys.executable dir>/synthpanel``) — the canonical venv layout;
+    5. the literal ``"synthpanel"`` as a last resort.
+    """
     if explicit:
         return explicit
+
     found = shutil.which("synthpanel")
-    return found or "synthpanel"
+    if found:
+        return os.path.realpath(found)
+
+    # The console script we're (likely) running under. In a venv this is an
+    # absolute path like <venv>/bin/synthpanel even when that bin dir is not
+    # on PATH, so it's a reliable launcher for the host to invoke.
+    argv0 = sys.argv[0] if sys.argv else ""
+    if argv0:
+        real_argv0 = os.path.realpath(argv0)
+        base = os.path.basename(real_argv0)
+        if base in ("synthpanel", "synthpanel.exe") and os.path.isfile(real_argv0):
+            return real_argv0
+
+    # A synthpanel launcher next to the interpreter (canonical venv layout:
+    # <venv>/bin/python + <venv>/bin/synthpanel). Check the literal
+    # sys.executable dir FIRST: in a venv, sys.executable is <venv>/bin/python
+    # (a symlink), so resolving it would jump to the base interpreter's bin
+    # and miss the venv's console script. Fall back to the realpath dir for
+    # non-venv layouts.
+    if sys.executable:
+        seen: set[str] = set()
+        for bindir in (
+            os.path.dirname(sys.executable),
+            os.path.dirname(os.path.realpath(sys.executable)),
+        ):
+            if not bindir or bindir in seen:
+                continue
+            seen.add(bindir)
+            for name in ("synthpanel", "synthpanel.exe"):
+                candidate = os.path.join(bindir, name)
+                if os.path.isfile(candidate):
+                    return candidate
+
+    return "synthpanel"
 
 
 def parse_env_pairs(pairs: list[str] | None) -> dict[str, str]:
