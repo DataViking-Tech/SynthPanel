@@ -32,6 +32,7 @@ from synth_panel.llm.models import TokenUsage as LLMTokenUsage
 from synth_panel.persistence import Session
 from synth_panel.prompts import build_question_blocks
 from synth_panel.question_budget import QuestionFailureBudget
+from synth_panel.response_coercion import coerce_response, is_typed_schema
 from synth_panel.routing import route_round
 from synth_panel.runtime import AgentRuntime, TurnSummary
 from synth_panel.structured.output import StructuredOutputConfig, StructuredOutputEngine
@@ -1179,6 +1180,34 @@ def _run_panelist(
                         "response": response_text,
                     }
                     tracker.record_turn(summary.usage)
+
+                    # sy-547: when the question declares a typed
+                    # ``response_schema`` (enum/scale), coerce the free-text
+                    # answer to the nearest declared option / in-range integer
+                    # and persist BOTH the raw text (``response``, untouched)
+                    # and the typed value (``response_typed``). The schema kind
+                    # is stamped on the response so poll-summary/analyze bucket
+                    # the question as enum/scale instead of falling back to
+                    # ``kind=text``. Unmappable answers set ``schema_unmapped``
+                    # so the caller can tally a run-level failure count and emit
+                    # a per-response warning.
+                    q_schema = question.get("response_schema") if isinstance(question, dict) else None
+                    if is_typed_schema(q_schema):
+                        resp_dict["response_schema"] = q_schema
+                        coerced = coerce_response(q_schema, response_text)
+                        if coerced is not None:
+                            if coerced.mapped:
+                                resp_dict["response_typed"] = coerced.value
+                            else:
+                                resp_dict["schema_unmapped"] = True
+                                logger.warning(
+                                    "panelist %s q%d: answer %r could not be mapped to "
+                                    "declared %s response_schema; stored as raw text only",
+                                    name,
+                                    qi,
+                                    response_text[:80],
+                                    coerced.kind,
+                                )
 
                     # Extraction pass: extract structured data from the
                     # free-text response (--extract-schema).

@@ -98,6 +98,7 @@ from synth_panel.prompts import (
     persona_system_prompt_from_template,
 )
 from synth_panel.question_budget import QuestionFailureBudget
+from synth_panel.response_coercion import is_typed_schema
 from synth_panel.runtime import AgentRuntime
 from synth_panel.synthesis import (
     STRATEGY_MAP_REDUCE,
@@ -874,6 +875,134 @@ def _estimate_output_tokens_per_response(question: Any) -> int:
     return _DRY_RUN_OUTPUT_TOKENS_TEXT_DEFAULT
 
 
+def _question_meta_for_save(questions: list[Any]) -> list[dict[str, Any]]:
+    """Build the per-question metadata persisted alongside a saved result.
+
+    sy-547: ``poll-summary`` / ``analyze`` read the saved result's
+    ``questions`` field to recover each question's ``response_schema`` and
+    bucket it as enum/scale. Previously the standard run path never passed
+    ``questions=`` to :func:`save_panel_result`, so the schema was lost and
+    every question degraded to ``kind=text``. Emit a minimal
+    ``{text, response_schema?}`` entry per authored question, preserving the
+    declared schema verbatim so the downstream ``_detect_kind`` is schema-
+    driven rather than guessing from response shape.
+    """
+    meta: list[dict[str, Any]] = []
+    for q in questions:
+        if not isinstance(q, dict):
+            meta.append({"text": str(q)})
+            continue
+        entry: dict[str, Any] = {"text": build_question_prompt(q)}
+        rs = q.get("response_schema")
+        if rs is not None:
+            entry["response_schema"] = rs
+        meta.append(entry)
+    return meta
+
+
+def _blend_dropped_models(ensemble: Any) -> list[str]:
+    """Return blend members that produced zero usable responses (sy-546).
+
+    A model is "dropped" when, across all its panelists, every primary
+    (non-follow-up) response is an error or empty — i.e. the model
+    contributed nothing to the blended distributions. A bad slug that
+    404s on every call lands here, as does a model that died mid-run.
+    Order follows ``ensemble.models``.
+    """
+    dropped: list[str] = []
+    for mr in ensemble.model_results:
+        usable = 0
+        for pr in mr.panelist_results:
+            for resp in pr.responses:
+                if not isinstance(resp, dict) or resp.get("follow_up"):
+                    continue
+                if resp.get("error"):
+                    continue
+                val = resp.get("response")
+                if val is None:
+                    continue
+                if isinstance(val, str) and (not val.strip() or val.strip().startswith("[error:")):
+                    continue
+                usable += 1
+        if usable == 0:
+            dropped.append(mr.model)
+    return dropped
+
+
+def _run_model_preflight(
+    models: list[str],
+    *,
+    args: Any,
+    client: Any | None = None,
+) -> int | None:
+    """Probe *models* for reachability; return an exit code to abort or None.
+
+    sy-546. Aborts (returns 1) when the reachable-model count violates the
+    configured guard:
+
+    * ``--min-models N`` set → abort if fewer than N models are reachable.
+    * Otherwise (default, or ``--require-all-models``) → abort if ANY model
+      is unreachable.
+
+    Unreachable models are always reported. Inconclusive probes (transient /
+    auth / missing-credential failures) never count against the guard — they
+    are not a property of the slug.
+    """
+    from synth_panel.preflight import preflight_models
+
+    print(
+        f"Pre-flight: probing {len(set(models))} model(s) for reachability...",
+        file=sys.stderr,
+    )
+    report = preflight_models(models, client=client)
+
+    reachable = [p.model for p in report.probes if p.status == "reachable"]
+    inconclusive = [p for p in report.probes if p.status == "inconclusive"]
+    for p in inconclusive:
+        print(
+            f"Pre-flight: could not verify {p.model} (inconclusive: {p.detail or 'unknown error'}); "
+            "proceeding — it will surface at call time if truly broken.",
+            file=sys.stderr,
+        )
+
+    min_models = getattr(args, "min_models", None)
+    require_all = getattr(args, "require_all_models", False)
+
+    if min_models is not None and not require_all:
+        # Relaxed guard: only abort if too few models are reachable. Treat
+        # inconclusive as potentially-usable so a flaky probe doesn't trip
+        # the floor.
+        usable = len(reachable) + len(inconclusive)
+        if usable < min_models:
+            if report.unreachable:
+                print(report.failure_message(), file=sys.stderr)
+            print(
+                f"Pre-flight failed: only {usable} model(s) reachable, "
+                f"--min-models requires {min_models}.",
+                file=sys.stderr,
+            )
+            return 1
+        if report.unreachable:
+            bad = ", ".join(p.model for p in report.unreachable)
+            print(
+                f"Pre-flight: WARNING — {len(report.unreachable)} model(s) unreachable ({bad}); "
+                f"proceeding with {len(reachable)} reachable model(s) per --min-models={min_models}.",
+                file=sys.stderr,
+            )
+        return None
+
+    # Default / --require-all-models: any unreachable slug is fatal.
+    if report.unreachable:
+        print(report.failure_message(), file=sys.stderr)
+        return 1
+
+    print(
+        f"Pre-flight: OK — all {len(reachable)} model(s) reachable.",
+        file=sys.stderr,
+    )
+    return None
+
+
 def _iter_instrument_attachments(instrument: Instrument):
     """Yield every attachment dict the instrument would send to the model.
 
@@ -942,6 +1071,13 @@ def _emit_dry_run_preview(
     questions = instrument.questions
     question_count = len(questions)
     llm_calls = persona_count * question_count
+
+    # sy-547 (d): count questions with an enforceable typed response_schema
+    # (enum/scale) so the preview can be explicit that these are coerced
+    # post-hoc, not constrained at generation.
+    typed_schema_count = sum(
+        1 for q in questions if isinstance(q, dict) and is_typed_schema(q.get("response_schema"))
+    )
 
     system_prompt_chars = sum(len(system_prompt_fn(p)) for p in personas)
     question_chars = sum(len(build_question_prompt(q)) for q in questions)
@@ -1037,7 +1173,20 @@ def _emit_dry_run_preview(
         if vision_warning:
             print(f"Validation: WARNING — {vision_warning}", file=sys.stderr)
         else:
-            print("Validation: OK", file=sys.stderr)
+            print("Validation: OK (instrument spec is structurally valid)", file=sys.stderr)
+        # sy-547 (d): be explicit that a typed response_schema is NOT
+        # enforced at generation. The real run coerces free-text answers to
+        # the nearest enum option / in-range integer post-hoc and flags any
+        # that can't be mapped, but "Validation: OK" must not read as
+        # "output is guaranteed to be one of the options".
+        if typed_schema_count:
+            print(
+                f"Note: {typed_schema_count} question(s) declare an enum/scale response_schema. "
+                "These are NOT constrained at generation — the run coerces each free-text answer "
+                "to the nearest option / in-range integer post-hoc and flags unmappable answers. "
+                "Dry-run does not perform that coercion.",
+                file=sys.stderr,
+            )
         return
 
     preview: dict[str, Any] = {
@@ -1051,6 +1200,11 @@ def _emit_dry_run_preview(
         "estimated_cost_usd": round(cost.total_cost, 6),
         "cost_is_estimated": pricing_is_estimated,
         "validation": "warning" if vision_warning else "ok",
+        # sy-547 (d): advertise that typed response_schemas are coerced
+        # post-hoc, not enforced at generation, so JSON consumers don't
+        # treat "validation: ok" as "output guaranteed constrained".
+        "typed_schema_question_count": typed_schema_count,
+        "typed_schema_enforced": False,
         "rounds": [
             {
                 "name": r.name,
@@ -1533,6 +1687,25 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     if persona_models:
         print(format_assignment_breakdown(persona_models), file=sys.stderr)
 
+    # ── sy-546: model reachability pre-flight ────────────────────────────
+    # For multi-model runs (--models weighted / ensemble / --blend), probe
+    # every distinct slug with a 1-token call before spending. A bogus slug
+    # (e.g. a 404'ing OpenRouter id) deterministically fails every call and
+    # silently shrinks an ensemble/blend; catch it here and fail fast naming
+    # the bad slug(s). Runs on BOTH --dry-run and real runs so a dry-run's
+    # "OK" actually means the spec is runnable. Bypassable with
+    # --skip-preflight. Transient/auth/credential failures are inconclusive
+    # and never block the run.
+    preflight_models_list: list[str] = []
+    if model_spec is not None and len(model_spec) > 1:
+        preflight_models_list = [m for m, _w in model_spec]
+    elif persona_models:
+        preflight_models_list = sorted(set(persona_models.values()))
+    if len(set(preflight_models_list)) > 1 and not getattr(args, "skip_preflight", False):
+        rc = _run_model_preflight(preflight_models_list, args=args, client=None)
+        if rc is not None:
+            return rc
+
     # ── sp-x8g: --dry-run preview ────────────────────────────────────────
     # Short-circuit before any LLM-invoking code (variant expansion,
     # ensemble, blend, orchestrator). Shows the user what each question
@@ -1940,6 +2113,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
 
     # Run all panelists in parallel via the orchestrator
     blend_result = None  # populated only when --blend is active
+    blend_drop_warning: str | None = None  # sy-546: set when a blend member dropped
 
     # ── sp-hsk3: checkpoint + resume wiring ────────────────────────────
     # We snapshot progress every K completed panelists so a crashed or
@@ -2097,6 +2271,24 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         # Build weights dict from the model spec
         blend_weights = {m: w for m, w in model_spec}
         blend_result = blend_distributions(ensemble, weights=blend_weights, questions=questions)
+
+        # sy-546: detect blend members that contributed ZERO usable responses
+        # (e.g. a slug that 404'd on every call slipped past pre-flight, or a
+        # member died mid-run). The blend silently degrades to the survivors;
+        # emit a loud, top-level warning stating the new N so the operator
+        # isn't fooled into treating it as a full-strength blend.
+        dropped_models = _blend_dropped_models(ensemble)
+        if dropped_models:
+            surviving = [m for m in ensemble_models if m not in dropped_models]
+            blend_drop_warning = (
+                f"BLEND DEGRADED: {len(dropped_models)} of {len(ensemble_models)} model(s) "
+                f"produced no usable responses ({', '.join(dropped_models)}). "
+                f"The blend dropped to {len(surviving)} model(s): {', '.join(surviving) or 'none'}. "
+                "Distributions and synthesis reflect only the surviving model(s). "
+                "Re-run with corrected --models (or --require-all-models to abort instead)."
+            )
+            logger.warning(blend_drop_warning)
+            print(f"\nWarning: {blend_drop_warning}\n", file=sys.stderr)
 
         # Flatten all panelist results across models for output + synthesis
         panelist_results = [pr for mr in ensemble.model_results for pr in mr.panelist_results]
@@ -2582,6 +2774,12 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             persona_count=len(personas),
             question_count=len(questions),
             instrument_name=inst_name,
+            # sy-547: persist the authored question defs (text +
+            # response_schema) so poll-summary / analyze recognize enum/scale
+            # questions instead of falling back to kind=text. Without this the
+            # saved result carried only the question text echoed on each
+            # response, dropping the schema kind.
+            questions=_question_meta_for_save(questions),
             models=all_models,
             synthesis=synthesis_dict,
             metadata=metadata,
@@ -2852,6 +3050,14 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             warnings_list = extra.setdefault("warnings", [])
             if isinstance(warnings_list, list):
                 warnings_list.extend(assignment_warnings)
+        # sy-546: carry the blend-degraded warning into the JSON envelope so
+        # CI / MCP consumers detect the dropped member(s) without scraping
+        # stderr, and expose the count explicitly.
+        if blend_drop_warning is not None:
+            warnings_list = extra.setdefault("warnings", [])
+            if isinstance(warnings_list, list):
+                warnings_list.append(blend_drop_warning)
+            extra["blend_degraded"] = True
         # sp-g270: surface --personas-merge name-collision drops so JSON
         # consumers can assert panel size matches expectations. Always
         # present (as []) when --personas-merge was used so downstream
