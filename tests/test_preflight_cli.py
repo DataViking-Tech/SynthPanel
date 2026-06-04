@@ -79,7 +79,9 @@ def test_skip_preflight_bypasses_check(
 
     usage = CostTokenUsage(input_tokens=5, output_tokens=2)
     runtime.run_turn.return_value = TurnSummary(
-        assistant_messages=[ConversationMessage(role="assistant", content=[{"type": "text", "text": "ok"}], usage=usage)],
+        assistant_messages=[
+            ConversationMessage(role="assistant", content=[{"type": "text", "text": "ok"}], usage=usage)
+        ],
         iterations=1,
         usage=usage,
     )
@@ -155,7 +157,9 @@ def test_min_models_allows_degraded_run(
 
     usage = CostTokenUsage(input_tokens=5, output_tokens=2)
     runtime.run_turn.return_value = TurnSummary(
-        assistant_messages=[ConversationMessage(role="assistant", content=[{"type": "text", "text": "ok"}], usage=usage)],
+        assistant_messages=[
+            ConversationMessage(role="assistant", content=[{"type": "text", "text": "ok"}], usage=usage)
+        ],
         iterations=1,
         usage=usage,
     )

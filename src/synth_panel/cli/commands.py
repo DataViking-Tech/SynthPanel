@@ -977,8 +977,7 @@ def _run_model_preflight(
             if report.unreachable:
                 print(report.failure_message(), file=sys.stderr)
             print(
-                f"Pre-flight failed: only {usable} model(s) reachable, "
-                f"--min-models requires {min_models}.",
+                f"Pre-flight failed: only {usable} model(s) reachable, --min-models requires {min_models}.",
                 file=sys.stderr,
             )
             return 1
@@ -1075,9 +1074,7 @@ def _emit_dry_run_preview(
     # sy-547 (d): count questions with an enforceable typed response_schema
     # (enum/scale) so the preview can be explicit that these are coerced
     # post-hoc, not constrained at generation.
-    typed_schema_count = sum(
-        1 for q in questions if isinstance(q, dict) and is_typed_schema(q.get("response_schema"))
-    )
+    typed_schema_count = sum(1 for q in questions if isinstance(q, dict) and is_typed_schema(q.get("response_schema")))
 
     system_prompt_chars = sum(len(system_prompt_fn(p)) for p in personas)
     question_chars = sum(len(build_question_prompt(q)) for q in questions)

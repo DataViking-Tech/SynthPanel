@@ -37,8 +37,7 @@ def test_bad_slug_is_flagged_unreachable() -> None:
     client = _FakeClient(
         {
             BAD_SLUG: LLMError(
-                "OpenRouter API error 404: No endpoints found for "
-                "google/gemini-2.0-flash-001.",
+                "OpenRouter API error 404: No endpoints found for google/gemini-2.0-flash-001.",
                 LLMErrorCategory.BAD_REQUEST,
                 status_code=404,
             ),
@@ -64,9 +63,7 @@ def test_all_reachable_is_ok() -> None:
 
 def test_rate_limit_is_inconclusive_not_unreachable() -> None:
     # A 429 must NOT abort the run — it isn't a property of the slug.
-    client = _FakeClient(
-        {GOOD_SLUG: LLMError("rate limited", LLMErrorCategory.RATE_LIMIT, status_code=429)}
-    )
+    client = _FakeClient({GOOD_SLUG: LLMError("rate limited", LLMErrorCategory.RATE_LIMIT, status_code=429)})
     report = preflight_models([GOOD_SLUG], client=client)
     assert report.ok
     statuses = {p.model: p.status for p in report.probes}
@@ -74,9 +71,7 @@ def test_rate_limit_is_inconclusive_not_unreachable() -> None:
 
 
 def test_missing_credentials_is_inconclusive() -> None:
-    client = _FakeClient(
-        {GOOD_SLUG: LLMError("no key", LLMErrorCategory.MISSING_CREDENTIALS)}
-    )
+    client = _FakeClient({GOOD_SLUG: LLMError("no key", LLMErrorCategory.MISSING_CREDENTIALS)})
     report = preflight_models([GOOD_SLUG], client=client)
     assert report.ok
 
