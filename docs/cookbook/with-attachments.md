@@ -77,6 +77,25 @@ instrument:
   `pip install 'synthpanel[visual]'`, then fetch the browser once with
   `python -m playwright install chromium`. Without it, screenshot mode
   can't render the page. Text-only modes have no extra dependency.
+- **Failed URL fetches are a hard error by default (sy-550).** If a
+  `type: url` attachment can't be fetched or yields no usable content
+  (perimeter-denied / HTTP error / timeout / empty extraction), the
+  affected question fails loudly — naming the URL and reason — and counts
+  in the run's failure rate, instead of silently sending the persona an
+  empty page (which makes personas answer blind while the run still
+  reports 0% failures). Pass `--allow-empty-attachments` to `panel run`
+  to opt into best-effort behaviour, where a failed fetch becomes a
+  placeholder note and the run continues. Either way, a per-attachment
+  `attachment_fetch_status` (`ok` / `failed` + reason) is recorded on
+  each response in the saved result for auditability.
+- **Loopback / private addresses are SSRF-blocked.** URLs that resolve to
+  `localhost`, `127.0.0.1`, or RFC-1918 private ranges (`10.x`,
+  `172.16–31.x`, `192.168.x`, link-local, etc.) are rejected by the fetch
+  perimeter — so **a local preview server cannot be used as a `type: url`
+  source** (e.g. `http://localhost:4321/` fails with `perimeter denied …
+  loopback`). For local or not-yet-published content, embed it inline as
+  a `type: html` (or `type: document`) attachment instead of pointing at a
+  local URL.
 - **Inline HTML** — YAML's `|` (literal block scalar) preserves newlines
   and indentation, which is what you want for HTML fragments.
 - **Image media types** — `image/png`, `image/jpeg`, `image/gif`,

@@ -687,6 +687,7 @@ def run_panel_sync(
     synthesis_temperature: float | None = None,
     variants: int = 0,
     attachment_bank: dict[str, dict[str, Any]] | None = None,
+    allow_empty_attachments: bool = False,
 ) -> tuple[
     list[PanelistResult],
     list[dict[str, Any]],
@@ -731,6 +732,7 @@ def run_panel_sync(
         persona_models=persona_models,
         extract_schema=extract_schema,
         attachment_bank=attachment_bank,
+        allow_empty_attachments=allow_empty_attachments,
     )
 
     # sp-efip: fail loud when every panelist produced no usable data.

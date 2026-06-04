@@ -37,6 +37,20 @@ _DEFAULT_RETRY_LIMIT = 2
 _CHEAP_MODEL_PATTERNS = ("flash", "haiku", "lite", "mini", "nano", "small")
 _ESCALATION_MODEL = "sonnet"
 
+# OpenRouter routing prefix. A model id of the form ``openrouter/<vendor>/...``
+# is routed through OpenRouter (OPENROUTER_API_KEY), not the vendor's direct
+# provider — see synth_panel.llm.client._resolve_provider. The final-strike
+# escalation must preserve this prefix so an ``openrouter/anthropic/*`` model
+# escalates to an OpenRouter-served Sonnet (still on OPENROUTER_API_KEY) rather
+# than the bare ``sonnet`` alias, which resolves to the direct Anthropic
+# provider and demands ANTHROPIC_API_KEY the OpenRouter-only caller never set
+# (sy-549).
+_OPENROUTER_PREFIX = "openrouter/"
+# OpenRouter slug for the escalation target. The bare ``sonnet`` alias maps to
+# the direct-Anthropic ``claude-sonnet-4-6``; this is its OpenRouter-served
+# equivalent so escalation stays on the same provider/credentials.
+_OPENROUTER_ESCALATION_MODEL = "openrouter/anthropic/claude-sonnet-4.5"
+
 # sp-d1x0: terminal-failure warning, mirrors the sp-g59o synthesis warning
 # surface so operators see consistent signal across extraction failures.
 _TERMINAL_FAILURE_WARNING = (
@@ -52,6 +66,23 @@ def _is_cheap_model(model: str) -> bool:
 
     canonical = resolve_alias(model).lower()
     return any(p in canonical for p in _CHEAP_MODEL_PATTERNS)
+
+
+def _escalation_model_for(model: str) -> str:
+    """Return the final-strike escalation target for *model*.
+
+    Escalation must stay on the same *provider* as the original model so it
+    uses the same credentials. A model routed through OpenRouter
+    (``openrouter/`` prefix) escalates to an OpenRouter-served Sonnet; every
+    other model escalates to the direct ``sonnet`` alias (historical
+    behaviour). Without this, an ``openrouter/anthropic/*`` model — resolved
+    to OpenRouter for every normal call — would escalate to the bare
+    ``sonnet`` alias on the *direct* Anthropic provider and fail with
+    "Missing API key for Anthropic" for an OpenRouter-only caller (sy-549).
+    """
+    if model.startswith(_OPENROUTER_PREFIX):
+        return _OPENROUTER_ESCALATION_MODEL
+    return _ESCALATION_MODEL
 
 
 @dataclass
@@ -153,7 +184,7 @@ class StructuredOutputEngine:
             # when the original model is in the cheap/flash tier.
             effective_model = model
             if attempt == config.retry_limit and _is_cheap_model(model):
-                effective_model = _ESCALATION_MODEL
+                effective_model = _escalation_model_for(model)
                 logger.debug(
                     "structured output: escalating from %s to %s on final attempt",
                     model,

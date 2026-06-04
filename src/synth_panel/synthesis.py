@@ -341,6 +341,14 @@ class SynthesisResult:
             d["per_question_synthesis"] = {str(k): v for k, v in self.per_question_synthesis.items()}
         if self.warnings:
             d["warnings"] = list(self.warnings)
+        # sy-549: a fallback synthesis (judge exhausted retries / returned a
+        # partial schema) must carry a machine-detectable marker so a saved
+        # result is never silently mistaken for a healthy synthesis. Emitted
+        # only when set so the serialized shape is unchanged for healthy runs.
+        if self.is_fallback:
+            d["is_fallback"] = True
+        if self.error:
+            d["error"] = self.error
         return d
 
 
