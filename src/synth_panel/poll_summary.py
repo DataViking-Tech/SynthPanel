@@ -786,6 +786,26 @@ def _extract_first_choice(
     else:
         keys = _FIRST_CHOICE_KEYS
 
+    # sy-547: the orchestrator coerces enum answers against the declared
+    # response_schema and persists the canonical option under
+    # ``response_typed``. Trust it first — it's already mapped to a valid
+    # option (e.g. ``"Blue."`` → ``"blue"``), so it wins over re-parsing
+    # the raw free text.
+    typed = response_dict.get("response_typed")
+    if isinstance(typed, str) and typed.strip():
+        return typed.strip()
+    if isinstance(typed, (int, float)) and not isinstance(typed, bool):
+        return str(typed)
+
+    # sy-547: when the response carries an enum response_schema but no typed
+    # value, the orchestrator already determined the free text could not be
+    # mapped to a declared option (``schema_unmapped``). Do NOT fall back to
+    # the raw string — counting it as a choice would resurrect exactly the
+    # off-schema free-text the coercion layer rejected. Report unparseable.
+    resp_schema = response_dict.get("response_schema")
+    if isinstance(resp_schema, dict) and resp_schema.get("type") == "enum":
+        return None
+
     extraction = response_dict.get("extraction")
     if isinstance(extraction, dict):
         for key in keys:
@@ -844,6 +864,12 @@ def _extract_score(
         keys = (score_field, *(k for k in _SCORE_KEYS if k != score_field))
     else:
         keys = _SCORE_KEYS
+
+    # sy-547: prefer the schema-coerced integer the orchestrator persisted
+    # for scale questions (already validated to be inside [min, max]).
+    typed = response_dict.get("response_typed")
+    if isinstance(typed, (int, float)) and not isinstance(typed, bool):
+        return float(typed)
 
     raw = response_dict.get("response")
     # Top-level numeric response wins when the whole response is a

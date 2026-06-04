@@ -391,6 +391,42 @@ def build_parser() -> argparse.ArgumentParser:
             "can be passed to 'synthpanel analyze <RESULT_ID>'."
         ),
     )
+    # sy-546: model reachability pre-flight guards for multi-model runs.
+    panel_run_parser.add_argument(
+        "--skip-preflight",
+        action="store_true",
+        default=False,
+        help=(
+            "Skip the model reachability pre-flight. By default, runs with "
+            "multiple models (--models, ensemble, or --blend) probe each slug "
+            "with a 1-token call before spending and abort if any slug is "
+            "unreachable (e.g. a bad OpenRouter model id that 404s)."
+        ),
+    )
+    panel_run_parser.add_argument(
+        "--require-all-models",
+        action="store_true",
+        default=False,
+        help=(
+            "Abort the run if ANY model in --models is unreachable in "
+            "pre-flight, even when the others would still satisfy --min-models. "
+            "This is the default for multi-model runs; the flag is accepted "
+            "for explicitness and to override a relaxed --min-models."
+        ),
+    )
+    panel_run_parser.add_argument(
+        "--min-models",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Minimum number of reachable models required to proceed with a "
+            "multi-model run. If pre-flight finds fewer than N reachable "
+            "models, the run aborts. Without this flag (and without "
+            "--require-all-models), the run still aborts on ANY unreachable "
+            "slug — set --min-models to deliberately allow a degraded run."
+        ),
+    )
     panel_run_parser.add_argument(
         "--dry-run",
         action="store_true",
