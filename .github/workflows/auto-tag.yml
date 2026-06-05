@@ -189,11 +189,32 @@ jobs:
           # added here AND covered by tests/test_version_artifacts_in_sync.py
           # so the next release doesn't need a manual follow-up PR.
 
+      # Mint a token for the org-owned `dataviking-release-bot` App. The App is
+      # an Integration bypass actor on the main branch ruleset (see
+      # dataviking-infra synthpanel.tf), so pushing the bump commit AS the App
+      # is allowed — whereas a github-actions[bot] / GITHUB_TOKEN push to main
+      # is rejected with GH013. This removed the manual "pre-bump the version in
+      # the PR" workaround (the escape-hatch branch below still works if a PR
+      # happens to be pre-bumped, but it is no longer required).
+      - name: Mint release-bot app token
+        if: steps.check.outputs.skipped != 'true'
+        id: app_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
       - name: Commit version bump to main
         if: steps.check.outputs.skipped != 'true'
         env:
           NEW_TAG: ${{ steps.bump.outputs.tag }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          # Pushed via env (not inline ${{ }}) so the token never lands in the
+          # command echo; create-github-app-token also registers it as a masked
+          # secret. Only the bump push uses it — the tag push below stays on
+          # GITHUB_TOKEN so it does NOT trigger publish.yml (publish is invoked
+          # by the explicit workflow_dispatch step further down).
+          APP_TOKEN: ${{ steps.app_token.outputs.token }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -205,11 +226,12 @@ jobs:
           git add src/synth_panel/__version__.py site/index.html site/ \
                   site/.well-known/mcp/server-card.json
           if git diff --staged --quiet; then
-            echo "Version artifacts already at ${NEW_TAG} (dev pre-bumped in PR) — nothing to commit."
+            echo "Version artifacts already at ${NEW_TAG} (pre-bumped in PR) — nothing to commit."
           else
             VERSION="${NEW_TAG#v}"
             git commit -m "chore(release): sync __version__.py + rendered artifacts to ${VERSION} (PR #${PR_NUMBER}) (sy-hs4)"
-            git push origin HEAD:main
+            # Push as the release-bot App (Integration bypass actor on main).
+            git push "https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:main
           fi
 
       - name: Create and push tag
