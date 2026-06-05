@@ -24,7 +24,7 @@ from synth_panel.conditions import evaluate_condition, normalize_follow_up
 from synth_panel.convergence import ConvergenceTracker, extract_categorical_responses
 from synth_panel.cost import ZERO_USAGE, CostGate, TokenUsage, UsageTracker, resolve_cost
 from synth_panel.fetch.cache import CacheL1, UrlCache
-from synth_panel.fetch.lower import lower_url_blocks
+from synth_panel.fetch.lower import AttachmentFetchError, lower_url_blocks
 from synth_panel.instrument import END_SENTINEL, Instrument, Round
 from synth_panel.llm.client import LLMClient
 from synth_panel.llm.models import ContentBlock, InputMessage, TextBlock, URLBlock
@@ -967,6 +967,7 @@ def _run_panelist(
     request_id: str | None = None,
     url_cache_l1: CacheL1 | None = None,
     url_cache_disk: UrlCache | None = None,
+    allow_empty_attachments: bool = False,
 ) -> tuple[PanelistResult, Session]:
     """Execute a single panelist's full interview. Runs in a worker thread.
 
@@ -1126,22 +1127,37 @@ def _run_panelist(
             # call sites stay untouched.
             has_attachments = bool(attachments_for_persona) or bool(panel_shared_attachments)
 
-            # hq-8iz3: frame-stage URLBlock lowering. Resolve any pre-fetch
-            # URL stubs to concrete TextBlock / ImageBlock entries via the
-            # hq-gmju content ladder. Runs after the cache fingerprint is
-            # computed (so two panelists pointing at the same URL hit the
-            # same stratum) and before serialization (so URLBlock never
-            # reaches the wire).
-            if has_attachments and any(isinstance(b, URLBlock) for b in user_blocks):
-                user_blocks = lower_url_blocks(
-                    user_blocks,
-                    l1=url_cache_l1,
-                    cache=url_cache_disk,
-                )
-
-            turn_input: str | list[ContentBlock] = user_blocks if has_attachments else question_text
+            # sy-550: per-attachment fetch status, persisted on the response
+            # for auditability. Populated by lower_url_blocks below.
+            attachment_fetch_status: list[dict[str, str]] = []
 
             try:
+                # hq-8iz3: frame-stage URLBlock lowering. Resolve any pre-fetch
+                # URL stubs to concrete TextBlock / ImageBlock entries via the
+                # hq-gmju content ladder. Runs after the cache fingerprint is
+                # computed (so two panelists pointing at the same URL hit the
+                # same stratum) and before serialization (so URLBlock never
+                # reaches the wire).
+                #
+                # sy-550: this now runs INSIDE the per-question try so a failed
+                # fetch (perimeter denial / extraction failure / empty result)
+                # raises AttachmentFetchError by default and is recorded as a
+                # failed response — counted in the failure rate and the
+                # per-question budget — instead of silently degrading to a
+                # placeholder and letting the persona answer blind. Pass
+                # ``allow_empty_attachments`` (--allow-empty-attachments) to
+                # restore best-effort placeholder behaviour.
+                if has_attachments and any(isinstance(b, URLBlock) for b in user_blocks):
+                    user_blocks = lower_url_blocks(
+                        user_blocks,
+                        l1=url_cache_l1,
+                        cache=url_cache_disk,
+                        allow_empty=allow_empty_attachments,
+                        status_sink=attachment_fetch_status,
+                    )
+
+                turn_input: str | list[ContentBlock] = user_blocks if has_attachments else question_text
+
                 if structured_engine and structured_config:
                     # Use structured output: run turn for conversation context,
                     # then extract structured response
@@ -1268,13 +1284,17 @@ def _run_panelist(
 
                     responses.append(resp_dict)
             except Exception as exc:
-                responses.append(
-                    {
-                        "question": question_text,
-                        "response": f"[error: {exc}]",
-                        "error": True,
-                    }
-                )
+                err_resp: dict[str, Any] = {
+                    "question": question_text,
+                    "response": f"[error: {exc}]",
+                    "error": True,
+                }
+                # sy-550: tag attachment-fetch failures so consumers can tell
+                # "the URL attachment could not be fetched" apart from a model
+                # / transport error, and so the reason is machine-readable.
+                if isinstance(exc, AttachmentFetchError):
+                    err_resp["attachment_fetch_error"] = {"url": exc.url, "reason": exc.reason}
+                responses.append(err_resp)
                 # sp-xw2z6o: record this failure against the per-question
                 # budget so subsequent panelists short-circuit once the
                 # threshold is crossed.
@@ -1291,6 +1311,14 @@ def _run_panelist(
             # when the question carried attachments at all.
             if raw_attachments and responses and responses[-1].get("question") == question_text:
                 responses[-1]["attachments"] = attachments_for_persona
+
+            # sy-550: persist per-attachment fetch status (ok / failed + reason)
+            # on the just-appended response so a saved result is auditable —
+            # a reader can see exactly which URL attachments were fetched and
+            # which failed, even when --allow-empty-attachments let the run
+            # proceed best-effort.
+            if attachment_fetch_status and responses and responses[-1].get("question") == question_text:
+                responses[-1]["attachment_fetch_status"] = attachment_fetch_status
 
             # Handle conditional follow-ups (text mode only)
             raw_follow_ups = question.get("follow_ups", []) if isinstance(question, dict) else []
@@ -1417,6 +1445,7 @@ def run_panel_parallel(
     panel_shared_attachments: list[dict[str, Any]] | None = None,
     attachment_bank: dict[str, dict[str, Any]] | None = None,
     cache_tier: CacheTier = "5m",
+    allow_empty_attachments: bool = False,
 ) -> tuple[list[PanelistResult], WorkerRegistry, dict[str, Session]]:
     """Run all panelists in parallel and return ordered results.
 
@@ -1595,6 +1624,7 @@ def run_panel_parallel(
                 request_id,
                 url_cache_l1,
                 url_cache_disk,
+                allow_empty_attachments,
             )
             future_to_index[future] = idx
 

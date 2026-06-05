@@ -427,6 +427,22 @@ def build_parser() -> argparse.ArgumentParser:
             "slug — set --min-models to deliberately allow a degraded run."
         ),
     )
+    # sy-550: attachment fetch failures are a hard error by default.
+    panel_run_parser.add_argument(
+        "--allow-empty-attachments",
+        action="store_true",
+        default=False,
+        help=(
+            "Proceed best-effort when a `type: url` attachment cannot be "
+            "fetched (perimeter-denied / HTTP error / timeout / empty). By "
+            "default such a failure is a hard error so a persona never answers "
+            "blind on missing attachment content. With this flag the failed "
+            "fetch becomes a placeholder note and the run continues. Note: "
+            "loopback/private addresses (localhost, 127.0.0.1, 10.x, "
+            "192.168.x) are SSRF-blocked — use an inline `type: html` / "
+            "`type: document` attachment for local content."
+        ),
+    )
     panel_run_parser.add_argument(
         "--dry-run",
         action="store_true",

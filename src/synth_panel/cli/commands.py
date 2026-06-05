@@ -2337,6 +2337,7 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 cost_gate=cost_gate,
                 question_budget=question_budget,
                 attachment_bank=instrument.attachments or None,
+                allow_empty_attachments=getattr(args, "allow_empty_attachments", False),
             )
         except RunAbortedError as abort_exc:
             # sp-56pb: SIGINT path. Surface whatever panelists finished
@@ -2616,6 +2617,28 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                     ),
                 )
                 run_invalid = True
+
+    # sy-549: a synthesis that returned a *fallback* result (judge exhausted
+    # its schema-adherence retries, or returned a partial schema) is NOT a
+    # healthy synthesis. Previously such a result was persisted as if it
+    # succeeded, hiding the failure behind mostly-empty fields. Surface a
+    # loud warning + a machine-detectable error payload and mark the run
+    # invalid, mirroring the sp-avmm hard-fail on synthesis API errors.
+    if synthesis_result is not None and getattr(synthesis_result, "is_fallback", False):
+        synth_err = synthesis_result.error or "synthesis judge did not return a valid structured result"
+        logger.warning("synthesis produced a fallback result: %s", synth_err)
+        print(f"Error: synthesis incomplete: {synth_err}", file=sys.stderr)
+        synthesis_error_payload = build_synthesis_error_payload(
+            None,
+            error_type="synthesis_fallback",
+            message=f"Synthesis incomplete: {synth_err}",
+            suggested_fix=(
+                "The synthesis judge returned an empty/partial result after all retries. "
+                "Rerun with a higher-quality --synthesis-model, or re-synthesize the saved "
+                "result with `synthpanel panel synthesize <id> --synthesis-model ...`."
+            ),
+        )
+        run_invalid = True
 
     if synthesis_result:
         total_usage = panelist_usage + synthesis_result.usage
@@ -5656,6 +5679,37 @@ def handle_panel_synthesize(args: argparse.Namespace, fmt: OutputFormat) -> int:
             "synthesis": synthesis_dict,
         },
     )
+
+    # sy-549: a fallback synthesis (judge exhausted retries / partial schema)
+    # is persisted for auditability but is NOT a healthy result — surface it
+    # loudly and exit non-zero so MCP / CI consumers don't treat the empty
+    # synthesis as success.
+    if synth.is_fallback:
+        synth_err = synth.error or "synthesis judge did not return a valid structured result"
+        payload = build_synthesis_error_payload(
+            None,
+            error_type="synthesis_fallback",
+            message=f"Synthesis incomplete: {synth_err}",
+            suggested_fix=(
+                "The synthesis judge returned an empty/partial result after all retries. "
+                "Rerun with a higher-quality --synthesis-model."
+            ),
+        )
+        print(f"Error: synthesis incomplete: {synth_err}", file=sys.stderr)
+        print(f"Saved (incomplete) synthesis: {sidecar_name}", file=sys.stderr)
+        if fmt is not OutputFormat.TEXT:
+            emit(
+                fmt,
+                message=f"Synthesis incomplete: {synth_err}",
+                extra={
+                    "run_invalid": True,
+                    "synthesis_error": payload,
+                    "source_result_id": source_id,
+                    "synthesis": synthesis_dict,
+                    "saved_as": sidecar_name,
+                },
+            )
+        return 2
 
     if fmt is OutputFormat.TEXT:
         print(f"{'=' * 60}")

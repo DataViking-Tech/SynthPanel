@@ -278,6 +278,34 @@ class TestSchemaConformanceRetry:
         models_used = [call[0][0].model for call in mock_client.send.call_args_list]
         assert all(m == "claude-sonnet-4-6" for m in models_used)
 
+    def test_openrouter_cheap_model_escalates_within_openrouter(self):
+        """sy-549: an ``openrouter/anthropic/*`` cheap model must escalate to
+        an OpenRouter-served Sonnet, NOT the bare ``sonnet`` alias (which
+        resolves to the direct Anthropic provider and demands
+        ANTHROPIC_API_KEY an OpenRouter-only caller never set).
+        """
+        mock_client = MagicMock()
+        bad = _make_response_with_tool({"sentiment": "positive"})  # missing 'summary'
+        mock_client.send.return_value = bad
+
+        engine = StructuredOutputEngine(mock_client)
+        config = StructuredOutputConfig(schema=_SENTIMENT_SCHEMA, retry_limit=2)
+
+        engine.extract(
+            model="openrouter/anthropic/claude-haiku-4.5",
+            max_tokens=1024,
+            messages=_messages(),
+            config=config,
+        )
+
+        models_used = [call[0][0].model for call in mock_client.send.call_args_list]
+        # first two attempts keep the original OpenRouter slug
+        assert models_used[0] == "openrouter/anthropic/claude-haiku-4.5"
+        assert models_used[1] == "openrouter/anthropic/claude-haiku-4.5"
+        # final-strike escalation stays on OpenRouter (same credentials)
+        assert models_used[2].startswith("openrouter/")
+        assert "sonnet" in models_used[2]
+
     def test_total_usage_accumulates_across_retries(self):
         """total_usage sums token counts from all retry attempts."""
         usage_a = TokenUsage(input_tokens=10, output_tokens=5)

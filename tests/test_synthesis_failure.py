@@ -307,6 +307,183 @@ class TestContextWindowResolution:
         assert is_default is True
 
 
+# --- sy-549: openrouter/anthropic/* synthesis routing ---------------------
+
+
+class TestSynthesisOpenRouterRouting:
+    """sy-549: a synthesis model of the form ``openrouter/anthropic/*`` must
+    route through OpenRouter (OPENROUTER_API_KEY) for the WHOLE synthesis call
+    chain — including the structured-output engine's final-strike escalation,
+    which previously jumped to the bare ``sonnet`` alias on the *direct*
+    Anthropic provider and demanded ANTHROPIC_API_KEY an OpenRouter-only
+    caller never set.
+    """
+
+    def test_openrouter_synthesis_never_demands_anthropic_key(self, monkeypatch):
+        from synth_panel.llm.client import LLMClient
+        from synth_panel.synthesis import synthesize_panel
+
+        # OpenRouter-only environment.
+        monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+        seen_urls: list[str] = []
+
+        def fake_post(url, **kwargs):
+            seen_urls.append(url)
+            resp = MagicMock()
+            resp.status_code = 200
+            # Return an empty tool input so the structured engine exhausts its
+            # retries and reaches the final-strike escalation branch — the exact
+            # path that used to cross over to the Anthropic provider.
+            resp.json.return_value = {
+                "id": "x",
+                "model": "anthropic/claude-haiku-4.5",
+                "role": "assistant",
+                "stop_reason": "tool_use",
+                "content": [{"type": "tool_use", "id": "t", "name": "synthesize", "input": {}}],
+                "usage": {"input_tokens": 1, "output_tokens": 1},
+            }
+            return resp
+
+        monkeypatch.setattr("httpx.post", fake_post)
+
+        results = _panelist_results(2)
+        # Should NOT raise "Missing API key for Anthropic".
+        synth = synthesize_panel(
+            LLMClient(),
+            results,
+            [{"text": "Q1"}],
+            model="openrouter/anthropic/claude-haiku-4.5",
+            panelist_model="openrouter/anthropic/claude-haiku-4.5",
+        )
+        # Every call (including the escalation strike) hit OpenRouter.
+        assert seen_urls, "synthesis made no LLM call"
+        assert all("openrouter.ai" in u for u in seen_urls)
+        # The synthesis itself is a fallback (empty tool input every time),
+        # surfacing the failure rather than pretending success.
+        assert synth.is_fallback is True
+
+
+# --- sy-549: fallback synthesis must surface a marker, not save silently --
+
+
+class TestSynthesisFallbackSurfaced:
+    """sy-549 (2): a fallback synthesis (judge exhausted retries / partial
+    schema) must not be persisted as a silent success — it carries an
+    ``is_fallback`` marker in to_dict() and fails the run loudly."""
+
+    def test_to_dict_marks_fallback(self):
+        from synth_panel.synthesis import SynthesisResult
+
+        sr = SynthesisResult(
+            summary="Synthesis failed — see error field.",
+            themes=[],
+            agreements=[],
+            disagreements=[],
+            surprises=[],
+            recommendation="",
+            is_fallback=True,
+            error="judge exhausted retries",
+        )
+        d = sr.to_dict()
+        assert d["is_fallback"] is True
+        assert d["error"] == "judge exhausted retries"
+
+    def test_healthy_synthesis_has_no_fallback_marker(self):
+        from synth_panel.synthesis import SynthesisResult
+
+        sr = SynthesisResult(
+            summary="All good",
+            themes=["t"],
+            agreements=["a"],
+            disagreements=[],
+            surprises=[],
+            recommendation="ship it",
+        )
+        d = sr.to_dict()
+        assert "is_fallback" not in d
+        assert "error" not in d
+
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_inrun_fallback_sets_run_invalid(self, _mock_client, mock_run, mock_synth, capsys, tmp_path):
+        from synth_panel.orchestrator import WorkerRegistry
+        from synth_panel.synthesis import SynthesisResult
+
+        mock_run.return_value = (_panelist_results(2), WorkerRegistry(), {})
+        mock_synth.return_value = SynthesisResult(
+            summary="Synthesis failed — see error field.",
+            themes=[],
+            agreements=[],
+            disagreements=[],
+            surprises=[],
+            recommendation="",
+            is_fallback=True,
+            error="judge exhausted retries",
+        )
+
+        code = main(
+            [
+                "--output-format",
+                "json",
+                "panel",
+                "run",
+                "--personas",
+                _write_personas(tmp_path / "personas.yaml"),
+                "--instrument",
+                _write_instrument(tmp_path / "survey.yaml"),
+            ]
+        )
+        assert code == 2
+        captured = capsys.readouterr()
+        assert "incomplete" in captured.err.lower()
+        payload = json.loads(captured.out)
+        assert payload["run_invalid"] is True
+        err = payload["synthesis_error"]
+        assert err["error_type"] == "synthesis_fallback"
+
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    def test_resynthesize_fallback_exits_two(self, mock_synth, capsys, tmp_path):
+        from synth_panel.mcp.data import save_panel_result
+        from synth_panel.synthesis import SynthesisResult
+
+        mock_synth.return_value = SynthesisResult(
+            summary="Synthesis failed — see error field.",
+            themes=[],
+            agreements=[],
+            disagreements=[],
+            surprises=[],
+            recommendation="",
+            is_fallback=True,
+            error="judge exhausted retries",
+        )
+        saved = save_panel_result(
+            results=[
+                {
+                    "persona": "Alice",
+                    "responses": [{"question": "Q1", "response": "An answer"}],
+                    "usage": ZERO_USAGE.to_dict(),
+                    "cost": "$0.00",
+                    "error": None,
+                }
+            ],
+            model="sonnet",
+            total_usage=ZERO_USAGE.to_dict(),
+            total_cost="$0.00",
+            persona_count=1,
+            question_count=1,
+        )
+
+        code = main(["--output-format", "json", "panel", "synthesize", saved])
+        assert code == 2
+        captured = capsys.readouterr()
+        payload = json.loads(captured.out)
+        assert payload["run_invalid"] is True
+        assert payload["synthesis_error"]["error_type"] == "synthesis_fallback"
+
+
 # --- sp-avmm: detect_synthesis_context_overflow diagnostic shape ----------
 
 

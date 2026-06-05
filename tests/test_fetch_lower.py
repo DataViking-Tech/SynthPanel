@@ -4,9 +4,15 @@ Covers the AC from the bead:
 
 - Bank-ref URL attachment reaches the model as fetched markdown TextBlock.
 - Multiple panelists in the same panel reuse cached content (L1 hit, no double-fetch).
-- SSRF perimeter still enforced (private-IP URL produces a placeholder, not a wire send).
+- SSRF perimeter still enforced (private-IP URL is a hard error, not a wire send).
 - URLBlock no longer reaches the wire — every block in the output is concrete.
 - Tests cover happy path + fetch-failure + cache-reuse.
+
+sy-550: a URL attachment that yields no usable content is now a **hard error**
+by default (``AttachmentFetchError``) so a persona never answers blind on
+missing content. The legacy placeholder behaviour is opt-in via
+``allow_empty=True`` (wired to ``--allow-empty-attachments``). Fetch status
+is recorded into an optional ``status_sink`` for auditability.
 
 The ladder is monkeypatched to keep these tests offline; the network paths
 themselves are exercised in ``tests/test_fetch.py`` and the integration
@@ -17,6 +23,8 @@ from __future__ import annotations
 
 import time
 
+import pytest
+
 from synth_panel.fetch import lower as lower_mod
 from synth_panel.fetch.cache import CacheEntry, CacheHit, CacheL1
 from synth_panel.fetch.ladder import (
@@ -24,6 +32,7 @@ from synth_panel.fetch.ladder import (
     ExtractionFailed,
     LadderResult,
 )
+from synth_panel.fetch.lower import AttachmentFetchError
 from synth_panel.fetch.perimeter import PerimeterDeny
 from synth_panel.llm.models import (
     ImageBlock,
@@ -201,73 +210,160 @@ def test_l1_hit_short_circuits_extract(monkeypatch) -> None:
 
 
 # ---------------------------------------------------------------------------
-# failure modes (AC: fetch failure → placeholder, no abort)
+# failure modes (sy-550: fetch failure → hard error by default)
 # ---------------------------------------------------------------------------
 
 
-def test_extraction_failure_emits_placeholder(monkeypatch) -> None:
+def _empty_result(url: str) -> LadderResult:
+    return LadderResult(
+        url=url,
+        intent=AttachmentIntent.TEXT,
+        text=None,
+        text_mode=None,
+        screenshot=None,
+        screenshot_mode=None,
+        final_url=url,
+        redirect_chain=[],
+        stale=False,
+        fetched=True,
+    )
+
+
+def test_extraction_failure_raises_by_default(monkeypatch) -> None:
     def boom(url, cfg):
         raise ExtractionFailed(url, "extraction <200 chars and screenshot_fallback disabled")
 
     monkeypatch.setattr(lower_mod, "extract", boom)
 
-    out = lower_mod.lower_url_blocks([URLBlock(url="https://example.com/empty")])
+    with pytest.raises(AttachmentFetchError) as ei:
+        lower_mod.lower_url_blocks([URLBlock(url="https://example.com/empty")])
+    assert ei.value.url == "https://example.com/empty"
+    assert "extraction failed" in ei.value.reason
+    # The message names the URL + reason and points at the opt-out.
+    assert "https://example.com/empty" in str(ei.value)
+    assert "--allow-empty-attachments" in str(ei.value)
+
+
+def test_perimeter_deny_raises_by_default(monkeypatch) -> None:
+    """SSRF perimeter rejections (loopback/private addresses) are a hard
+    error by default — the run must not proceed with empty content."""
+
+    def deny(url, cfg):
+        raise PerimeterDeny("no safe address for 'localhost': loopback")
+
+    monkeypatch.setattr(lower_mod, "extract", deny)
+
+    with pytest.raises(AttachmentFetchError) as ei:
+        lower_mod.lower_url_blocks([URLBlock(url="http://localhost:4321/")])
+    assert "perimeter denied" in ei.value.reason
+    assert "loopback" in ei.value.reason
+    # SSRF documentation breadcrumb is in the message.
+    assert "SSRF-blocked" in str(ei.value)
+
+
+def test_unexpected_exception_raises_by_default(monkeypatch) -> None:
+    def kaboom(url, cfg):
+        raise RuntimeError("network melted")
+
+    monkeypatch.setattr(lower_mod, "extract", kaboom)
+
+    with pytest.raises(AttachmentFetchError) as ei:
+        lower_mod.lower_url_blocks([URLBlock(url="https://example.com/x")])
+    assert "RuntimeError" in ei.value.reason
+
+
+def test_empty_result_raises_by_default(monkeypatch) -> None:
+    """A ladder success with no text *and* no screenshot is empty content —
+    a hard error rather than a silently-dropped block."""
+    monkeypatch.setattr(lower_mod, "extract", lambda url, cfg: _empty_result(url))
+    with pytest.raises(AttachmentFetchError) as ei:
+        lower_mod.lower_url_blocks([URLBlock(url="https://example.com/empty")])
+    assert ei.value.reason == "fetch produced no content"
+
+
+# ---------------------------------------------------------------------------
+# sy-550: opt-out (--allow-empty-attachments) restores placeholder behaviour
+# ---------------------------------------------------------------------------
+
+
+def test_allow_empty_extraction_failure_emits_placeholder(monkeypatch) -> None:
+    def boom(url, cfg):
+        raise ExtractionFailed(url, "extraction <200 chars and screenshot_fallback disabled")
+
+    monkeypatch.setattr(lower_mod, "extract", boom)
+
+    out = lower_mod.lower_url_blocks([URLBlock(url="https://example.com/empty")], allow_empty=True)
     assert len(out) == 1
     assert isinstance(out[0], TextBlock)
     assert "https://example.com/empty" in out[0].text
     assert "unavailable" in out[0].text.lower()
 
 
-def test_perimeter_deny_emits_placeholder_not_wire_send(monkeypatch) -> None:
-    """SSRF perimeter rejections must not silently drop the URL — they
-    surface as a placeholder TextBlock so the persona sees something."""
-
+def test_allow_empty_perimeter_deny_emits_placeholder(monkeypatch) -> None:
     def deny(url, cfg):
         raise PerimeterDeny("private-ip target rejected: 10.0.0.1")
 
     monkeypatch.setattr(lower_mod, "extract", deny)
 
-    out = lower_mod.lower_url_blocks([URLBlock(url="https://internal.example/")])
+    out = lower_mod.lower_url_blocks([URLBlock(url="https://internal.example/")], allow_empty=True)
     assert len(out) == 1
     assert isinstance(out[0], TextBlock)
     assert "perimeter" in out[0].text.lower()
 
 
-def test_unexpected_exception_does_not_abort(monkeypatch) -> None:
-    def kaboom(url, cfg):
-        raise RuntimeError("network melted")
-
-    monkeypatch.setattr(lower_mod, "extract", kaboom)
-
-    out = lower_mod.lower_url_blocks([URLBlock(url="https://example.com/x")])
-    assert len(out) == 1
-    assert isinstance(out[0], TextBlock)
-    assert "RuntimeError" in out[0].text
-
-
-def test_empty_result_emits_placeholder(monkeypatch) -> None:
-    """If the ladder returns success but with no text *and* no screenshot
-    we still produce a placeholder rather than dropping the block."""
-
-    def empty(url, cfg):
-        return LadderResult(
-            url=url,
-            intent=AttachmentIntent.TEXT,
-            text=None,
-            text_mode=None,
-            screenshot=None,
-            screenshot_mode=None,
-            final_url=url,
-            redirect_chain=[],
-            stale=False,
-            fetched=True,
-        )
-
-    monkeypatch.setattr(lower_mod, "extract", empty)
-    out = lower_mod.lower_url_blocks([URLBlock(url="https://example.com/empty")])
+def test_allow_empty_empty_result_emits_placeholder(monkeypatch) -> None:
+    monkeypatch.setattr(lower_mod, "extract", lambda url, cfg: _empty_result(url))
+    out = lower_mod.lower_url_blocks([URLBlock(url="https://example.com/empty")], allow_empty=True)
     assert len(out) == 1
     assert isinstance(out[0], TextBlock)
     assert "no content" in out[0].text
+
+
+# ---------------------------------------------------------------------------
+# sy-550: per-attachment fetch status recording (status_sink)
+# ---------------------------------------------------------------------------
+
+
+def test_status_sink_records_ok_on_success(monkeypatch) -> None:
+    monkeypatch.setattr(lower_mod, "extract", lambda url, cfg: _ok_text_result(url, "body"))
+    sink: list[dict] = []
+    lower_mod.lower_url_blocks(
+        [URLBlock(url="https://example.com/a", fetch_mode="markdown")],
+        status_sink=sink,
+    )
+    assert sink == [{"url": "https://example.com/a", "status": "ok", "mode": "markdown"}]
+
+
+def test_status_sink_records_failure_with_reason(monkeypatch) -> None:
+    def deny(url, cfg):
+        raise PerimeterDeny("no safe address for 'localhost': loopback")
+
+    monkeypatch.setattr(lower_mod, "extract", deny)
+    sink: list[dict] = []
+    # allow_empty so the call returns rather than raising; status is still recorded.
+    lower_mod.lower_url_blocks(
+        [URLBlock(url="http://localhost:4321/", fetch_mode="markdown")],
+        allow_empty=True,
+        status_sink=sink,
+    )
+    assert len(sink) == 1
+    assert sink[0]["url"] == "http://localhost:4321/"
+    assert sink[0]["status"] == "failed"
+    assert "loopback" in sink[0]["reason"]
+
+
+def test_status_sink_records_failure_even_when_raising(monkeypatch) -> None:
+    """The status record is appended before the hard error is raised, so an
+    auditing caller that catches the error still sees the failed entry."""
+
+    def boom(url, cfg):
+        raise ExtractionFailed(url, "empty")
+
+    monkeypatch.setattr(lower_mod, "extract", boom)
+    sink: list[dict] = []
+    with pytest.raises(AttachmentFetchError):
+        lower_mod.lower_url_blocks([URLBlock(url="https://x/")], status_sink=sink)
+    assert sink and sink[0]["status"] == "failed"
 
 
 # ---------------------------------------------------------------------------
