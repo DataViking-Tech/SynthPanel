@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.23
+# syntax=docker/dockerfile:1.25
 #
 # Production runtime image for synthpanel.
 #
