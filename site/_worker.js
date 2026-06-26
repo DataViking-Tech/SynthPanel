@@ -21,22 +21,44 @@
 //     that detect 406 should fall back to ``Accept: text/html``.
 //   - Anything else -> pass through to static asset serving.
 
+// PostHog analytics snippet, injected into the <head> of every HTML
+// response by injectAnalytics() below. The project API key is a
+// PUBLISHABLE key (safe to commit). The init call is gated to the
+// production hostname so local dev, CI, and *.pages.dev preview
+// deploys never emit events.
+const POSTHOG_SNIPPET = `<script>!function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture identify alias people set set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId setPersonProperties startSessionRecording stopSessionRecording captureException".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);var h=window.location.hostname;if(h==="synthpanel.dev"||h.endsWith(".synthpanel.dev")){posthog.init("phc_AgGKBvc4HRVhFvN44pnF4vHhf2H3q8eHeRqF73BRLiyg",{api_host:"https://us.i.posthog.com",ui_host:"https://us.posthog.com",defaults:"2025-05-24",person_profiles:"identified_only"});}</script>`;
+
+// Inject the PostHog snippet into the <head> of HTML responses only.
+// Guarded on content-type so JSON / markdown / binary assets pass
+// through untouched (HTMLRewriter would otherwise mangle them).
+async function injectAnalytics(response) {
+  const ct = response.headers.get("content-type") || "";
+  if (!ct.includes("text/html")) return response;
+  return new HTMLRewriter()
+    .on("head", {
+      element(el) {
+        el.append(POSTHOG_SNIPPET, { html: true });
+      },
+    })
+    .transform(response);
+}
+
 export default {
   async fetch(request, env) {
     const method = request.method;
     if (method !== "GET" && method !== "HEAD") {
-      return env.ASSETS.fetch(request);
+      return injectAnalytics(await env.ASSETS.fetch(request));
     }
 
     const accept = request.headers.get("accept") || "";
     if (!prefersMarkdown(accept)) {
-      return env.ASSETS.fetch(request);
+      return injectAnalytics(await env.ASSETS.fetch(request));
     }
 
     const url = new URL(request.url);
     const mdUrl = htmlPathToMarkdown(url);
     if (!mdUrl) {
-      return env.ASSETS.fetch(request);
+      return injectAnalytics(await env.ASSETS.fetch(request));
     }
 
     const mdRequest = new Request(mdUrl.toString(), {
