@@ -101,7 +101,7 @@ when configured (`synthpanel.preferred_interface = mcp`).
 
 | Tool | Purpose |
 | --- | --- |
-| `mcp__synth_panel__run_prompt` | One-shot prompt against one persona (smoke test). |
+| `mcp__synth_panel__run_prompt` | One-shot prompt to an LLM — no personas (smoke test). |
 | `mcp__synth_panel__run_quick_poll` | One-question poll across N personas; returns vote tallies + synthesis. |
 | `mcp__synth_panel__run_panel` | Full panel with persona pack + instrument pack (v1, v2, v3 branching). |
 | `mcp__synth_panel__extend_panel` | Append one ad-hoc round on top of a saved result. Not v3 re-entry. |
