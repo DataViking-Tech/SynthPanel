@@ -145,6 +145,15 @@ Predicate ops: `contains` (substring), `equals` (exact), `matches`
 (regex). Targets: any round name or the reserved `__end__` sentinel.
 `else` clause is mandatory as the last entry.
 
+`panel run` dispatches multi-round (v2/v3) instruments through
+`run_multi_round_panel` — the same router-driven engine as the MCP/SDK
+surfaces — and emits the rounds-shaped envelope with the real routing
+`path`. Single-round-only features (checkpointing/`--resume`,
+convergence/`--auto-stop`, `--max-cost`, `--question-failure-budget`,
+`--variants`, ensemble `--models`/`--blend`, map-reduce synthesis,
+`--no-synthesis` on branching instruments) are refused loudly up front;
+see the README "CLI Flag Support for Multi-Round Runs" table.
+
 ## MCP Integration
 
 The MCP server exposes 12 tools: `run_prompt`, `run_panel`, `run_quick_poll`, `extend_panel`, `list_persona_packs`, `get_persona_pack`, `save_persona_pack`, `list_instrument_packs`, `get_instrument_pack`, `save_instrument_pack`, `list_panel_results`, `get_panel_result`.

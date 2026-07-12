@@ -4250,3 +4250,567 @@ class TestBuildRoundsShapeCostFallback:
         out = self._call(cost_fallback_warnings=[])
         assert out["warnings"] == []
         assert out["cost_is_estimated"] is False
+
+
+# --- Multi-round panel run tests (P1-2) --------------------------------------
+#
+# The CLI used to flat-concat every round's questions into one
+# run_panel_parallel call: every persona answered every branch, no
+# route_when predicate was evaluated, JSON hardcoded ``"path": []``, and
+# text mode printed a fabricated linear path. These tests pin the fixed
+# behaviour: multi-round instruments dispatch through the real
+# run_multi_round_panel engine (same as MCP/SDK) and emit the REAL path.
+
+
+V3_BRANCHING_YAML = """\
+instrument:
+  version: 3
+  rounds:
+    - name: discovery
+      questions:
+        - text: What hurts most?
+      route_when:
+        - if: {field: themes, op: contains, value: price}
+          goto: probe_pricing
+        - else: probe_pain
+    - name: probe_pricing
+      questions:
+        - text: What price feels fair?
+      route_when:
+        - else: __end__
+    - name: probe_pain
+      questions:
+        - text: What is the biggest pain?
+      route_when:
+        - else: __end__
+"""
+
+V2_LINEAR_YAML = """\
+instrument:
+  version: 2
+  rounds:
+    - name: discovery
+      questions:
+        - text: What frustrates you?
+    - name: deep_dive
+      depends_on: discovery
+      questions:
+        - text: Tell me more.
+"""
+
+
+def _mock_routing_synthesis(themes: list[str]):
+    """SynthesisResult whose themes drive route_when predicates."""
+    from synth_panel.cost import CostEstimate
+    from synth_panel.synthesis import SynthesisResult
+
+    return SynthesisResult(
+        summary="routing summary",
+        themes=list(themes),
+        agreements=[],
+        disagreements=[],
+        surprises=[],
+        recommendation="Probe further",
+        usage=ZERO_USAGE,
+        cost=CostEstimate(),
+        model="sonnet",
+    )
+
+
+def _write_multi_round_fixtures(tmp_path, instrument_yaml: str = V3_BRANCHING_YAML):
+    personas_file = tmp_path / "personas.yaml"
+    personas_file.write_text("personas:\n  - name: Alice\n  - name: Bob\n")
+    survey_file = tmp_path / "survey.yaml"
+    survey_file.write_text(instrument_yaml)
+    return personas_file, survey_file
+
+
+class TestPanelRunMultiRound:
+    """v3 branching instruments execute through the real multi-round engine."""
+
+    @patch("synth_panel._runners.synthesize_panel")
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_route_when_fires_and_json_carries_real_path(
+        self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path
+    ):
+        mock_runtime = MagicMock()
+        mock_runtime.run_turn.return_value = _mock_turn_summary("panel answer")
+        mock_runtime_cls.return_value = mock_runtime
+        # Round synthesis emits themes=['price'] -> the 'themes contains
+        # price' predicate fires and routes to probe_pricing.
+        mock_synth.return_value = _mock_routing_synthesis(["price"])
+
+        personas_file, survey_file = _write_multi_round_fixtures(tmp_path)
+        code = main(
+            [
+                "--output-format",
+                "json",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+            ]
+        )
+        assert code == 0
+        data = json.loads(capsys.readouterr().out)
+
+        # Only the ROUTED rounds executed — not the flattened union.
+        assert [r["name"] for r in data["rounds"]] == ["discovery", "probe_pricing"]
+        # question_count covers executed rounds only (2), not all 3 declared.
+        assert data["question_count"] == 2
+
+        # The REAL path: the fired route_when decision, not a hardcoded [].
+        assert len(data["path"]) == 2
+        assert data["path"][0]["round"] == "discovery"
+        assert "price" in data["path"][0]["branch"]
+        assert data["path"][0]["next"] == "probe_pricing"
+        assert data["path"][1]["round"] == "probe_pricing"
+        assert data["path"][1]["next"] == "__end__"
+        assert data["terminal_round"] == "probe_pricing"
+
+        # Per-round synthesis is populated (routing context), final synthesis
+        # is at the top level.
+        assert data["rounds"][0]["synthesis"]["themes"] == ["price"]
+        assert data["synthesis"] is not None
+        assert data["run_invalid"] is False
+
+    @patch("synth_panel._runners.synthesize_panel")
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_only_routed_rounds_questions_are_asked(
+        self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path
+    ):
+        """The un-routed branch's questions never reach the LLM layer."""
+        mock_runtime = MagicMock()
+        mock_runtime.run_turn.return_value = _mock_turn_summary("panel answer")
+        mock_runtime_cls.return_value = mock_runtime
+        mock_synth.return_value = _mock_routing_synthesis(["price"])
+
+        personas_file, survey_file = _write_multi_round_fixtures(tmp_path)
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+            ]
+        )
+        assert code == 0
+        asked = [str(c.args[0]) for c in mock_runtime.run_turn.call_args_list]
+        # 2 personas x (1 discovery + 1 probe_pricing question) = 4 calls.
+        assert len(asked) == 4
+        assert sum("What hurts most?" in q for q in asked) == 2
+        assert sum("What price feels fair?" in q for q in asked) == 2
+        # The probe_pain branch was NOT taken; its question must not be asked.
+        assert not any("biggest pain" in q for q in asked)
+
+    @patch("synth_panel._runners.synthesize_panel")
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_else_branch_routes_to_pain_probe(self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path):
+        """When the predicate does NOT match, the else target executes."""
+        mock_runtime = MagicMock()
+        mock_runtime.run_turn.return_value = _mock_turn_summary("panel answer")
+        mock_runtime_cls.return_value = mock_runtime
+        mock_synth.return_value = _mock_routing_synthesis(["onboarding friction"])
+
+        personas_file, survey_file = _write_multi_round_fixtures(tmp_path)
+        code = main(
+            [
+                "--output-format",
+                "json",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+            ]
+        )
+        assert code == 0
+        data = json.loads(capsys.readouterr().out)
+        assert [r["name"] for r in data["rounds"]] == ["discovery", "probe_pain"]
+        assert data["path"][0]["next"] == "probe_pain"
+        assert "else" in data["path"][0]["branch"]
+        assert data["terminal_round"] == "probe_pain"
+
+    @patch("synth_panel._runners.synthesize_panel")
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_text_mode_prints_real_path_not_fabricated_linear(
+        self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path
+    ):
+        mock_runtime = MagicMock()
+        mock_runtime.run_turn.return_value = _mock_turn_summary("panel answer")
+        mock_runtime_cls.return_value = mock_runtime
+        mock_synth.return_value = _mock_routing_synthesis(["price"])
+
+        personas_file, survey_file = _write_multi_round_fixtures(tmp_path)
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+            ]
+        )
+        assert code == 0
+        out = capsys.readouterr().out
+        # Real routing decision rendered, naming the fired predicate.
+        assert "path: discovery" in out
+        assert "themes contains 'price' -> probe_pricing" in out
+        assert "terminal round: probe_pricing" in out
+        assert "ROUND: discovery" in out
+        assert "ROUND: probe_pricing" in out
+        # The fabricated linear walk used to print every declared round —
+        # the un-executed branch must no longer appear anywhere on stdout.
+        assert "probe_pain" not in out
+        assert "SYNTHESIS" in out
+
+    @patch("synth_panel._runners.synthesize_panel")
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_ndjson_mode_carries_real_path(self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path):
+        mock_runtime = MagicMock()
+        mock_runtime.run_turn.return_value = _mock_turn_summary("panel answer")
+        mock_runtime_cls.return_value = mock_runtime
+        mock_synth.return_value = _mock_routing_synthesis(["price"])
+
+        personas_file, survey_file = _write_multi_round_fixtures(tmp_path)
+        code = main(
+            [
+                "--output-format",
+                "ndjson",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+            ]
+        )
+        assert code == 0
+        lines = [ln for ln in capsys.readouterr().out.splitlines() if ln.strip()]
+        payload = json.loads(lines[-1])
+        assert payload["path"][0]["next"] == "probe_pricing"
+        assert payload["terminal_round"] == "probe_pricing"
+        assert [r["name"] for r in payload["rounds"]] == ["discovery", "probe_pricing"]
+
+    @patch("synth_panel._runners.synthesize_panel")
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_save_persists_multi_round_result(
+        self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path, monkeypatch
+    ):
+        mock_runtime = MagicMock()
+        mock_runtime.run_turn.return_value = _mock_turn_summary("panel answer")
+        mock_runtime_cls.return_value = mock_runtime
+        mock_synth.return_value = _mock_routing_synthesis(["price"])
+        monkeypatch.setenv("SYNTH_PANEL_DATA_DIR", str(tmp_path / "data"))
+
+        personas_file, survey_file = _write_multi_round_fixtures(tmp_path)
+        code = main(
+            [
+                "--output-format",
+                "json",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--save",
+            ]
+        )
+        assert code == 0
+        data = json.loads(capsys.readouterr().out)
+        assert data["result_id"]
+        saved = json.loads(Path(data["saved_path"]).read_text(encoding="utf-8"))
+        assert saved["model"]
+
+    @patch("synth_panel._runners.synthesize_panel")
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_v2_linear_runs_every_round_with_no_synthesis(
+        self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path
+    ):
+        """Linear v2 + --no-synthesis is allowed: no route_when to evaluate."""
+        mock_runtime = MagicMock()
+        mock_runtime.run_turn.return_value = _mock_turn_summary("panel answer")
+        mock_runtime_cls.return_value = mock_runtime
+
+        personas_file, survey_file = _write_multi_round_fixtures(tmp_path, V2_LINEAR_YAML)
+        code = main(
+            [
+                "--output-format",
+                "json",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--no-synthesis",
+            ]
+        )
+        assert code == 0
+        data = json.loads(capsys.readouterr().out)
+        assert [r["name"] for r in data["rounds"]] == ["discovery", "deep_dive"]
+        assert data["synthesis"] is None
+        assert [p["next"] for p in data["path"]] == ["deep_dive", "__end__"]
+        mock_synth.assert_not_called()
+
+
+class TestPanelRunMultiRoundFlagAudit:
+    """Incompatible flag combinations fail loudly BEFORE any LLM spend."""
+
+    @pytest.mark.parametrize(
+        "extra_argv,needle",
+        [
+            (["--resume", "run-123"], "--resume"),
+            (["--checkpoint-dir", "ckpts"], "--checkpoint-dir"),
+            (["--max-cost", "5"], "--max-cost"),
+            (["--variants", "2"], "--variants"),
+            (["--auto-stop"], "--auto-stop"),
+            (["--convergence-check-every", "10"], "--convergence-check-every"),
+            (["--question-failure-budget", "2"], "--question-failure-budget"),
+            (["--calibrate-against", "gss:abany"], "--calibrate-against"),
+            (["--synthesis-strategy", "map-reduce"], "--synthesis-strategy=map-reduce"),
+            (["--allow-empty-attachments"], "--allow-empty-attachments"),
+        ],
+    )
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_incompatible_flag_exits_nonzero_with_clear_message(
+        self, mock_client_cls, mock_runtime_cls, extra_argv, needle, capsys, tmp_path
+    ):
+        personas_file, survey_file = _write_multi_round_fixtures(tmp_path)
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                *extra_argv,
+            ]
+        )
+        assert code == 1
+        err = capsys.readouterr().err
+        assert needle in err
+        assert "not supported with multi-round" in err
+        # Refusal happened before any panelist was dispatched.
+        mock_runtime_cls.assert_not_called()
+
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_no_synthesis_refused_for_branching_instruments(self, mock_client_cls, mock_runtime_cls, capsys, tmp_path):
+        personas_file, survey_file = _write_multi_round_fixtures(tmp_path)
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--no-synthesis",
+            ]
+        )
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "--no-synthesis" in err
+        assert "route_when" in err
+        mock_runtime_cls.assert_not_called()
+
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_blend_refused_for_multi_round(self, mock_client_cls, mock_runtime_cls, capsys, tmp_path):
+        personas_file, survey_file = _write_multi_round_fixtures(tmp_path)
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--models",
+                "sonnet:0.5,haiku:0.5",
+                "--blend",
+                "--skip-preflight",
+            ]
+        )
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "--blend" in err
+        assert "not supported with multi-round" in err
+        mock_runtime_cls.assert_not_called()
+
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_ensemble_models_refused_for_multi_round(self, mock_client_cls, mock_runtime_cls, capsys, tmp_path):
+        personas_file, survey_file = _write_multi_round_fixtures(tmp_path)
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--models",
+                "sonnet,haiku",
+                "--skip-preflight",
+            ]
+        )
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "ensemble" in err
+        assert "not supported with multi-round" in err
+        mock_runtime_cls.assert_not_called()
+
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_single_round_still_accepts_audited_flags(
+        self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path
+    ):
+        """Regression: the audit must not touch single-round instruments."""
+        mock_runtime = MagicMock()
+        mock_runtime.run_turn.return_value = _mock_turn_summary("answer")
+        mock_runtime_cls.return_value = mock_runtime
+        mock_synth.return_value = _mock_synthesis_result()
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: Q?\n")
+
+        code = main(
+            [
+                "--output-format",
+                "json",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--max-cost",
+                "5",
+            ]
+        )
+        assert code == 0
+        data = json.loads(capsys.readouterr().out)
+        # Legacy single-round shape is unchanged: one 'default' round,
+        # empty path, no terminal_round key.
+        assert [r["name"] for r in data["rounds"]] == ["default"]
+        assert data["path"] == []
+        assert "terminal_round" not in data
+
+
+class TestDryRunEngineStatement:
+    """--dry-run states which engine will run and previews the DAG (P1-2)."""
+
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_multi_round_dry_run_states_engine_and_dag(self, mock_client_cls, mock_run_panel, capsys, tmp_path):
+        personas_file, survey_file = _write_multi_round_fixtures(tmp_path)
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--dry-run",
+            ]
+        )
+        assert code == 0
+        err = capsys.readouterr().err
+        assert "Engine: multi-round router (branching)" in err
+        assert "UPPER BOUND" in err
+        assert "Instrument DAG:" in err
+        assert "if themes contains 'price' -> probe_pricing" in err
+        mock_run_panel.assert_not_called()
+
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_single_round_dry_run_states_engine(self, mock_client_cls, mock_run_panel, capsys, tmp_path):
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Alice\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: Q?\n")
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--dry-run",
+            ]
+        )
+        assert code == 0
+        err = capsys.readouterr().err
+        assert "Engine: single-round parallel panel" in err
+        mock_run_panel.assert_not_called()
+
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_multi_round_dry_run_json_engine_and_routes(self, mock_client_cls, mock_run_panel, capsys, tmp_path):
+        personas_file, survey_file = _write_multi_round_fixtures(tmp_path)
+        code = main(
+            [
+                "--output-format",
+                "json",
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--dry-run",
+            ]
+        )
+        assert code == 0
+        data = json.loads(capsys.readouterr().out)
+        assert data["engine"] == "multi_round"
+        assert data["estimates_are_upper_bound"] is True
+        discovery = next(r for r in data["rounds"] if r["name"] == "discovery")
+        assert discovery["route_when"][0]["goto"] == "probe_pricing"
+        mock_run_panel.assert_not_called()
+
+    @patch("synth_panel.cli.commands.run_panel_parallel")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_dry_run_with_incompatible_flag_still_fails_loudly(self, mock_client_cls, mock_run_panel, capsys, tmp_path):
+        """Dry-run 'OK' must mean the real run is runnable (sy-546 spirit)."""
+        personas_file, survey_file = _write_multi_round_fixtures(tmp_path)
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--dry-run",
+                "--max-cost",
+                "5",
+            ]
+        )
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "not supported with multi-round" in err
+        mock_run_panel.assert_not_called()
