@@ -47,7 +47,10 @@ def test_missing_decision_returns_typed_error() -> None:
     assert err.error_code == "MISSING_DECISION"
     assert err.field_path == "decision_being_informed"
     assert err.schema_version == "1.0.0"
-    assert err.retry_safe is True
+    # Request-side validation failures are deterministic: replaying the
+    # identical request fails identically, so retry_safe is False per the
+    # docs/response-contract.md table (fix the request, don't retry).
+    assert err.retry_safe is False
     assert "decision_being_informed" in err.message
 
 
@@ -113,7 +116,9 @@ def test_envelope_to_dict_roundtrip() -> None:
     payload = err.to_dict()
     assert payload["error_code"] == "MISSING_DECISION"
     assert payload["schema_version"] == "1.0.0"
-    assert payload["retry_safe"] is True
+    # See test_missing_decision_returns_typed_error: request-side errors
+    # carry retry_safe=False under the aligned contract semantics.
+    assert payload["retry_safe"] is False
     assert payload["field_path"] == "decision_being_informed"
 
 

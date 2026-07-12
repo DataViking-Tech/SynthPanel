@@ -83,6 +83,7 @@ from synth_panel.llm.models import (
     TextBlock,
     URLSource,
 )
+from synth_panel.mcp.compat import W_DECISION_MISSING, apply_legacy_grace
 from synth_panel.mcp.data import (
     get_panel_result as _data_get_panel_result,
 )
@@ -104,6 +105,7 @@ from synth_panel.mcp.data import (
 from synth_panel.mcp.data import (
     load_panel_sessions,
     save_panel_result,
+    save_panel_sessions,
     update_panel_result,
 )
 from synth_panel.mcp.data import (
@@ -127,10 +129,14 @@ from synth_panel.metadata import PanelTimer, build_metadata
 from synth_panel.orchestrator import (
     MultiRoundResult,
     PanelistResult,
+    PanelState,
     run_panel_parallel,
 )
+from synth_panel.persistence import Session
 from synth_panel.prompts import build_question_prompt, persona_system_prompt
+from synth_panel.structured.retry import exhausted_retry_outcome
 from synth_panel.structured.validate import ErrorEnvelope, apply_response_gate, validate_request
+from synth_panel.structured.verdict import build_panel_verdict
 from synth_panel.synthesis import synthesize_panel
 
 logger = logging.getLogger(__name__)
@@ -326,14 +332,15 @@ def _invalid_tool_arg(message: str, *, field_path: str | None = None) -> str:
     Mirrors the v1.0.0 ErrorEnvelope shape (``error_code``, ``message``,
     optional ``field_path``, ``schema_version``, ``retry_safe``) and also
     carries a top-level ``error`` field so existing callers that read the
-    plain-text message keep working.
+    plain-text message keep working. ``retry_safe`` is False: replaying an
+    identical malformed request fails identically (fix the request instead).
     """
     env = ErrorEnvelope(
         error_code="INVALID_TOOL_ARG",
         message=message,
         field_path=field_path,
         schema_version="1.0.0",
-        retry_safe=True,
+        retry_safe=False,
     ).to_dict()
     env["error"] = message
     return json.dumps(env)
@@ -418,27 +425,248 @@ def _normalize_models_param(
     return (model, models)
 
 
-def _validate_decision_request(tool: str, decision_being_informed: str | None) -> str | None:
-    """AC-3: enforce v1.0.0 constraints on ``decision_being_informed``.
+def _grace_nudge(tool: str) -> str:
+    """Response-side warning emitted when AC-4 synthesized the placeholder."""
+    return (
+        f"{W_DECISION_MISSING}: 'decision_being_informed' was not provided; "
+        f"synthesized 'unspecified-legacy-call' under the v1.0.x grace window. "
+        f"Supply the decision this {tool} call informs (12-280 chars, single line) — "
+        f"v1.1.0 (or SYNTHPANEL_SCHEMA_MIN>=1.1.0) hard-rejects the call with MISSING_DECISION."
+    )
 
-    When the field is provided, run the validator-core (AC-2) to enforce
-    the 12-280 trimmed-length, UTF-8 string-shape, and no-newline rules.
-    Returns a JSON-serialised typed error envelope on violation, or
-    ``None`` when the value conforms.
 
-    Missing / ``None`` is intentionally pass-through here. Under v1.0.x
-    the migration grace path (AC-4 ``apply_legacy_grace``) synthesises
-    ``"unspecified-legacy-call"`` ahead of the validator; under
-    ``SYNTHPANEL_SCHEMA_MIN>=1.1.0`` that shim becomes a no-op so the
-    validator's ``MISSING_DECISION`` branch fires. AC-3 sits behind that
-    decision and only owns the constraint surface.
+def _resolve_decision_contract(
+    tool: str,
+    decision_being_informed: str | None,
+) -> tuple[str | None, list[str], str | None]:
+    """AC-3/AC-4 request path: grace shim → validator-core.
+
+    Returns ``(decision, warnings, error_json)``:
+
+    * ``decision`` — the caller-supplied value, or the AC-4 placeholder
+      ``"unspecified-legacy-call"`` when the field was omitted under the
+      v1.0.x grace window. ``None`` only alongside a non-``None``
+      ``error_json``.
+    * ``warnings`` — the response-side ``W_DECISION_MISSING`` nudge when
+      the placeholder was synthesized; empty otherwise.
+    * ``error_json`` — JSON-serialised typed error envelope when the
+      request violates the contract; ``None`` when it conforms.
+
+    An *omitted* field (``None``) is the AC-4 grace path: the shim
+    synthesizes the placeholder, or — under ``SYNTHPANEL_SCHEMA_MIN>=1.1.0``
+    — leaves it absent so the validator returns ``MISSING_DECISION``.
+    A field that was *provided* (even empty/whitespace) skips the shim and
+    goes straight to the validator-core: an explicit-but-empty value is a
+    caller bug worth a typed error, not legacy traffic to be masked.
+    """
+    warnings: list[str] = []
+    decision = decision_being_informed
+    if decision is None:
+        graced = apply_legacy_grace(tool, {})
+        decision = graced.get("decision_being_informed")
+        if decision is not None:
+            warnings.append(_grace_nudge(tool))
+    payload: dict[str, Any] = {}
+    if decision is not None:
+        payload["decision_being_informed"] = decision
+    err = validate_request(tool, payload)
+    if err is not None:
+        env = err.to_dict()
+        env["error"] = err.message
+        return None, [], json.dumps(env)
+    return decision, warnings, None
+
+
+def _persist_stamped_sessions(
+    result_id: str,
+    sessions: dict[str, Any] | None,
+    decision_being_informed: str | None,
+) -> None:
+    """AC-7: stamp panel sessions with the decision and persist them.
+
+    Only genuine :class:`~synth_panel.persistence.Session` objects are
+    stamped/saved — test doubles and legacy sentinels are skipped. Failure
+    to persist sessions is non-fatal (the panel result itself is already
+    saved); it is logged loudly instead of failing the response.
+    """
+    if not sessions:
+        return
+    real: dict[str, Session] = {}
+    for name, sess in sessions.items():
+        if isinstance(sess, Session):
+            if decision_being_informed is not None:
+                sess.decision_being_informed = decision_being_informed
+            real[name] = sess
+    if not real:
+        return
+    try:
+        save_panel_sessions(result_id, real)
+    except OSError:
+        logger.warning("failed to persist stamped sessions for %s (non-fatal)", result_id, exc_info=True)
+
+
+def _derive_headline(
+    synthesis_dict: dict[str, Any] | None,
+    persona_count: int,
+    question_count: int,
+) -> str:
+    """Pick the verdict headline: synthesis recommendation > summary > fallback."""
+    if isinstance(synthesis_dict, dict):
+        for key in ("recommendation", "summary"):
+            val = synthesis_dict.get(key)
+            if isinstance(val, str) and val.strip():
+                line = val.strip().splitlines()[0].strip()
+                if line:
+                    return line
+    return f"Panel completed: {persona_count} personas x {question_count} question(s)."
+
+
+def _derive_convergence_dissent(
+    poll_summary: dict[str, Any] | None,
+) -> tuple[float | None, int]:
+    """Derive (convergence, dissent_count) from the deterministic poll summary.
+
+    Uses the first enum-kind question's first-choice distribution: the
+    modal share is the agreement score and everyone outside the modal
+    bucket is a dissenter. Free-text-only panels have no comparable
+    measure — ``(None, 0)`` (the verdict assembler renders ``None`` as
+    ``0.0`` and raises no ``low_convergence`` flag).
+    """
+    if not isinstance(poll_summary, dict):
+        return None, 0
+    for q in poll_summary.get("questions") or []:
+        if not isinstance(q, dict) or q.get("kind") != "enum":
+            continue
+        counts = q.get("first_choice_counts")
+        if not isinstance(counts, dict) or not counts:
+            continue
+        try:
+            values = [int(v) for v in counts.values()]
+        except (TypeError, ValueError):
+            continue
+        total = sum(values)
+        if total <= 0:
+            continue
+        top = max(values)
+        return top / total, max(0, total - top)
+    return None, 0
+
+
+_VERBATIM_MAX_CHARS = 240
+
+
+def _collect_verbatims(result_dicts: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Deterministic ``{persona_id, quote}`` selection for the verdict.
+
+    Takes each panelist's first non-empty free-text response, in panelist
+    order, deduped by persona, capped at three. Structured (dict-shaped)
+    responses carry no quotable prose and are skipped — the schema allows
+    0-3 verbatims.
+    """
+    out: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for rd in result_dicts:
+        if len(out) >= 3:
+            break
+        persona = str(rd.get("persona", ""))
+        if not persona or persona in seen:
+            continue
+        for resp in rd.get("responses") or []:
+            if not isinstance(resp, dict):
+                continue
+            text = resp.get("response")
+            if isinstance(text, str) and text.strip():
+                out.append({"persona_id": persona, "quote": text.strip()[:_VERBATIM_MAX_CHARS]})
+                seen.add(persona)
+                break
+    return out
+
+
+def _structured_retry_exhausted(result_dicts: list[dict[str, Any]]) -> bool:
+    """True when any schema-forced response exhausted the 3-strike retry.
+
+    Scoped to ``structured`` responses (``response_schema`` tool-forcing):
+    a fallback there means the primary artifact is untrustworthy. Post-hoc
+    ``extract_schema`` fallbacks are auxiliary annotations over intact
+    free text and surface via ``extraction_is_fallback`` instead.
+    """
+    for rd in result_dicts:
+        for resp in rd.get("responses") or []:
+            if isinstance(resp, dict) and resp.get("structured") and resp.get("is_fallback"):
+                return True
+    return False
+
+
+def _finalize_contract_response(
+    result: dict[str, Any],
+    *,
+    decision_being_informed: str | None,
+    decision_warnings: list[str] | tuple[str, ...] = (),
+    panelist_results: list[PanelistResult],
+    personas: list[dict[str, Any]],
+    result_dicts: list[dict[str, Any]],
+    synthesis_dict: dict[str, Any] | None,
+    poll_summary: dict[str, Any] | None,
+    result_id: str,
+) -> dict[str, Any]:
+    """AC-6/AC-8: attach the v1.0.0 ``panel_verdict`` to a success envelope.
+
+    Builds the verdict from the run's post-synthesis state and returns the
+    envelope carrying ``panel_verdict`` + top-level ``schema_version`` so
+    the AC-9 gate validates it on egress. When the structured-output
+    3-strike retry exhausted (schema drift), the AC-8 contract pivot
+    applies: with ``SYNTHPANEL_DRIFT_DEGRADE`` on, the degraded verdict
+    (``schema_drift`` warn flag) ships inside the normal envelope; with it
+    off (v1.0.0 default), the whole envelope is replaced by the typed
+    ``SCHEMA_DRIFT`` error (``retry_safe=True``).
+
+    ``decision_being_informed=None`` (direct legacy callers) returns the
+    envelope untouched — the contract fields ride only on decision-scoped
+    runs.
     """
     if decision_being_informed is None:
-        return None
-    err = validate_request(tool, {"decision_being_informed": decision_being_informed})
-    if err is None:
-        return None
-    return json.dumps(err.to_dict())
+        return result
+
+    if decision_warnings:
+        result["warnings"] = [*list(result.get("warnings") or []), *decision_warnings]
+
+    drift = _structured_retry_exhausted(result_dicts)
+    convergence, dissent = _derive_convergence_dissent(poll_summary)
+    panel_state = PanelState(
+        panelist_results=panelist_results,
+        personas=personas,
+        convergence=convergence,
+        schema_drift=drift,
+    )
+    transcript_uri = f"panel-result://{result_id}"
+    verdict = build_panel_verdict(
+        decision_being_informed=decision_being_informed,
+        panel_state=panel_state,
+        headline=_derive_headline(
+            synthesis_dict,
+            int(result.get("persona_count") or len(personas)),
+            int(result.get("question_count") or 0),
+        ),
+        full_transcript_uri=transcript_uri,
+        top_3_verbatims=_collect_verbatims(result_dicts),
+        dissent_count=dissent,
+    )
+
+    if drift:
+        outcome = exhausted_retry_outcome(
+            partial_artifact=verdict,
+            decision_being_informed=decision_being_informed,
+            full_transcript_uri=transcript_uri,
+        )
+        if isinstance(outcome, ErrorEnvelope):
+            env = outcome.to_dict()
+            env["error"] = outcome.message
+            return env
+        verdict = outcome
+
+    result["panel_verdict"] = verdict
+    result["schema_version"] = "1.0.0"
+    return result
 
 
 # Re-export for backward compatibility — callers patch these names.
@@ -533,6 +761,7 @@ def _server_run_panel_sync(
     extract_schema: dict[str, Any] | None = None,
     synthesis_temperature: float | None = None,
     variants: int = 0,
+    sessions_out: dict[str, Any] | None = None,
 ) -> tuple[
     list[PanelistResult], list[dict[str, Any]], CostTokenUsage, Any, dict[str, Any] | None, dict[str, Any] | None
 ]:
@@ -552,6 +781,7 @@ def _server_run_panel_sync(
         extract_schema=extract_schema,
         synthesis_temperature=synthesis_temperature,
         variants=variants,
+        sessions_out=sessions_out,
     )
 
 
@@ -646,6 +876,8 @@ async def _run_panel_async_instrument(
     persona_models: dict[str, str] | None = None,
     extract_schema: dict[str, Any] | None = None,
     synthesis_temperature: float | None = None,
+    decision_being_informed: str | None = None,
+    decision_warnings: list[str] | tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """Run a (possibly branching) instrument and return v3-shaped response."""
     total = len(personas)
@@ -760,7 +992,10 @@ async def _run_panel_async_instrument(
         question_count=total_question_count,
         synthesis=final_synth_dict,
         metadata=inst_metadata,
+        decision_being_informed=decision_being_informed,
     )
+    # AC-7: persist decision-stamped panelist transcripts alongside the result.
+    _persist_stamped_sessions(result_id, mr.sessions, decision_being_informed)
 
     # sp-0h9x: mirror the ensemble path's per-model rollup onto every
     # non-ensemble panel result. The terminal round's panelist list is the
@@ -798,7 +1033,7 @@ async def _run_panel_async_instrument(
         else None
     )
 
-    return {
+    result = {
         "result_id": result_id,
         "model": model,
         "persona_count": len(personas),
@@ -820,6 +1055,22 @@ async def _run_panel_async_instrument(
         "poll_summary": poll_summary_payload,
     }
 
+    # v1.0.0 contract fields. Drift detection scans every executed round's
+    # results (not just the terminal round) so an early-round 3-strike
+    # exhaustion still triggers the AC-8 pivot.
+    all_round_result_dicts = [rd for rp in rounds_payload for rd in rp["results"]]
+    return _finalize_contract_response(
+        result,
+        decision_being_informed=decision_being_informed,
+        decision_warnings=decision_warnings,
+        panelist_results=terminal_prs,
+        personas=personas,
+        result_dicts=all_round_result_dicts,
+        synthesis_dict=final_synth_dict,
+        poll_summary=poll_summary_payload,
+        result_id=result_id,
+    )
+
 
 async def _run_panel_async(
     personas: list[dict[str, Any]],
@@ -837,13 +1088,23 @@ async def _run_panel_async(
     extract_schema: dict[str, Any] | None = None,
     synthesis_temperature: float | None = None,
     variants: int = 0,
+    decision_being_informed: str | None = None,
+    decision_warnings: list[str] | tuple[str, ...] = (),
 ) -> dict[str, Any]:
-    """Run panel via asyncio.to_thread with progress notifications."""
+    """Run panel via asyncio.to_thread with progress notifications.
+
+    ``decision_being_informed`` / ``decision_warnings`` come from
+    :func:`_resolve_decision_contract`. When a decision is present (real or
+    AC-4 placeholder) the run persists it in the saved result, stamps the
+    panelist transcripts (AC-7), and attaches the ``panel_verdict`` +
+    ``schema_version`` contract fields to the envelope (AC-6/AC-8/AC-9).
+    """
     total = len(personas)
     timer = PanelTimer()
     await ctx.report_progress(0, total)
 
     # Run the blocking panel execution in a thread
+    run_sessions: dict[str, Any] = {}
     (
         panelist_results_full,
         result_dicts,
@@ -867,6 +1128,7 @@ async def _run_panel_async(
             extract_schema=extract_schema,
             synthesis_temperature=synthesis_temperature,
             variants=variants,
+            sessions_out=run_sessions,
         ),
         timeout=PANELIST_TIMEOUT * total * (1 + variants),
     )
@@ -931,7 +1193,10 @@ async def _run_panel_async(
         variant_count=variant_count,
         synthesis=synthesis_dict,
         metadata=metadata,
+        decision_being_informed=decision_being_informed,
     )
+    # AC-7: persist decision-stamped panelist transcripts alongside the result.
+    _persist_stamped_sessions(result_id, run_sessions, decision_being_informed)
 
     # sp-0h9x: emit per_model_results + cost_breakdown so downstream
     # consumers see the same rollup shape as the ensemble path, even on
@@ -1000,7 +1265,18 @@ async def _run_panel_async(
         result["per_persona_robustness"] = variant_data["per_persona_robustness"]
         result["variant_count"] = variant_data["variant_count"]
 
-    return result
+    # v1.0.0 contract fields (panel_verdict, schema_version, warnings nudge).
+    return _finalize_contract_response(
+        result,
+        decision_being_informed=decision_being_informed,
+        decision_warnings=decision_warnings,
+        panelist_results=panelist_results_full,
+        personas=personas,
+        result_dicts=result_dicts,
+        synthesis_dict=synthesis_dict,
+        poll_summary=poll_summary_payload,
+        result_id=result_id,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1285,8 +1561,15 @@ async def run_panel(
             verdict's ``meta`` and stamped on every transcript row.
             Validation failures return a typed ``MISSING_DECISION`` /
             ``DECISION_TOO_LONG`` / ``INVALID_TOOL_ARG`` error envelope.
+            Omitting the field is tolerated during the v1.0.x grace
+            window (the placeholder ``"unspecified-legacy-call"`` is
+            synthesized and a ``W_DECISION_MISSING`` warning is returned);
+            under ``SYNTHPANEL_SCHEMA_MIN>=1.1.0`` omission is a hard
+            ``MISSING_DECISION`` reject.
     """
-    decision_error = _validate_decision_request("run_panel", decision_being_informed)
+    decision_being_informed, decision_warnings, decision_error = _resolve_decision_contract(
+        "run_panel", decision_being_informed
+    )
     if decision_error is not None:
         return decision_error
     spec_error = _reject_weighted_model_spec(
@@ -1436,6 +1719,7 @@ async def run_panel(
                 temperature=temperature,
                 hint=decision.hint,
                 accept_multimodal=accept_multimodal_sampling,
+                decision_being_informed=decision_being_informed,
             )
             return json.dumps(apply_response_gate(sampling_result), indent=2)
 
@@ -1479,6 +1763,17 @@ async def run_panel(
                 },
                 indent=2,
             )
+        # Ensemble responses are comparative (one run per model, nothing
+        # persisted) so they carry no panel_verdict; the decision is still
+        # echoed and the AC-4 nudge surfaced.
+        if decision_being_informed is not None:
+            ens_result["decision_being_informed"] = decision_being_informed
+        if decision_warnings:
+            existing_warnings = ens_result.get("warnings")
+            if isinstance(existing_warnings, list):
+                existing_warnings.extend(decision_warnings)
+            else:
+                ens_result["warnings"] = list(decision_warnings)
         return json.dumps(apply_response_gate(ens_result), indent=2)
 
     # Resolve instrument source (pack > inline instrument > questions).
@@ -1513,6 +1808,8 @@ async def run_panel(
                 persona_models=persona_models,
                 extract_schema=resolved_extract_schema,
                 synthesis_temperature=synthesis_temperature,
+                decision_being_informed=decision_being_informed,
+                decision_warnings=decision_warnings,
             )
         except PanelTotalFailureError as exc:
             logger.error("run_panel instrument: total failure: %s", exc)
@@ -1557,6 +1854,8 @@ async def run_panel(
             extract_schema=resolved_extract_schema,
             synthesis_temperature=synthesis_temperature,
             variants=variants_k,
+            decision_being_informed=decision_being_informed,
+            decision_warnings=decision_warnings,
         )
     except PanelTotalFailureError as exc:
         logger.error("run_panel: total failure: %s", exc)
@@ -1667,9 +1966,13 @@ async def run_quick_poll(
             decision this poll will inform, in 12-280 characters
             (trimmed), single line, UTF-8. Validation failures return a
             typed ``MISSING_DECISION`` / ``DECISION_TOO_LONG`` /
-            ``INVALID_TOOL_ARG`` error envelope.
+            ``INVALID_TOOL_ARG`` error envelope. Omission is tolerated
+            during the v1.0.x grace window (placeholder + warning);
+            ``SYNTHPANEL_SCHEMA_MIN>=1.1.0`` makes it a hard reject.
     """
-    decision_error = _validate_decision_request("run_quick_poll", decision_being_informed)
+    decision_being_informed, decision_warnings, decision_error = _resolve_decision_contract(
+        "run_quick_poll", decision_being_informed
+    )
     if decision_error is not None:
         return decision_error
     spec_error = _reject_weighted_model_spec(
@@ -1731,6 +2034,7 @@ async def run_quick_poll(
             temperature=temperature,
             hint=decision.hint,
             accept_multimodal=accept_multimodal_sampling,
+            decision_being_informed=decision_being_informed,
         )
         return json.dumps(apply_response_gate(result), indent=2)
 
@@ -1746,8 +2050,11 @@ async def run_quick_poll(
         synthesis_prompt=synthesis_prompt,
         temperature=temperature,
         top_p=top_p,
+        decision_being_informed=decision_being_informed,
+        decision_warnings=decision_warnings,
     )
-    result["mode"] = "byok"
+    if "error_code" not in result:
+        result["mode"] = "byok"
     return json.dumps(apply_response_gate(result), indent=2)
 
 
@@ -1761,6 +2068,7 @@ async def _run_panel_sampling(
     temperature: float | None,
     hint: str | None,
     accept_multimodal: bool = False,
+    decision_being_informed: str | None = None,
 ) -> dict[str, Any]:
     """Run a full panel via MCP sampling.
 
@@ -1844,7 +2152,7 @@ async def _run_panel_sampling(
             "usage": None,
         }
 
-    return {
+    out: dict[str, Any] = {
         "mode": "sampling",
         "hint": hint,
         "model": host_model,
@@ -1865,6 +2173,12 @@ async def _run_panel_sampling(
         "cost": None,
         "metadata": None,
     }
+    # Sampling runs are not persisted (no result_id / transcript), so no
+    # panel_verdict is emitted here — the decision is echoed for the audit
+    # join instead. See docs/response-contract.md for the caveat.
+    if decision_being_informed is not None:
+        out["decision_being_informed"] = decision_being_informed
+    return out
 
 
 async def _run_quick_poll_sampling(
@@ -1877,6 +2191,7 @@ async def _run_quick_poll_sampling(
     temperature: float | None,
     hint: str | None,
     accept_multimodal: bool = False,
+    decision_being_informed: str | None = None,
 ) -> dict[str, Any]:
     """Run a quick poll via MCP sampling.
 
@@ -1948,7 +2263,7 @@ async def _run_quick_poll_sampling(
             "usage": None,
         }
 
-    return {
+    out: dict[str, Any] = {
         "mode": "sampling",
         "hint": hint,
         "model": host_model,
@@ -1969,6 +2284,12 @@ async def _run_quick_poll_sampling(
         "cost": None,
         "metadata": None,
     }
+    # Sampling runs are not persisted (no result_id / transcript), so no
+    # panel_verdict is emitted here — the decision is echoed for the audit
+    # join instead. See docs/response-contract.md for the caveat.
+    if decision_being_informed is not None:
+        out["decision_being_informed"] = decision_being_informed
+    return out
 
 
 @mcp.tool()
@@ -2093,9 +2414,13 @@ async def extend_panel(
             decision this extension informs, in 12-280 characters
             (trimmed), single line, UTF-8. Validation failures return a
             typed ``MISSING_DECISION`` / ``DECISION_TOO_LONG`` /
-            ``INVALID_TOOL_ARG`` error envelope.
+            ``INVALID_TOOL_ARG`` error envelope. Omission is tolerated
+            during the v1.0.x grace window (placeholder + warning);
+            ``SYNTHPANEL_SCHEMA_MIN>=1.1.0`` makes it a hard reject.
     """
-    decision_error = _validate_decision_request("extend_panel", decision_being_informed)
+    decision_being_informed, decision_warnings, decision_error = _resolve_decision_contract(
+        "extend_panel", decision_being_informed
+    )
     if decision_error is not None:
         return decision_error
     spec_error = _reject_weighted_model_spec(
@@ -2117,9 +2442,9 @@ async def extend_panel(
     if ctx is not None:
         await ctx.report_progress(0, len(personas))
 
-    def _go() -> tuple[list[PanelistResult], Any, dict[str, Any] | None]:
+    def _go() -> tuple[list[PanelistResult], dict[str, Any], Any, dict[str, Any] | None]:
         client = _get_shared_client()
-        results, _registry, _sessions = run_panel_parallel(
+        results, _registry, out_sessions = run_panel_parallel(
             client=client,
             personas=personas,
             questions=questions,
@@ -2156,9 +2481,9 @@ async def extend_panel(
                         " retry extend_panel once the underlying issue is resolved."
                     ),
                 )
-        return results, synth, synth_error
+        return results, out_sessions, synth, synth_error
 
-    panelist_results, synth, synthesis_error = await asyncio.wait_for(
+    panelist_results, extended_sessions, synth, synthesis_error = await asyncio.wait_for(
         asyncio.to_thread(_go),
         timeout=PANELIST_TIMEOUT * len(personas),
     )
@@ -2176,6 +2501,10 @@ async def extend_panel(
         "synthesis": synth.to_dict() if synth is not None and hasattr(synth, "to_dict") else None,
         "extension": True,
     }
+    if decision_being_informed is not None:
+        # The extension's own decision is recorded on the round it produced;
+        # the top-level field (if any) keeps describing the original run.
+        new_round["decision_being_informed"] = decision_being_informed
     if synthesis_error is not None:
         new_round["synthesis_error"] = synthesis_error
     rounds = [*list(rounds), new_round]
@@ -2195,17 +2524,35 @@ async def extend_panel(
     updated["question_count"] = int(existing.get("question_count", 0)) + len(questions)
     update_panel_result(result_id, updated)
 
+    # AC-7: persist the extended sessions, stamped with the extension's
+    # decision (the freshest decision the transcript now serves).
+    _persist_stamped_sessions(result_id, extended_sessions, decision_being_informed)
+
     response: dict[str, Any] = {
         "result_id": result_id,
         "appended_round": rounds[-1]["name"],
         "results": new_round_results,
         "synthesis": rounds[-1]["synthesis"],
         "path": path,
+        "warnings": list(decision_warnings),
     }
     if synthesis_error is not None:
         # sp-0ozi: top-level synthesis_error so MCP clients can gate on
         # envelope shape without inspecting the appended round.
         response["synthesis_error"] = synthesis_error
+
+    # v1.0.0 contract fields for the extension round.
+    response = _finalize_contract_response(
+        response,
+        decision_being_informed=decision_being_informed,
+        decision_warnings=(),  # already placed on the envelope above
+        panelist_results=panelist_results,
+        personas=personas,
+        result_dicts=new_round_results,
+        synthesis_dict=rounds[-1]["synthesis"],
+        poll_summary=None,
+        result_id=result_id,
+    )
     return json.dumps(apply_response_gate(response), indent=2)
 
 

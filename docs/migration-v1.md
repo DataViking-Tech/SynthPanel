@@ -15,7 +15,7 @@ and is the source of truth for everything below.
 | Verdict envelope | Loose dict | **`panel_verdict.json`** with `additionalProperties: false` |
 | Flags | Free-form strings | **Closed enum** of 7 codes + severity |
 | Errors | Mixed shapes | **Typed envelope** with `retry_safe` |
-| Schema versioning | None | `schema_version: "1.0.0"` echoed in every response and error |
+| Schema versioning | None | `schema_version: "1.0.0"` echoed on every persisted-panel success envelope and every typed error |
 | Drift handling | Silent partial result | `SCHEMA_DRIFT` typed error (v1.0) → degraded artifact with flag (v1.1) |
 
 ## The new requirement: `decision_being_informed`

@@ -688,6 +688,7 @@ def run_panel_sync(
     variants: int = 0,
     attachment_bank: dict[str, dict[str, Any]] | None = None,
     allow_empty_attachments: bool = False,
+    sessions_out: dict[str, Any] | None = None,
 ) -> tuple[
     list[PanelistResult],
     list[dict[str, Any]],
@@ -701,6 +702,13 @@ def run_panel_sync(
     Returns ``(panelist_results, result_dicts, panelist_usage,
     panelist_cost, synthesis_dict, variant_data)``. ``variant_data`` is
     ``None`` when ``variants == 0``.
+
+    ``sessions_out``: optional out-param. When a dict is passed, it is
+    updated in place with the per-persona
+    :class:`~synth_panel.persistence.Session` objects the run produced,
+    keyed by persona name. Kept as an out-param rather than a seventh
+    tuple element so existing unpack sites stay valid. The MCP server
+    uses this to persist AC-7 decision-stamped transcripts.
     """
     all_personas = list(personas)
     variant_names: set[str] = set()
@@ -734,6 +742,8 @@ def run_panel_sync(
         attachment_bank=attachment_bank,
         allow_empty_attachments=allow_empty_attachments,
     )
+    if sessions_out is not None:
+        sessions_out.update(_sessions)
 
     # sp-efip: fail loud when every panelist produced no usable data.
     # Without this, MCP callers see a normally-shaped "panel complete"

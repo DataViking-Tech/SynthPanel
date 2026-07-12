@@ -62,8 +62,14 @@ def _err(
     message: str,
     *,
     field_path: str | None = None,
-    retry_safe: bool = True,
+    retry_safe: bool = False,
 ) -> ErrorEnvelope:
+    # retry_safe defaults to False: request-side validation failures are
+    # deterministic — replaying the identical request fails identically, so
+    # the caller must fix the request, not retry it. This matches the
+    # docs/response-contract.md table (retry_safe=true is reserved for
+    # transient conditions: MODEL_TIMEOUT / PANEL_TIMEOUT and pre-exhaustion
+    # SCHEMA_DRIFT, which set it explicitly).
     return ErrorEnvelope(
         error_code=code,
         message=message,
@@ -235,11 +241,21 @@ def validate_response(artifact: dict[str, Any]) -> ErrorEnvelope | None:
 def apply_response_gate(artifact: Any) -> Any:
     """AC-9 response gate — final validation before egress.
 
-    Treats *artifact* as a v1.0.0 ``panel_verdict`` candidate iff it is a
-    ``dict`` carrying a ``schema_version`` key. In that case
-    :func:`validate_response` runs and, on failure, the artifact is
-    replaced with the typed error envelope dict. Conformant artifacts
-    are returned unchanged (same identity).
+    Three artifact classes are recognized:
+
+    * **Success envelope** — a ``dict`` carrying a dict-valued
+      ``panel_verdict`` key (the MCP tool response shape). The nested
+      verdict is validated via :func:`validate_response` and the
+      envelope-level ``schema_version`` must be ``"1.0.0"``. On any
+      failure the entire envelope is replaced with the typed error
+      envelope dict — a non-conformant verdict never leaves the server
+      wrapped in a success shape.
+    * **Bare verdict candidate** — a ``dict`` carrying ``schema_version``
+      but no ``panel_verdict``. Validated directly via
+      :func:`validate_response` (the original AC-9 behavior).
+    * **Typed error envelope** — a ``dict`` carrying ``error_code``.
+      Passed through unchanged; error envelopes are the gate's *output*
+      shape, not a verdict candidate.
 
     Anything else — non-dicts, dicts without ``schema_version`` (legacy
     pre-contract MCP shapes such as ``{"results": [...], ...}``) — passes
@@ -253,6 +269,24 @@ def apply_response_gate(artifact: Any) -> Any:
     """
     if not isinstance(artifact, dict):
         return artifact
+    if "error_code" in artifact:
+        return artifact
+    nested = artifact.get("panel_verdict")
+    if isinstance(nested, dict):
+        if artifact.get("schema_version") != _SCHEMA_VERSION:
+            return _err(
+                "SCHEMA_DRIFT",
+                (
+                    f"response envelope carrying a panel_verdict must set "
+                    f"schema_version {_SCHEMA_VERSION!r}; got {artifact.get('schema_version')!r}."
+                ),
+                field_path="schema_version",
+                retry_safe=False,
+            ).to_dict()
+        err = validate_response(nested)
+        if err is None:
+            return artifact
+        return err.to_dict()
     if "schema_version" not in artifact:
         return artifact
     err = validate_response(artifact)

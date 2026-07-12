@@ -54,13 +54,16 @@ telemetry. **Bring your own LLM key — Claude, OpenAI, Gemini, or local.**
 Drops into Claude Code, Cursor, Windsurf, LangChain, CrewAI, OpenAI Agents
 SDK.
 
-> **Note (v1.0.5):** the v1.0.0 `panel_verdict` envelope (`headline`,
-> `convergence`, `dissent_count`, `flags[]`, `schema_version`) is defined in
-> [`schemas/v1.0.0.json`](src/synth_panel/schemas/v1.0.0.json) and validated by
-> the response gate, but is **not yet emitted on the success path** by either
-> `run_panel` or `panel run`. Wiring is tracked separately; until it lands,
-> consume the `synthesis` block above. Error responses already use the typed
-> envelope (`error_code`, `schema_version`, `retry_safe`).
+> **Note (v1.0.6):** the v1.0.0 `panel_verdict` artifact (`headline`,
+> `convergence`, `dissent_count`, `flags[]`, `schema_version`) defined in
+> [`schemas/v1.0.0.json`](src/synth_panel/schemas/v1.0.0.json) is now **emitted
+> on the success path** of the MCP panel tools (`run_panel`, `run_quick_poll`,
+> `extend_panel` in BYOK mode): it rides under the envelope's `panel_verdict`
+> key alongside the `synthesis` block above, and the response gate validates it
+> on egress. Sampling-mode and ensemble runs don't persist a transcript and
+> carry no verdict; the CLI `panel run` envelope is unchanged — see
+> [docs/response-contract.md](docs/response-contract.md). Error responses use
+> the typed envelope (`error_code`, `schema_version`, `retry_safe`).
 
 ```bash
 pip install synthpanel
@@ -68,7 +71,8 @@ pip install synthpanel
 
 **Frozen contract:** the v1.0.0 schema lives in the package at
 [`synthpanel/schemas/v1.0.0.json`](src/synth_panel/schemas/v1.0.0.json) and is
-echoed in every response (`schema_version: "1.0.0"`). Field-by-field reference:
+echoed on every persisted-panel success envelope and every typed error
+(`schema_version: "1.0.0"`). Field-by-field reference:
 [docs/response-contract.md](docs/response-contract.md). Migrating from v0.12?
 [docs/migration-v1.md](docs/migration-v1.md). Methodology and inspectability:
 [docs/methodology.md](docs/methodology.md).

@@ -925,6 +925,11 @@ class MultiRoundResult:
     final_synthesis: Any = None  # SynthesisResult
     warnings: list[str] = field(default_factory=list)
     usage: TokenUsage = field(default_factory=lambda: ZERO_USAGE)
+    # AC-7: final per-persona sessions from the executed rounds, keyed by
+    # persona name. Appended (default-empty) so pre-existing constructor
+    # call sites stay valid; the MCP server persists these as
+    # decision-stamped transcripts.
+    sessions: dict[str, Any] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -1926,6 +1931,7 @@ def run_multi_round_panel(
         final_synthesis=final_synthesis,
         warnings=warnings,
         usage=cumulative.cumulative_usage,
+        sessions=sessions,
     )
 
 
