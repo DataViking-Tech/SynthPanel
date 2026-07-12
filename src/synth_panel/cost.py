@@ -156,11 +156,19 @@ SONNET_PRICING = ModelPricing(
     cache_read_cost_per_million=0.30,
 )
 
+# Opus 4.5+ published rates (per Anthropic price list, all current Opus tiers):
+# $5/M in, $25/M out, with the standard cache multipliers this table uses
+# elsewhere — cache write = 1.25x input ($6.25/M), cache read = 0.10x input
+# ($0.50/M), matching HAIKU_PRICING and SONNET_PRICING structure. Prior to
+# this fix the table carried legacy Opus-3-era rates ($15/$75/$18.75/$1.50),
+# overstating every Opus run's cost and the ``--max-cost`` projected-total
+# gate by ~3x (the ``opus`` alias resolves to ``claude-opus-4-8``, which
+# bills $5/$25).
 OPUS_PRICING = ModelPricing(
-    input_cost_per_million=15.00,
-    output_cost_per_million=75.00,
-    cache_creation_cost_per_million=18.75,
-    cache_read_cost_per_million=1.50,
+    input_cost_per_million=5.00,
+    output_cost_per_million=25.00,
+    cache_creation_cost_per_million=6.25,
+    cache_read_cost_per_million=0.50,
 )
 
 # hq-xq36: prior rates ($0.15/$0.60) were Gemini 1.5 Flash, leaving
@@ -337,7 +345,16 @@ DEFAULT_PRICING = SONNET_PRICING
 # e.g. ``gpt-4o-mini`` wins over the shorter ``gpt-4o`` key.
 _PRICING_TABLE: dict[str, ModelPricing] = {
     "haiku": HAIKU_PRICING,
+    # Current-generation Anthropic flagships get explicit keys placed *ahead*
+    # of the bare ``sonnet``/``opus`` substrings. They resolve to the same
+    # tier today (``claude-sonnet-5`` → $3/$15, ``claude-opus-4-8`` → $5/$25),
+    # but the explicit rows keep cost tracking self-documenting and correct
+    # even if the generic constants are ever repurposed for a newer
+    # generation. The dashed canonical ids these keys match are what the
+    # ``opus``/``sonnet`` aliases now resolve to (see llm/aliases.py).
+    "claude-sonnet-5": SONNET_PRICING,
     "sonnet": SONNET_PRICING,
+    "claude-opus-4-8": OPUS_PRICING,
     "opus": OPUS_PRICING,
     "gemini-2.5-pro": GEMINI_PRO_PRICING,
     # sp-9gcm: ``flash-lite`` (distinctive substring) must precede the bare

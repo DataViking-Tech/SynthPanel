@@ -93,6 +93,34 @@ class TestPricingLookup:
         assert p is OPUS_PRICING
         assert est is False
 
+    def test_opus_pricing_is_opus_4_5_plus_tier(self):
+        """P1-7: OPUS_PRICING must be the current $5/$25 tier, not the legacy
+        Opus-3-era $15/$75 that overstated every opus run's cost ~3x."""
+        assert OPUS_PRICING.input_cost_per_million == pytest.approx(5.00)
+        assert OPUS_PRICING.output_cost_per_million == pytest.approx(25.00)
+        # Standard cache multipliers (1.25x write / 0.10x read on input),
+        # matching HAIKU/SONNET structure.
+        assert OPUS_PRICING.cache_creation_cost_per_million == pytest.approx(6.25)
+        assert OPUS_PRICING.cache_read_cost_per_million == pytest.approx(0.50)
+        # Guard against a regression back to the Opus-3 rates.
+        assert OPUS_PRICING.input_cost_per_million != 15.00
+        assert OPUS_PRICING.output_cost_per_million != 75.00
+
+    def test_claude_opus_4_8_resolves_to_opus_not_wrong_tier(self):
+        """The current opus alias target must price via the explicit opus tier
+        ($5/$25), never fall through to DEFAULT/Sonnet nor a stale tier."""
+        p, est = lookup_pricing("claude-opus-4-8")
+        assert p is OPUS_PRICING
+        assert est is False
+        assert p is not SONNET_PRICING
+
+    def test_claude_sonnet_5_resolves_to_sonnet_not_wrong_tier(self):
+        """The current sonnet alias target must price via the sonnet tier
+        ($3/$15), not substring-match some other row."""
+        p, est = lookup_pricing("claude-sonnet-5")
+        assert p is SONNET_PRICING
+        assert est is False
+
     def test_unknown_model_defaults(self):
         p, est = lookup_pricing("grok-3")
         assert p is SONNET_PRICING
@@ -170,6 +198,15 @@ class TestPricingLookup:
             # ``gemini`` substring (which used to overstate cost by ~41%).
             ("gemini-flash-lite", GEMINI_FLASH_LITE_PRICING),
             ("openrouter/google/gemini-2.5-flash-lite", GEMINI_FLASH_LITE_PRICING),
+            # P1-7: current-generation Anthropic flagships (alias targets).
+            # Explicit rows guarantee correct pricing; the dashed canonical
+            # ids and the OpenRouter dotted forms must both resolve.
+            ("claude-opus-4-8", OPUS_PRICING),
+            ("raw-anthropic/claude-opus-4-8", OPUS_PRICING),
+            ("openrouter/anthropic/claude-opus-4.8", OPUS_PRICING),
+            ("claude-sonnet-5", SONNET_PRICING),
+            ("raw-anthropic/claude-sonnet-5", SONNET_PRICING),
+            ("openrouter/anthropic/claude-sonnet-5", SONNET_PRICING),
         ],
     )
     def test_openrouter_common_models(self, model, expected):
@@ -367,6 +404,29 @@ class TestEstimateCost:
         cost = estimate_cost(usage, SONNET_PRICING)
         assert cost.input_cost == pytest.approx(3.0)
         assert cost.output_cost == pytest.approx(15.0)
+
+    def test_opus_pricing(self):
+        # P1-7: Opus 4.5+ rates are $5/M input, $25/M output (down from the
+        # legacy Opus-3 $15/$75 tier). 1M in + 1M out → $5 + $25 = $30.
+        usage = TokenUsage(input_tokens=1_000_000, output_tokens=1_000_000)
+        cost = estimate_cost(usage, OPUS_PRICING)
+        assert cost.input_cost == pytest.approx(5.0)
+        assert cost.output_cost == pytest.approx(25.0)
+        assert cost.total_cost == pytest.approx(30.0)
+        # A concrete panelist-sized turn: 20k in + 10k out → $0.35 at $5/$25
+        # (would have been $1.05 at the old $15/$75 tier — the 3x overstatement).
+        panelist = TokenUsage(input_tokens=20_000, output_tokens=10_000)
+        assert estimate_cost(panelist, OPUS_PRICING).total_cost == pytest.approx(0.35)
+
+    def test_opus_cache_pricing(self):
+        # Cache write $6.25/M (1.25x input), cache read $0.50/M (0.10x input).
+        usage = TokenUsage(
+            cache_creation_input_tokens=1_000_000,
+            cache_read_input_tokens=1_000_000,
+        )
+        cost = estimate_cost(usage, OPUS_PRICING)
+        assert cost.cache_creation_cost == pytest.approx(6.25)
+        assert cost.cache_read_cost == pytest.approx(0.50)
 
     def test_zero_usage(self):
         cost = estimate_cost(ZERO_USAGE)

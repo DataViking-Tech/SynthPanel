@@ -44,6 +44,34 @@ def test_known_aliases():
     assert resolve_alias("grok").startswith("grok-")
 
 
+def test_hardcoded_alias_targets_are_current_generation():
+    """P1-7: alias *names* stay stable but targets track the current-generation
+    model for each family (July 2026). Pins the exact canonical ids so a
+    silent regression to a superseded target is caught."""
+    assert resolve_alias("opus") == "claude-opus-4-8"
+    assert resolve_alias("sonnet") == "claude-sonnet-5"
+    assert resolve_alias("grok") == "grok-4"
+    # Unchanged families remain pinned to their current ids.
+    assert resolve_alias("haiku") == "claude-haiku-4-5-20251001"
+    assert resolve_alias("gemini") == "gemini-2.5-flash"
+    assert resolve_alias("gemini-pro") == "gemini-2.5-pro"
+
+
+def test_updated_opus_alias_prices_at_current_tier():
+    """End-to-end: the opus alias resolves to a canonical id that the cost
+    table prices at the current $5/$25 tier — the join point of the P1-7 fix.
+    Before the fix, resolving ``opus`` and pricing it yielded the $15/$75
+    Opus-3 tier, 3x too high."""
+    from synth_panel.cost import OPUS_PRICING, SONNET_PRICING, lookup_pricing
+
+    pricing, is_estimated = lookup_pricing(resolve_alias("opus"))
+    assert pricing is OPUS_PRICING
+    assert is_estimated is False
+    assert pricing is not SONNET_PRICING
+    assert pricing.input_cost_per_million == 5.00
+    assert pricing.output_cost_per_million == 25.00
+
+
 def test_passthrough():
     assert resolve_alias("claude-sonnet-4-6-20250414") == "claude-sonnet-4-6-20250414"
     assert resolve_alias("my-custom-model") == "my-custom-model"
