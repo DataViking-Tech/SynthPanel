@@ -160,6 +160,37 @@ jobs:
       - name: Check site/CLI subcommand sync
         run: python scripts/check_site_cli_sync.py
 
+  synthbench-contract:
+    # Cross-repo contract gate (sp-ezz / gap-analysis P0-2): every
+    # --submit-to-synthbench payload must pass SynthBench's real
+    # validate_submission() with zero errors in tier 1 AND tier 2. The
+    # matrix `test` job skips these tests (pytest.importorskip) because
+    # the real synthbench harness is GitHub-only — the `synthbench` name
+    # on PyPI is an unrelated project — so this job installs the harness
+    # from git and runs the contract suite for real on every push/PR.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e ".[dev,mcp]"
+
+      - name: Install the real SynthBench harness (GitHub-only)
+        # Installed after synthpanel so its `synthpanel>=0.2.0` dependency
+        # is already satisfied by the editable install and pip does not
+        # pull a published synthpanel wheel over the checkout.
+        run: pip install "synthbench @ git+https://github.com/DataViking-Tech/SynthBench.git"
+
+      - name: Run the submission contract tests against synthbench validate()
+        run: pytest tests/test_synthbench_contract.py -v --no-cov
+
   install-smoke:
     # Guards the *source/uv resolution* path agents and contributors hit
     # when they clone the repo. The historical `composio>=0.5,<0.6` pin

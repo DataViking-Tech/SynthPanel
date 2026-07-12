@@ -27,6 +27,7 @@ so a future refactor of the tracker's internals does not ripple here.
 from __future__ import annotations
 
 import json
+import math
 import os
 import sys
 from dataclasses import dataclass, field
@@ -55,7 +56,8 @@ benchmark leaderboard.
 
 What gets uploaded:
   • Per-question categorical response distributions (the model_distribution
-    used to compute calibration JSD).
+    used to compute calibration JSD), the published human baseline they are
+    scored against, and the derived parity metrics (JSD, Kendall's tau).
   • The calibration spec (e.g. 'gss:HAPPY'), extractor label, and panel
     sample size n.
   • Run config: model identifier(s), persona pack name, instrument name.
@@ -184,6 +186,104 @@ def _mean(values: list[float]) -> float | None:
     return sum(values) / len(values)
 
 
+# The SynthBench harness version whose submission contract this module
+# targets. ``synthbench run`` stamps its own ``__version__`` as the
+# top-level ``version`` field of every result file; we mirror that when
+# the real synthbench package is importable and fall back to this pin
+# when only the vendored metric implementations are available.
+SYNTHBENCH_CONTRACT_VERSION = "0.1.0"
+
+
+def _vendored_jsd(p: dict[str, float], q: dict[str, float]) -> float:
+    """Jensen-Shannon divergence, replicating synthbench's convention.
+
+    Mirrors ``synthbench.metrics.distributional.jensen_shannon_divergence``:
+    base-2 log (so the result is bounded in ``[0, 1]``), computed over the
+    union of both supports, negatives clamped to zero, and ``1.0`` returned
+    when either distribution carries no mass. Parity-tested against
+    synthbench's scipy-backed implementation in
+    ``tests/test_synthbench_contract.py``.
+    """
+    keys = sorted(set(p) | set(q))
+    p_vec = [max(float(p.get(k, 0.0)), 0.0) for k in keys]
+    q_vec = [max(float(q.get(k, 0.0)), 0.0) for k in keys]
+    p_sum = sum(p_vec)
+    q_sum = sum(q_vec)
+    if p_sum == 0 or q_sum == 0:
+        return 1.0
+    p_vec = [v / p_sum for v in p_vec]
+    q_vec = [v / q_sum for v in q_vec]
+    jsd = 0.0
+    for a, b in zip(p_vec, q_vec):
+        m = 0.5 * (a + b)
+        if a > 0.0:
+            jsd += 0.5 * a * math.log2(a / m)
+        if b > 0.0:
+            jsd += 0.5 * b * math.log2(b / m)
+    return max(0.0, min(1.0, float(jsd)))
+
+
+def _vendored_kendall_tau_b(p: dict[str, float], q: dict[str, float]) -> float:
+    """Kendall's tau-b, replicating synthbench's convention.
+
+    Mirrors ``synthbench.metrics.ranking.kendall_tau_b`` (which wraps
+    ``scipy.stats.kendalltau(variant="b")``): both distributions are read
+    over the sorted union of their supports, ties are corrected in the
+    denominator, and degenerate inputs (fewer than 2 options, or a constant
+    vector) return ``0.0``.
+    """
+    keys = sorted(set(p) | set(q))
+    n = len(keys)
+    if n < 2:
+        return 0.0
+    x = [float(p.get(k, 0.0)) for k in keys]
+    y = [float(q.get(k, 0.0)) for k in keys]
+    concordant_minus_discordant = 0
+    ties_x = 0  # pairs tied in x (including pairs tied in both)
+    ties_y = 0  # pairs tied in y (including pairs tied in both)
+    for i in range(n):
+        for j in range(i + 1, n):
+            dx = x[i] - x[j]
+            dy = y[i] - y[j]
+            if dx == 0.0:
+                ties_x += 1
+            if dy == 0.0:
+                ties_y += 1
+            if dx != 0.0 and dy != 0.0:
+                concordant_minus_discordant += 1 if dx * dy > 0 else -1
+    n0 = n * (n - 1) // 2
+    denominator = math.sqrt((n0 - ties_x) * (n0 - ties_y))
+    if denominator == 0.0:
+        return 0.0
+    return float(concordant_minus_discordant / denominator)
+
+
+def _synthbench_metrics() -> tuple[Any, Any, str]:
+    """Resolve ``(jsd_fn, kendall_tau_fn, version)`` for payload metrics.
+
+    SynthBench's Tier-2 validation *recomputes* ``jsd`` and ``kendall_tau``
+    from the submitted distributions with its own implementations and
+    rejects on mismatch, so when the real harness is importable we call its
+    metric functions directly and stamp its ``__version__``. Otherwise we
+    fall back to the vendored pure-Python implementations above (no
+    numpy/scipy needed) and :data:`SYNTHBENCH_CONTRACT_VERSION`.
+
+    NOTE: the package named ``synthbench`` on PyPI is an unrelated project;
+    the real harness lives at github.com/DataViking-Tech/SynthBench. The
+    broad ``except`` therefore guards both "not installed" and "a different
+    distribution shadowing the name" (no ``metrics`` subpackage).
+    """
+    try:
+        from synthbench import __version__ as sb_version  # type: ignore[import-not-found]
+        from synthbench.metrics.distributional import (  # type: ignore[import-not-found]
+            jensen_shannon_divergence as sb_jsd,
+        )
+        from synthbench.metrics.ranking import kendall_tau_b as sb_tau  # type: ignore[import-not-found]
+    except Exception:
+        return _vendored_jsd, _vendored_kendall_tau_b, SYNTHBENCH_CONTRACT_VERSION
+    return sb_jsd, sb_tau, str(sb_version)
+
+
 def build_submission_payload(
     *,
     panel_extra: dict[str, Any],
@@ -196,63 +296,108 @@ def build_submission_payload(
 ) -> dict[str, Any]:
     """Assemble a SynthBench ``/submit`` payload from a calibrated panel run.
 
-    The shape is best-effort against the SynthBench Tier 2 schema documented
-    in ``SUBMISSIONS.md`` (see bead sp-ezz). When the server cannot validate
-    a field — for example, ``mean_tau`` for non-rank questions — we omit the
-    field rather than send a placeholder; the server can choose to accept or
-    reject. Server-side rejections are surfaced verbatim by :func:`submit`.
+    The shape matches the contract enforced by SynthBench's validator
+    (``synthbench.validation``, Tier 1 + Tier 2) and its edge Worker
+    (``workers/data-proxy``):
+
+    * top level: ``benchmark``, ``version``, ``config``, ``aggregate`` and a
+      **list**-shaped ``per_question``;
+    * ``config`` carries ``dataset`` (the ``DATASET`` half of the calibration
+      spec) and ``provider`` (``synthpanel/<model>``, the provider format
+      SynthBench's leaderboard taxonomy uses to classify SynthPanel rows as
+      ``product`` framework) plus the synthpanel provenance extras;
+    * every ``per_question`` row carries ``key``, ``human_distribution``,
+      ``model_distribution``, ``jsd`` and ``kendall_tau``;
+    * ``aggregate`` carries ``mean_jsd``, ``mean_kendall_tau``,
+      ``composite_parity`` (SynthBench's accepted 2-metric blend:
+      ``0.5*(1-mean_jsd) + 0.5*(1+mean_tau)/2``) and ``n_questions``
+      (== ``len(per_question)``).
+
+    ``jsd`` and ``kendall_tau`` are computed here from the *exact*
+    distributions serialized into the payload — with synthbench's own metric
+    functions when importable — so the server's Tier-2 recompute is an
+    identity check. The convergence report's calibration ``jsd`` is not
+    reused verbatim because it is computed pre-normalization.
+
+    The whole payload is verified against SynthBench's real ``validate()``
+    in ``tests/test_synthbench_contract.py``.
     """
     convergence = panel_extra.get("convergence") or {}
     per_question_in = convergence.get("per_question") or {}
     final_n = convergence.get("final_n", 0)
 
-    human_dists: dict[str, dict[str, float]] = {}
+    jsd_fn, tau_fn, contract_version = _synthbench_metrics()
+
+    # Human baselines. Supported shapes:
+    #   {"human_distribution": {...}}                          (single-question)
+    #   {"per_question": {key: {"human_distribution": ...}}}   (multi-question)
+    # The single-question shape applies only to rows that carry a
+    # ``calibration`` block: build_report binds calibration to the one
+    # tracked question matching the baseline's question key, so this no
+    # longer stamps one human distribution onto every tracked question.
+    single_human: dict[str, float] | None = None
+    multi_human: dict[str, dict[str, float]] = {}
     if isinstance(baseline_payload, dict):
-        # Supported shapes:
-        #   {"human_distribution": {...}}                          (single-question)
-        #   {"per_question": {key: {"human_distribution": ...}}}   (multi-question)
         if isinstance(baseline_payload.get("human_distribution"), dict):
-            for key in per_question_in:
-                human_dists[key] = _normalize_distribution(baseline_payload["human_distribution"])
+            single_human = _normalize_distribution(baseline_payload["human_distribution"]) or None
         elif isinstance(baseline_payload.get("per_question"), dict):
             for key, sub in baseline_payload["per_question"].items():
                 if isinstance(sub, dict) and isinstance(sub.get("human_distribution"), dict):
-                    human_dists[key] = _normalize_distribution(sub["human_distribution"])
+                    multi_human[key] = _normalize_distribution(sub["human_distribution"])
 
-    per_question_out: dict[str, Any] = {}
+    per_question_out: list[dict[str, Any]] = []
     jsd_values: list[float] = []
+    tau_values: list[float] = []
     for key, q_data in per_question_in.items():
         calib = q_data.get("calibration") if isinstance(q_data, dict) else None
         if not isinstance(calib, dict):
-            # Skip questions for which calibration was not computed (e.g.
-            # disjoint supports surfaced via alignment_error are still
-            # included since calib will exist with jsd=1.0). Absence here
-            # means the question was not on the calibration path at all.
+            # The question was not on the calibration path at all (free
+            # text, or excluded by the single-question baseline binding).
+            # Disjoint-support questions surfaced via alignment_error ARE
+            # included, since their calib block exists with jsd=1.0.
             continue
         model_dist = _normalize_distribution(model_distributions.get(key, {}))
-        human_dist = human_dists.get(key, {})
+        human_dist = multi_human.get(key) if multi_human else single_human
         if not model_dist or not human_dist:
             continue
-        jsd_value = float(calib.get("jsd", 0.0))
-        entry = {
-            "model_distribution": model_dist,
+        jsd_value = round(float(jsd_fn(human_dist, model_dist)), 6)
+        tau_value = round(float(tau_fn(human_dist, model_dist)), 6)
+        row: dict[str, Any] = {
+            "key": str(key),
             "human_distribution": human_dist,
+            "model_distribution": model_dist,
             "jsd": jsd_value,
+            "kendall_tau": tau_value,
             "n": final_n,
+            "n_samples": final_n,
             "extractor": calib.get("extractor"),
             "auto_derived": bool(calib.get("auto_derived", False)),
         }
         if "alignment_error" in calib:
-            entry["alignment_error"] = calib["alignment_error"]
-        per_question_out[key] = entry
+            row["alignment_error"] = calib["alignment_error"]
+        per_question_out.append(row)
         jsd_values.append(jsd_value)
+        tau_values.append(tau_value)
 
-    aggregate: dict[str, Any] = {"n": final_n}
+    aggregate: dict[str, Any] = {
+        "n": final_n,
+        "n_questions": len(per_question_out),
+    }
     mean_jsd = _mean(jsd_values)
-    if mean_jsd is not None:
-        aggregate["mean_jsd"] = mean_jsd
+    mean_tau = _mean(tau_values)
+    if mean_jsd is not None and mean_tau is not None:
+        aggregate["mean_jsd"] = round(mean_jsd, 6)
+        aggregate["mean_kendall_tau"] = round(mean_tau, 6)
+        # SynthBench accepts composite_parity as either the 2-metric blend
+        # or the full SPS mean; we report the blend since JSD + tau are the
+        # only components a calibrated panel run produces.
+        aggregate["composite_parity"] = round(0.5 * (1.0 - mean_jsd) + 0.5 * (1.0 + mean_tau) / 2.0, 6)
 
+    dataset = calibration_spec.partition(":")[0].strip()
     config: dict[str, Any] = {
+        "dataset": dataset,
+        "provider": f"synthpanel/{panelist_model}" if panelist_model else "synthpanel",
+        "framework": "synthpanel",
         "calibration_spec": calibration_spec,
         "n": final_n,
         "client": "synthpanel",
@@ -267,6 +412,7 @@ def build_submission_payload(
 
     return {
         "benchmark": "synthbench",
+        "version": contract_version,
         "config": config,
         "aggregate": aggregate,
         "per_question": per_question_out,
