@@ -608,11 +608,17 @@ def save_panel_result(
     attachments: dict[str, dict[str, Any]] | None = None,
     synthesis: dict[str, Any] | None = None,
     metadata: dict[str, Any] | None = None,
+    decision_being_informed: str | None = None,
 ) -> str:
     """Save panel results and return the result ID.
 
     New optional fields (backward-compatible — omitted when *None*):
 
+    * ``decision_being_informed``: the v1.0.0 contract field this panel
+      run informs (real caller-supplied value, or the AC-4 grace
+      placeholder ``"unspecified-legacy-call"``). Persisted at the top
+      level so a saved result can be joined back to the decision it
+      answered without re-reading the transcript.
     * ``instrument_name``: name/id of the instrument pack used.
     * ``questions``: question defs with ``text`` and optional
       ``extraction_schema``.
@@ -654,6 +660,8 @@ def save_panel_result(
         "total_cost": total_cost,
         "results": results,
     }
+    if decision_being_informed is not None:
+        data["decision_being_informed"] = decision_being_informed
     if variant_count > 0:
         data["variant_count"] = variant_count
     if instrument_name is not None:

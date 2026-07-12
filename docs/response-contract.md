@@ -18,9 +18,13 @@ sequenceDiagram
     participant Model
 
     Agent->>SynthPanel: run_panel(decision_being_informed=...)
-    SynthPanel->>SynthPanel: validate request (pre-model)
-    alt missing / <12 / >280 / newline
-        SynthPanel-->>Agent: error_envelope (MISSING_DECISION | DECISION_TOO_LONG)
+    SynthPanel->>SynthPanel: grace shim (AC-4) + validate request (pre-model)
+    alt omitted (v1.0.x grace window)
+        SynthPanel->>SynthPanel: synthesize "unspecified-legacy-call" + W_DECISION_MISSING warning
+    else omitted (SYNTHPANEL_SCHEMA_MIN >= 1.1.0)
+        SynthPanel-->>Agent: error_envelope (MISSING_DECISION)
+    else empty / <12 / >280 / newline / wrong type
+        SynthPanel-->>Agent: error_envelope (MISSING_DECISION | INVALID_TOOL_ARG | DECISION_TOO_LONG)
     else valid
         SynthPanel->>Orchestrator: dispatch panel
         Orchestrator->>Model: panelist turns
@@ -46,6 +50,16 @@ window.
 Required on `run_panel`, `run_quick_poll`, `extend_panel`. Not used on
 `run_prompt` (sub-decisional scratch work).
 
+**v1.0.x grace window (AC-4):** *omitting* the field does not fail the call
+yet. The server synthesizes the placeholder `"unspecified-legacy-call"`,
+returns a `W_DECISION_MISSING` nudge in the response `warnings[]`, and the
+placeholder flows through persistence and the verdict echo exactly like a
+real value — so audits can identify legacy traffic. Setting
+`SYNTHPANEL_SCHEMA_MIN=1.1.0` (v1.1.0 default) turns omission into a hard
+typed `MISSING_DECISION` reject. A field that is *provided* but
+empty/whitespace is a caller bug, not legacy traffic — it is rejected with
+`MISSING_DECISION` in every version.
+
 | Property | Value |
 |---|---|
 | Type | `string` |
@@ -66,7 +80,19 @@ verbatim.
 
 ## Response: `panel_verdict.json`
 
-Returned alongside every successful panel run.
+Returned alongside every successful **persisted** panel run: the success
+envelope from `run_panel`, `run_quick_poll`, and `extend_panel` (BYOK mode)
+carries the artifact under the top-level `panel_verdict` key, next to the
+existing `synthesis` block, and stamps `schema_version: "1.0.0"` at the
+envelope top level. Two documented exceptions:
+
+- **Sampling mode** (zero-config, host-agent-run panels) does not persist a
+  result, so there is no transcript for `full_transcript_uri` to point at —
+  no `panel_verdict` is emitted. The decision is still echoed at the
+  envelope's top-level `decision_being_informed`.
+- **Ensemble mode** (`models=[...]`) returns a comparative per-model shape
+  and persists nothing — no `panel_verdict`; the decision is echoed at the
+  envelope top level.
 
 ```json
 {
@@ -190,16 +216,33 @@ elif verdict["convergence"] >= 0.7:
 
 | Code | When | `retry_safe` |
 |---|---|---|
-| `MISSING_DECISION` | Required field absent or `<12` chars after trim | `false` |
-| `DECISION_TOO_LONG` | `>280` chars | `false` |
-| `INVALID_TOOL_ARG` | Other request validation failure | `false` |
+| `MISSING_DECISION` | Required field omitted (hard-reject mode, `SYNTHPANEL_SCHEMA_MIN>=1.1.0`) or provided but empty after trim | `false` |
+| `DECISION_TOO_LONG` | `>280` chars after trim | `false` |
+| `INVALID_TOOL_ARG` | Other request validation failure — including `<12` chars after trim, newlines, or a non-string value | `false` |
 | `INVALID_FLAG` | Response carries a flag not in the closed enum | `false` |
 | `SCHEMA_DRIFT` | 3-strike retry exhausted (default v1.0) **or** degraded artifact itself fails re-validation | `true` (pre-exhaustion) |
-| `MODEL_TIMEOUT` | Provider timeout | `true` |
+| `MODEL_TIMEOUT` | Provider timeout on a single completion | `true` |
+| `PANEL_TIMEOUT` | Panel run exceeded the per-panelist time budget | `true` |
 | `INTERNAL_ERROR` | Uncategorized server-side failure | `false` |
 
-`retry_safe = true` only for `MODEL_TIMEOUT` and `SCHEMA_DRIFT` pre-exhaustion.
-Treat `retry_safe = false` as terminal — fix the request, don't retry the call.
+`retry_safe = true` only for `MODEL_TIMEOUT` / `PANEL_TIMEOUT` and
+`SCHEMA_DRIFT` pre-exhaustion. Treat `retry_safe = false` as terminal — fix
+the request, don't retry the call.
+
+> **Length semantics:** a too-*short* (but non-empty) decision is an
+> `INVALID_TOOL_ARG`, not a `MISSING_DECISION` — the field was supplied, it
+> just violates the 12-char floor. Earlier revisions of this page documented
+> `<12` under `MISSING_DECISION`; the code has always returned
+> `INVALID_TOOL_ARG` and agents in the wild branch on it, so the docs now
+> follow the code.
+
+> **`PANEL_TIMEOUT` note:** panel-run timeouts have emitted
+> `error_code: "PANEL_TIMEOUT"` on the wire since v1.0.x, but the code was
+> missing from the schema's `error_codes_enum` until v1.0.6. It was added to
+> the enum (an enum-widening, backward-compatible change) rather than renamed
+> to `MODEL_TIMEOUT`, because agents may already branch on the
+> `PANEL_TIMEOUT` string and a silent rename would break them.
+> `MODEL_TIMEOUT` remains reserved for single-completion provider timeouts.
 
 ### Validation boundary
 
@@ -218,9 +261,13 @@ Fail fast, fail closed.
 Single file, embedded in the package:
 [`synthpanel/schemas/v1.0.0.json`](../src/synth_panel/schemas/v1.0.0.json).
 Append-only — new contract versions ship as parallel files
-(`v1.1.0.json`, `v2.0.0.json`), never as in-place edits.
+(`v1.1.0.json`, `v2.0.0.json`), never as in-place edits. One documented
+exception: v1.0.6 appended `PANEL_TIMEOUT` to `error_codes_enum` to record a
+code the server had already been emitting on the wire — an enum-widening
+correction of the schema to shipped reality, not a semantic change.
 
-`schema_version` is echoed in every response and every error. Pin to it for
+`schema_version` is echoed on every persisted-panel success envelope (top
+level and inside `panel_verdict`) and on every typed error. Pin to it for
 forward-compat — when v1.1 lands, your agent reads `schema_version` and routes.
 
 ## Out of scope for v1.0.0

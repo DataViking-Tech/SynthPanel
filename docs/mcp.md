@@ -173,11 +173,16 @@ Every panel-running tool call (`run_panel`, `run_quick_poll`, `extend_panel`)
 
 - 12–280 chars, single line, UTF-8.
 - Echoed verbatim into `panel_verdict.meta.decision_being_informed`.
-- Missing or `<12` chars → typed error `MISSING_DECISION`. `>280` → `DECISION_TOO_LONG`.
-  No silent truncation.
+- *Omitted* → v1.0.x grace: the server synthesizes
+  `"unspecified-legacy-call"`, returns a `W_DECISION_MISSING` nudge in
+  `warnings[]`, and proceeds; under `SYNTHPANEL_SCHEMA_MIN>=1.1.0` omission
+  is a hard typed `MISSING_DECISION` reject.
+- Provided but empty after trim → `MISSING_DECISION`. `<12` chars →
+  `INVALID_TOOL_ARG`. `>280` → `DECISION_TOO_LONG`. No silent truncation.
 
-The response envelope (`panel_verdict.json`) is closed-shape with
-`schema_version: "1.0.0"` and a closed `flags[]` enum. Full reference:
+Successful persisted panel runs return the `panel_verdict.json` artifact
+(closed-shape, `schema_version: "1.0.0"`, closed `flags[]` enum) under the
+envelope's `panel_verdict` key, alongside `synthesis`. Full reference:
 [docs/response-contract.md](response-contract.md). Migration guide:
 [docs/migration-v1.md](migration-v1.md).
 

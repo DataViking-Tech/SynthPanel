@@ -6,6 +6,42 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [Unreleased]
 
+### Added
+
+- **The v1.0.0 agent contract is wired end to end on the MCP panel tools
+  (P1-1).** `run_panel`, `run_quick_poll`, and `extend_panel` now route
+  requests through the AC-4 grace shim (`apply_legacy_grace`): an omitted
+  `decision_being_informed` synthesizes `"unspecified-legacy-call"` and
+  returns a `W_DECISION_MISSING` nudge in the response `warnings[]`, while
+  `SYNTHPANEL_SCHEMA_MIN>=1.1.0` hard-rejects with a typed
+  `MISSING_DECISION`. The (real or synthesized) decision is persisted in the
+  saved result JSON, stamped on the newly-persisted per-panelist session
+  transcripts (AC-7, `results/<result_id>.sessions/`), and echoed at
+  `panel_verdict.meta.decision_being_informed`. Successful persisted (BYOK)
+  panel runs now emit the `panel_verdict` artifact (AC-6,
+  `build_panel_verdict`) under the envelope's `panel_verdict` key alongside
+  `synthesis`, with `schema_version: "1.0.0"` stamped at the envelope top
+  level so the AC-9 response gate genuinely validates success responses on
+  egress. Structured-output 3-strike exhaustion now routes through the AC-8
+  contract pivot (`exhausted_retry_outcome`): typed `SCHEMA_DRIFT` error by
+  default, degraded verdict with a `schema_drift` warn flag under
+  `SYNTHPANEL_DRIFT_DEGRADE=1`. Sampling-mode and ensemble runs (nothing
+  persisted) echo the decision but carry no verdict — documented in
+  docs/response-contract.md.
+
+### Changed
+
+- **`retry_safe` semantics aligned with docs/response-contract.md.**
+  Request-side validation errors (`MISSING_DECISION`, `DECISION_TOO_LONG`,
+  `INVALID_TOOL_ARG`) now carry `retry_safe: false` — replaying an identical
+  malformed request fails identically. `retry_safe: true` remains reserved
+  for transient conditions (`MODEL_TIMEOUT`/`PANEL_TIMEOUT`, pre-exhaustion
+  `SCHEMA_DRIFT`).
+- **`PANEL_TIMEOUT` added to the v1.0.0 `error_codes_enum`.** The server has
+  emitted this code on panel-run timeouts since v1.0.x; the schema now
+  records it (enum-widening only). It was not renamed to `MODEL_TIMEOUT`
+  because agents may already branch on the `PANEL_TIMEOUT` string.
+
 ### Fixed
 
 - **`--best-model-for` substitutes a runnable upstream `model_id` (sy-i7a,

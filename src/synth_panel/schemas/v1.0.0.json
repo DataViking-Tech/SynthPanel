@@ -22,6 +22,7 @@
   },
   "error_codes_enum": {
     "type": "string",
+    "description": "PANEL_TIMEOUT was appended in v1.0.6 to document the code the server has emitted on panel-run timeouts since v1.0.x; the addition is enum-widening only (existing members and their semantics are unchanged). MODEL_TIMEOUT remains reserved for single-completion provider timeouts.",
     "enum": [
       "MISSING_DECISION",
       "DECISION_TOO_LONG",
@@ -29,6 +30,7 @@
       "INVALID_FLAG",
       "SCHEMA_DRIFT",
       "MODEL_TIMEOUT",
+      "PANEL_TIMEOUT",
       "INTERNAL_ERROR"
     ]
   },
