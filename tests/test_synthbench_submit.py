@@ -11,10 +11,13 @@ Covers:
   ``--calibrate-against`` and without ``SYNTHBENCH_API_KEY`` both
   short-circuit before any LLM call
 
-The tests deliberately avoid asserting against the *exact* SynthBench
-schema fields beyond what the bead's contract pins down (config /
-aggregate / per_question keys + the per-question distribution shape) so
-a future SynthBench-side schema change does not need to ripple here.
+The payload-shape tests here pin the SynthBench submission contract as
+enforced by ``synthbench.validation`` (list-shaped ``per_question`` with
+``key``/``jsd``/``kendall_tau``, top-level ``version``, ``config.dataset``
++ ``config.provider``, full ``aggregate``). The authoritative cross-repo
+check — running SynthBench's actual ``validate_submission`` against a
+payload built from a realistic calibrated run — lives in
+``tests/test_synthbench_contract.py``.
 """
 
 from __future__ import annotations
@@ -159,6 +162,12 @@ def test_build_submission_payload_shape(calibrated_extra, baseline_payload, mode
         persona_pack_name="general-public",
     )
     assert payload["benchmark"] == "synthbench"
+    # Top-level `version` is required by SynthBench Tier-1 schema validation.
+    assert isinstance(payload["version"], str) and payload["version"]
+    # config.dataset / config.provider are required Tier-1 config keys.
+    assert payload["config"]["dataset"] == "gss"
+    assert payload["config"]["provider"] == "synthpanel/claude-sonnet-4-6"
+    assert payload["config"]["framework"] == "synthpanel"
     assert payload["config"]["calibration_spec"] == "gss:HAPPY"
     assert payload["config"]["panelist_model"] == "claude-sonnet-4-6"
     assert payload["config"]["instrument"] == "happiness-probe"
@@ -166,16 +175,35 @@ def test_build_submission_payload_shape(calibrated_extra, baseline_payload, mode
     assert payload["config"]["client"] == "synthpanel"
     assert payload["config"]["n"] == 100
 
-    q1 = payload["per_question"]["q1"]
-    assert q1["jsd"] == pytest.approx(0.0123)
+    # per_question is a LIST of rows, each carrying the required Tier-1
+    # fields (key, human_distribution, model_distribution, jsd, kendall_tau).
+    assert isinstance(payload["per_question"], list)
+    assert len(payload["per_question"]) == 1
+    q1 = payload["per_question"][0]
+    assert q1["key"] == "q1"
+    # jsd is recomputed from the submitted distributions with the synthbench
+    # convention (base-2 JSD) so the server's Tier-2 recompute is an
+    # identity check — small and close to the report's calibration jsd.
+    assert 0.0 <= q1["jsd"] <= 1.0
+    assert q1["jsd"] == pytest.approx(0.0123, abs=0.03)
+    assert -1.0 <= q1["kendall_tau"] <= 1.0
     assert q1["n"] == 100
+    assert q1["n_samples"] == 100
     assert q1["extractor"] == "pick_one:auto-derived"
     assert q1["auto_derived"] is True
     # Distributions must sum to ~1.0 each (the server enforces this).
     assert sum(q1["model_distribution"].values()) == pytest.approx(1.0)
     assert sum(q1["human_distribution"].values()) == pytest.approx(1.0)
-    assert payload["aggregate"]["mean_jsd"] == pytest.approx(0.0123)
-    assert payload["aggregate"]["n"] == 100
+
+    aggregate = payload["aggregate"]
+    assert aggregate["n"] == 100
+    assert aggregate["n_questions"] == 1
+    assert aggregate["mean_jsd"] == pytest.approx(q1["jsd"])
+    assert aggregate["mean_kendall_tau"] == pytest.approx(q1["kendall_tau"])
+    # composite_parity uses SynthBench's accepted 2-metric blend.
+    expected_composite = 0.5 * (1.0 - aggregate["mean_jsd"]) + 0.5 * (1.0 + aggregate["mean_kendall_tau"]) / 2.0
+    assert aggregate["composite_parity"] == pytest.approx(expected_composite, abs=1e-6)
+    assert 0.0 <= aggregate["composite_parity"] <= 1.0
 
 
 def test_build_submission_payload_omits_questions_with_no_distribution(calibrated_extra, baseline_payload):
@@ -189,10 +217,28 @@ def test_build_submission_payload_omits_questions_with_no_distribution(calibrate
         instrument_name=None,
         persona_pack_name=None,
     )
-    assert payload["per_question"] == {}
-    # Aggregate still carries n; mean_jsd is omitted when nothing scored.
+    assert payload["per_question"] == []
+    # Aggregate still carries n; means are omitted when nothing scored
+    # (an empty payload is never POSTed — see submit_panel_result).
     assert payload["aggregate"]["n"] == 100
+    assert payload["aggregate"]["n_questions"] == 0
     assert "mean_jsd" not in payload["aggregate"]
+
+
+def test_build_submission_payload_provider_without_model_is_bare_synthpanel(
+    calibrated_extra, baseline_payload, model_distributions
+):
+    payload = build_submission_payload(
+        panel_extra=calibrated_extra,
+        calibration_spec="gss:HAPPY",
+        baseline_payload=baseline_payload,
+        model_distributions=model_distributions,
+        panelist_model=None,
+        instrument_name=None,
+        persona_pack_name=None,
+    )
+    assert payload["config"]["provider"] == "synthpanel"
+    assert "panelist_model" not in payload["config"]
 
 
 def test_build_submission_payload_threads_alignment_error(calibrated_extra, model_distributions):
@@ -206,7 +252,11 @@ def test_build_submission_payload_threads_alignment_error(calibrated_extra, mode
         instrument_name=None,
         persona_pack_name=None,
     )
-    assert payload["per_question"]["q1"]["alignment_error"] == "['a'] vs ['x']"
+    (q1,) = payload["per_question"]
+    assert q1["alignment_error"] == "['a'] vs ['x']"
+    # Disjoint supports pin JSD to the base-2 upper bound, matching both the
+    # convergence report and synthbench's recompute convention.
+    assert q1["jsd"] == pytest.approx(1.0)
 
 
 # ---------------------------------------------------------------------------

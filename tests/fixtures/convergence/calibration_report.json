@@ -1,5 +1,5 @@
 {
-  "_comment": "sp-bldz / GH-313 golden fixture — pins per_question[key].calibration wire format. Field names, casing, and nesting are committed; downstream sp-pack-registry consumes this shape. Additive-only changes per structure.md §6 and plan.md R3.",
+  "_comment": "sp-bldz / GH-313 golden fixture \u2014 pins per_question[key].calibration wire format. Field names, casing, and nesting are committed; downstream sp-pack-registry consumes this shape. Additive-only changes per structure.md \u00a76 and plan.md R3. sp-ezz P0 fix: a single-question baseline now binds to exactly ONE tracked question (matched via the baseline/spec question key), so 'color' no longer carries a fabricated calibration block against the gss:HAPPY baseline.",
   "per_question": {
     "happy": {
       "final_n": 10,
@@ -31,15 +31,6 @@
       "converged_at": null,
       "curve": [],
       "support_size": 2,
-      "calibration": {
-        "jsd": 1.0,
-        "baseline_spec": "gss:HAPPY",
-        "extractor": "pick_one:auto-derived",
-        "auto_derived": true,
-        "alignment_error": "['blue', 'red'] vs ['Not too happy', 'Pretty happy', 'Very happy']",
-        "cramers_v": 1.0,
-        "lead_interpretation": "Cramer's V=1.000 (large effect vs baseline). Panel and baseline use disjoint category vocabularies; see alignment_error before drawing conclusions."
-      },
       "skew_vs_uniform": {
         "chi2": 1.6,
         "cramers_v": 0.4,

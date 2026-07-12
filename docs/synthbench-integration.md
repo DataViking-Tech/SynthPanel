@@ -66,11 +66,92 @@ Submitted to SynthBench: https://synthbench.org/submit/sub_abc123
 Per the consent notice:
 
 * Per-question categorical response distributions (the
-  `model_distribution` used to compute the calibration JSD).
+  `model_distribution` used to compute the calibration JSD), alongside
+  the published human baseline distribution they are scored against.
+* Parity metrics derived from those two distributions: per-question
+  `jsd` and `kendall_tau`, plus aggregate `mean_jsd`,
+  `mean_kendall_tau`, and `composite_parity`.
 * The calibration spec (e.g. `gss:HAPPY`), extractor label, and panel
   sample size *n*.
 * Run config: model identifier(s), persona pack name, instrument name.
 * The SynthPanel client version.
+
+## Payload contract
+
+The upload is shaped to pass SynthBench's submission validator
+(`synthbench.validation`, Tier 1 schema + Tier 2 metric recomputation —
+see SynthBench's `SUBMISSIONS.md`). Concretely:
+
+```json
+{
+  "benchmark": "synthbench",
+  "version": "0.1.0",
+  "config": {
+    "dataset": "gss",
+    "provider": "synthpanel/claude-haiku-4-5-20251001",
+    "framework": "synthpanel",
+    "calibration_spec": "gss:HAPPY",
+    "n": 60,
+    "client": "synthpanel",
+    "client_version": "1.5.7",
+    "panelist_model": "claude-haiku-4-5-20251001",
+    "instrument": "happiness-probe",
+    "persona_pack": "general-public"
+  },
+  "aggregate": {
+    "n": 60,
+    "n_questions": 1,
+    "mean_jsd": 0.023996,
+    "mean_kendall_tau": 0.333333,
+    "composite_parity": 0.821335
+  },
+  "per_question": [
+    {
+      "key": "HAPPY",
+      "human_distribution": { "Very happy": 0.31, "Pretty happy": 0.56, "Not too happy": 0.13 },
+      "model_distribution": { "Very happy": 0.4667, "Pretty happy": 0.3833, "Not too happy": 0.15 },
+      "jsd": 0.023996,
+      "kendall_tau": 0.333333,
+      "n": 60,
+      "n_samples": 60,
+      "extractor": "pick_one:auto-derived",
+      "auto_derived": true
+    }
+  ]
+}
+```
+
+Contract notes:
+
+* `per_question` is a **list** of rows; each row carries the Tier-1
+  required fields `key`, `human_distribution`, `model_distribution`,
+  `jsd`, and `kendall_tau`.
+* `version` mirrors the SynthBench harness version whose contract the
+  payload targets (`synthbench.__version__` when the harness is
+  importable).
+* `config.dataset` is the `DATASET` half of the calibration spec;
+  `config.provider` uses SynthBench's `synthpanel/<model>` provider
+  format so leaderboard rows classify under the *product* framework.
+* `jsd` and `kendall_tau` are computed from the exact distributions in
+  the payload using SynthBench's own metric functions (base-2 JSD,
+  tau-b) when `synthbench` is importable — SynthBench's Tier-2
+  validation recomputes both from the submitted distributions and
+  rejects on mismatch, so this makes the recompute an identity check.
+  `composite_parity` is the accepted 2-metric blend
+  `0.5·(1−mean_jsd) + 0.5·(1+mean_tau)/2`.
+* **A calibration baseline describes one survey question, so exactly one
+  question is uploaded per run.** With a multi-question instrument, the
+  baseline binds to the tracked question matching the baseline's
+  question key (e.g. a question keyed `HAPPY` for `gss:HAPPY`); the
+  other tracked questions are excluded from calibration and submission,
+  and the CLI prints a warning naming them.
+
+The contract is enforced by `tests/test_synthbench_contract.py`, which
+builds a payload from a simulated calibrated run and asserts SynthBench's
+actual `validate_submission()` reports zero errors in tiers 1 and 2. CI
+runs it on every push (the `synthbench-contract` job installs the real
+harness from GitHub — note that the `synthbench` package on PyPI is an
+unrelated project).
 
 ## What does NOT get uploaded
 

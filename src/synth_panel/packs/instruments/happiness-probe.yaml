@@ -1,0 +1,41 @@
+# happiness-probe: the SynthBench calibration wedge (sp-ezz).
+#
+# Single-question v3 instrument aligned with the GSS HAPPY item — the
+# question the README and docs/synthbench-integration.md recipes pair
+# with `--calibrate-against gss:HAPPY`. The bounded pick_one response
+# space and the verbatim GSS option strings ("Very happy" /
+# "Pretty happy" / "Not too happy") make the question trackable by the
+# convergence module and directly comparable against the published
+# human distribution (S-gate OQ1: option strings must match the
+# baseline verbatim — do not reword them).
+#
+# The explicit `key: HAPPY` pins the tracked-question key so calibration
+# binds to this question even if you extend the instrument with more
+# bounded questions.
+name: happiness-probe
+version: 1
+description: >
+  Single GSS-aligned happiness question (GSS HAPPY) with a bounded
+  pick_one response space.  The calibration wedge for
+  `--calibrate-against gss:HAPPY` and `--submit-to-synthbench`:
+  option strings match the GSS human-distribution labels verbatim.
+author: synthpanel
+
+instrument:
+  version: 3
+  rounds:
+    - name: happiness
+      questions:
+        - key: HAPPY
+          text: >
+            Taken all together, how would you say things are these days —
+            would you say that you are very happy, pretty happy, or not
+            too happy?
+          response_schema:
+            type: pick_one
+            options:
+              - Very happy
+              - Pretty happy
+              - Not too happy
+      route_when:
+        - else: __end__

@@ -2757,6 +2757,29 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         convergence_model_distributions = convergence_tracker.cumulative_distributions()
         if convergence_baseline_error:
             convergence_report["human_baseline_error"] = convergence_baseline_error
+        # sp-ezz P0 fix: a --calibrate-against baseline describes ONE survey
+        # question, so build_report binds calibration to a single tracked
+        # question. Surface that decision loudly — excluded questions carry
+        # no calibration JSD and are never uploaded to SynthBench.
+        if calibrate_against_spec is not None and "calibration_question" in convergence_report:
+            bound_question = convergence_report.get("calibration_question")
+            excluded_questions = convergence_report.get("calibration_excluded_questions") or []
+            if bound_question is None:
+                print(
+                    f"Warning: --calibrate-against {calibrate_against_spec} did not match any "
+                    f"tracked question; no calibration JSD was computed and nothing will be "
+                    f"submitted to SynthBench. Tracked questions: "
+                    f"{', '.join(repr(k) for k in convergence_report.get('tracked_questions') or [])}",
+                    file=sys.stderr,
+                )
+            elif excluded_questions:
+                print(
+                    f"Warning: --calibrate-against {calibrate_against_spec} is bound to question "
+                    f"{bound_question!r}; {len(excluded_questions)} other tracked question(s) were "
+                    f"excluded from calibration and any SynthBench submission: "
+                    f"{', '.join(repr(k) for k in excluded_questions)}",
+                    file=sys.stderr,
+                )
         convergence_tracker.close()
 
     # ── sy-659 (#471): persist --save BEFORE the text/json branch split ──
