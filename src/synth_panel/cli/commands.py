@@ -1123,6 +1123,14 @@ def _emit_dry_run_preview(
             "claude-haiku-4-5) or remove the attachments."
         )
 
+    # P1-2: name the engine the real run will use so a dry-run reader knows
+    # whether route_when routing will actually execute.
+    branching = any(r.route_when for r in instrument.rounds)
+    if instrument.is_multi_round:
+        engine_label = "multi-round router" + (" (branching)" if branching else " (linear rounds)")
+    else:
+        engine_label = "single-round parallel panel"
+
     if fmt is OutputFormat.TEXT:
         print("DRY RUN — no LLM calls will be made", file=sys.stderr)
         print(f"Model: {model}", file=sys.stderr)
@@ -1131,10 +1139,23 @@ def _emit_dry_run_preview(
             print(f"Questions: {question_count} across {len(instrument.rounds)} rounds", file=sys.stderr)
         else:
             print(f"Questions: {question_count}", file=sys.stderr)
+        print(f"Engine: {engine_label}", file=sys.stderr)
+        if branching:
+            print(
+                "Note: route_when predicates decide the executed path at run time; "
+                "the question/call/cost figures below cover every declared round "
+                "and are an UPPER BOUND — the routed run may execute fewer.",
+                file=sys.stderr,
+            )
         print(
             f"Panel: {persona_count} personas x {question_count} questions = {llm_calls:,} LLM calls",
             file=sys.stderr,
         )
+        if instrument.is_multi_round:
+            print("", file=sys.stderr)
+            print("Instrument DAG:", file=sys.stderr)
+            for line in _render_text_dag(instrument).splitlines():
+                print(f"  {line}", file=sys.stderr)
         print("", file=sys.stderr)
 
         for round_ in instrument.rounds:
@@ -1197,6 +1218,10 @@ def _emit_dry_run_preview(
         "estimated_cost_usd": round(cost.total_cost, 6),
         "cost_is_estimated": pricing_is_estimated,
         "validation": "warning" if vision_warning else "ok",
+        # P1-2: which engine the real run dispatches through. For branching
+        # instruments the question/call/cost figures are an upper bound over
+        # every declared round — route_when decides the executed path.
+        "engine": "multi_round" if instrument.is_multi_round else "single_round",
         # sy-547 (d): advertise that typed response_schemas are coerced
         # post-hoc, not enforced at generation, so JSON consumers don't
         # treat "validation: ok" as "output guaranteed constrained".
@@ -1206,10 +1231,14 @@ def _emit_dry_run_preview(
             {
                 "name": r.name,
                 "questions": [build_question_prompt(q) for q in r.questions],
+                **({"depends_on": r.depends_on} if r.depends_on else {}),
+                **({"route_when": r.route_when} if r.route_when else {}),
             }
             for r in instrument.rounds
         ],
     }
+    if branching:
+        preview["estimates_are_upper_bound"] = True
     # sp-g270: surface collision metadata so dashboards and MCP
     # consumers see the dropped names without parsing stderr.
     if personas_merge_used:
@@ -1703,6 +1732,24 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         if rc is not None:
             return rc
 
+    # ── P1-2: multi-round flag compatibility audit ───────────────────────
+    # Multi-round (v2/v3) instruments dispatch through the router-driven
+    # engine below. Several panel-run features are only wired into the
+    # single-round orchestrator path; refuse those combinations LOUDLY
+    # here — before any LLM spend, and before --dry-run so a dry-run "OK"
+    # means the real run is actually runnable (same philosophy as sy-546).
+    if instrument.is_multi_round:
+        flag_errors = _multi_round_flag_errors(
+            args,
+            instrument,
+            ensemble_mode=ensemble_mode,
+            blend_mode=blend_mode,
+        )
+        if flag_errors:
+            for msg in flag_errors:
+                print(f"Error: {msg}", file=sys.stderr)
+            return 1
+
     # ── sp-x8g: --dry-run preview ────────────────────────────────────────
     # Short-circuit before any LLM-invoking code (variant expansion,
     # ensemble, blend, orchestrator). Shows the user what each question
@@ -1732,6 +1779,41 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         rate_limit_rps=rate_limit_rps,
     )
     timer = PanelTimer()
+
+    # ── P1-2: dispatch multi-round instruments through the real engine ──
+    # Previously the CLI flat-concatenated every round's questions into one
+    # run_panel_parallel call: every persona was asked every question from
+    # every branch, no route_when predicate was ever evaluated, and the
+    # output fabricated a linear "path". Multi-round instruments now run
+    # through run_multi_round_panel — the same engine the MCP/SDK surfaces
+    # use — and emit the rounds-shaped envelope with the REAL routing path.
+    # The incompatible-flag audit above has already rejected unsupported
+    # combinations, so everything reaching this point is safe to thread
+    # through. Single-round instruments continue on the legacy path below,
+    # unchanged.
+    if instrument.is_multi_round:
+        return _handle_panel_run_multi_round(
+            args=args,
+            fmt=fmt,
+            client=client,
+            timer=timer,
+            personas=personas,
+            instrument=instrument,
+            model=model,
+            system_prompt_fn=system_prompt_fn,
+            response_schema=response_schema,
+            extract_schema=extract_schema,
+            temperature=temperature,
+            top_p=top_p,
+            seed=seed,
+            persona_models=persona_models,
+            template_vars=template_vars,
+            personas_merge_warnings=personas_merge_warnings,
+            merge_used=merge_used,
+            profile=profile,
+            max_concurrent=max_concurrent,
+            request_id=request_id,
+        )
 
     # ── sp-5on.15: variant expansion ─────────────────────────────────
     variants_k = getattr(args, "variants", None)
@@ -3215,6 +3297,563 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
     return 0
 
 
+def _multi_round_flag_errors(
+    args: argparse.Namespace,
+    instrument: Instrument,
+    *,
+    ensemble_mode: bool,
+    blend_mode: bool,
+) -> list[str]:
+    """Collect loud-refusal messages for panel-run flags the multi-round engine does not support.
+
+    P1-2 support matrix (also documented in README "Adaptive Research"):
+    the multi-round router engine (``run_multi_round_panel``) supports
+    model selection (``--model``, weighted ``--models``, per-persona YAML
+    overrides, ``--best-model-for``), generation params
+    (``--temperature`` / ``--top-p`` / ``--seed``), schemas (``--schema``
+    / ``--extract-schema``), synthesis knobs (``--synthesis-model`` /
+    ``--synthesis-prompt`` / ``--synthesis-temperature``), templating
+    (``--var`` / ``--vars-file`` / ``--prompt-template``), persona
+    merging, ``--save``, ``--strict`` / ``--failure-threshold``,
+    ``--max-concurrent`` / ``--rate-limit-rps``, and ``--dry-run``.
+
+    Everything returned from here is only wired into the single-round
+    orchestrator path today. Rather than silently degrading (the pre-fix
+    behaviour was worse: silently flattening the whole DAG), each
+    combination fails loudly before any LLM spend. Returns one message
+    per offending flag group; empty list means the combination is safe.
+    """
+    errors: list[str] = []
+    unsupported = "is not supported with multi-round (branching) instruments yet"
+    hint = "run a single-round instrument or drop the flag"
+
+    if blend_mode:
+        errors.append(f"--blend {unsupported}; {hint}.")
+    if ensemble_mode:
+        errors.append(
+            f"--models ensemble comparison (comma-separated spec without weights) {unsupported}; "
+            f"use a single --model, a weighted --models 'model:weight,...' spec, or run a "
+            f"single-round instrument."
+        )
+    if getattr(args, "variants", None) is not None:
+        errors.append(f"--variants (robustness perturbation) {unsupported}; {hint}.")
+
+    checkpoint_flags = [
+        flag
+        for flag, dest in (
+            ("--resume", "resume"),
+            ("--checkpoint-dir", "checkpoint_dir"),
+            ("--checkpoint-every", "checkpoint_every"),
+            ("--allow-drift", "allow_drift"),
+            ("--force-overwrite", "force_overwrite"),
+        )
+        if getattr(args, dest, None)
+    ]
+    if checkpoint_flags:
+        errors.append(f"{'/'.join(checkpoint_flags)} (checkpointing/resume) {unsupported}; {hint}.")
+
+    if getattr(args, "max_cost", None) is not None:
+        errors.append(f"--max-cost (mid-run cost gate) {unsupported}; {hint}.")
+    if getattr(args, "question_failure_budget", None) is not None:
+        errors.append(f"--question-failure-budget {unsupported}; {hint}.")
+
+    convergence_flags = [
+        flag
+        for flag, dest in (
+            ("--convergence-check-every", "convergence_check_every"),
+            ("--convergence-log", "convergence_log"),
+            ("--convergence-eps", "convergence_eps"),
+            ("--convergence-min-n", "convergence_min_n"),
+            ("--convergence-m", "convergence_m"),
+            ("--convergence-baseline", "convergence_baseline"),
+        )
+        if getattr(args, dest, None) is not None
+    ]
+    if getattr(args, "auto_stop", False):
+        convergence_flags.append("--auto-stop")
+    if convergence_flags:
+        errors.append(f"{'/'.join(convergence_flags)} (convergence tracking) {unsupported}; {hint}.")
+
+    if getattr(args, "calibrate_against", None) is not None:
+        errors.append(f"--calibrate-against (inline calibration) {unsupported}; {hint}.")
+    if getattr(args, "submit_to_synthbench", False):
+        errors.append(f"--submit-to-synthbench {unsupported}; {hint}.")
+
+    # --no-synthesis is fine for LINEAR multi-round instruments (routing
+    # falls through depends_on / positional order), but branching route_when
+    # predicates evaluate against each round's synthesis — without it every
+    # route would silently fall to a halt after round 1.
+    if getattr(args, "no_synthesis", False) and any(r.route_when for r in instrument.rounds):
+        errors.append(
+            "--no-synthesis is not supported with branching (route_when) instruments: "
+            "routing predicates evaluate each round's synthesis, so skipping synthesis "
+            "would break routing. Drop --no-synthesis or run a non-branching instrument."
+        )
+
+    if (getattr(args, "synthesis_strategy", None) or "auto") == STRATEGY_MAP_REDUCE:
+        errors.append(
+            f"--synthesis-strategy=map-reduce {unsupported} (multi-round synthesis is "
+            f"always single-pass); drop the flag or run a single-round instrument."
+        )
+    if getattr(args, "synthesis_auto_escalate", False):
+        errors.append(f"--synthesis-auto-escalate (map-reduce only) {unsupported}; {hint}.")
+
+    if getattr(args, "allow_empty_attachments", False):
+        errors.append(f"--allow-empty-attachments {unsupported}; {hint}.")
+
+    return errors
+
+
+def _handle_panel_run_multi_round(
+    *,
+    args: argparse.Namespace,
+    fmt: OutputFormat,
+    client: LLMClient,
+    timer: PanelTimer,
+    personas: list[dict[str, Any]],
+    instrument: Instrument,
+    model: str,
+    system_prompt_fn: Any,
+    response_schema: dict[str, Any] | None,
+    extract_schema: dict[str, Any] | None,
+    temperature: float | None,
+    top_p: float | None,
+    seed: int | None,
+    persona_models: dict[str, str] | None,
+    template_vars: dict[str, str],
+    personas_merge_warnings: list[dict[str, Any]],
+    merge_used: bool,
+    profile: Any,
+    max_concurrent: int | None,
+    request_id: str,
+) -> int:
+    """Run a multi-round (v2 linear / v3 branching) instrument via the real engine.
+
+    Drives :func:`synth_panel._runners.run_multi_round_sync` — the same
+    machinery behind the MCP server's ``run_panel`` and the SDK's
+    ``run_panel(instrument=...)`` — and emits the rounds-shaped envelope
+    with the REAL routing ``path`` (the route_when decisions that fired)
+    in text, json, and ndjson output modes. Exit codes mirror the
+    single-round path: 0 success, 2 invalid run, 3 --strict violation.
+    """
+    from synth_panel._runners import (
+        _sanitize_api_error,
+        format_panelist_result,
+        run_multi_round_sync,
+    )
+
+    synthesis_enabled = not getattr(args, "no_synthesis", False)
+    synthesis_model = getattr(args, "synthesis_model", None)
+
+    logger.info(
+        "[%s] multi-round dispatch: %d declared rounds (branching=%s)",
+        request_id,
+        len(instrument.rounds),
+        any(r.route_when for r in instrument.rounds),
+    )
+
+    try:
+        mr = run_multi_round_sync(
+            client,
+            personas,
+            instrument,
+            model,
+            response_schema,
+            synthesis=synthesis_enabled,
+            synthesis_model=synthesis_model,
+            synthesis_prompt=getattr(args, "synthesis_prompt", None),
+            temperature=temperature,
+            top_p=top_p,
+            seed=seed,
+            persona_models=persona_models,
+            extract_schema=extract_schema,
+            synthesis_temperature=getattr(args, "synthesis_temperature", None),
+            system_prompt_fn=system_prompt_fn,
+            max_workers=max_concurrent,
+        )
+    except RunAbortedError:
+        # SIGINT mid-DAG: partial multi-round results only cover the round
+        # in flight; checkpointing is refused for multi-round runs, so there
+        # is no partial envelope to emit. Fail loud instead of fabricating.
+        print(
+            "panel run interrupted (SIGINT) during a multi-round instrument; "
+            "no partial result is emitted (checkpointing is not supported for "
+            "multi-round runs yet).",
+            file=sys.stderr,
+        )
+        return 2
+    except Exception as exc:
+        sanitized = _sanitize_api_error(exc)
+        logger.error("multi-round panel run failed: %s", sanitized, exc_info=True)
+        print(f"Error: multi-round panel run failed: {sanitized}", file=sys.stderr)
+        return 1
+
+    timer.stop()
+
+    # ── Per-round payload (mirrors the MCP _run_panel_async_instrument shape) ──
+    rounds_by_name = {r.name: r for r in instrument.rounds}
+    rounds_payload: list[dict[str, Any]] = []
+    executed_questions: list[dict[str, Any]] = []
+    for rr in mr.rounds:
+        declared = rounds_by_name.get(rr.name)
+        round_questions = declared.questions if declared is not None else []
+        executed_questions.extend(round_questions)
+        rounds_payload.append(
+            {
+                "name": rr.name,
+                "results": [format_panelist_result(pr, model) for pr in rr.panelist_results],
+                "synthesis": rr.synthesis.to_dict() if hasattr(rr.synthesis, "to_dict") else None,
+                "usage": rr.usage.to_dict(),
+            }
+        )
+    # Back-compat flat view: the terminal round's panelist list (same
+    # convention as the MCP/SDK surfaces).
+    flat_results = rounds_payload[-1]["results"] if rounds_payload else []
+    all_panelist_results = [pr for rr in mr.rounds for pr in rr.panelist_results]
+
+    # ── Failure analysis (sp-2hg / sp-efip parity with the single-round path) ──
+    failure_stats = _analyze_multi_round_failures(mr, rounds_by_name)
+    strict = getattr(args, "strict", False)
+    try:
+        threshold = float(getattr(args, "failure_threshold", 0.5))
+    except (TypeError, ValueError):
+        threshold = 0.5
+    run_invalid = failure_stats["total_pairs"] > 0 and failure_stats["failure_rate"] > threshold
+    strict_violation = strict and failure_stats["errored_pairs"] > 0
+
+    total_failure = detect_total_failure(all_panelist_results)
+    if total_failure is not None:
+        run_invalid = True
+
+    missing_input_stats = _detect_missing_input_refusals(all_panelist_results)
+    missing_input_invalid = (
+        missing_input_stats["considered"] > 0 and missing_input_stats["refusal_rate"] >= _MISSING_INPUT_THRESHOLD
+    )
+    if missing_input_invalid:
+        run_invalid = True
+
+    # sy-549 parity: a fallback final synthesis is not a healthy synthesis.
+    synthesis_error_payload: dict[str, Any] | None = None
+    if mr.final_synthesis is not None and getattr(mr.final_synthesis, "is_fallback", False):
+        synth_err = mr.final_synthesis.error or "synthesis judge did not return a valid structured result"
+        logger.warning("final synthesis produced a fallback result: %s", synth_err)
+        print(f"Error: synthesis incomplete: {synth_err}", file=sys.stderr)
+        synthesis_error_payload = build_synthesis_error_payload(
+            None,
+            error_type="synthesis_fallback",
+            message=f"Synthesis incomplete: {synth_err}",
+            suggested_fix=(
+                "The synthesis judge returned an empty/partial result after all retries. "
+                "Rerun with a higher-quality --synthesis-model."
+            ),
+        )
+        run_invalid = True
+
+    # ── Cost / usage aggregation ────────────────────────────────────────
+    panelist_usage = ZERO_USAGE
+    for pr in all_panelist_results:
+        panelist_usage = panelist_usage + pr.usage
+
+    panelist_per_model_usage, panelist_per_model_cost = aggregate_per_model(all_panelist_results, model)
+    multi_model_run = len(panelist_per_model_usage) > 1
+    pricing, is_estimated = lookup_pricing(model)
+    if multi_model_run:
+        panelist_cost_est = CostEstimate()
+        for _c in panelist_per_model_cost.values():
+            panelist_cost_est = panelist_cost_est + _c
+    else:
+        panelist_cost_est = estimate_cost(panelist_usage, pricing)
+
+    # Synthesis spend covers every per-round synthesis PLUS the final
+    # reduce, so total_cost accounts for the full multi-round bill.
+    synthesis_usage = ZERO_USAGE
+    synthesis_cost = CostEstimate()
+    synthesis_ran = False
+    synth_objects = [rr.synthesis for rr in mr.rounds]
+    if mr.final_synthesis is not None:
+        synth_objects.append(mr.final_synthesis)
+    for synth in synth_objects:
+        s_usage = getattr(synth, "usage", None)
+        if s_usage is not None:
+            synthesis_usage = synthesis_usage + s_usage
+            synthesis_ran = True
+        s_cost = getattr(synth, "cost", None)
+        if s_cost is not None:
+            synthesis_cost = synthesis_cost + s_cost
+
+    total_usage = mr.usage
+    total_cost_est = panelist_cost_est + synthesis_cost
+
+    final_synth_dict = (
+        mr.final_synthesis.to_dict()
+        if mr.final_synthesis is not None and hasattr(mr.final_synthesis, "to_dict")
+        else None
+    )
+    effective_synth_model = (
+        getattr(mr.final_synthesis, "model", None) if mr.final_synthesis is not None else None
+    ) or synthesis_model
+
+    panelist_per_model_meta: dict[str, tuple[TokenUsage, CostEstimate]] | None = None
+    if multi_model_run:
+        panelist_per_model_meta = {
+            _m: (panelist_per_model_usage[_m], panelist_per_model_cost[_m]) for _m in panelist_per_model_usage
+        }
+
+    metadata = build_metadata(
+        panelist_model=model,
+        synthesis_model=effective_synth_model,
+        panelist_usage=panelist_usage,
+        panelist_cost=panelist_cost_est,
+        synthesis_usage=synthesis_usage if synthesis_ran else None,
+        synthesis_cost=synthesis_cost if synthesis_ran else None,
+        total_usage=total_usage,
+        total_cost=total_cost_est,
+        persona_count=len(personas),
+        question_count=len(executed_questions),
+        timer=timer,
+        template_vars=template_vars or None,
+        panelist_per_model=panelist_per_model_meta,
+    )
+    if profile is not None:
+        metadata["profile"] = profile.name
+        metadata["profile_hash"] = profile.config_hash()
+
+    # sp-nn8k: surface DEFAULT_PRICING fallbacks loudly.
+    cost_fallback_warnings = build_cost_fallback_warnings([*panelist_per_model_usage.keys(), effective_synth_model])
+
+    banner = _build_invalid_banner(
+        failure_stats,
+        threshold,
+        strict=strict,
+        strict_violation=strict_violation,
+        missing_input_stats=missing_input_stats,
+        missing_input_invalid=missing_input_invalid,
+        total_failure=total_failure,
+    )
+
+    # ── sy-659 parity: persist --save BEFORE the text/json branch split ──
+    saved_result_id: str | None = None
+    saved_result_path: str | None = None
+    if getattr(args, "save", False):
+        from synth_panel.mcp.data import _results_dir, save_panel_result
+
+        inst_name: str | None = None
+        inst_arg = getattr(args, "instrument", None)
+        if inst_arg:
+            inst_path = Path(inst_arg)
+            inst_name = inst_path.stem if inst_path.exists() else inst_arg
+
+        all_models: list[str] | None = None
+        if persona_models:
+            all_models = sorted(set(persona_models.values()))
+
+        # sy-oyl convention (mirrors the SDK): persist every declared
+        # round's question defs so analyze/poll-summary see the schema
+        # kinds, while flat ``results`` carries the terminal round.
+        flat_questions = [q for r in instrument.rounds for q in r.questions]
+        saved_result_id = save_panel_result(
+            results=flat_results,
+            model=model,
+            total_usage=total_usage.to_dict(),
+            total_cost=total_cost_est.format_usd(),
+            persona_count=len(personas),
+            question_count=len(executed_questions),
+            instrument_name=inst_name,
+            questions=_question_meta_for_save(flat_questions),
+            models=all_models,
+            synthesis=final_synth_dict,
+            metadata=metadata,
+        )
+        saved_result_path = str(_results_dir() / f"{saved_result_id}.json")
+
+    if fmt is OutputFormat.TEXT:
+        if banner:
+            print(banner, file=sys.stderr)
+        # REAL routing path — the route_when decisions that fired, not the
+        # _degenerate_path fabrication the flattened run used to print.
+        path_line = _format_path(mr.path)
+        if path_line:
+            print(f"path: {path_line}")
+        if mr.terminal_round:
+            print(f"terminal round: {mr.terminal_round}")
+
+        for rp in rounds_payload:
+            print(f"\n{'=' * 60}")
+            print(f"ROUND: {rp['name']}")
+            print(f"{'=' * 60}")
+            for r in rp["results"]:
+                print(f"\nPersona: {r['persona']}")
+                if r.get("error"):
+                    print(f"  ERROR: {r['error']}")
+                for resp in r["responses"]:
+                    if resp.get("skipped_by_condition"):
+                        print(f"  [follow-up] Q: {resp['question']}")
+                        print("  [follow-up] A: (skipped — condition not met)")
+                        print()
+                        continue
+                    prefix = "  [follow-up] " if resp.get("follow_up") else "  "
+                    print(f"{prefix}Q: {resp['question']}")
+                    print(f"{prefix}A: {resp['response']}")
+                    print()
+                print(f"  Cost: {r['cost']}")
+
+        if final_synth_dict and "synthesis_error" not in final_synth_dict:
+            print(f"\n{'=' * 60}")
+            print("SYNTHESIS")
+            print(f"{'=' * 60}")
+            print(f"\n  Summary: {final_synth_dict['summary']}")
+            if final_synth_dict.get("themes"):
+                print("\n  Themes:")
+                for t in final_synth_dict["themes"]:
+                    print(f"    - {t}")
+            if final_synth_dict.get("agreements"):
+                print("\n  Agreements:")
+                for a in final_synth_dict["agreements"]:
+                    print(f"    - {a}")
+            if final_synth_dict.get("disagreements"):
+                print("\n  Disagreements:")
+                for d in final_synth_dict["disagreements"]:
+                    print(f"    - {d}")
+            if final_synth_dict.get("surprises"):
+                print("\n  Surprises:")
+                for s in final_synth_dict["surprises"]:
+                    print(f"    - {s}")
+            print(f"\n  Recommendation: {final_synth_dict['recommendation']}")
+            print(f"  Synthesis cost: {final_synth_dict['cost']}")
+
+        print(f"\n{'=' * 60}")
+        print(
+            format_summary("Panelist cost", panelist_usage, panelist_cost_est, model=model, is_estimated=is_estimated)
+        )
+        if synthesis_ran:
+            synth_model_disp = effective_synth_model or model
+            _synth_pricing, synth_est = lookup_pricing(synth_model_disp)
+            print(
+                format_summary(
+                    "Synthesis cost",
+                    synthesis_usage,
+                    synthesis_cost,
+                    model=synth_model_disp,
+                    is_estimated=synth_est,
+                )
+            )
+        print(format_summary("Total", total_usage, total_cost_est, model=model, is_estimated=is_estimated))
+        for w in mr.warnings:
+            print(f"Warning: {w}", file=sys.stderr)
+        for w in cost_fallback_warnings:
+            print(f"Warning: {w}", file=sys.stderr)
+        if banner:
+            print(banner, file=sys.stderr)
+    else:
+        if banner:
+            print(banner, file=sys.stderr)
+
+        from synth_panel.ensemble import build_mixed_model_rollup
+
+        terminal_prs = mr.rounds[-1].panelist_results if mr.rounds else []
+        per_model_results, cost_breakdown = build_mixed_model_rollup(
+            terminal_prs,
+            default_model=model,
+            panelist_formatter=format_panelist_result,
+        )
+
+        extra: dict[str, Any] = _build_rounds_shape(
+            instrument=instrument,
+            results=flat_results,
+            synthesis_dict=final_synth_dict,
+            panelist_cost=panelist_cost_est,
+            panelist_usage=panelist_usage,
+            total_usage=total_usage,
+            total_cost=total_cost_est,
+            model=model,
+            persona_count=len(personas),
+            question_count=len(executed_questions),
+            metadata=metadata,
+            per_model_results=per_model_results,
+            cost_breakdown=cost_breakdown,
+            cost_fallback_warnings=cost_fallback_warnings,
+            rounds_override=rounds_payload,
+            path=mr.path,
+            terminal_round=mr.terminal_round,
+            run_warnings=list(mr.warnings),
+        )
+        extra["parameters"] = _build_params_metadata(args, temperature, top_p)
+        extra["failure_stats"] = failure_stats
+        extra["missing_input_stats"] = missing_input_stats
+        extra["run_invalid"] = bool(run_invalid or strict_violation)
+        if total_failure is not None:
+            extra["total_failure"] = total_failure
+            extra["abort_reason"] = _classify_total_failure_abort_reason(total_failure)
+        if synthesis_error_payload is not None:
+            extra["synthesis_error"] = synthesis_error_payload
+        if missing_input_invalid:
+            warnings_list = extra.setdefault("warnings", [])
+            if isinstance(warnings_list, list):
+                warnings_list.append(
+                    "missing_input_refusals: "
+                    f"{missing_input_stats['refusing']}/{missing_input_stats['considered']}"
+                    f" panelists reported missing or unavailable input"
+                    f" ({missing_input_stats['refusal_rate']:.0%})"
+                )
+        if merge_used:
+            extra["personas_merge_warnings"] = personas_merge_warnings
+        if persona_models:
+            extra["model_assignment"] = dict(persona_models)
+        if run_invalid or strict_violation:
+            extra["message"] = banner.replace("\n", " ").strip() if banner else "PANEL RUN INVALID"
+        if saved_result_id is not None:
+            extra["result_id"] = saved_result_id
+            extra["saved_path"] = saved_result_path
+        emit(fmt, message=extra.get("message", "Panel complete"), extra=extra)
+
+    if saved_result_id is not None:
+        _print_saved_result_hint(saved_result_id)
+
+    if strict_violation:
+        return 3
+    if run_invalid:
+        return 2
+    return 0
+
+
+def _analyze_multi_round_failures(
+    mr: Any,
+    rounds_by_name: dict[str, Any],
+) -> dict[str, Any]:
+    """Sum :func:`_analyze_failures` stats across each executed round.
+
+    Per-round accounting keeps the pair math honest: a persona is only
+    accountable for the questions of rounds that actually executed, not
+    the flattened union of every declared branch.
+    """
+    totals: dict[str, Any] = {
+        "total_pairs": 0,
+        "errored_pairs": 0,
+        "failure_rate": 0.0,
+        "failed_panelists": 0,
+        "errored_personas": [],
+        "skipped_follow_ups": 0,
+        "skipped_by_budget": 0,
+    }
+    errored_personas: set[str] = set()
+    for rr in mr.rounds:
+        declared = rounds_by_name.get(rr.name)
+        round_stats = _analyze_failures(
+            rr.panelist_results,
+            declared.questions if declared is not None else [],
+        )
+        totals["total_pairs"] += round_stats["total_pairs"]
+        totals["errored_pairs"] += round_stats["errored_pairs"]
+        totals["failed_panelists"] += round_stats["failed_panelists"]
+        totals["skipped_follow_ups"] += round_stats["skipped_follow_ups"]
+        totals["skipped_by_budget"] += round_stats["skipped_by_budget"]
+        errored_personas.update(round_stats["errored_personas"])
+    totals["errored_personas"] = sorted(errored_personas)
+    if totals["total_pairs"] > 0:
+        totals["failure_rate"] = totals["errored_pairs"] / totals["total_pairs"]
+    return totals
+
+
 # sp-56pb: substrings that mark a panelist failure as rooted in rate-limit
 # exhaustion. The LLM client raises ``LLMError`` with category
 # ``RETRIES_EXHAUSTED`` after the rate-limit retry budget is spent; the
@@ -3582,14 +4221,24 @@ def _build_rounds_shape(
     per_model_results: dict[str, Any] | None = None,
     cost_breakdown: dict[str, Any] | None = None,
     cost_fallback_warnings: list[str] | None = None,
+    rounds_override: list[dict[str, Any]] | None = None,
+    path: list[dict[str, Any]] | None = None,
+    terminal_round: str | None = None,
+    run_warnings: list[str] | None = None,
 ) -> dict[str, Any]:
     """Build the rounds-shaped panel output payload.
 
     Single-round runs surface as one round entry whose ``name`` is the
     instrument's only round (``"default"`` for v1). Multi-round/branching
-    runs use this same shape with one entry per executed round; that
-    wiring lives in F3-A. Per-round ``synthesis`` is ``null`` for the
-    single-round case — the final synthesis goes at the top level.
+    runs (P1-2) pass ``rounds_override`` — one entry per EXECUTED round —
+    plus the REAL router-emitted ``path`` and ``terminal_round``, matching
+    the envelope the MCP/SDK surfaces produce. Per-round ``synthesis`` is
+    ``null`` for the single-round case — the final synthesis goes at the
+    top level.
+
+    ``run_warnings``, when provided, replaces the parser-only
+    ``instrument.warnings`` default — the multi-round engine's warnings
+    already include the parser warnings plus any runtime routing issues.
 
     ``per_model_results`` and ``cost_breakdown``, when provided, surface
     the sp-0h9x rollup shape alongside the primary ``model`` field — a
@@ -3603,18 +4252,23 @@ def _build_rounds_shape(
     the warning text.
     """
     round_name = instrument.rounds[0].name if instrument.rounds else "default"
-    warnings = list(getattr(instrument, "warnings", []) or [])
+    warnings = list(run_warnings) if run_warnings is not None else list(getattr(instrument, "warnings", []) or [])
     fallback_warnings = list(cost_fallback_warnings or [])
     warnings.extend(fallback_warnings)
-    result: dict[str, Any] = {
-        "rounds": [
+    rounds_payload = (
+        rounds_override
+        if rounds_override is not None
+        else [
             {
                 "name": round_name,
                 "results": results,
                 "synthesis": None,
             }
-        ],
-        "path": [],
+        ]
+    )
+    result: dict[str, Any] = {
+        "rounds": rounds_payload,
+        "path": list(path) if path is not None else [],
         "warnings": warnings,
         "cost_is_estimated": bool(fallback_warnings),
         "synthesis": synthesis_dict,
@@ -3628,6 +4282,10 @@ def _build_rounds_shape(
         "per_model_results": per_model_results,
         "cost_breakdown": cost_breakdown,
     }
+    if rounds_override is not None:
+        # Multi-round envelope always names the terminal round (parity with
+        # the MCP/SDK shape); omitted for legacy single-round output.
+        result["terminal_round"] = terminal_round
     if metadata is not None:
         result["metadata"] = metadata
     return result
@@ -5461,13 +6119,13 @@ def _render_mermaid(instrument: Instrument) -> str:
 
 
 def _degenerate_path(instrument: Instrument) -> list[dict[str, Any]]:
-    """Synthesize a path log for non-branching runs.
+    """Synthesize a path log for single-round runs.
 
-    Single-round and linear v2 runs do not currently flow through
-    ``run_multi_round_panel`` (they use the legacy single-round path),
-    so they have no real router-emitted path. F3-E still wants the
-    path line rendered for those cases — fall back to a linear walk
-    over the instrument's declared rounds, ending in ``__end__``.
+    Multi-round (v2/v3) instruments now execute through
+    ``run_multi_round_panel`` (P1-2) and render the REAL router-emitted
+    path, so this fallback only ever sees single-round instruments —
+    where the "path" is trivially ``round -> __end__``. F3-E still wants
+    the path line rendered for that case.
     """
     from synth_panel.instrument import END_SENTINEL
 
