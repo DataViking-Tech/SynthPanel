@@ -207,7 +207,7 @@ envelope's `panel_verdict` key, alongside `synthesis`. Full reference:
 |------|-------------|
 | `run_prompt` | Send a single prompt to an LLM. No personas required. The simplest tool — ask a quick research question. **Does not require `decision_being_informed`.** |
 | `run_panel` | Run a full synthetic focus group panel. Each persona answers all questions independently in parallel, followed by synthesis. Accepts inline `questions`, an inline `instrument` dict (v1/v2/v3), or an `instrument_pack` name. **Requires `decision_being_informed`.** |
-| `run_quick_poll` | Quick single-question poll across personas. A simplified `run_panel` for one question with synthesis. **Requires `decision_being_informed`.** |
+| `run_quick_poll` | Quick single-question poll across personas. A simplified `run_panel` for one question with synthesis. Accepts inline `personas` and/or a saved `pack_id` (merged; falls back to a built-in diverse set when both are omitted). **Requires `decision_being_informed`.** |
 | `extend_panel` | Append a single ad-hoc round to a saved panel result. Reuses each panelist's saved session for conversational context. **Not** a re-entry into the v3 DAG — use for human-in-the-loop follow-ups. **Requires `decision_being_informed`.** |
 
 ### Tool-call examples
@@ -228,7 +228,7 @@ envelope's `panel_verdict` key, alongside `synthesis`. Full reference:
   "tool": "run_quick_poll",
   "arguments": {
     "question": "Which name feels most premium: Core, Plus, or Pro?",
-    "personas_pack": "general-consumer",
+    "pack_id": "general-consumer",
     "decision_being_informed": "naming the paid tier"
   }
 }
@@ -273,7 +273,7 @@ envelope's `panel_verdict` key, alongside `synthesis`. Full reference:
 | Tool | Description |
 |------|-------------|
 | `list_panel_results` | List all saved panel results. Returns ID, date, model, and counts. |
-| `get_panel_result` | Get a specific panel result by ID. Returns the full result with all rounds and synthesis. |
+| `get_panel_result` | Get a specific panel result by ID. Returns the full result with all rounds and synthesis (`detail="full"` by default) — the canonical way to fetch the per-panelist transcript the run tools omit under their default `detail="summary"`. Pass `detail="summary"` for a metadata/synthesis-only peek. |
 
 ## Resources (4 URI Patterns)
 
@@ -298,7 +298,8 @@ Prompt templates provide pre-built research workflows that agents can use as sta
 
 ## Response Shape
 
-All panel runs (`run_panel`, `run_quick_poll`, `extend_panel`) return a uniform response shape:
+All panel runs (`run_panel`, `run_quick_poll`, `extend_panel`) return a uniform
+response shape. The example below is `detail="full"`:
 
 ```json
 {
@@ -306,6 +307,7 @@ All panel runs (`run_panel`, `run_quick_poll`, `extend_panel`) return a uniform 
   "model": "haiku",
   "persona_count": 5,
   "question_count": 3,
+  "detail": "full",
   "rounds": [
     {
       "name": "discovery",
@@ -327,6 +329,9 @@ All panel runs (`run_panel`, `run_quick_poll`, `extend_panel`) return a uniform 
   "terminal_round": "probe_pricing",
   "warnings": [],
   "synthesis": { "themes": [...], "summary": "...", "recommendation": "..." },
+  "poll_summary": { "questions": [...] },
+  "per_model_results": { "haiku": { "usage": {...}, "cost": "$0.02", "result_count": 5, "personas": ["Sarah Chen", "..."] } },
+  "cost_breakdown": { "by_model": { "haiku": "$0.02" }, "total": "$0.0234" },
   "total_cost": "$0.0234",
   "total_usage": { "input_tokens": 2250, "output_tokens": 600 },
   "results": [...]
@@ -335,11 +340,69 @@ All panel runs (`run_panel`, `run_quick_poll`, `extend_panel`) return a uniform 
 
 - `rounds` — per-round results with panelist responses and per-round synthesis
 - `path` — the routing decisions that fired (v3 branching instruments)
-- `terminal_round` — the round whose synthesis fed final synthesis
+- `terminal_round` — the round whose synthesis fed final synthesis (present on
+  every path, including flat `questions` runs where it is `"default"`)
 - `warnings` — parser or runtime warnings
 - `results` — back-compat flat array mirroring the terminal round's panelist results
+- `per_model_results` — per-model `{usage, cost, result_count, personas}`. It does
+  **not** duplicate the transcript: the panelist responses live only in
+  `rounds[].results` (each row is `model`-tagged, so per-model slices are
+  recoverable by filtering). The `models=[...]` ensemble path is the one
+  exception — there each model ran independently, so it keeps a `results` block.
 
-For v1/v2 instruments and raw `questions` input, `path` is empty or linear and `warnings` is typically empty — the shape is uniform across versions.
+For v1/v2 instruments and raw `questions` input, `path` is empty or linear and
+`warnings` is typically empty — the shape is uniform across versions.
+
+### `detail`: compact-by-default responses
+
+`run_panel` and `run_quick_poll` accept a **`detail`** argument — `"summary"`
+(the default) or `"full"`.
+
+- **`summary`** (default) returns `synthesis`, `panel_verdict`, `poll_summary`,
+  `metadata`, `result_id`, costs, `per_model_results` (usage/cost only),
+  `warnings`, `path` and `terminal_round`, but **drops the per-panelist
+  transcripts** — the top-level `results` mirror and every `rounds[].results`
+  list. With caps of `MAX_PERSONAS` (100) × `MAX_QUESTIONS` (50), a full panel's
+  transcript can serialise to megabytes; keeping it out of the default response
+  protects the agent's context window. The envelope marks the omission
+  (`"detail": "summary"`, `"results_omitted": true`, per-round `result_count`)
+  and points at the full copy via `transcript_uri` (also
+  `panel_verdict.full_transcript_uri`).
+- **`full`** returns every panelist row — the pre-existing shape.
+
+The dropped transcript is always retrievable from the persisted result:
+
+```jsonc
+{ "tool": "get_panel_result", "arguments": { "result_id": "result-20260410-..." } }
+```
+
+or via the `panel-result://{result_id}` resource. `get_panel_result` defaults to
+`detail="full"` (back-compat — every existing caller keeps getting the whole
+result); pass `detail="summary"` for a cheap metadata/synthesis peek at a large
+saved panel.
+
+**Sampling** responses are never persisted (no `result_id`), so their transcript
+is not retrievable later — sampling always returns full transcripts regardless of
+`detail`. `extend_panel` returns its single appended round in full.
+
+### Typed error envelopes
+
+Boundary errors return a typed `INVALID_TOOL_ARG` envelope
+(`{ "error_code", "message", "field_path", "schema_version", "retry_safe",
+"error" }`) rather than a raw FastMCP "Error executing tool":
+
+- Unknown `pack_id` (`run_panel`, `run_quick_poll`), `instrument_pack`
+  (`run_panel`), or `result_id` (`extend_panel`) → `INVALID_TOOL_ARG` naming the
+  offending field and enumerating the available ids.
+- `detail` outside `{"summary", "full"}` → `INVALID_TOOL_ARG` on `detail`.
+
+Runtime failures on `run_panel`, `run_quick_poll`, and `extend_panel` are also
+typed:
+
+- Every panelist failing (e.g. a bad model alias that 400s upstream) →
+  `{ "run_invalid": true, "total_failure": {...} }`.
+- A per-panelist timeout budget exceeded → `{ "error_code": "PANEL_TIMEOUT",
+  "retry_safe": true, "timeout_seconds": N }`.
 
 ## Model Resolution Order
 
