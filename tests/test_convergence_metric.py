@@ -515,6 +515,104 @@ def test_build_report_calibration_matches_golden_fixture():
     assert report["per_question"] == expected
 
 
+# ---------------------------------------------------------------------------
+# sp-ezz P0 fix: single-question baseline binds to exactly one question
+# ---------------------------------------------------------------------------
+
+
+def _two_question_tracker() -> ConvergenceTracker:
+    questions = [_pick_one_question("HAPPY"), _pick_one_question("SATJOB")]
+    tracked = identify_tracked_questions(questions)
+    tracker = ConvergenceTracker(tracked, check_every=100, min_n=0, m_consecutive=2)
+    for _ in range(6):
+        tracker.record({"HAPPY": "Very happy", "SATJOB": "Satisfied"})
+    for _ in range(4):
+        tracker.record({"HAPPY": "Pretty happy", "SATJOB": "Dissatisfied"})
+    return tracker
+
+
+_HAPPY_BASELINE_DIST = {"Very happy": 0.5, "Pretty happy": 0.4, "Not too happy": 0.1}
+
+
+def test_calibration_binds_to_question_matching_baseline_key():
+    """Multi-question instrument: only the question matching the baseline's
+    question_key carries a calibration block; the rest are excluded (they
+    would otherwise be scored against a baseline for a different question)."""
+    tracker = _two_question_tracker()
+    report = tracker.build_report(
+        baseline={"dataset": "gss", "question_key": "GSS_HAPPY", "human_distribution": _HAPPY_BASELINE_DIST},
+        calibration_spec="gss:HAPPY",
+        extractor_label="pick_one:auto-derived",
+        auto_derived=True,
+    )
+    assert "calibration" in report["per_question"]["HAPPY"]
+    assert "calibration" not in report["per_question"]["SATJOB"]
+    assert report["calibration_question"] == "HAPPY"
+    assert report["calibration_excluded_questions"] == ["SATJOB"]
+
+
+def test_calibration_binding_falls_back_to_spec_question_key():
+    """No question_key on the baseline → the QUESTION half of the spec is
+    matched (case-insensitively) against tracked keys."""
+    tracker = _two_question_tracker()
+    report = tracker.build_report(
+        baseline={"human_distribution": _HAPPY_BASELINE_DIST},
+        calibration_spec="gss:happy",
+        extractor_label="pick_one:auto-derived",
+        auto_derived=True,
+    )
+    assert report["calibration_question"] == "HAPPY"
+    assert "calibration" in report["per_question"]["HAPPY"]
+    assert "calibration" not in report["per_question"]["SATJOB"]
+
+
+def test_calibration_no_match_attaches_nothing():
+    """Multiple tracked questions, none matching the baseline key → refuse
+    to calibrate rather than fabricate rows against the wrong baseline."""
+    tracker = _two_question_tracker()
+    report = tracker.build_report(
+        baseline={"dataset": "gss", "question_key": "ABANY", "human_distribution": _HAPPY_BASELINE_DIST},
+        calibration_spec="gss:ABANY",
+        extractor_label="pick_one:auto-derived",
+        auto_derived=True,
+    )
+    assert report["calibration_question"] is None
+    assert report["calibration_excluded_questions"] == []
+    for entry in report["per_question"].values():
+        assert "calibration" not in entry
+
+
+def test_calibration_single_tracked_question_binds_regardless_of_key():
+    """One tracked question → it is the target even when its key does not
+    textually match the baseline (preserves the S-gate OQ1 alignment_error
+    contract for vocabulary mismatches)."""
+    questions = [_pick_one_question("color")]
+    tracked = identify_tracked_questions(questions)
+    tracker = ConvergenceTracker(tracked, check_every=100, min_n=0, m_consecutive=2)
+    for _ in range(5):
+        tracker.record({"color": "red"})
+    report = tracker.build_report(
+        baseline={"dataset": "gss", "question_key": "GSS_HAPPY", "human_distribution": _HAPPY_BASELINE_DIST},
+        calibration_spec="gss:HAPPY",
+        extractor_label="pick_one:auto-derived",
+        auto_derived=True,
+    )
+    assert report["calibration_question"] == "color"
+    assert "alignment_error" in report["per_question"]["color"]["calibration"]
+
+
+def test_calibration_binding_report_keys_absent_without_baseline():
+    """No calibration attempted → the binding keys stay off the report so
+    the pre-calibration wire format is untouched."""
+    questions = [_pick_one_question("happy")]
+    tracked = identify_tracked_questions(questions)
+    tracker = ConvergenceTracker(tracked, check_every=100, min_n=0, m_consecutive=2)
+    tracker.record({"happy": "Very happy"})
+    report = tracker.build_report()
+    assert "calibration_question" not in report
+    assert "calibration_excluded_questions" not in report
+
+
 def test_build_report_skews_omit_with_single_observed_category():
     """Only one category in the running histogram → no GOF / Cramer's V."""
     questions = [_pick_one_question("only")]

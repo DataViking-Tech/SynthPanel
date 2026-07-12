@@ -120,6 +120,60 @@ def compute_calibration_jsd(
 _CALIBRATION_EXPECTED_FLOOR = 0.5
 
 
+def _normalize_calibration_key(value: str) -> str:
+    """Case-fold + strip a question key for calibration matching."""
+    return value.strip().lower()
+
+
+def match_calibration_question(
+    tracked_keys: list[str],
+    *,
+    baseline_question_key: str | None = None,
+    calibration_spec: str | None = None,
+) -> str | None:
+    """Pick the single tracked question a single-question baseline binds to.
+
+    A ``--calibrate-against DATASET:QUESTION`` baseline describes exactly one
+    survey question, so its ``human_distribution`` may be compared against
+    exactly one tracked question. Historically ``build_report`` stamped the
+    baseline onto *every* tracked question, which fabricated garbage JSD rows
+    for instruments with more than one bounded question (P0 fix, sp-ezz).
+
+    Resolution order:
+
+    1. When only one question is tracked, it is the target (the common
+       calibration wedge — e.g. the bundled ``happiness-probe`` instrument).
+    2. Otherwise the baseline's ``question_key`` (and, as a fallback, the
+       ``QUESTION`` half of the calibration spec) is matched against the
+       tracked keys, case-insensitively and tolerating dataset prefixes on
+       either side (``GSS_HAPPY`` binds to a question keyed ``HAPPY`` and
+       vice versa) — mirroring synthbench's own suffix-tolerant
+       ``_resolve_question`` behaviour.
+    3. No match → ``None``; the caller must refuse to calibrate rather than
+       fabricate per-question rows.
+    """
+    if not tracked_keys:
+        return None
+    if len(tracked_keys) == 1:
+        return tracked_keys[0]
+    candidates: list[str] = []
+    if baseline_question_key:
+        candidates.append(str(baseline_question_key))
+    if calibration_spec:
+        _, _, spec_question = str(calibration_spec).partition(":")
+        if spec_question.strip():
+            candidates.append(spec_question)
+    for candidate in candidates:
+        cand = _normalize_calibration_key(candidate)
+        if not cand:
+            continue
+        for key in tracked_keys:
+            k = _normalize_calibration_key(key)
+            if k == cand or k.endswith(f"_{cand}") or cand.endswith(f"_{k}"):
+                return key
+    return None
+
+
 def compute_calibration_cramers_v(
     model_counts: dict[str, int],
     human_dist: dict[str, float],
@@ -607,8 +661,13 @@ class ConvergenceTracker:
         ``per_question[key]['calibration']`` sub-object with JSD computed
         against the local :func:`jensen_shannon_divergence` (deliberately
         not synthbench's copy — see ``specs/sp-inline-calibration/structure.md``
-        §5). When supplied without a baseline distribution, the kwargs are
-        accepted but no calibration data is attached.
+        §5). The sub-object is attached ONLY to the single tracked question
+        the baseline binds to (see :func:`match_calibration_question`); other
+        tracked questions carry no ``calibration`` key and the binding
+        decision is surfaced as ``report['calibration_question']`` /
+        ``report['calibration_excluded_questions']``. When supplied without
+        a baseline distribution, the kwargs are accepted but no calibration
+        data is attached.
 
         ``orchestrator`` — optional small dict (e.g. primary model, mixed-model
         flags) merged verbatim under ``report['orchestrator']`` so JSON
@@ -620,6 +679,39 @@ class ConvergenceTracker:
                 candidate = baseline.get("human_distribution")
                 if isinstance(candidate, dict) and candidate:
                     human_dist = {str(k): float(v) for k, v in candidate.items()}
+
+            # sp-ezz P0 fix: a single-question baseline binds to exactly ONE
+            # tracked question. Stamping it onto every question fabricated
+            # nonsense JSD rows (and garbage SynthBench submissions) for
+            # instruments with >1 bounded question.
+            calibration_question: str | None = None
+            calibration_excluded: list[str] = []
+            if human_dist is not None:
+                calibration_question = match_calibration_question(
+                    list(self._states),
+                    baseline_question_key=(baseline.get("question_key") if isinstance(baseline, dict) else None),
+                    calibration_spec=calibration_spec,
+                )
+                if calibration_question is None:
+                    logger.warning(
+                        "calibration baseline %s did not match any of the %d tracked questions %r; "
+                        "no calibration attached (refusing to compare a single-question baseline "
+                        "against unrelated questions)",
+                        calibration_spec,
+                        len(self._states),
+                        list(self._states),
+                    )
+                else:
+                    calibration_excluded = [k for k in self._states if k != calibration_question]
+                    if calibration_excluded:
+                        logger.warning(
+                            "calibration %s bound to question %r; %d other tracked question(s) "
+                            "excluded from calibration: %r",
+                            calibration_spec,
+                            calibration_question,
+                            len(calibration_excluded),
+                            calibration_excluded,
+                        )
 
             per_question: dict[str, Any] = {}
             for key, state in self._states.items():
@@ -640,7 +732,7 @@ class ConvergenceTracker:
                 # code against ``.human_jsd`` should migrate to
                 # ``.calibration.jsd``. sp-pack-registry fingerprints depend
                 # on the sub-object shape.
-                if human_dist is not None:
+                if human_dist is not None and key == calibration_question:
                     model_dist = {k: float(v) for k, v in state.cumulative.items()}
                     jsd = compute_calibration_jsd(model_dist, human_dist)
                     calibration: dict[str, Any] = {
@@ -725,6 +817,13 @@ class ConvergenceTracker:
                 "human_baseline": baseline,
                 "diversity_warnings": self._build_diversity_warnings_locked(),
             }
+            if human_dist is not None:
+                # Surface the binding decision so JSON consumers (and the
+                # CLI's stderr warning) can tell which question the baseline
+                # was scored against and which tracked questions were
+                # excluded from calibration + submission.
+                report["calibration_question"] = calibration_question
+                report["calibration_excluded_questions"] = calibration_excluded
             if orchestrator:
                 report["orchestrator"] = dict(orchestrator)
             return report

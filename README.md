@@ -922,6 +922,32 @@ Render the DAG of any instrument:
 synthpanel instruments graph pricing-discovery --format mermaid
 ```
 
+### CLI Flag Support for Multi-Round Runs
+
+`panel run` executes multi-round (v2 linear / v3 branching) instruments
+through the same router-driven engine as the MCP and SDK surfaces
+(`run_multi_round_panel`). Most flags work identically; a few features
+are only wired into the single-round path today and are **refused
+loudly** up front (exit 1, before any LLM spend) rather than silently
+degrading:
+
+| Supported with multi-round instruments | Refused (single-round only, for now) |
+|---|---|
+| `--model`, weighted `--models m:w,...`, per-persona YAML model overrides, `--best-model-for` | `--models a,b` ensemble comparison, `--blend` |
+| `--temperature`, `--top-p`, `--seed` | `--variants` (robustness perturbation) |
+| `--schema`, `--extract-schema` | `--resume`, `--checkpoint-dir`, `--checkpoint-every`, `--allow-drift`, `--force-overwrite` (checkpointing) |
+| `--synthesis-model`, `--synthesis-prompt`, `--synthesis-temperature` | `--max-cost` (mid-run cost gate), `--question-failure-budget` |
+| `--var` / `--vars-file`, `--prompt-template`, instrument-embedded `system_prompt_template` | `--convergence-*`, `--auto-stop`, `--calibrate-against`, `--submit-to-synthbench` |
+| `--save`, `--strict`, `--failure-threshold` | `--synthesis-strategy=map-reduce`, `--synthesis-auto-escalate` |
+| `--max-concurrent`, `--rate-limit-rps`, `--skip-preflight`, `--personas-merge` | `--allow-empty-attachments` |
+| `--dry-run` (previews the DAG and names the engine) | `--no-synthesis` on **branching** instruments — per-round synthesis is what `route_when` evaluates. (Allowed on linear v2/v3 instruments with no `route_when`.) |
+
+The compatibility audit also runs on `--dry-run`, so a dry-run "OK"
+always means the real run is runnable. Note that for branching
+instruments the dry-run question/call/cost figures cover every declared
+round and are an upper bound — routing decides the executed path at run
+time.
+
 ### Predicate Reference
 
 `route_when` is a list of clauses evaluated in order. The first matching

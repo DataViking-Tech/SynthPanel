@@ -70,6 +70,16 @@ composio = [
     "pydantic>=2.0,<3.0",
 ]
 convergence = [
+    # CAUTION: the distribution named `synthbench` on PyPI is an UNRELATED
+    # project (synthetic ML datasets). The real SynthBench harness this
+    # extra targets is GitHub-only:
+    #   pip install "synthbench @ git+https://github.com/DataViking-Tech/SynthBench.git"
+    # PyPI rejects direct-URL requirements in published wheels, so the
+    # loose name pin stays here for resolver compatibility; every consumer
+    # of the harness (convergence baseline loader, synthbench_submit
+    # metrics) probes for the real API at runtime and degrades gracefully
+    # when the wrong distribution shadows the name. CI's
+    # `synthbench-contract` job installs the real harness from git.
     "synthbench>=0.1",
 ]
 pdf = [

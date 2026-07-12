@@ -851,8 +851,17 @@ def run_multi_round_sync(
     persona_models: dict[str, str] | None = None,
     extract_schema: dict[str, Any] | None = None,
     synthesis_temperature: float | None = None,
+    system_prompt_fn: Any = None,
+    max_workers: int | None = None,
 ) -> MultiRoundResult:
-    """Drive :func:`run_multi_round_panel` for v1/v2/v3 instruments."""
+    """Drive :func:`run_multi_round_panel` for v1/v2/v3 instruments.
+
+    ``system_prompt_fn`` lets callers (the CLI's ``--prompt-template`` /
+    instrument-embedded ``system_prompt_template``) override the default
+    persona system prompt; ``None`` keeps :func:`persona_system_prompt`.
+    ``max_workers`` bounds the per-round panelist thread pool (the CLI's
+    ``--max-concurrent``); ``None`` keeps the orchestrator default.
+    """
 
     def _round_synth(
         c: LLMClient,
@@ -878,11 +887,12 @@ def run_multi_round_sync(
         personas=personas,
         instrument=instrument,
         model=model,
-        system_prompt_fn=persona_system_prompt,
+        system_prompt_fn=system_prompt_fn or persona_system_prompt,
         question_prompt_fn=build_question_prompt,
         synthesize_round_fn=_round_synth if synthesis else (lambda *a, **kw: None),
         synthesize_final_fn=final_fn,
         response_schema=response_schema,
+        max_workers=max_workers,
         temperature=temperature,
         top_p=top_p,
         seed=seed,
