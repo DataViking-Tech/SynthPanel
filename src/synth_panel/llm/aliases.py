@@ -19,11 +19,14 @@ import yaml
 logger = logging.getLogger(__name__)
 
 # Short alias → canonical model identifier (tier 3: hardcoded fallback).
+# Alias *names* are stable; targets track the current-generation model for
+# each family (July 2026). ``opus``/``sonnet`` point at the current Anthropic
+# flagships (priced explicitly in cost.py); ``grok`` tracks xAI's grok-4.
 _HARDCODED_ALIASES: dict[str, str] = {
-    "opus": "claude-opus-4-6",
-    "sonnet": "claude-sonnet-4-6",
+    "opus": "claude-opus-4-8",
+    "sonnet": "claude-sonnet-5",
     "haiku": "claude-haiku-4-5-20251001",
-    "grok": "grok-3",
+    "grok": "grok-4",
     "gemini": "gemini-2.5-flash",
     "gemini-pro": "gemini-2.5-pro",
 }
@@ -48,7 +51,7 @@ def _load_file_aliases() -> dict[str, str]:
 
         aliases:
           fast: claude-haiku-4-5-20251001
-          smart: claude-opus-4-6
+          smart: claude-opus-4-8
     """
     if not _ALIASES_FILE.is_file():
         return {}

@@ -121,6 +121,47 @@ class TestCostGateUnit:
         assert snap["halted"] is False
         assert snap["halted_projection_usd"] is None
 
+    def test_opus_gate_projects_at_corrected_5_25_tier(self):
+        """P1-7: the --max-cost projection for an opus run must use the
+        corrected $5/$25 tier, not the legacy $15/$75 that halted runs ~3x
+        too early.
+
+        10 panelists, each 20k in / 10k out. At the corrected opus rate that
+        is $0.35/panelist → projected $3.50, comfortably under a $10 ceiling.
+        Under the old $15/$75 tier the same run priced at $1.05/panelist →
+        projected $10.50, which would have tripped a $10 gate near $3.50 of
+        *actual* spend — the reported bug.
+        """
+        from synth_panel.cost import OPUS_PRICING, ModelPricing, TokenUsage, estimate_cost
+
+        usage = TokenUsage(input_tokens=20_000, output_tokens=10_000)
+        per_panelist = estimate_cost(usage, OPUS_PRICING).total_cost
+        assert per_panelist == pytest.approx(0.35)
+
+        gate = CostGate(max_cost_usd=10.00, total_panelists=10)
+        halted = gate.record(per_panelist)
+        assert halted is False
+        assert gate.should_halt() is False
+        assert gate.projected_total() == pytest.approx(3.50)
+
+        # Same tokens at the legacy Opus-3 tier would have tripped the gate.
+        legacy_opus = ModelPricing(15.00, 75.00, 18.75, 1.50)
+        legacy_per_panelist = estimate_cost(usage, legacy_opus).total_cost
+        assert legacy_per_panelist == pytest.approx(1.05)
+        legacy_gate = CostGate(max_cost_usd=10.00, total_panelists=10)
+        assert legacy_gate.record(legacy_per_panelist) is True
+
+    def test_opus_gate_still_trips_at_correct_threshold(self):
+        """The corrected tier must not disable the gate — an opus run that
+        genuinely exceeds the ceiling still halts. $0.35/panelist * 10 = $3.50
+        projected trips a $3.00 ceiling."""
+        from synth_panel.cost import OPUS_PRICING, TokenUsage, estimate_cost
+
+        per_panelist = estimate_cost(TokenUsage(input_tokens=20_000, output_tokens=10_000), OPUS_PRICING).total_cost
+        gate = CostGate(max_cost_usd=3.00, total_panelists=10)
+        assert gate.record(per_panelist) is True
+        assert gate.halted_projection == pytest.approx(3.50)
+
     def test_thread_safety_concurrent_records(self):
         """Concurrent record() calls must not lose accounting."""
         gate = CostGate(max_cost_usd=1_000_000.0, total_panelists=10_000)

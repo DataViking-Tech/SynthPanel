@@ -41,6 +41,14 @@ OR_MODELS_URL = "https://openrouter.ai/api/v1/models"
 EXPECTED_OR_MAPPING: dict[str, str] = {
     "anthropic/claude-haiku-4.5": "HAIKU_PRICING",
     "anthropic/claude-sonnet-4.5": "SONNET_PRICING",
+    # Current-generation Anthropic flagships. Opus was previously uncovered
+    # here, so its stale Opus-3-era pricing could not self-heal via the drift
+    # cron — the exact rot this check exists to prevent. ``claude-sonnet-5``
+    # and ``claude-opus-4.8`` are what the ``sonnet``/``opus`` aliases now
+    # resolve to; both are checked against the live OR feed so a future
+    # price move (or a delisted id → NOT FOUND) fails loudly.
+    "anthropic/claude-sonnet-5": "SONNET_PRICING",
+    "anthropic/claude-opus-4.8": "OPUS_PRICING",
     "google/gemini-2.5-flash": "GEMINI_FLASH_PRICING",
     "google/gemini-2.5-flash-lite": "GEMINI_FLASH_LITE_PRICING",
     "google/gemini-2.5-pro": "GEMINI_PRO_PRICING",

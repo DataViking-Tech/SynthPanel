@@ -131,6 +131,51 @@ def test_missing_model_fails(refresh_module):
     assert drift_for_missing.found is False
 
 
+def test_mapping_covers_opus_and_current_flagships(refresh_module):
+    """P1-7: the drift check must cover opus (previously uncovered, so its
+    stale pricing could not self-heal) and the current-generation Anthropic
+    flagship ids the aliases now resolve to."""
+    from synth_panel.cost import OPUS_PRICING, SONNET_PRICING, lookup_pricing
+
+    mapping = refresh_module.EXPECTED_OR_MAPPING
+    assert "anthropic/claude-opus-4.8" in mapping
+    assert "anthropic/claude-sonnet-5" in mapping
+    # Each mapped id must resolve to an explicit (non-estimated) tier via the
+    # same substring path the runtime uses — otherwise the drift row would be
+    # meaningless (comparing OR rates against a DEFAULT fallback).
+    opus_pricing, opus_est = lookup_pricing("openrouter/anthropic/claude-opus-4.8")
+    assert opus_pricing is OPUS_PRICING
+    assert opus_est is False
+    sonnet_pricing, sonnet_est = lookup_pricing("openrouter/anthropic/claude-sonnet-5")
+    assert sonnet_pricing is SONNET_PRICING
+    assert sonnet_est is False
+
+
+def test_new_mapping_entries_report_zero_drift_at_local_rates(refresh_module):
+    """Feeding OR rates equal to the local table for the opus/sonnet-5 entries
+    yields zero drift (regression guard that they route to a real tier)."""
+    from synth_panel.cost import lookup_pricing
+
+    targets = ["anthropic/claude-opus-4.8", "anthropic/claude-sonnet-5"]
+    models = []
+    for or_id in targets:
+        local, _ = lookup_pricing(f"openrouter/{or_id}")
+        models.append(
+            _model(
+                or_id,
+                local.input_cost_per_million / 1_000_000,
+                local.output_cost_per_million / 1_000_000,
+            )
+        )
+    drifts = refresh_module.compute_drift(models)
+    by_id = {d.model: d for d in drifts}
+    for or_id in targets:
+        d = by_id[or_id]
+        assert d.found is True
+        assert d.input_drift == pytest.approx(0.0)
+        assert d.output_drift == pytest.approx(0.0)
+
+
 def test_relative_drift_handles_zero_upstream(refresh_module):
     """When upstream rate is 0 (e.g. provider stops billing for cache
     reads), the drift function must not divide by zero."""
