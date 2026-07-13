@@ -381,6 +381,154 @@ def _panel_timeout_envelope(
     return json.dumps(env, indent=2)
 
 
+# Cap on how many valid ids an INVALID_TOOL_ARG envelope enumerates, so a
+# store with hundreds of saved results doesn't itself bloat the error.
+_MAX_ENUMERATED_IDS = 20
+
+
+def _unknown_id_envelope(
+    kind: str,
+    given: str,
+    field_path: str,
+    valid_ids: list[str],
+) -> str:
+    """Typed ``INVALID_TOOL_ARG`` for an unknown pack/result/instrument id.
+
+    Turns the raw ``FileNotFoundError`` the data layer raises for a bad
+    ``pack_id`` / ``instrument_pack`` / ``result_id`` into the same typed
+    envelope the rest of the MCP boundary emits, naming the valid ids when
+    that is cheap to enumerate (a store with more than
+    :data:`_MAX_ENUMERATED_IDS` entries is truncated with a ``+N more``
+    tail so the error stays small).
+    """
+    if valid_ids:
+        shown = valid_ids[:_MAX_ENUMERATED_IDS]
+        listing = ", ".join(repr(v) for v in shown)
+        if len(valid_ids) > _MAX_ENUMERATED_IDS:
+            listing += f", … (+{len(valid_ids) - _MAX_ENUMERATED_IDS} more)"
+        valid_clause = f" Valid {kind}s: {listing}."
+    else:
+        valid_clause = f" No {kind}s are currently available."
+    return _invalid_tool_arg(f"Unknown {kind} {given!r}.{valid_clause}", field_path=field_path)
+
+
+def _resolve_persona_pack_or_error(pack_id: str) -> tuple[dict[str, Any] | None, str | None]:
+    """Load a persona pack, returning ``(pack, None)`` or ``(None, error_json)``.
+
+    An unknown ``pack_id`` becomes a typed ``INVALID_TOOL_ARG`` envelope
+    naming the installed packs, instead of the raw ``FileNotFoundError``
+    FastMCP would otherwise surface as a generic tool error.
+    """
+    try:
+        return _data_get_persona_pack(pack_id), None
+    except FileNotFoundError:
+        valid = [str(p.get("id")) for p in _data_list_persona_packs() if p.get("id")]
+        return None, _unknown_id_envelope("persona pack", pack_id, "pack_id", valid)
+
+
+def _resolve_instrument_pack_or_error(name: str) -> tuple[dict[str, Any] | None, str | None]:
+    """Load an instrument pack, returning ``(body, None)`` or ``(None, error_json)``."""
+    try:
+        return _data_load_instrument_pack(name), None
+    except FileNotFoundError:
+        valid = [str(p.get("id")) for p in _data_list_instrument_packs() if p.get("id")]
+        return None, _unknown_id_envelope("instrument pack", name, "instrument_pack", valid)
+
+
+def _resolve_panel_result_or_error(result_id: str) -> tuple[dict[str, Any] | None, str | None]:
+    """Load a saved panel result, returning ``(result, None)`` or ``(None, error_json)``."""
+    try:
+        return _data_get_panel_result(result_id), None
+    except FileNotFoundError:
+        valid = [str(r.get("id")) for r in _data_list_panel_results() if r.get("id")]
+        return None, _unknown_id_envelope("panel result", result_id, "result_id", valid)
+
+
+def _total_failure_envelope(exc: PanelTotalFailureError) -> str:
+    """Serialize the typed total-failure envelope ``run_panel`` returns.
+
+    Shared by ``run_quick_poll`` and ``extend_panel`` so a knowingly-bad
+    model alias produces the same ``run_invalid`` / ``total_failure``
+    shape everywhere instead of a raw ``PanelTotalFailureError`` bubbling
+    up as a generic FastMCP "Error executing tool".
+    """
+    return json.dumps(
+        {
+            "error": str(exc),
+            "run_invalid": True,
+            "total_failure": exc.diagnostic,
+        },
+        indent=2,
+    )
+
+
+def _dereference_per_model_transcripts(
+    per_model_results: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Strip the duplicated panelist transcript from a NON-ensemble rollup.
+
+    :func:`synth_panel.ensemble.build_mixed_model_rollup` embeds a full
+    formatted copy of every panelist's responses under
+    ``per_model_results[model]["results"]`` — a byte-for-byte duplicate of
+    the canonical ``rounds[].results`` transcript (each canonical row
+    already carries its ``model`` tag, so per-model views are recoverable
+    by filtering). We keep the per-model ``usage`` / ``cost`` breakdown and
+    add a cheap ``result_count`` + ``personas`` reference so consumers can
+    still slice by model without the server serialising the transcript two
+    or three times.
+
+    The ensemble path (``models=[...]``) is deliberately NOT routed through
+    here: there each model ran the panel independently, so its ``results``
+    block is a unique, unpersisted transcript rather than a copy.
+    """
+    compact: dict[str, dict[str, Any]] = {}
+    for model_name, entry in per_model_results.items():
+        rows = entry.get("results") or []
+        new_entry = {k: v for k, v in entry.items() if k != "results"}
+        new_entry["result_count"] = len(rows)
+        new_entry["personas"] = [r.get("persona") for r in rows if isinstance(r, dict)]
+        compact[model_name] = new_entry
+    return compact
+
+
+def _apply_detail(result: dict[str, Any], detail: str) -> dict[str, Any]:
+    """Honor the ``detail`` selector on a *persisted* panel-run envelope.
+
+    ``detail="full"`` returns the envelope untouched. ``detail="summary"``
+    drops the per-panelist transcripts — the top-level ``results`` mirror
+    and each ``rounds[].results`` list — to protect the agent's context
+    window, keeping synthesis, ``panel_verdict``, ``poll_summary``,
+    ``metadata``, ``per_model_results`` (usage/cost only), costs,
+    ``warnings``, ``path`` and ``terminal_round``. The dropped transcript
+    stays retrievable via ``get_panel_result`` / the
+    ``panel-result://{result_id}`` resource (also on
+    ``panel_verdict.full_transcript_uri``); the envelope carries
+    ``detail: "summary"`` plus a ``transcript_uri`` pointer and per-round
+    ``result_count`` so the omission is self-describing.
+
+    Only applied where the transcript is recoverable (persisted BYOK
+    runs). Sampling responses carry no ``result_id`` and are never
+    persisted, so their transcripts are returned in full regardless.
+    Typed error envelopes (``error_code``) pass through unchanged.
+    """
+    if not isinstance(result, dict) or detail != "summary" or "error_code" in result:
+        return result
+    result["detail"] = "summary"
+    if "results" in result:
+        result.pop("results", None)
+        result["results_omitted"] = True
+    rounds = result.get("rounds")
+    if isinstance(rounds, list):
+        for rd in rounds:
+            if isinstance(rd, dict) and "results" in rd:
+                rd["result_count"] = len(rd.get("results") or [])
+                rd.pop("results", None)
+    rid = result.get("result_id") or result.get("id")
+    if rid:
+        result["transcript_uri"] = f"panel-result://{rid}"
+    return result
+
+
 def _normalize_models_param(
     *,
     model: str | None,
@@ -878,8 +1026,15 @@ async def _run_panel_async_instrument(
     synthesis_temperature: float | None = None,
     decision_being_informed: str | None = None,
     decision_warnings: list[str] | tuple[str, ...] = (),
+    detail: str = "summary",
 ) -> dict[str, Any]:
-    """Run a (possibly branching) instrument and return v3-shaped response."""
+    """Run a (possibly branching) instrument and return v3-shaped response.
+
+    ``detail`` selects the transcript verbosity of the returned envelope:
+    ``"full"`` keeps every panelist row; ``"summary"`` (the default for
+    ``run_panel``) drops the transcripts via :func:`_apply_detail` — see
+    that helper for the retained/omitted field split.
+    """
     total = len(personas)
     timer = PanelTimer()
     await ctx.report_progress(0, total)
@@ -1009,6 +1164,8 @@ async def _run_panel_async_instrument(
         default_model=model,
         panelist_formatter=lambda pr, m: _format_panelist_result(pr, m),
     )
+    # Drop the per-model transcript copy; ``rounds[].results`` is canonical.
+    per_model_results = _dereference_per_model_transcripts(per_model_results)
 
     # sp-nn8k: warn loudly when any contributing model was priced via
     # DEFAULT_PRICING fallback instead of an explicit tier. Candidates are
@@ -1059,7 +1216,7 @@ async def _run_panel_async_instrument(
     # results (not just the terminal round) so an early-round 3-strike
     # exhaustion still triggers the AC-8 pivot.
     all_round_result_dicts = [rd for rp in rounds_payload for rd in rp["results"]]
-    return _finalize_contract_response(
+    finalized = _finalize_contract_response(
         result,
         decision_being_informed=decision_being_informed,
         decision_warnings=decision_warnings,
@@ -1070,6 +1227,7 @@ async def _run_panel_async_instrument(
         poll_summary=poll_summary_payload,
         result_id=result_id,
     )
+    return _apply_detail(finalized, detail)
 
 
 async def _run_panel_async(
@@ -1090,6 +1248,7 @@ async def _run_panel_async(
     variants: int = 0,
     decision_being_informed: str | None = None,
     decision_warnings: list[str] | tuple[str, ...] = (),
+    detail: str = "summary",
 ) -> dict[str, Any]:
     """Run panel via asyncio.to_thread with progress notifications.
 
@@ -1098,6 +1257,11 @@ async def _run_panel_async(
     AC-4 placeholder) the run persists it in the saved result, stamps the
     panelist transcripts (AC-7), and attaches the ``panel_verdict`` +
     ``schema_version`` contract fields to the envelope (AC-6/AC-8/AC-9).
+
+    ``detail`` selects the transcript verbosity: ``"full"`` keeps every
+    panelist row; ``"summary"`` (the default) drops the top-level
+    ``results`` mirror and ``rounds[].results`` via :func:`_apply_detail`
+    so a large BYOK panel doesn't flood the caller's context.
     """
     total = len(personas)
     timer = PanelTimer()
@@ -1208,6 +1372,8 @@ async def _run_panel_async(
         default_model=model,
         panelist_formatter=lambda pr, m: _format_panelist_result(pr, m),
     )
+    # Drop the per-model transcript copy; ``rounds[].results`` is canonical.
+    per_model_results = _dereference_per_model_transcripts(per_model_results)
 
     # sp-nn8k: surface DEFAULT_PRICING fallback loudly so estimated totals
     # don't blend into billed ones silently.
@@ -1244,6 +1410,13 @@ async def _run_panel_async(
             }
         ],
         "path": [],
+        # Envelope uniformity (sy-envlp): the flat-questions path now emits
+        # the same top-level ``results`` mirror + ``terminal_round`` keys the
+        # instrument and sampling paths already carry, so an agent keying on
+        # ``results`` doesn't KeyError on a plain-questions BYOK run. Both
+        # honor ``detail`` — the mirror is dropped under ``summary``.
+        "terminal_round": "default",
+        "results": result_dicts,
         "warnings": list(cost_warnings),
         "cost_is_estimated": bool(cost_warnings),
         "per_model_results": per_model_results,
@@ -1266,7 +1439,7 @@ async def _run_panel_async(
         result["variant_count"] = variant_data["variant_count"]
 
     # v1.0.0 contract fields (panel_verdict, schema_version, warnings nudge).
-    return _finalize_contract_response(
+    finalized = _finalize_contract_response(
         result,
         decision_being_informed=decision_being_informed,
         decision_warnings=decision_warnings,
@@ -1277,6 +1450,7 @@ async def _run_panel_async(
         poll_summary=poll_summary_payload,
         result_id=result_id,
     )
+    return _apply_detail(finalized, detail)
 
 
 # ---------------------------------------------------------------------------
@@ -1416,6 +1590,7 @@ async def run_panel(
     use_sampling: bool | None = None,
     accept_multimodal_sampling: bool = False,
     decision_being_informed: str | None = None,
+    detail: str = "summary",
     ctx: Context = None,
 ) -> str:
     """Run a full synthetic focus group panel.
@@ -1443,13 +1618,22 @@ async def run_panel(
     ``warnings`` is empty in the typical case — the shape is uniform
     across versions so callers don't need to special-case.
 
-    Every non-ensemble run also includes ``per_model_results``
-    (``{model: {results, cost, usage}}``) and ``cost_breakdown``
-    (``{by_model, total}``) — the same shape the ``models=[...]``
-    ensemble path returns. Single-model panels produce a one-entry
-    dict; ``persona_models`` runs produce one entry per distinct
-    model. Consumers can read the rollup unconditionally instead of
-    iterating ``rounds[].results[]`` themselves.
+    Every non-ensemble run also includes ``per_model_results`` and
+    ``cost_breakdown`` (``{by_model, total}``). To avoid re-serialising
+    the transcript, the non-ensemble ``per_model_results[model]`` carries
+    ``{usage, cost, result_count, personas}`` — the per-model spend plus a
+    cheap reference list — NOT a second copy of every panelist's
+    responses; the canonical transcript is ``rounds[].results``, whose
+    rows are already ``model``-tagged for filtering. (The ``models=[...]``
+    ensemble path still returns ``{results, cost, usage}`` per model,
+    because there each model's transcript is unique and unpersisted.)
+    Single-model panels produce a one-entry dict; ``persona_models`` runs
+    produce one entry per distinct model.
+
+    Response verbosity is controlled by ``detail`` (see below): the
+    default ``"summary"`` omits the per-panelist transcripts to protect
+    the caller's context window; pass ``detail="full"`` (or fetch
+    ``get_panel_result``) for the complete rows.
 
     Args:
         questions: Flat list of question dicts (v1-equivalent). Each
@@ -1566,7 +1750,27 @@ async def run_panel(
             synthesized and a ``W_DECISION_MISSING`` warning is returned);
             under ``SYNTHPANEL_SCHEMA_MIN>=1.1.0`` omission is a hard
             ``MISSING_DECISION`` reject.
+        detail: Transcript verbosity of the response envelope, one of
+            ``"summary"`` (default) or ``"full"``. ``"summary"`` returns
+            synthesis, ``panel_verdict``, ``poll_summary``, ``metadata``,
+            ``result_id``, costs, ``per_model_results`` (usage/cost),
+            ``warnings``, ``path`` and ``terminal_round`` but DROPS the
+            per-panelist transcripts (the top-level ``results`` mirror and
+            each ``rounds[].results`` list) to protect the agent's context
+            window — with caps of MAX_PERSONAS x MAX_QUESTIONS a full panel
+            can serialise megabytes. The dropped transcript stays
+            retrievable via ``get_panel_result(result_id)`` or the
+            ``panel-result://{result_id}`` resource (also surfaced on
+            ``panel_verdict.full_transcript_uri`` and the envelope's
+            ``transcript_uri``). ``"full"`` returns every panelist row.
+            Applies to persisted BYOK runs; sampling responses (no
+            ``result_id``, never persisted) always return full transcripts.
     """
+    if detail not in ("summary", "full"):
+        return _invalid_tool_arg(
+            f"'detail' must be 'summary' or 'full' (got {detail!r}).",
+            field_path="detail",
+        )
     decision_being_informed, decision_warnings, decision_error = _resolve_decision_contract(
         "run_panel", decision_being_informed
     )
@@ -1596,7 +1800,10 @@ async def run_panel(
         return json.dumps({"error": str(exc)})
     merged = list(personas) if personas else []
     if pack_id is not None:
-        pack = _data_get_persona_pack(pack_id)
+        pack, pack_error = _resolve_persona_pack_or_error(pack_id)
+        if pack_error is not None:
+            return pack_error
+        assert pack is not None
         merged.extend(pack.get("personas", []))
     if not merged:
         return json.dumps({"error": "No personas provided. Supply personas and/or pack_id."})
@@ -1638,7 +1845,10 @@ async def run_panel(
             # Resolve question stream for sampling — no v3 branching.
             sampling_questions: list[dict[str, Any]]
             if instrument_pack is not None:
-                pack_body = _data_load_instrument_pack(instrument_pack)
+                pack_body, ip_error = _resolve_instrument_pack_or_error(instrument_pack)
+                if ip_error is not None:
+                    return ip_error
+                assert pack_body is not None
                 raw = pack_body.get("instrument", pack_body)
                 try:
                     inst = parse_instrument(raw)
@@ -1736,7 +1946,10 @@ async def run_panel(
                     inst = parse_instrument(raw)
                     ens_questions = [{"text": q["text"]} for q in inst.questions]
                 elif instrument_pack is not None:
-                    pack_body = _data_load_instrument_pack(instrument_pack)
+                    pack_body, ip_error = _resolve_instrument_pack_or_error(instrument_pack)
+                    if ip_error is not None:
+                        return ip_error
+                    assert pack_body is not None
                     raw = pack_body.get("instrument", pack_body)
                     inst = parse_instrument(raw)
                     ens_questions = [{"text": q["text"]} for q in inst.questions]
@@ -1781,9 +1994,13 @@ async def run_panel(
     # payloads (hq-jviv) surface across the wire instead of crashing the
     # tool with a generic ToolError.
     instrument_obj: Instrument | None = None
+    if instrument_pack is not None:
+        pack_body, ip_error = _resolve_instrument_pack_or_error(instrument_pack)
+        if ip_error is not None:
+            return ip_error
+        assert pack_body is not None
     try:
         if instrument_pack is not None:
-            pack_body = _data_load_instrument_pack(instrument_pack)
             raw = pack_body.get("instrument", pack_body)
             instrument_obj = parse_instrument(raw)
         elif instrument is not None:
@@ -1810,6 +2027,7 @@ async def run_panel(
                 synthesis_temperature=synthesis_temperature,
                 decision_being_informed=decision_being_informed,
                 decision_warnings=decision_warnings,
+                detail=detail,
             )
         except PanelTotalFailureError as exc:
             logger.error("run_panel instrument: total failure: %s", exc)
@@ -1856,6 +2074,7 @@ async def run_panel(
             variants=variants_k,
             decision_being_informed=decision_being_informed,
             decision_warnings=decision_warnings,
+            detail=detail,
         )
     except PanelTotalFailureError as exc:
         logger.error("run_panel: total failure: %s", exc)
@@ -1888,6 +2107,7 @@ async def run_panel(
 async def run_quick_poll(
     question: str,
     personas: list[dict[str, Any]] | None = None,
+    pack_id: str | None = None,
     model: str | None = None,
     response_schema: dict[str, Any] | None = None,
     synthesis: bool = True,
@@ -1898,6 +2118,7 @@ async def run_quick_poll(
     use_sampling: bool | None = None,
     accept_multimodal_sampling: bool = False,
     decision_being_informed: str | None = None,
+    detail: str = "summary",
     ctx: Context = None,
 ) -> str:
     """Quick single-question poll across personas.
@@ -1915,12 +2136,13 @@ async def run_quick_poll(
 
     Args:
         question: The question to ask all personas.
-        personas: List of persona definitions. Optional — when omitted,
-            a small built-in pack of diverse personas is used so the
-            tool works with zero configuration. Each persona is a JSON
-            object with the following recognized fields (additional
-            fields are preserved and remain available to custom
-            prompt templates):
+        personas: List of persona definitions. Optional — when omitted
+            (and no ``pack_id`` is given), a small built-in pack of
+            diverse personas is used so the tool works with zero
+            configuration. Merged with ``pack_id`` (inline personas
+            first). Each persona is a JSON object with the following
+            recognized fields (additional fields are preserved and
+            remain available to custom prompt templates):
 
             * ``name`` (str, **required**) — persona's display name.
             * ``age`` (int, optional) — persona's age.
@@ -1941,6 +2163,12 @@ async def run_quick_poll(
                     "personality_traits": ["analytical", "curious", "pragmatic"]
                   }
                 ]
+        pack_id: ID of a saved persona pack (bundled or user-saved),
+            resolved the same way ``run_panel`` resolves it. Merged with
+            inline ``personas`` (inline first). An unknown ``pack_id``
+            returns a typed ``INVALID_TOOL_ARG`` envelope naming the
+            installed packs. When both ``personas`` and ``pack_id`` are
+            omitted the built-in diverse persona set is used.
         model: LLM model to use. Defaults to a cheap/fast model chosen
             from configured provider credentials. When the auto-resolved
             default would be ``openrouter/auto`` and the poll runs against
@@ -1969,7 +2197,18 @@ async def run_quick_poll(
             ``INVALID_TOOL_ARG`` error envelope. Omission is tolerated
             during the v1.0.x grace window (placeholder + warning);
             ``SYNTHPANEL_SCHEMA_MIN>=1.1.0`` makes it a hard reject.
+        detail: Transcript verbosity of the BYOK response envelope, one of
+            ``"summary"`` (default) or ``"full"``. ``"summary"`` drops the
+            per-panelist transcripts (retrievable via
+            ``get_panel_result(result_id)``); ``"full"`` returns them. See
+            ``run_panel``'s ``detail`` for the retained/omitted split.
+            Sampling responses always return full transcripts.
     """
+    if detail not in ("summary", "full"):
+        return _invalid_tool_arg(
+            f"'detail' must be 'summary' or 'full' (got {detail!r}).",
+            field_path="detail",
+        )
     decision_being_informed, decision_warnings, decision_error = _resolve_decision_contract(
         "run_quick_poll", decision_being_informed
     )
@@ -1986,10 +2225,18 @@ async def run_quick_poll(
     if not question or not question.strip():
         return json.dumps({"error": "Question text must be a non-empty string."})
 
-    # Fall back to the built-in diverse persona set when the caller
-    # omits personas — preserves the zero-config first-run story.
-    if personas is None or len(personas) == 0:
-        personas = [dict(p) for p in DEFAULT_QUICK_POLL_PERSONAS]
+    # Resolve personas: inline first, then pack_id, else the built-in
+    # diverse persona set (preserves the zero-config first-run story).
+    merged_personas = list(personas) if personas else []
+    if pack_id is not None:
+        pack, pack_error = _resolve_persona_pack_or_error(pack_id)
+        if pack_error is not None:
+            return pack_error
+        assert pack is not None
+        merged_personas.extend(pack.get("personas", []))
+    if not merged_personas:
+        merged_personas = [dict(p) for p in DEFAULT_QUICK_POLL_PERSONAS]
+    personas = merged_personas
 
     # Validate personas: must be dicts with "name"
     for i, p in enumerate(personas):
@@ -2039,20 +2286,39 @@ async def run_quick_poll(
         return json.dumps(apply_response_gate(result), indent=2)
 
     questions = [{"text": question}]
-    result = await _run_panel_async(
-        personas,
-        questions,
-        model,
-        ctx,
-        response_schema,
-        synthesis=synthesis,
-        synthesis_model=synthesis_model,
-        synthesis_prompt=synthesis_prompt,
-        temperature=temperature,
-        top_p=top_p,
-        decision_being_informed=decision_being_informed,
-        decision_warnings=decision_warnings,
-    )
+    try:
+        result = await _run_panel_async(
+            personas,
+            questions,
+            model,
+            ctx,
+            response_schema,
+            synthesis=synthesis,
+            synthesis_model=synthesis_model,
+            synthesis_prompt=synthesis_prompt,
+            temperature=temperature,
+            top_p=top_p,
+            decision_being_informed=decision_being_informed,
+            decision_warnings=decision_warnings,
+            detail=detail,
+        )
+    except PanelTotalFailureError as exc:
+        # Same typed envelope run_panel returns — a knowingly-bad model
+        # alias must not surface as a generic FastMCP tool error (hq-6j40).
+        logger.error("run_quick_poll: total failure: %s", exc)
+        return _total_failure_envelope(exc)
+    except asyncio.TimeoutError:
+        logger.error(
+            "run_quick_poll: timed out (personas=%d model=%s)",
+            len(personas),
+            model,
+        )
+        return _panel_timeout_envelope(
+            personas=len(personas),
+            questions=1,
+            variants=0,
+            model=model,
+        )
     if "error_code" not in result:
         result["mode"] = "byok"
     return json.dumps(apply_response_gate(result), indent=2)
@@ -2402,7 +2668,9 @@ async def extend_panel(
     (``<result_id>.pre-extend.json``) so the operation is reversible.
 
     Args:
-        result_id: ID of a previously saved panel result.
+        result_id: ID of a previously saved panel result. An unknown id
+            returns a typed ``INVALID_TOOL_ARG`` envelope naming the
+            available result ids (not a raw tool error).
         questions: One or more questions for the ad-hoc round. They
             run as a single round, in order, against the same
             personas as the original run.
@@ -2431,10 +2699,22 @@ async def extend_panel(
         return spec_error
     model = model or _resolve_mcp_default_model()
     logger.info("extend_panel: result_id=%s questions=%d model=%s", result_id, len(questions), model)
-    existing = _data_get_panel_result(result_id)
+    existing, result_error = _resolve_panel_result_or_error(result_id)
+    if result_error is not None:
+        return result_error
+    assert existing is not None
 
     # Reuse the original personas (recovered from saved sessions if possible).
-    sessions = load_panel_sessions(result_id)
+    # A missing sessions dir raises FileNotFoundError — surface it as the
+    # same typed INVALID_TOOL_ARG envelope rather than a raw tool error.
+    try:
+        sessions = load_panel_sessions(result_id)
+    except FileNotFoundError:
+        return _invalid_tool_arg(
+            f"Panel result {result_id!r} has no saved panelist sessions to extend; "
+            "extend_panel can only follow up on a run that persisted its transcripts.",
+            field_path="result_id",
+        )
     personas: list[dict[str, Any]] = [{"name": name} for name in sessions]
     if not personas:
         return json.dumps({"error": f"No sessions found for result {result_id}"})
@@ -2483,10 +2763,40 @@ async def extend_panel(
                 )
         return results, out_sessions, synth, synth_error
 
-    panelist_results, extended_sessions, synth, synthesis_error = await asyncio.wait_for(
-        asyncio.to_thread(_go),
-        timeout=PANELIST_TIMEOUT * len(personas),
-    )
+    try:
+        panelist_results, extended_sessions, synth, synthesis_error = await asyncio.wait_for(
+            asyncio.to_thread(_go),
+            timeout=PANELIST_TIMEOUT * len(personas),
+        )
+    except PanelTotalFailureError as exc:
+        # Parity with run_panel: a bad alias / provider outage returns the
+        # typed run_invalid envelope, not a generic FastMCP tool error.
+        logger.error("extend_panel: total failure: %s", exc)
+        return _total_failure_envelope(exc)
+    except asyncio.TimeoutError:
+        logger.error(
+            "extend_panel: timed out (personas=%d questions=%d model=%s)",
+            len(personas),
+            len(questions),
+            model,
+        )
+        return _panel_timeout_envelope(
+            personas=len(personas),
+            rounds=1,
+            model=model,
+        )
+
+    # ``run_panel_parallel`` returns error-tagged rows rather than raising on
+    # a total wipeout, so detect it here and emit the same typed envelope
+    # run_panel does (a knowingly-bad model alias produces 0-token panelists).
+    failure = detect_total_failure(panelist_results)
+    if failure is not None:
+        from synth_panel._runners import format_total_failure_message
+
+        logger.error("extend_panel: total failure detected: %s", failure)
+        return _total_failure_envelope(
+            PanelTotalFailureError(format_total_failure_message(failure), diagnostic=failure)
+        )
 
     if ctx is not None:
         await ctx.report_progress(len(personas), len(personas))
@@ -2567,14 +2877,31 @@ async def list_panel_results() -> str:
 
 
 @mcp.tool()
-async def get_panel_result(result_id: str) -> str:
+async def get_panel_result(result_id: str, detail: str = "full") -> str:
     """Get a specific panel result by ID.
+
+    This is the canonical way to retrieve the per-panelist transcript that
+    ``run_panel`` / ``run_quick_poll`` omit under their default
+    ``detail="summary"`` envelope. It therefore defaults to ``detail="full"``
+    (unlike the run tools, whose default protects the agent's live context)
+    so ``get_panel_result(result_id)`` returns the complete saved result —
+    the behavior every existing caller already depends on.
 
     Args:
         result_id: The ID of the panel result to retrieve.
+        detail: ``"full"`` (default) returns the complete saved result;
+            ``"summary"`` drops the per-panelist transcript (top-level
+            ``results`` mirror + any ``rounds[].results``) the same way the
+            run tools' summary envelope does — useful for a cheap metadata
+            /synthesis peek at a large saved panel.
     """
+    if detail not in ("summary", "full"):
+        return _invalid_tool_arg(
+            f"'detail' must be 'summary' or 'full' (got {detail!r}).",
+            field_path="detail",
+        )
     result = _data_get_panel_result(result_id)
-    return json.dumps(result, indent=2)
+    return json.dumps(_apply_detail(result, detail), indent=2)
 
 
 # ---------------------------------------------------------------------------

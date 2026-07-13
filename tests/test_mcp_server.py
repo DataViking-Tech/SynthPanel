@@ -441,18 +441,22 @@ class TestRunPanelPackId:
         assert "error" in data
 
     @pytest.mark.asyncio
-    async def test_invalid_pack_id_raises(self):
-        """Non-existent pack_id should raise ToolError wrapping FileNotFoundError."""
-        from mcp.server.fastmcp.exceptions import ToolError
-
-        with pytest.raises(ToolError, match="Persona pack not found"):
-            await mcp.call_tool(
-                "run_panel",
-                {
-                    "questions": [{"text": "Hello?"}],
-                    "pack_id": "nonexistent",
-                },
-            )
+    async def test_invalid_pack_id_returns_typed_envelope(self):
+        """Non-existent pack_id returns a typed INVALID_TOOL_ARG envelope
+        (naming the field) rather than raising a raw FileNotFoundError."""
+        result = await mcp.call_tool(
+            "run_panel",
+            {
+                "questions": [{"text": "Hello?"}],
+                "pack_id": "nonexistent",
+                "decision_being_informed": "choosing which persona pack to reuse",
+            },
+        )
+        data = json.loads(result[0][0].text)
+        assert data["error_code"] == "INVALID_TOOL_ARG"
+        assert data["field_path"] == "pack_id"
+        assert "nonexistent" in data["message"]
+        assert data["retry_safe"] is False
 
     @pytest.mark.asyncio
     async def test_inline_personas_without_pack_id(self):
@@ -1290,8 +1294,12 @@ class TestExtendPanelSynthesisLoudness:
         fake_existing = {"rounds": [], "path": [], "question_count": 0}
         fake_sessions = {"Alice": object()}
         fake_panelist = PanelistResult(
+            # Canonical response shape uses ``response`` (matches the real
+            # orchestrator + every other stub); ``extend_panel`` now runs
+            # detect_total_failure over these rows, which treats a row with
+            # no clean ``response`` as a failed panelist.
             persona_name="Alice",
-            responses=[{"question": "q?", "answer": "a"}],
+            responses=[{"question": "q?", "response": "a"}],
             usage=TokenUsage(),
             model="haiku",
         )
@@ -1603,6 +1611,11 @@ class TestRunPanelMultiRoundV3:
         the empty list, and the path log advances normally. If we ever
         decide to raise on this case, this test's assertion needs to
         flip — but until then, callers can rely on the envelope shape.
+
+        ``detail="full"`` is requested explicitly because ``run_panel``
+        now defaults to the compact ``detail="summary"`` envelope, which
+        drops ``rounds[].results`` (retrievable via ``get_panel_result``).
+        This test pins the per-round transcript shape, so it opts into full.
         """
         from synth_panel.cost import TokenUsage
 
@@ -1659,6 +1672,7 @@ class TestRunPanelMultiRoundV3:
                 personas=self.PERSONAS,
                 instrument=self.V3_LINEAR,
                 model="haiku",
+                detail="full",
                 ctx=_StubMcpContext(),
             )
 
