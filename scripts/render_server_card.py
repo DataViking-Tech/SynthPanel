@@ -1,12 +1,26 @@
-"""Sync site/.well-known/mcp/server-card.json to the canonical __version__ (sy-hs4).
+"""Sync the MCP server descriptors to the canonical __version__ (sy-hs4).
+
+Two sibling descriptors carry the version and must never drift from the
+package:
+
+* ``site/.well-known/mcp/server-card.json`` — the MCP Server Card served
+  by Cloudflare Pages (three version slots).
+* ``server.json`` — the root MCP server descriptor that
+  ``site/.well-known/api-catalog`` points RFC-9727 discovery at (two
+  version slots: top-level + ``packages[synthpanel].version``).
 
 Single-source-of-truth model identical to :mod:`scripts.render_site`:
-read ``src/synth_panel/__version__.py``, then rewrite the three
-version fields the MCP server-card schema exposes:
+read ``src/synth_panel/__version__.py``, then rewrite the
+version fields each descriptor exposes:
 
+server-card.json (three slots):
 1. Top-level ``version``
 2. ``serverInfo.version`` (runtime metadata the host server prints)
 3. Every ``packages[].version`` where ``identifier == "synthpanel"``
+
+server.json (two slots):
+1. Top-level ``version``
+2. ``packages[synthpanel].version``
 
 We do *targeted line-level substitution* rather than ``json.load`` +
 ``json.dump`` because the committed file uses a compact style
@@ -42,6 +56,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CARD_PATH = REPO_ROOT / "site" / ".well-known" / "mcp" / "server-card.json"
+SERVER_JSON_PATH = REPO_ROOT / "server.json"
 VERSION_PATH = REPO_ROOT / "src" / "synth_panel" / "__version__.py"
 
 
@@ -79,41 +94,64 @@ _VERSION_LINE = re.compile(
 # field that we should be syncing too.
 _EXPECTED_VERSION_LINE_COUNT = 3
 
+# server.json exposes two version slots: top-level + packages[0].version
+# (it has no serverInfo block). Same guard rationale as the card.
+_EXPECTED_SERVER_JSON_VERSION_LINE_COUNT = 2
+
+
+def _sync_version_lines(text: str, version: str, *, expected: int, path: Path) -> str:
+    """Substitute every ``"version": "..."`` line to *version*.
+
+    Refuses to return a half-synced document: if the number of matched
+    version lines differs from *expected*, the schema drifted (a slot
+    moved or was added) and shipping the partial result would reproduce
+    exactly the v1.5.0 mismatch this script exists to prevent.
+    """
+    new_text, n = _VERSION_LINE.subn(rf"\g<lead>{version}\g<trail>", text)
+    if n != expected:
+        raise RuntimeError(
+            f"render_server_card: matched {n} version line(s) in {path}, "
+            f"expected {expected}. If the schema legitimately changed, update "
+            "the expected-count constant in scripts/render_server_card.py."
+        )
+    return new_text
+
 
 def render(*, write: bool = False) -> tuple[str, str]:
-    """Return ``(rendered_text, version)``; write to disk when requested.
+    """Return ``(rendered_text, version)`` for server-card.json; write when requested.
 
     Returns the rendered text so the idempotency test can compare
     against the on-disk file without re-reading.
     """
     version = _read_version()
     text = CARD_PATH.read_text(encoding="utf-8")
-
-    new_text, n = _VERSION_LINE.subn(
-        rf"\g<lead>{version}\g<trail>",
-        text,
-    )
-    if n != _EXPECTED_VERSION_LINE_COUNT:
-        # Mismatch means the schema drifted (someone added or moved a
-        # version slot). Refuse to write a half-synced card — the next
-        # release would land with mismatched fields, exactly the v1.5.0
-        # failure mode this whole script exists to prevent.
-        raise RuntimeError(
-            f"render_server_card: matched {n} version line(s) in {CARD_PATH}, "
-            f"expected {_EXPECTED_VERSION_LINE_COUNT} "
-            "(top-level, serverInfo.version, packages[0].version). "
-            "If the schema legitimately changed, update "
-            "_EXPECTED_VERSION_LINE_COUNT in scripts/render_server_card.py."
-        )
-
+    new_text = _sync_version_lines(text, version, expected=_EXPECTED_VERSION_LINE_COUNT, path=CARD_PATH)
     if write:
         CARD_PATH.write_text(new_text, encoding="utf-8")
+    return new_text, version
+
+
+def render_server_json(*, write: bool = False) -> tuple[str, str]:
+    """Return ``(rendered_text, version)`` for root server.json; write when requested.
+
+    Mirrors :func:`render` for the sibling MCP descriptor that
+    ``site/.well-known/api-catalog`` advertises as ``service-desc``.
+    """
+    version = _read_version()
+    text = SERVER_JSON_PATH.read_text(encoding="utf-8")
+    new_text = _sync_version_lines(
+        text, version, expected=_EXPECTED_SERVER_JSON_VERSION_LINE_COUNT, path=SERVER_JSON_PATH
+    )
+    if write:
+        SERVER_JSON_PATH.write_text(new_text, encoding="utf-8")
     return new_text, version
 
 
 def main() -> int:
     rendered, version = render(write=True)
     print(f"Rendered {CARD_PATH.relative_to(REPO_ROOT)} with version {version} ({len(rendered)} bytes)")
+    rendered_sj, _ = render_server_json(write=True)
+    print(f"Rendered {SERVER_JSON_PATH.relative_to(REPO_ROOT)} with version {version} ({len(rendered_sj)} bytes)")
     return 0
 
 

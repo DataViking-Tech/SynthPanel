@@ -5717,6 +5717,7 @@ _INSTALL_SKILLS_SKILLS = [
     "name-test",
     "pricing-probe",
     "survey-prescreen",
+    "synthpanel",
 ]
 
 

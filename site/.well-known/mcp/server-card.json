@@ -26,8 +26,9 @@
       "version": "1.5.7",
       "runtimeHint": "uvx",
       "runtimeArguments": [
-        { "type": "positional", "value": "synthpanel[mcp]" },
-        { "type": "positional", "value": "synthpanel" },
+        { "type": "named", "name": "--from", "value": "synthpanel[mcp]" }
+      ],
+      "packageArguments": [
         { "type": "positional", "value": "mcp-serve" }
       ],
       "transport": { "type": "stdio" },

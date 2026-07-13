@@ -33,6 +33,7 @@ _VERSION_PATH = _REPO_ROOT / "src" / "synth_panel" / "__version__.py"
 _SITE_HTML = _REPO_ROOT / "site" / "index.html"
 _SITE_MD = _REPO_ROOT / "site" / "index.md"
 _SERVER_CARD = _REPO_ROOT / "site" / ".well-known" / "mcp" / "server-card.json"
+_SERVER_JSON = _REPO_ROOT / "server.json"
 
 
 def _canonical_version() -> str:
@@ -99,6 +100,55 @@ def test_server_card_carries_version_in_all_three_slots(canonical_version: str) 
             assert pkg["version"] == canonical_version, (
                 f"server-card.json packages[synthpanel].version {pkg['version']!r} != __version__ {canonical_version!r}"
             )
+
+
+def test_server_json_carries_version_in_all_slots(canonical_version: str) -> None:
+    """server.json: top-level version + packages[synthpanel].version.
+
+    server.json is the root MCP server descriptor that
+    ``site/.well-known/api-catalog`` advertises as the RFC-9727
+    ``service-desc`` link. It has no ``serverInfo`` block (two version
+    slots, not three). It drifted to 0.9.1 while the package shipped
+    1.5.7 — precisely the release defect this aggregate guard exists to
+    catch. ``scripts/render_server_card.py`` now syncs it alongside the
+    server card.
+    """
+    doc = json.loads(_SERVER_JSON.read_text(encoding="utf-8"))
+    assert doc["version"] == canonical_version, (
+        f"server.json top version {doc['version']!r} != __version__ {canonical_version!r}. "
+        "Run `python scripts/render_server_card.py` to refresh."
+    )
+    for pkg in doc.get("packages") or []:
+        if pkg.get("identifier") == "synthpanel" and "version" in pkg:
+            assert pkg["version"] == canonical_version, (
+                f"server.json packages[synthpanel].version {pkg['version']!r} != __version__ {canonical_version!r}"
+            )
+
+
+def test_render_server_json_is_idempotent() -> None:
+    """A no-op render of server.json must produce a no-op diff.
+
+    Same contract as :func:`test_render_server_card_is_idempotent` for
+    the sibling descriptor — guards against hand-edits that bypass the
+    renderer (indent / trailing-newline drift, or a version left stale).
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "render_server_card",
+        _REPO_ROOT / "scripts" / "render_server_card.py",
+    )
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    rendered, _ = mod.render_server_json(write=False)
+    on_disk = _SERVER_JSON.read_text(encoding="utf-8")
+    assert rendered == on_disk, (
+        "scripts/render_server_card.py produces server.json output that differs "
+        "from the committed file. Run the script to refresh, or fix the version "
+        "field(s) by hand so the no-op render matches what's committed."
+    )
 
 
 def test_auto_tag_workflow_calls_every_renderer() -> None:
