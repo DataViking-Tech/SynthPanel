@@ -21,7 +21,8 @@ call:
 {
   "tool": "run_panel",
   "arguments": {
-    "stimulus": "price at $49 or $79?",
+    "pack_id": "general-consumer",
+    "questions": [{ "text": "Would you pay $49 or $79 for this launch tier?" }],
     "decision_being_informed": "choosing launch tier price"
   }
 }
@@ -111,7 +112,7 @@ run without one.
 {
   "tool": "run_panel",
   "arguments": {
-    "personas_pack": "general-consumer",
+    "pack_id": "general-consumer",
     "instrument_pack": "pricing-discovery",
     "decision_being_informed": "choosing launch tier price"
   }
@@ -122,7 +123,7 @@ run without one.
   "tool": "run_quick_poll",
   "arguments": {
     "question": "Which name feels most premium: Core, Plus, or Pro?",
-    "personas_pack": "general-consumer",
+    "pack_id": "general-consumer",
     "decision_being_informed": "naming the paid tier"
   }
 }
@@ -809,7 +810,8 @@ synthpanel panel run \
   --personas developer.yaml \
   --personas-merge contrarian.yaml \
   --personas-merge intern.yaml \
-  --instrument pricing-discovery
+  --instrument pricing-discovery \
+  --var problem="choosing a project management tool"
 ```
 
 ### Community packs
@@ -902,7 +904,8 @@ loop, no hand-coded conditional flows.
 # whether to dig into pain, pricing, or alternatives.
 synthpanel panel run \
   --personas examples/personas.yaml \
-  --instrument pricing-discovery
+  --instrument pricing-discovery \
+  --var problem="choosing a project management tool"
 ```
 
 `pricing-discovery` is one of eight bundled v3 instrument packs (see
@@ -1270,6 +1273,7 @@ For panels of 500 to 10,000+ panelists, synthpanel can track response-distributi
 synthpanel panel run \
   --personas large-panel.yaml \
   --instrument pricing-discovery \
+  --var problem="choosing a project management tool" \
   --convergence-check-every 20 \
   --auto-stop \
   --output-format json > result.json

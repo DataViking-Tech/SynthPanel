@@ -30,8 +30,8 @@ sub-decisional scratch work.
 {
   "tool": "run_panel",
   "arguments": {
-    "stimulus": "price at $49 or $79?",
-    "personas": "general-consumer"
+    "questions": [{ "text": "Would you pay $49 or $79 for this?" }],
+    "pack_id": "general-consumer"
   }
 }
 ```
@@ -42,8 +42,8 @@ sub-decisional scratch work.
 {
   "tool": "run_panel",
   "arguments": {
-    "stimulus": "price at $49 or $79?",
-    "personas": "general-consumer",
+    "questions": [{ "text": "Would you pay $49 or $79 for this?" }],
+    "pack_id": "general-consumer",
     "decision_being_informed": "choosing launch tier price"
   }
 }

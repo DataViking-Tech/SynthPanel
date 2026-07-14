@@ -219,7 +219,7 @@ pip install synthpanel[mcp]
 export ANTHROPIC_API_KEY=sk-...
 
 # Run a panel from a bundled instrument
-synthpanel panel run --personas examples/personas.yaml --instrument pricing-discovery
+synthpanel panel run --personas examples/personas.yaml --instrument pricing-discovery --var problem="choosing a project management tool"
 
 # Or start the MCP server for your AI coding agent
 synthpanel mcp-serve

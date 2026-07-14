@@ -11,7 +11,8 @@ engine — pick the one that matches your runtime:
 - **[CLI path](#cli-path)** — shell agents, CI, terminals.
 - **[MCP path](#mcp-path)** — editor and framework agents that call tools.
 
-Every command and number below was run against `synthpanel 1.5.5`. Costs are the
+Every command and number below was captured on a recent `synthpanel` release
+(the exact version and Python patch your machine prints will differ). Costs are the
 CLI's own pre-flight estimates (Haiku pricing) — your run will print the actual
 spend.
 
@@ -52,8 +53,8 @@ synthpanel doctor --install-only  # install health only — no key required
 ```
 
 ```text
-synthpanel 1.5.5
-  ✓ python: 3.14.3 (>= 3.10)
+synthpanel 1.5.7
+  ✓ python: 3.12.7 (>= 3.10)
   ✓ required deps: httpx, pyyaml
   ✓ optional: mcp installed
   ! credentials: none configured (install-only mode — run `synthpanel login` before running a panel).
@@ -249,7 +250,7 @@ anchored to a real decision instead of free-floating opinion.
 {
   "tool": "run_panel",
   "arguments": {
-    "personas_pack": "product-research",
+    "pack_id": "product-research",
     "instrument_pack": "pricing-discovery",
     "decision_being_informed": "choosing launch tier price"
   }
@@ -260,7 +261,7 @@ anchored to a real decision instead of free-floating opinion.
   "tool": "run_quick_poll",
   "arguments": {
     "question": "Would you pay $79/month for this product?",
-    "personas_pack": "product-research",
+    "pack_id": "product-research",
     "decision_being_informed": "validating the $79 ceiling"
   }
 }
