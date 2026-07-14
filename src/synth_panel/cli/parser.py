@@ -1301,14 +1301,39 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Register synthpanel as an MCP server in a host's config "
             "(default: Claude Code user config at ~/.claude.json). "
-            "Pass --uninstall to remove the entry instead of writing it."
+            "Pick a host with --host (claude-code, claude-desktop, cursor, "
+            "windsurf, zed, or auto to detect installed hosts). "
+            "Use 'synthpanel mcp uninstall' to remove the entry."
         ),
     )
     mcp_install_parser.add_argument(
         "--uninstall",
         action="store_true",
         default=False,
-        help="Remove the synthpanel MCP server entry instead of installing it.",
+        help=(
+            "Remove the synthpanel MCP server entry instead of installing "
+            "it (kept for back-compat; prefer 'synthpanel mcp uninstall')."
+        ),
+    )
+    mcp_install_parser.add_argument(
+        "--host",
+        choices=["auto", "claude-code", "claude-desktop", "cursor", "windsurf", "zed"],
+        default=None,
+        help=(
+            "Named MCP host to write the config for (synthbench#262). "
+            "'claude-code' (the default when neither --host nor --target is "
+            "given) honors --scope; 'zed' writes the context_servers schema "
+            "into ~/.config/zed/settings.json; 'auto' detects hosts whose "
+            "user-level config already exists and asks before writing each "
+            "one (pass --yes to skip the prompts)."
+        ),
+    )
+    mcp_install_parser.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        default=False,
+        help="Skip the per-host confirmation prompt in --host auto mode.",
     )
     mcp_install_parser.add_argument(
         "--scope",
@@ -1388,6 +1413,56 @@ def build_parser() -> argparse.ArgumentParser:
             "installed in this Python env. Use for cross-machine setup "
             "where the server runs in a different env than the editor."
         ),
+    )
+
+    # mcp uninstall (synthbench#262): first-class mirror of `mcp install
+    # --uninstall`. Removes exactly the synthpanel-managed entry.
+    mcp_uninstall_parser = mcp_subparsers.add_parser(
+        "uninstall",
+        help=(
+            "Remove the synthpanel MCP server entry from a host's config "
+            "(mirror of 'mcp install'; removes only the entry it manages)."
+        ),
+    )
+    mcp_uninstall_parser.add_argument(
+        "--host",
+        choices=["auto", "claude-code", "claude-desktop", "cursor", "windsurf", "zed"],
+        default=None,
+        help=(
+            "Named MCP host to remove the entry from. 'auto' detects hosts "
+            "whose user-level config exists and asks before editing each one."
+        ),
+    )
+    mcp_uninstall_parser.add_argument(
+        "--scope",
+        choices=["user", "project"],
+        default="user",
+        help="Which config to edit for hosts with a project-level file (claude-code, cursor).",
+    )
+    mcp_uninstall_parser.add_argument(
+        "--target",
+        default=None,
+        metavar="PATH",
+        help="Override the JSON config file path. When set, --host/--scope are ignored.",
+    )
+    mcp_uninstall_parser.add_argument(
+        "--name",
+        default="synth_panel",
+        help="Name the server was registered under (default: synth_panel).",
+    )
+    mcp_uninstall_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        dest="dry_run",
+        help="Print the resulting JSON to stdout without modifying any files.",
+    )
+    mcp_uninstall_parser.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        default=False,
+        help="Skip the per-host confirmation prompt in --host auto mode.",
     )
 
     # plugin (sy-0rr): author-time tooling for plugin manifests

@@ -29,6 +29,7 @@ that used to receive the raw MCP payload.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -54,6 +55,7 @@ from synth_panel.cost import (
     TokenUsage as CostTokenUsage,
 )
 from synth_panel.instrument import Instrument, parse_instrument
+from synth_panel.llm import fast_default as _fast_default
 from synth_panel.llm.client import LLMClient
 from synth_panel.llm.models import CompletionRequest, InputMessage, TextBlock
 from synth_panel.mcp.data import (
@@ -101,6 +103,8 @@ __all__ = [
     "run_prompt",
 ]
 
+logger = logging.getLogger(__name__)
+
 # ---------------------------------------------------------------------------
 # Default model resolution
 # ---------------------------------------------------------------------------
@@ -131,6 +135,28 @@ def _default_model() -> str:
         if has_credential(env_var):
             return alias
     return "sonnet"
+
+
+def _default_model_for_panel(persona_count: int) -> str:
+    """Resolve the default model, preferring fast equivalents for big panels.
+
+    synthbench#261 / sy-2ag: an auto-resolved ``openrouter/auto`` default
+    can route a ≥10-persona panel to a slow reasoning model (>15 min for
+    20 personas). Swap it for a known-fast equivalent via the shared
+    :mod:`synth_panel.llm.fast_default` policy and emit a one-line
+    warning so the caller knows how to override. Explicit ``model=``
+    arguments never reach this function — call sites guard on
+    ``model is None`` — so a deliberate ``openrouter/auto`` is honored.
+    """
+    base = _default_model()
+    model, swapped_from = _fast_default.fast_default_for_panel(base, persona_count)
+    if swapped_from is not None:
+        logger.warning(
+            _fast_default.format_fast_default_note(
+                model, swapped_from, persona_count, override_hint="model="
+            )
+        )
+    return model
 
 
 # Module-level shared client — reused across calls to avoid rebuilding the
@@ -767,7 +793,8 @@ def quick_poll(
     if not question or not question.strip():
         raise ValueError("question must be a non-empty string.")
     merged = _resolve_personas(personas, pack_id)
-    model = model or _default_model()
+    if model is None:
+        model = _default_model_for_panel(len(merged))
     questions = [{"text": question}]
 
     client = _get_client()
@@ -983,7 +1010,8 @@ def run_panel(
     if variants < 0 or variants > 20:
         raise ValueError("variants must be between 0 and 20.")
     merged = _resolve_personas(personas, pack_id)
-    model = model or _default_model()
+    if model is None:
+        model = _default_model_for_panel(len(merged))
 
     resolved_extract_schema = resolve_extract_schema(extract_schema)
 

@@ -8,6 +8,23 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ### Added
 
+- **`synthpanel mcp install` now targets every documented editor
+  (synthbench#262).** New `--host` flag with `claude-code`,
+  `claude-desktop` (platform-specific path), `cursor`, `windsurf`, and
+  `zed` (writes the `context_servers` schema with `"source": "custom"`),
+  plus `--host auto` which detects hosts whose user-level config already
+  exists and confirms each write (`--yes` accepts all). A first-class
+  `synthpanel mcp uninstall` subcommand removes exactly the entry the
+  installer manages. Successful writes print `Restart <host> to pick up
+  the server.`; installs without `--env` print a pointer at
+  `synthpanel login` instead of ever baking a key in by default.
+- **Large-panel fast-default swap is now shared across CLI, SDK, and MCP
+  (synthbench#261).** The ≥10-persona `openrouter/auto` →
+  `openrouter/anthropic/claude-haiku-4.5` policy (previously MCP-only,
+  GH#462) moved to `synth_panel.llm.fast_default` and now also applies
+  to SDK `run_panel`/`quick_poll` and CLI `panel run` when the model was
+  not explicitly chosen, with a one-line note on stderr. Explicit
+  `--model openrouter/auto` is always honored.
 - **The v1.0.0 agent contract is wired end to end on the MCP panel tools
   (P1-1).** `run_panel`, `run_quick_poll`, and `extend_panel` now route
   requests through the AC-4 grace shim (`apply_legacy_grace`): an omitted
