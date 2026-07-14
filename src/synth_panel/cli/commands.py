@@ -821,11 +821,14 @@ def _apply_vars_to_instrument(instrument: Instrument, template_vars: dict[str, s
     so any missing key aborts the run (sp-6yi); any ``{placeholder}``
     that survives here is either dynamic (resolved downstream) or
     explicitly opted in via ``--allow-unresolved``.
-    """
-    from synth_panel.templates import render_questions
 
-    for rnd in instrument.rounds:
-        rnd.questions = render_questions(rnd.questions, template_vars)
+    Thin wrapper over the shared engine in :mod:`synth_panel.templates`
+    so the CLI and the MCP ``run_panel(vars=...)`` path (GH#562) render
+    identically.
+    """
+    from synth_panel.templates import apply_vars_to_instrument
+
+    apply_vars_to_instrument(instrument, template_vars)
 
 
 def _load_schema(value: str) -> dict[str, Any]:
