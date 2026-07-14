@@ -88,9 +88,7 @@ def host_config_path(host: HostSpec, scope: str = "user") -> Path:
     project-level config file.
     """
     if scope == "project" and not host.supports_project_scope:
-        raise ValueError(
-            f"host {host.key!r} has no project-scope config; use --scope user (default)."
-        )
+        raise ValueError(f"host {host.key!r} has no project-scope config; use --scope user (default).")
     if host.key == "claude-code":
         return Path.cwd() / ".mcp.json" if scope == "project" else Path.home() / ".claude.json"
     if host.key == "claude-desktop":
@@ -120,6 +118,7 @@ def detect_hosts() -> list[tuple[HostSpec, Path]]:
         if path.is_file():
             found.append((host, path))
     return found
+
 
 # sy-xyn: actionable copy used by every hard-error surface that detects
 # a missing `mcp` extra (install refusal + `mcp-serve` startup guard).

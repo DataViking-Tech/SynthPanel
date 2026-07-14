@@ -5794,8 +5794,7 @@ def handle_mcp_install(args: argparse.Namespace, fmt: OutputFormat) -> int:
             return 1
         verb = "Remove synthpanel from" if is_uninstall else "Install synthpanel into"
         print(
-            "Detected MCP host configs: "
-            + ", ".join(f"{h.label} ({p})" for h, p in detected),
+            "Detected MCP host configs: " + ", ".join(f"{h.label} ({p})" for h, p in detected),
             file=sys.stderr,
         )
         for host, path in detected:

@@ -152,9 +152,7 @@ def _default_model_for_panel(persona_count: int) -> str:
     model, swapped_from = _fast_default.fast_default_for_panel(base, persona_count)
     if swapped_from is not None:
         logger.warning(
-            _fast_default.format_fast_default_note(
-                model, swapped_from, persona_count, override_hint="model="
-            )
+            _fast_default.format_fast_default_note(model, swapped_from, persona_count, override_hint="model=")
         )
     return model
 

@@ -657,23 +657,14 @@ class TestHostRegistry:
             mcp_install.host_config_path(mcp_install.HOSTS["windsurf"])
             == home / ".codeium" / "windsurf" / "mcp_config.json"
         )
-        assert (
-            mcp_install.host_config_path(mcp_install.HOSTS["zed"])
-            == home / ".config" / "zed" / "settings.json"
-        )
+        assert mcp_install.host_config_path(mcp_install.HOSTS["zed"]) == home / ".config" / "zed" / "settings.json"
         desktop = mcp_install.host_config_path(mcp_install.HOSTS["claude-desktop"])
         assert desktop.name == "claude_desktop_config.json"
 
     def test_project_scope_paths(self, monkeypatch, tmp_path):
         monkeypatch.chdir(tmp_path)
-        assert (
-            mcp_install.host_config_path(mcp_install.HOSTS["claude-code"], "project")
-            == tmp_path / ".mcp.json"
-        )
-        assert (
-            mcp_install.host_config_path(mcp_install.HOSTS["cursor"], "project")
-            == tmp_path / ".cursor" / "mcp.json"
-        )
+        assert mcp_install.host_config_path(mcp_install.HOSTS["claude-code"], "project") == tmp_path / ".mcp.json"
+        assert mcp_install.host_config_path(mcp_install.HOSTS["cursor"], "project") == tmp_path / ".cursor" / "mcp.json"
 
     def test_project_scope_rejected_for_user_only_hosts(self):
         for key in ("claude-desktop", "windsurf", "zed"):
