@@ -186,7 +186,7 @@ synthpanel panel run ... --best-model-for <span class="text-amber-300">"Technolo
         <div
           class="mt-3 rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-3 font-mono text-sm shadow-xl"
         >
-          <pre class="text-emerald-300 overflow-x-auto whitespace-pre text-xs">synthbench: best model for globalopinionqa/Economy &amp; Work → claude-haiku-4-5-20251001 · SPS 0.850 · JSD 0.091 · n=100 · $0.032/100q · cached 0h ago · source=synthbench.org</pre>
+          <pre class="text-emerald-300 overflow-x-auto whitespace-pre text-xs">synthbench: best model for globalopinionqa/Economy &amp; Work → claude-haiku-4-5-20251001 · SPS 0.850 · JSD 0.091 · n=100 · $0.032/100q · cached 0h ago · source=live</pre>
         </div>
       </section>
 
@@ -293,10 +293,14 @@ synthpanel panel run ... --best-model-for <span class="text-amber-300">"Technolo
           Use-case → top-ranked model
         </h2>
         <p class="mb-4 text-sm text-slate-400">
-          Snapshot from <code class="text-slate-300">leaderboard.json</code> on 2026-04-24.
-          The live data updates continuously — consult the CLI flag or
+          Regenerated from the live <code class="text-slate-300">leaderboard.json</code>
+          (<code class="text-slate-300">generated_at</code> 2026-07-13). Picks are the
+          top-ranked <em>runnable single model</em> per filter (the 3-model ensemble
+          leads several rows but isn't a plain <code class="text-slate-300">--model</code>
+          value). The live data updates continuously — consult the CLI flag or
           <a href="https://synthbench.org" class="text-emerald-400 hover:text-emerald-300">synthbench.org</a>
-          for current picks.
+          for current picks. Several topics are thinly sampled (small
+          <code class="text-slate-300">n</code>); treat those as suggestive.
         </p>
         <div class="overflow-x-auto rounded-lg border border-slate-800">
           <table class="w-full text-sm">
@@ -304,6 +308,7 @@ synthpanel panel run ... --best-model-for <span class="text-amber-300">"Technolo
               <tr>
                 <th>Use case</th>
                 <th>Dataset</th>
+                <th>Topic / filter</th>
                 <th>Top SynthBench pick</th>
               </tr>
             </thead>
@@ -311,32 +316,38 @@ synthpanel panel run ... --best-model-for <span class="text-amber-300">"Technolo
               <tr>
                 <td class="text-slate-300">General attitudes research</td>
                 <td><code>globalopinionqa</code></td>
-                <td><code>claude-haiku-4-5-20251001</code></td>
+                <td class="text-slate-400">(overall SPS)</td>
+                <td><code>openai/gpt-4o-mini</code></td>
               </tr>
               <tr>
                 <td class="text-slate-300">Economic / workplace surveys</td>
                 <td><code>globalopinionqa</code></td>
-                <td><code>claude-haiku-4-5-20251001</code></td>
+                <td class="text-slate-400">"Economy &amp; Work" <span class="text-slate-500">(n=5)</span></td>
+                <td><code>google/gemini-2.5-flash</code></td>
               </tr>
               <tr>
                 <td class="text-slate-300">Tech product discovery</td>
                 <td><code>globalopinionqa</code></td>
-                <td><code>gemini-2.5-flash</code></td>
+                <td class="text-slate-400">"Technology &amp; Digital Life" <span class="text-slate-500">(n=3)</span></td>
+                <td><code>google/gemini-2.5-flash-lite</code></td>
               </tr>
               <tr>
                 <td class="text-slate-300">Health &amp; science messaging</td>
                 <td><code>globalopinionqa</code></td>
-                <td class="text-slate-400">see <code class="text-slate-300">--best-model-for "Health &amp; Science"</code></td>
+                <td class="text-slate-400">"Health &amp; Science" <span class="text-slate-500">(n=2)</span></td>
+                <td><code>anthropic/claude-sonnet-4.6</code></td>
               </tr>
               <tr>
                 <td class="text-slate-300">International affairs / policy</td>
                 <td><code>globalopinionqa</code></td>
-                <td class="text-slate-400">see CLI</td>
+                <td class="text-slate-400">"International Relations &amp; Security" <span class="text-slate-500">(n=50)</span></td>
+                <td><code>openai/gpt-4o-mini</code></td>
               </tr>
               <tr>
                 <td class="text-slate-300">Trust &amp; wellbeing</td>
                 <td><code>globalopinionqa</code></td>
-                <td class="text-slate-400">see CLI</td>
+                <td class="text-slate-400">"Trust &amp; Wellbeing" <span class="text-slate-500">(n=7)</span></td>
+                <td><code>anthropic/claude-sonnet-4.6</code></td>
               </tr>
             </tbody>
           </table>
@@ -353,13 +364,26 @@ synthpanel panel run ... --best-model-for <span class="text-amber-300">"Technolo
         <ul class="space-y-4 text-base text-slate-300">
           <li class="flex gap-3">
             <span class="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-slate-500"></span>
-            <span><strong class="text-white">Ensembles &amp; product configs.</strong>
+            <span><strong class="text-white">Display labels, ensembles &amp; product configs (gh-519).</strong>
               Some leaderboard entries are SynthPanel product configs
               (<code class="text-slate-300">framework=product</code>,
-              <code class="text-slate-300">is_ensemble=true</code>). These aren't runnable as a plain
-              <code class="text-slate-300">--model</code> value, so SynthPanel falls back to the
-              underlying base model inferred from the entry's
-              <code class="text-slate-300">config_id</code>. A stderr note records the substitution.</span>
+              <code class="text-slate-300">is_ensemble=true</code>) or carry a human-readable
+              display label (e.g. <code class="text-slate-300">SynthPanel (Gemini Flash Lite)</code>)
+              in their <code class="text-slate-300">model</code> field. SynthPanel never stamps such
+              a label onto <code class="text-slate-300">--model</code>. Instead it substitutes a
+              runnable id, preferring
+              <strong class="text-slate-200">(1)</strong> the row's runnable
+              <code class="text-slate-300">model_id</code> published by SynthBench (e.g.
+              <code class="text-slate-300">google/gemini-2.5-flash-lite</code>, joined with
+              <code class="text-slate-300">provider_id</code> when <code class="text-slate-300">model_id</code>
+              is a bare slug), then
+              <strong class="text-slate-200">(2)</strong> for product/ensemble rows without a
+              <code class="text-slate-300">model_id</code>, a base model inferred from the entry's
+              <code class="text-slate-300">config_id</code> (adopted only when it resolves to a
+              recognized provider id or alias). If neither yields a runnable id the recommendation is
+              <strong class="text-slate-200">refused</strong> with an actionable stderr message and
+              your existing <code class="text-slate-300">--model</code>/default is kept. A stderr note
+              records any substitution.</span>
           </li>
           <li class="flex gap-3">
             <span class="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-slate-500"></span>
