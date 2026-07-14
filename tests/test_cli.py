@@ -84,6 +84,49 @@ class TestParser:
         assert args.personas == "p.yaml"
         assert args.instrument == "i.yaml"
 
+    def test_panel_run_accepts_output_format_after_subcommand(self):
+        """gh#571: --output-format is accepted in subcommand position."""
+        parser = build_parser()
+        args = parser.parse_args(["panel", "run", "--output-format", "json"])
+        assert args.output_format == "json"
+
+    def test_panel_run_accepts_model_after_subcommand(self):
+        """gh#571: --model is accepted in subcommand position."""
+        parser = build_parser()
+        args = parser.parse_args(["panel", "run", "--model", "gemini"])
+        assert args.model == "gemini"
+
+    def test_panel_run_subcommand_flags_override_global(self):
+        """gh#571: subcommand-position flags win over global-position ones."""
+        parser = build_parser()
+        args = parser.parse_args(
+            [
+                "--output-format",
+                "text",
+                "--model",
+                "opus",
+                "panel",
+                "run",
+                "--output-format",
+                "json",
+                "--model",
+                "gemini",
+            ]
+        )
+        assert args.output_format == "json"
+        assert args.model == "gemini"
+
+    def test_panel_run_global_flags_survive_subcommand_defaults(self):
+        """gh#571: the subcommand's SUPPRESS defaults must not clobber
+        global-position values (or the global defaults)."""
+        parser = build_parser()
+        args = parser.parse_args(["--output-format", "json", "--model", "opus", "panel", "run"])
+        assert args.output_format == "json"
+        assert args.model == "opus"
+        defaults = parser.parse_args(["panel", "run"])
+        assert defaults.output_format == "text"
+        assert defaults.model is None
+
     def test_panel_run_personas_merge_default_empty(self):
         parser = build_parser()
         args = parser.parse_args(
@@ -589,6 +632,42 @@ class TestPanelRun:
         assert data["synthesis"] is not None
         assert data["synthesis"]["summary"] == "Test synthesis summary"
         assert "panelist_cost" in data
+
+    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("synth_panel.orchestrator.AgentRuntime")
+    @patch("synth_panel.cli.commands.LLMClient")
+    def test_panel_run_output_format_after_subcommand(
+        self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path
+    ):
+        """gh#571: 'panel run --output-format json' (flag after the
+        subcommand) parses and emits JSON on stdout instead of exiting 2
+        with an argparse usage dump."""
+        mock_runtime = MagicMock()
+        mock_runtime.run_turn.return_value = _mock_turn_summary("answer")
+        mock_runtime_cls.return_value = mock_runtime
+        mock_synth.return_value = _mock_synthesis_result()
+
+        personas_file = tmp_path / "personas.yaml"
+        personas_file.write_text("personas:\n  - name: Bob\n")
+        survey_file = tmp_path / "survey.yaml"
+        survey_file.write_text("instrument:\n  questions:\n    - text: Question?\n")
+
+        code = main(
+            [
+                "panel",
+                "run",
+                "--personas",
+                str(personas_file),
+                "--instrument",
+                str(survey_file),
+                "--output-format",
+                "json",
+            ]
+        )
+        assert code == 0
+        data = json.loads(capsys.readouterr().out)
+        assert data["persona_count"] == 1
+        assert data["synthesis"] is not None
 
     @patch("synth_panel.orchestrator.AgentRuntime")
     @patch("synth_panel.cli.commands.LLMClient")

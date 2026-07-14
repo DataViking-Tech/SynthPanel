@@ -47,9 +47,27 @@ _ESCALATION_MODEL = "sonnet"
 # (sy-549).
 _OPENROUTER_PREFIX = "openrouter/"
 # OpenRouter slug for the escalation target. The bare ``sonnet`` alias maps to
-# the direct-Anthropic ``claude-sonnet-4-6``; this is its OpenRouter-served
-# equivalent so escalation stays on the same provider/credentials.
+# the direct-Anthropic flagship; this is its OpenRouter-served equivalent so
+# escalation stays on the same provider/credentials.
 _OPENROUTER_ESCALATION_MODEL = "openrouter/anthropic/claude-sonnet-4.5"
+
+# gh#571: in-family escalation targets for the remaining native providers.
+# Provider detection is prefix-based on the canonical model id (claude-* →
+# Anthropic, gemini-* → Google, grok-* → xAI; see
+# synth_panel.llm.client._PROVIDER_REGISTRY), so each escalation target must
+# share its family's prefix to resolve to the same provider — and the same
+# credentials — as the original model.
+_GEMINI_ESCALATION_MODEL = "gemini-2.5-pro"
+_XAI_ESCALATION_MODEL = "grok-4"
+# OpenAI-compatible models have no registry prefix (they hit the fallback
+# provider on whatever base URL is configured), so the only safe "stronger
+# sibling" is the same model id minus a cheap-tier suffix — e.g.
+# ``gpt-4o-mini`` → ``gpt-4o``, ``gpt-5-nano`` → ``gpt-5`` — which stays on
+# the same base URL and API key by construction.
+_OPENAI_COMPAT_CHEAP_SUFFIXES = ("-mini", "-nano")
+# Local-model routing prefixes (see synth_panel.llm.aliases._LOCAL_PREFIXES):
+# there is no known stronger sibling on a local endpoint.
+_LOCAL_MODEL_PREFIXES = ("ollama:", "local:")
 
 # sp-d1x0: terminal-failure warning, mirrors the sp-g59o synthesis warning
 # surface so operators see consistent signal across extraction failures.
@@ -68,21 +86,54 @@ def _is_cheap_model(model: str) -> bool:
     return any(p in canonical for p in _CHEAP_MODEL_PATTERNS)
 
 
-def _escalation_model_for(model: str) -> str:
-    """Return the final-strike escalation target for *model*.
+def _escalation_model_for(model: str) -> str | None:
+    """Return the final-strike escalation target for *model*, or ``None``.
 
-    Escalation must stay on the same *provider* as the original model so it
-    uses the same credentials. A model routed through OpenRouter
-    (``openrouter/`` prefix) escalates to an OpenRouter-served Sonnet; every
-    other model escalates to the direct ``sonnet`` alias (historical
-    behaviour). Without this, an ``openrouter/anthropic/*`` model — resolved
-    to OpenRouter for every normal call — would escalate to the bare
-    ``sonnet`` alias on the *direct* Anthropic provider and fail with
-    "Missing API key for Anthropic" for an OpenRouter-only caller (sy-549).
+    Escalation must stay on the same *provider family* as the original model
+    so it uses the same credentials (sy-549, gh#571). Historically everything
+    that wasn't ``openrouter/*`` escalated to the bare ``sonnet`` alias, which
+    resolves to the *direct* Anthropic provider — so a native ``gemini-*`` run
+    with only GEMINI_API_KEY set died with "Missing API key for Anthropic" on
+    the final strike (gh#571). Per family:
+
+    * ``openrouter/*``  → OpenRouter-served Sonnet (same key; sy-549, unchanged)
+    * ``claude-*``      → ``sonnet`` alias (historical behaviour, unchanged)
+    * ``gemini-*``      → ``gemini-2.5-pro``
+    * ``grok-*``        → ``grok-4``
+    * OpenAI-compat     → same id minus a cheap-tier suffix (``gpt-4o-mini`` →
+      ``gpt-4o``), which stays on the same base URL
+
+    Returns ``None`` when no stronger same-family model is known (local
+    models, an unrecognised OpenAI-compat id, or a model already at its
+    family's escalation target). Callers must then skip escalation — the
+    final strike reuses the original model and terminal failure flows to the
+    existing fallback path — rather than demand another provider's key.
     """
+    from synth_panel.llm.aliases import resolve_alias
+
     if model.startswith(_OPENROUTER_PREFIX):
         return _OPENROUTER_ESCALATION_MODEL
-    return _ESCALATION_MODEL
+
+    canonical = resolve_alias(model)
+    if canonical.startswith("claude-"):
+        return _ESCALATION_MODEL
+    if canonical.startswith("gemini-"):
+        if canonical.startswith(_GEMINI_ESCALATION_MODEL):
+            return None  # already at the family's escalation target
+        return _GEMINI_ESCALATION_MODEL
+    if canonical.startswith("grok-"):
+        if canonical.startswith(_XAI_ESCALATION_MODEL):
+            return None  # already at the family's escalation target
+        return _XAI_ESCALATION_MODEL
+    if model.startswith(_LOCAL_MODEL_PREFIXES) or canonical.startswith(_LOCAL_MODEL_PREFIXES):
+        return None  # local endpoint — no known stronger sibling
+
+    # OpenAI-compat fallback: strip a cheap-tier suffix to reach the bigger
+    # sibling on the same base URL; otherwise no escalation is known.
+    for suffix in _OPENAI_COMPAT_CHEAP_SUFFIXES:
+        if canonical.endswith(suffix):
+            return canonical[: -len(suffix)]
+    return None
 
 
 @dataclass
@@ -184,12 +235,24 @@ class StructuredOutputEngine:
             # when the original model is in the cheap/flash tier.
             effective_model = model
             if attempt == config.retry_limit and _is_cheap_model(model):
-                effective_model = _escalation_model_for(model)
-                logger.debug(
-                    "structured output: escalating from %s to %s on final attempt",
-                    model,
-                    effective_model,
-                )
+                escalation = _escalation_model_for(model)
+                if escalation is not None:
+                    effective_model = escalation
+                    logger.debug(
+                        "structured output: escalating from %s to %s on final attempt",
+                        model,
+                        effective_model,
+                    )
+                else:
+                    # gh#571: no stronger same-provider model is known — keep
+                    # the original model rather than crossing provider
+                    # families (which would demand credentials the caller
+                    # never configured). Terminal failure flows to the
+                    # fallback path below.
+                    logger.debug(
+                        "structured output: no same-provider escalation known for %s; final attempt keeps the original model",
+                        model,
+                    )
 
             # Build messages: on retries, append the failed response + correction.
             effective_messages = (

@@ -306,6 +306,72 @@ class TestSchemaConformanceRetry:
         assert models_used[2].startswith("openrouter/")
         assert "sonnet" in models_used[2]
 
+    def _models_used_for(self, model: str) -> list[str]:
+        """Run extract with permanently-bad responses; return per-attempt models."""
+        mock_client = MagicMock()
+        bad = _make_response_with_tool({"sentiment": "positive"})  # missing 'summary'
+        mock_client.send.return_value = bad
+
+        engine = StructuredOutputEngine(mock_client)
+        config = StructuredOutputConfig(schema=_SENTIMENT_SCHEMA, retry_limit=2)
+
+        result = engine.extract(
+            model=model,
+            max_tokens=1024,
+            messages=_messages(),
+            config=config,
+        )
+        assert result.is_fallback is True
+        return [call[0][0].model for call in mock_client.send.call_args_list]
+
+    def test_gemini_cheap_model_escalates_within_gemini(self):
+        """gh#571: a native ``gemini-*`` cheap model must escalate to a
+        stronger Gemini model, NOT the bare ``sonnet`` alias (which resolves
+        to the direct Anthropic provider and demands ANTHROPIC_API_KEY a
+        Gemini-only caller never set)."""
+        models_used = self._models_used_for("gemini-2.5-flash")
+        assert models_used[:2] == ["gemini-2.5-flash", "gemini-2.5-flash"]
+        assert models_used[2] == "gemini-2.5-pro"
+
+    def test_gemini_alias_escalates_within_gemini(self):
+        """gh#571 live-repro shape: --model gemini (alias for a flash-tier
+        model) stays in the Gemini family on the final strike."""
+        models_used = self._models_used_for("gemini")
+        assert models_used[2].startswith("gemini-")
+
+    def test_xai_cheap_model_escalates_within_xai(self):
+        """gh#571: a ``grok-*`` cheap model escalates to a stronger xAI model."""
+        models_used = self._models_used_for("grok-3-mini")
+        assert models_used[:2] == ["grok-3-mini", "grok-3-mini"]
+        assert models_used[2] == "grok-4"
+
+    def test_openai_compat_cheap_model_escalates_within_family(self):
+        """gh#571: an OpenAI-compat cheap model escalates to its bigger
+        sibling on the same base URL (suffix strip), never to Anthropic."""
+        models_used = self._models_used_for("gpt-4o-mini")
+        assert models_used[:2] == ["gpt-4o-mini", "gpt-4o-mini"]
+        assert models_used[2] == "gpt-4o"
+
+    def test_anthropic_cheap_model_still_escalates_to_sonnet(self):
+        """gh#571 regression guard: native Anthropic escalation is unchanged."""
+        models_used = self._models_used_for("claude-haiku-4-5-20251001")
+        assert models_used[2] == "sonnet"
+
+    def test_no_known_escalation_keeps_original_model(self):
+        """gh#571: when no stronger same-family model is known (local model),
+        the final strike reuses the original model and the engine degrades to
+        the fallback path — it must never call another provider's model."""
+        models_used = self._models_used_for("ollama:llama3.2-small")
+        assert len(models_used) == 3
+        assert all(m == "ollama:llama3.2-small" for m in models_used)
+
+    def test_unrecognized_openai_compat_cheap_model_keeps_original_model(self):
+        """gh#571: an OpenAI-compat model whose cheap tier can't be mapped to
+        a bigger sibling skips escalation instead of crossing providers."""
+        models_used = self._models_used_for("mystery-flash-preview")
+        assert len(models_used) == 3
+        assert all(m == "mystery-flash-preview" for m in models_used)
+
     def test_total_usage_accumulates_across_retries(self):
         """total_usage sums token counts from all retry attempts."""
         usage_a = TokenUsage(input_tokens=10, output_tokens=5)
