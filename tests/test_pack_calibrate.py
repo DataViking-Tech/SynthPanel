@@ -619,6 +619,103 @@ def test_cli_pack_calibrate_propagates_panel_failure(tmp_path, capsys):
     assert "boom" in capsys.readouterr().err
 
 
+# ── _build_calibration_instrument: real question text, no fabrication ──
+
+
+def test_calibration_instrument_uses_real_question_text_and_options():
+    """The panel is run against the baseline's real question text + options.
+
+    Regression for cross-repo P0-3: the panel must see the actual survey item,
+    not a fabricated placeholder that gets scored against real ground truth.
+    """
+    from synth_panel.cli.commands import _build_calibration_instrument
+    from synth_panel.convergence import identify_tracked_questions
+
+    baseline = {
+        "dataset": "gss",
+        "question_key": "GSS_HAPPY",
+        "question_text": "Taken all together, how would you say things are these days?",
+        "options": ["Very happy", "Pretty happy", "Not too happy"],
+        "human_distribution": {"Very happy": 0.31, "Pretty happy": 0.56, "Not too happy": 0.13},
+    }
+    inst = _build_calibration_instrument(baseline, "gss:HAPPY")
+    question = inst["instrument"]["questions"][0]
+
+    # Real wording is presented verbatim (as the leading line of the prompt).
+    assert question["text"].startswith("Taken all together, how would you say things are these days?")
+    # The fabricated placeholder must never appear.
+    assert "as honestly as you can" not in question["text"]
+    # Real answer labels are shown to the panelist AND bound as the schema.
+    for opt in baseline["options"]:
+        assert opt in question["text"]
+    assert question["response_schema"] == {
+        "type": "enum",
+        "options": ["Very happy", "Pretty happy", "Not too happy"],
+    }
+    # Bounded => the calibration tracker actually tracks this question, so a
+    # JSD can be computed (a bare-text question would be dropped).
+    assert identify_tracked_questions(inst["instrument"]["questions"])
+
+
+def test_calibration_instrument_options_align_with_human_distribution_keys():
+    """Schema labels are the baseline's option set, matching the distribution
+    keys so the panel distribution and human distribution share categories."""
+    from synth_panel.cli.commands import _build_calibration_instrument
+
+    baseline = {
+        "question_text": "Do you use the internet?",
+        "options": ["Yes", "No"],
+        "human_distribution": {"Yes": 0.8, "No": 0.2},
+    }
+    inst = _build_calibration_instrument(baseline, "ntia:USE")
+    schema_opts = set(inst["instrument"]["questions"][0]["response_schema"]["options"])
+    assert schema_opts == set(baseline["human_distribution"].keys())
+
+
+@pytest.mark.parametrize(
+    "baseline",
+    [
+        {"human_distribution": {"Yes": 0.6, "No": 0.4}},  # older synthbench: no text
+        {"question_text": "", "options": ["Yes", "No"]},  # empty text
+        {"question_text": "   ", "options": ["Yes"]},  # whitespace-only text
+    ],
+    ids=["no-text", "empty-text", "whitespace-text"],
+)
+def test_calibration_instrument_refuses_without_question_text(baseline):
+    """Missing/blank question text => refuse (raise), never fabricate."""
+    from synth_panel.cli.commands import _build_calibration_instrument
+
+    with pytest.raises(RuntimeError) as exc:
+        _build_calibration_instrument(baseline, "gss:HAPPY")
+    msg = str(exc.value)
+    assert "gss:HAPPY" in msg
+    assert "did not include question text" in msg
+    # Actionable hint: upgrade synthbench / pick a full-tier dataset.
+    assert "Upgrade SynthBench" in msg or "full-tier" in msg
+
+
+def test_calibration_instrument_honors_legacy_prompt_key():
+    """A baseline exposing ``prompt`` (rather than ``question_text``) still
+    works — no fabrication path is taken."""
+    from synth_panel.cli.commands import _build_calibration_instrument
+
+    inst = _build_calibration_instrument({"prompt": "Legacy prompt wording?", "options": ["A", "B"]}, "gss:HAPPY")
+    assert inst["instrument"]["questions"][0]["text"].startswith("Legacy prompt wording?")
+
+
+def test_calibration_instrument_text_only_when_options_absent():
+    """Text present but no options: present the real text, no enum schema.
+
+    (SynthBench ships options alongside text for full-tier datasets, so this
+    is a defensive path — but we still never fabricate.)"""
+    from synth_panel.cli.commands import _build_calibration_instrument
+
+    inst = _build_calibration_instrument({"question_text": "A free-form question?"}, "gss:HAPPY")
+    question = inst["instrument"]["questions"][0]
+    assert question["text"] == "A free-form question?"
+    assert "response_schema" not in question
+
+
 def test_now_iso_utc_format():
     s = calib_mod.now_iso_utc()
     # RFC3339 UTC, second precision, trailing Z.
