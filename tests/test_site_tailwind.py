@@ -30,6 +30,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SITE_ROOT = REPO_ROOT / "site"
 CSS_PATH = SITE_ROOT / "assets" / "tailwind.css"
 STYLESHEET_LINK = '<link rel="stylesheet" href="/assets/tailwind.css" />'
+# Forbidden-token scan for the Tailwind Play CDN host. A regex (rather than a
+# plain substring test on the URL) keeps CodeQL's
+# py/incomplete-url-substring-sanitization heuristic from misreading this
+# content grep as URL sanitization logic — these tests scan committed files
+# for a banned reference; they never sanitize or route request URLs.
+_PLAY_CDN_RE = re.compile(r"cdn\.tailwindcss\.com")
 
 
 def _site_pages() -> list[Path]:
@@ -39,7 +45,7 @@ def _site_pages() -> list[Path]:
 
 
 def test_no_page_references_the_play_cdn() -> None:
-    offenders = [p for p in _site_pages() if "cdn.tailwindcss.com" in p.read_text()]
+    offenders = [p for p in _site_pages() if _PLAY_CDN_RE.search(p.read_text())]
     assert not offenders, (
         f"Pages still reference the Tailwind Play CDN (not for production): "
         f"{[str(p.relative_to(REPO_ROOT)) for p in offenders]}"
@@ -48,7 +54,7 @@ def test_no_page_references_the_play_cdn() -> None:
 
 def test_csp_does_not_allowlist_the_play_cdn() -> None:
     headers = (SITE_ROOT / "_headers").read_text()
-    assert "cdn.tailwindcss.com" not in headers, (
+    assert not _PLAY_CDN_RE.search(headers), (
         "site/_headers CSP still allowlists cdn.tailwindcss.com — nothing loads "
         "from it anymore, drop it to shrink the script-src attack surface"
     )
