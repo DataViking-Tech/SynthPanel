@@ -1,0 +1,11 @@
+{
+  "name": "synthpanel-site-tailwind",
+  "private": true,
+  "description": "Precompiles site/assets/tailwind.css from the Tailwind classes used in site/**/*.html (+ index.html.j2). Regenerate with: npm ci && npm run build (from this directory). CI fails if the committed CSS drifts from the class usage.",
+  "scripts": {
+    "build": "tailwindcss -c tailwind.config.js -i input.css -o ../../site/assets/tailwind.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.19"
+  }
+}

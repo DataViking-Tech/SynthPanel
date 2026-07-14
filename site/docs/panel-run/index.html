@@ -35,25 +35,7 @@
     <meta name="twitter:image" content="https://synthpanel.dev/og-image.png" />
     <meta name="twitter:image:alt" content="synthpanel — Run synthetic focus groups with any LLM" />
 
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            fontFamily: {
-              mono: [
-                "ui-monospace",
-                "SFMono-Regular",
-                "Menlo",
-                "Monaco",
-                "Consolas",
-                "monospace",
-              ],
-            },
-          },
-        },
-      };
-    </script>
+    <link rel="stylesheet" href="/assets/tailwind.css" />
 
     <style>
       :root {
@@ -114,7 +96,7 @@
         <a
           href="https://dataviking.tech"
           rel="noopener"
-          class="inline-flex items-center gap-2 font-mono text-slate-500 transition hover:text-emerald-300"
+          class="inline-flex items-center gap-2 font-mono text-slate-400 transition hover:text-emerald-300"
         >
           <span aria-hidden="true" class="inline-flex h-5 w-5 items-center justify-center rounded bg-slate-900 text-[10px] font-bold text-emerald-400 ring-1 ring-slate-800">·</span>
           <span>DataViking</span>
@@ -153,7 +135,7 @@
 
       <!-- Table of contents -->
       <nav class="mt-10 rounded-lg border border-slate-800 bg-slate-900/50 p-5" aria-label="Page sections">
-        <p class="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">On this page</p>
+        <p class="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">On this page</p>
         <ul class="space-y-1.5 text-sm text-slate-400">
           <li><a href="#multi-model" class="hover:text-emerald-300 transition">Multi-model — <code class="text-slate-300">--models</code>, <code class="text-slate-300">--blend</code></a></li>
           <li><a href="#variants" class="hover:text-emerald-300 transition">Persona variants — <code class="text-slate-300">--variants</code>, <code class="text-slate-300">--personas-merge</code></a></li>
@@ -203,14 +185,14 @@
         <div
           class="mt-3 rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-3 font-mono text-sm shadow-xl"
         >
-          <pre class="text-slate-300 overflow-x-auto whitespace-pre"><span class="text-slate-500">Model assignment:</span>
+          <pre class="text-slate-300 overflow-x-auto whitespace-pre"><span class="text-slate-400">Model assignment:</span>
   Maya Chen        → haiku
   Derek Washington → haiku
   Priya Patel      → haiku
   Sam Torres       → gemini-2.5-flash
   Julia Hoffman    → gemini-2.5-flash
   Omar Rashid      → gemini-2.5-flash
-<span class="text-slate-500">Totals: haiku=3, gemini-2.5-flash=3</span></pre>
+<span class="text-slate-400">Totals: haiku=3, gemini-2.5-flash=3</span></pre>
         </div>
 
         <h3 class="mt-8 mb-3 font-semibold text-white">Ensemble mode</h3>
@@ -282,9 +264,9 @@
           class="group relative rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-4 font-mono text-sm shadow-xl"
         >
           <pre class="text-slate-300 overflow-x-auto whitespace-pre">synthpanel panel run \
-  --personas small-panel.yaml \    <span class="text-slate-500"># 5 personas</span>
+  --personas small-panel.yaml \    <span class="text-slate-400"># 5 personas</span>
   --instrument survey.yaml \
-  --variants 4                     <span class="text-slate-500"># → 20 total panelists</span></pre>
+  --variants 4                     <span class="text-slate-400"># → 20 total panelists</span></pre>
         </div>
         <p class="mt-3 text-sm text-slate-400">
           Useful for stress-testing whether results are stable across plausible
@@ -426,7 +408,7 @@
                 <td class="text-slate-300">Large panels where responses overflow the synthesis model's context.</td>
               </tr>
               <tr>
-                <td><code>auto</code> <span class="text-slate-500">(default)</span></td>
+                <td><code>auto</code> <span class="text-slate-400">(default)</span></td>
                 <td class="text-slate-300">Pre-flight token estimate picks <code>single</code> or <code>map-reduce</code>.</td>
                 <td class="text-slate-300">Most runs. Falls back to <code>single</code> whenever estimate fits context.</td>
               </tr>
@@ -490,7 +472,7 @@
   --personas large-panel.yaml \
   --instrument survey.yaml \
   --max-concurrent 20 \
-  --rate-limit-rps 5.0          <span class="text-slate-500"># at most 5 new requests/sec</span></pre>
+  --rate-limit-rps 5.0          <span class="text-slate-400"># at most 5 new requests/sec</span></pre>
         </div>
         <p class="mt-3 text-sm text-slate-400">
           Accepts fractional values: <code class="text-slate-300">0.5</code> means one request every
@@ -542,8 +524,8 @@
           <pre class="text-slate-300 overflow-x-auto whitespace-pre">synthpanel panel run \
   --personas panel.yaml \
   --instrument survey.yaml \
-  --checkpoint-dir /tmp/runs \    <span class="text-slate-500"># opts in; default: ~/.synthpanel/checkpoints</span>
-  --checkpoint-every 10           <span class="text-slate-500"># flush every 10 completed panelists</span></pre>
+  --checkpoint-dir /tmp/runs \    <span class="text-slate-400"># opts in; default: ~/.synthpanel/checkpoints</span>
+  --checkpoint-every 10           <span class="text-slate-400"># flush every 10 completed panelists</span></pre>
         </div>
         <p class="mt-3 text-sm text-slate-400">
           The run id is printed to stderr. Each checkpoint is written to
@@ -632,11 +614,11 @@
           <pre class="text-slate-300 overflow-x-auto whitespace-pre">synthpanel panel run \
   --personas panel.yaml \
   --instrument pricing-discovery \
-  --convergence-check-every 20 \  <span class="text-slate-500"># compute JSD every 20 panelists</span>
-  --auto-stop \                    <span class="text-slate-500"># halt once all questions converge</span>
-  --convergence-eps 0.02 \         <span class="text-slate-500"># JSD threshold (default: 0.02)</span>
-  --convergence-min-n 50 \         <span class="text-slate-500"># don't stop before n=50</span>
-  --convergence-m 3                <span class="text-slate-500"># 3 consecutive checks below eps</span></pre>
+  --convergence-check-every 20 \  <span class="text-slate-400"># compute JSD every 20 panelists</span>
+  --auto-stop \                    <span class="text-slate-400"># halt once all questions converge</span>
+  --convergence-eps 0.02 \         <span class="text-slate-400"># JSD threshold (default: 0.02)</span>
+  --convergence-min-n 50 \         <span class="text-slate-400"># don't stop before n=50</span>
+  --convergence-m 3                <span class="text-slate-400"># 3 consecutive checks below eps</span></pre>
         </div>
 
         <p class="mt-4 text-base text-slate-300">
@@ -648,12 +630,12 @@
         >
           <pre class="text-slate-300 overflow-x-auto whitespace-pre">{
   <span class="text-emerald-400">"convergence"</span>: {
-    <span class="text-slate-500">"final_n"</span>: 487,
-    <span class="text-slate-500">"auto_stopped"</span>: true,
-    <span class="text-slate-500">"overall_converged_at"</span>: 473,  <span class="text-slate-500">// run this many next time</span>
-    <span class="text-slate-500">"per_question"</span>: {
-      <span class="text-slate-500">"pricing"</span>: { <span class="text-slate-500">"converged_at"</span>: 473, <span class="text-slate-500">"curve"</span>: [...] },
-      <span class="text-slate-500">"tier_preference"</span>: { <span class="text-slate-500">"converged_at"</span>: 410, <span class="text-slate-500">"curve"</span>: [...] }
+    <span class="text-slate-400">"final_n"</span>: 487,
+    <span class="text-slate-400">"auto_stopped"</span>: true,
+    <span class="text-slate-400">"overall_converged_at"</span>: 473,  <span class="text-slate-400">// run this many next time</span>
+    <span class="text-slate-400">"per_question"</span>: {
+      <span class="text-slate-400">"pricing"</span>: { <span class="text-slate-400">"converged_at"</span>: 473, <span class="text-slate-400">"curve"</span>: [...] },
+      <span class="text-slate-400">"tier_preference"</span>: { <span class="text-slate-400">"converged_at"</span>: 410, <span class="text-slate-400">"curve"</span>: [...] }
     }
   }
 }</pre>
@@ -852,7 +834,7 @@ synthpanel panel run \
             <div class="flex items-center justify-between">
               <h3 class="font-semibold text-white">Pack Calibration</h3>
               <span
-                class="text-slate-500 transition group-hover:text-emerald-300"
+                class="text-slate-400 transition group-hover:text-emerald-300"
                 >→</span
               >
             </div>
@@ -868,7 +850,7 @@ synthpanel panel run \
             <div class="flex items-center justify-between">
               <h3 class="font-semibold text-white">MCP Server</h3>
               <span
-                class="text-slate-500 transition group-hover:text-emerald-300"
+                class="text-slate-400 transition group-hover:text-emerald-300"
                 >→</span
               >
             </div>
@@ -884,7 +866,7 @@ synthpanel panel run \
             <div class="flex items-center justify-between">
               <h3 class="font-semibold text-white">Ensemble deep-dive</h3>
               <span
-                class="text-slate-500 transition group-hover:text-emerald-300"
+                class="text-slate-400 transition group-hover:text-emerald-300"
                 >→</span
               >
             </div>
@@ -900,7 +882,7 @@ synthpanel panel run \
             <div class="flex items-center justify-between">
               <h3 class="font-semibold text-white">Convergence deep-dive</h3>
               <span
-                class="text-slate-500 transition group-hover:text-emerald-300"
+                class="text-slate-400 transition group-hover:text-emerald-300"
                 >→</span
               >
             </div>
@@ -928,7 +910,7 @@ synthpanel panel run \
                 DataViking
               </span>
             </a>
-            <p class="mt-3 text-xs text-slate-500">
+            <p class="mt-3 text-xs text-slate-400">
               Open-source synthetic focus groups.<br />
               A
               <a
@@ -977,7 +959,7 @@ synthpanel panel run \
         </div>
 
         <!-- Copyright + social row -->
-        <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 py-6 text-xs text-slate-500">
+        <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 py-6 text-xs text-slate-400">
           <span>
             &copy; 2026 DataViking · MIT-licensed ·
             <a
@@ -993,7 +975,7 @@ synthpanel panel run \
               target="_blank"
               rel="noopener noreferrer"
               aria-label="GitHub"
-              class="text-slate-500 transition-colors hover:text-emerald-300"
+              class="text-slate-400 transition-colors hover:text-emerald-300"
             >
               <svg class="size-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"></path>

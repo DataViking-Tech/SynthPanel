@@ -18,13 +18,13 @@ You help the user understand how a target audience reasons about price for a pro
 
 1. **Frame the problem** — what are we pricing, for whom, and against what alternatives?
 2. **Assemble a target-audience panel.**
-3. **Run the `pricing-discovery` pack** via `run_panel` — with the `{problem}` placeholder filled in (see below).
+3. **Run the `pricing-discovery` pack** via `run_panel` — with the `{problem}` placeholder filled in via `vars` (see below).
 4. **Interpret the branch** — the panel that routed through `probe_pain` is telling you something different than one that routed through `probe_pricing` or `probe_alternatives`.
 
 ## Available MCP Tools
 
-- **`mcp__synth_panel__run_panel`** — Primary tool. The `pricing-discovery` instrument's opening question contains a `{problem}` placeholder. **The MCP tools do not substitute template variables** (there is no `instrument_vars` argument — that is the CLI's `--var` feature). To fill it, fetch the pack with `get_instrument_pack`, replace `{problem}` in the question text with your problem statement, and pass the edited body as the inline `instrument` argument. (CLI equivalent: `synthpanel panel run --instrument pricing-discovery --var problem='...'`.)
-- **`mcp__synth_panel__get_instrument_pack`** / **`mcp__synth_panel__list_instrument_packs`** — Inspect the bundled pricing-discovery pack (and fetch its body so you can substitute `{problem}`).
+- **`mcp__synth_panel__run_panel`** — Primary tool. The `pricing-discovery` instrument's opening question contains a `{problem}` placeholder. Fill it with the `vars` argument: pass `instrument_pack="pricing-discovery"` together with `vars={"problem": "..."}`. (CLI equivalent: `synthpanel panel run --instrument pricing-discovery --var problem='...'`.) If you omit `vars`, the call fails fast with a typed `INVALID_TOOL_ARG` error naming the missing placeholder — it never sends literal `{problem}` to panelists.
+- **`mcp__synth_panel__get_instrument_pack`** / **`mcp__synth_panel__list_instrument_packs`** — Inspect the bundled pricing-discovery pack (e.g. to see which placeholders it declares).
 - **`mcp__synth_panel__list_persona_packs`** / **`mcp__synth_panel__get_persona_pack`** — Load a saved target-audience pack.
 - **`mcp__synth_panel__run_quick_poll`** — Use for a narrow follow-up question after the main run (e.g. "Would $X/month feel fair?").
 
@@ -48,7 +48,8 @@ Ask:
 
 Call `run_panel` with:
 - the persona set (inline `personas`, or a saved pack via `pack_id`)
-- the `pricing-discovery` instrument body as the inline `instrument` argument, with the `{problem}` placeholder in the opening question already replaced by your problem statement (fetch the body via `get_instrument_pack` first)
+- `instrument_pack="pricing-discovery"`
+- `vars={"problem": "<the user's problem statement>"}` — `run_panel` substitutes it into the instrument's `{problem}` placeholder before any panelist sees the question
 
 Note: the instrument branches via theme tags (`pain`, `price`, `alternative`). Routing is **panel-level** — the router makes one decision per round for the whole panel based on the round's aggregate synthesis themes, not one decision per panelist. The executed route lives in the result's top-level `path` (a list of `{round, branch, next}` entries) and `terminal_round` — inspect these; they are the primary signal.
 

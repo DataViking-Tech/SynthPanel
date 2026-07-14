@@ -221,7 +221,7 @@ envelope's `panel_verdict` key, alongside `synthesis`. Full reference:
 | Tool | Description |
 |------|-------------|
 | `run_prompt` | Send a single prompt to an LLM. No personas required. The simplest tool — ask a quick research question. **Does not require `decision_being_informed`.** |
-| `run_panel` | Run a full synthetic focus group panel. Each persona answers all questions independently in parallel, followed by synthesis. Accepts inline `questions`, an inline `instrument` dict (v1/v2/v3), or an `instrument_pack` name. **Requires `decision_being_informed`.** |
+| `run_panel` | Run a full synthetic focus group panel. Each persona answers all questions independently in parallel, followed by synthesis. Accepts inline `questions`, an inline `instrument` dict (v1/v2/v3), or an `instrument_pack` name. Template placeholders in the instrument (e.g. the bundled packs' `{problem}` / `{candidates}`) are filled via the `vars` argument — the MCP equivalent of the CLI's `--var`. **Requires `decision_being_informed`.** |
 | `run_quick_poll` | Quick single-question poll across personas. A simplified `run_panel` for one question with synthesis. Accepts inline `personas` and/or a saved `pack_id` (merged; falls back to a built-in diverse set when both are omitted). **Requires `decision_being_informed`.** |
 | `extend_panel` | Append a single ad-hoc round to a saved panel result. Reuses each panelist's saved session for conversational context. **Not** a re-entry into the v3 DAG — use for human-in-the-loop follow-ups. **Requires `decision_being_informed`.** |
 
@@ -234,6 +234,7 @@ envelope's `panel_verdict` key, alongside `synthesis`. Full reference:
   "arguments": {
     "pack_id": "general-consumer",
     "instrument_pack": "pricing-discovery",
+    "vars": { "problem": "tracking cloud spend across teams" },
     "decision_being_informed": "choosing launch tier price"
   }
 }
@@ -410,6 +411,12 @@ Boundary errors return a typed `INVALID_TOOL_ARG` envelope
   (`run_panel`), or `result_id` (`extend_panel`) → `INVALID_TOOL_ARG` naming the
   offending field and enumerating the available ids.
 - `detail` outside `{"summary", "full"}` → `INVALID_TOOL_ARG` on `detail`.
+- Unsubstituted `{placeholder}` tokens left in a resolved instrument after
+  `vars` is applied (`run_panel`) → `INVALID_TOOL_ARG` on `vars`, naming the
+  missing keys and showing an example `vars` payload. This fires even when
+  `vars` is omitted entirely, so a placeholder-bearing pack can never send
+  literal `{problem}` text to panelists. Passing `vars` alongside plain
+  `questions` (no instrument) is likewise an `INVALID_TOOL_ARG` on `vars`.
 
 Runtime failures on `run_panel`, `run_quick_poll`, and `extend_panel` are also
 typed:
