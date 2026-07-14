@@ -5277,6 +5277,58 @@ def handle_pack_generate(args: argparse.Namespace, fmt: OutputFormat) -> int:
 # ---------------------------------------------------------------------------
 
 
+def _render_calibration_question(question_text: str, options: list[str]) -> str:
+    """Render the panelist-facing prompt: the real question + its real options.
+
+    ``build_question_prompt`` shows only a question's ``text`` to the panel, so
+    the answer choices must be embedded in the text itself for the panelist to
+    see them. Returns the bare question when no options are supplied.
+    """
+    if not options:
+        return question_text
+    rendered = "\n".join(f"- {opt}" for opt in options)
+    return f"{question_text}\n\nAnswer with exactly one of the following options:\n{rendered}"
+
+
+def _build_calibration_instrument(baseline: dict[str, Any], against: str) -> dict[str, Any]:
+    """Build the single-question instrument for a calibration panel.
+
+    Uses the **real** survey question text and answer options from the
+    SynthBench baseline. When the baseline carries no question text (an older
+    SynthBench that predates the ``question_text``/``options`` fields, or a
+    gated dataset that withholds the wording), this **refuses** — it raises
+    rather than fabricate a placeholder prompt. Fabricating and then scoring
+    the panel against the real ``human_distribution`` would measure a question
+    the personas never actually saw (cross-repo P0-3).
+
+    The real option labels are attached as an ``enum`` ``response_schema`` so
+    the question is a bounded (tracked) calibration item and answers are
+    coerced to the same category space as the baseline's ``human_distribution``
+    (SynthBench guarantees ``options`` align with the distribution keys).
+    """
+    question_text = baseline.get("question_text") or baseline.get("prompt")
+    if not question_text or not str(question_text).strip():
+        raise RuntimeError(
+            f"SynthBench baseline for {against!r} did not include question text; "
+            "refusing to fabricate a placeholder prompt and score panelists "
+            "against real human ground truth. Upgrade SynthBench to a version "
+            "that exposes question_text/options, or pick a full-tier dataset "
+            "(e.g. gss, ntia) whose question text is redistributable."
+        )
+    question_text = str(question_text).strip()
+
+    raw_options = baseline.get("options")
+    options: list[str] = []
+    if isinstance(raw_options, list):
+        options = [str(o).strip() for o in raw_options if isinstance(o, str) and str(o).strip()]
+
+    question: dict[str, Any] = {"text": _render_calibration_question(question_text, options)}
+    if options:
+        question["response_schema"] = {"type": "enum", "options": options}
+
+    return {"instrument": {"version": 1, "questions": [question]}}
+
+
 def _run_calibration_panel(
     *,
     pack_yaml_path: str,
@@ -5300,27 +5352,20 @@ def _run_calibration_panel(
     import subprocess
     import tempfile
 
-    # The instrument used here is intentionally minimal — a single open-text
-    # question whose text comes from the SynthBench baseline payload (when
-    # available). The panelists' answers are extracted via the auto-derived
-    # pick_one schema (see convergence.derive_pick_one_schema_from_baseline)
-    # and compared against the baseline's human distribution to compute JSD.
+    # The instrument used here is a single question whose text + answer
+    # options come from the SynthBench baseline payload. If the baseline does
+    # not carry the real question text we REFUSE (see
+    # ``_build_calibration_instrument``) rather than fabricate a placeholder
+    # and score the panel against real human ground truth. The panelists'
+    # answers are bounded to the real option labels (which SynthBench aligns
+    # with the ``human_distribution`` keys) so the panel distribution and the
+    # human distribution share a category space and the JSD is meaningful.
     try:
         baseline = load_synthbench_baseline(against)
     except SynthbenchUnavailableError as exc:
         raise RuntimeError(str(exc)) from exc
 
-    question_text = baseline.get("question_text") or baseline.get("prompt")
-    if not question_text:
-        dataset, _, question = against.partition(":")
-        question_text = f"Please answer the SynthBench {dataset} question {question} as honestly as you can."
-
-    instrument_payload = {
-        "instrument": {
-            "version": 1,
-            "questions": [{"text": str(question_text)}],
-        }
-    }
+    instrument_payload = _build_calibration_instrument(baseline, against)
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as inst_fh:
         yaml.safe_dump(instrument_payload, inst_fh, sort_keys=False)

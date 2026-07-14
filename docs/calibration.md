@@ -95,13 +95,23 @@ SYNTHBENCH_ALLOW_GATED=1 synthpanel pack calibrate ... --against wvs:Q1
 For each calibration run:
 
 1. The SynthBench baseline payload is fetched (same loader as
-   `panel run --calibrate-against`).
+   `panel run --calibrate-against`). The payload must carry the real
+   `question_text` (and, for full-tier datasets, the real answer
+   `options`). If it does not — an older SynthBench that predates those
+   fields, or a gated dataset that withholds the wording — the command
+   **refuses** with a clear error rather than fabricate a placeholder
+   prompt. (Scoring a made-up prompt against real human ground truth
+   would measure a question the panel never actually saw.) Upgrade
+   SynthBench or pick a full-tier dataset (`gss`, `ntia`).
 2. A `pick_one` extraction schema is auto-derived from the baseline's
    small-enum distribution. If the baseline is Likert/ranking or
    too-wide, the command hard-fails with a hint to supply
    `--extract-schema` via `panel run` instead.
-3. A panel of `--n` panelists is run against the dataset's question
-   text. Each panelist answers `--samples-per-question` times.
+3. A panel of `--n` panelists is run against the dataset's **real
+   question text**, presented with the baseline's real answer options
+   (bound as an `enum` response schema whose labels match the
+   `human_distribution` keys). Each panelist answers
+   `--samples-per-question` times.
 4. The model distribution is compared against the baseline's
    `human_distribution` via Jensen-Shannon divergence.
 5. The resulting JSD, plus provenance (extractor, models, cost,
