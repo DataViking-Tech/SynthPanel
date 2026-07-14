@@ -12,6 +12,7 @@ drive defaults in the harness.
 synthpanel panel run \
   --personas examples/personas.yaml \
   --instrument pricing-discovery \
+  --var problem="choosing a project management tool" \
   --best-model-for "Economy & Work"
 
 # Top-ranked model across a whole dataset (by SPS)

@@ -186,7 +186,12 @@ stack; **highest severity wins** for gating decisions.
 ### Branching pattern
 
 ```python
-verdict = run_panel(stimulus, decision_being_informed="...")
+result = run_panel(
+    questions=[{"text": "Would you pay $49 or $79 for this?"}],
+    pack_id="general-consumer",
+    decision_being_informed="choosing launch tier price",
+)
+verdict = result["panel_verdict"]
 
 severity_rank = {"info": 0, "warn": 1, "block": 2}
 worst = max((severity_rank[f["severity"]] for f in verdict["flags"]), default=-1)

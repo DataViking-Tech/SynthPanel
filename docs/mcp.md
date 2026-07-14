@@ -217,7 +217,7 @@ envelope's `panel_verdict` key, alongside `synthesis`. Full reference:
 {
   "tool": "run_panel",
   "arguments": {
-    "personas_pack": "general-consumer",
+    "pack_id": "general-consumer",
     "instrument_pack": "pricing-discovery",
     "decision_being_informed": "choosing launch tier price"
   }

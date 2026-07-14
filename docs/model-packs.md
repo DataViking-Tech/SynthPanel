@@ -81,6 +81,7 @@ this pack is for "is this question even legible?" not "what would users do?".
 synthpanel panel run \
   --personas examples/personas.yaml \
   --instrument pricing-discovery \
+  --var problem="choosing a project management tool" \
   --model haiku \
   --output-format json
 ```
@@ -91,7 +92,7 @@ synthpanel panel run \
 // MCP run_panel
 {
   "instrument_pack": "pricing-discovery",
-  "personas_pack": "general-consumer",
+  "pack_id": "general-consumer",
   "model": "haiku",
   "decision_being_informed": "early ideation, not a launch decision"
 }
@@ -122,6 +123,7 @@ panel per model.
 synthpanel panel run \
   --personas examples/personas.yaml \
   --instrument pricing-discovery \
+  --var problem="choosing a project management tool" \
   --models 'haiku,sonnet,gemini-2.5-flash' \
   --blend \
   --output-format json
@@ -133,7 +135,7 @@ synthpanel panel run \
 // MCP run_panel
 {
   "instrument_pack": "pricing-discovery",
-  "personas_pack": "general-consumer",
+  "pack_id": "general-consumer",
   "models": ["haiku", "sonnet", "gemini-2.5-flash"],
   "decision_being_informed": "choosing launch tier price"
 }
@@ -159,6 +161,8 @@ more objections.
 synthpanel panel run \
   --personas examples/personas.yaml \
   --instrument 'landing-page-comprehension' \
+  --var landing_page="Acme — ship faster with automated deploys. Start free, no card required." \
+  --var alt_cta="Start free trial" \
   --models 'sonnet,gpt-4o,gemini-2.5-pro' \
   --blend \
   --temperature 0.9 \
@@ -168,9 +172,10 @@ synthpanel panel run \
 **MCP / SDK:**
 
 ```jsonc
+// MCP run_panel
 {
   "instrument_pack": "landing-page-comprehension",
-  "personas_pack": "enterprise-buyer",
+  "pack_id": "enterprise-buyer",
   "models": ["sonnet", "gpt-4o", "gemini-2.5-pro"],
   "temperature": 0.9,
   "decision_being_informed": "credibility audit before paid acquisition"
@@ -196,6 +201,7 @@ three families gets you cross-provider diversity at preflight prices.
 synthpanel panel run \
   --personas examples/personas.yaml \
   --instrument 'name-test' \
+  --var candidates="Core, Plus, Pro" \
   --models 'haiku:0.34,gpt-4o-mini:0.33,gemini-2.5-flash:0.33' \
   --output-format json
 ```
@@ -236,8 +242,9 @@ general-purpose models.
 
 ```bash
 synthpanel panel run \
-  --personas-pack enterprise-buyer \
+  --personas enterprise-buyer \
   --instrument 'feature-prioritization' \
+  --var features="SSO, audit logs, and role-based access control" \
   --models 'sonnet:0.5,gpt-4o:0.5' \
   --output-format json
 ```
@@ -245,8 +252,9 @@ synthpanel panel run \
 **MCP / SDK:**
 
 ```jsonc
+// MCP run_panel
 {
-  "personas_pack": "enterprise-buyer",
+  "pack_id": "enterprise-buyer",
   "instrument_pack": "feature-prioritization",
   "models": ["sonnet", "gpt-4o"],
   "decision_being_informed": "B2B feature priority for Q3 roadmap"
@@ -271,8 +279,9 @@ to over-index on technical detail in free-text.
 
 ```bash
 synthpanel panel run \
-  --personas-pack developer \
+  --personas developer \
   --instrument 'feature-prioritization' \
+  --var features="SSO, audit logs, and role-based access control" \
   --models 'sonnet:0.4,gpt-4o:0.4,gemini-2.5-pro:0.2' \
   --output-format json
 ```
@@ -300,6 +309,7 @@ per model, with blending. **This is the most expensive pack.**
 synthpanel panel run \
   --personas examples/personas.yaml \
   --instrument pricing-discovery \
+  --var problem="choosing a project management tool" \
   --models 'opus,sonnet,gpt-4o,gemini-2.5-pro' \
   --blend \
   --max-cost 5.00 \
@@ -311,9 +321,10 @@ synthpanel panel run \
 **MCP / SDK:**
 
 ```jsonc
+// MCP run_panel
 {
   "instrument_pack": "pricing-discovery",
-  "personas_pack": "general-consumer",
+  "pack_id": "general-consumer",
   "models": ["opus", "sonnet", "gpt-4o", "gemini-2.5-pro"],
   "decision_being_informed": "launch-tier pricing for Q3 GA"
 }

@@ -14,6 +14,7 @@ smaller representative n next time.
 synthpanel panel run \
   --personas my-panel.yaml \
   --instrument pricing-discovery \
+  --var problem="choosing a project management tool" \
   --convergence-check-every 20 \
   --auto-stop \
   --output-format json > result.json
