@@ -4,7 +4,7 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: geolocation=(), microphone=(), camera=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://us-assets.i.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://us-assets.i.posthog.com; font-src 'self' data:; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://us-assets.i.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://us-assets.i.posthog.com; font-src 'self' data:; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
   Vary: Accept
   Cache-Control: private, no-store, must-revalidate
 
@@ -20,6 +20,10 @@
 /*.txt
   Cache-Control: public, max-age=300, must-revalidate
 /*.xml
+  Cache-Control: public, max-age=300, must-revalidate
+# Precompiled Tailwind stylesheet (scripts/site_tailwind/) — same short-cache
+# bucket as the other unhashed static assets.
+/*.css
   Cache-Control: public, max-age=300, must-revalidate
 
 # RFC 8288 Link headers — agent discovery (sy-7r1)
