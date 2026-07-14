@@ -109,6 +109,32 @@ def build_parser() -> argparse.ArgumentParser:
         "run",
         help="Run a panel with personas and an instrument/survey.",
     )
+    # gh#571: --model / --output-format are global flags, but users
+    # naturally type them after the subcommand ("synthpanel panel run
+    # --output-format json"), which argparse rejected with a usage dump.
+    # Re-declare them here with default=SUPPRESS so the subcommand parser
+    # only touches the namespace when the flag is actually given — the
+    # global value (and its default) survives otherwise, and a
+    # subcommand-position flag overrides a global-position one.
+    panel_run_parser.add_argument(
+        "--model",
+        default=argparse.SUPPRESS,
+        help=(
+            "LLM model to use (same as the global --model, accepted here "
+            "so the flag may follow the subcommand; this position wins "
+            "when both are given)."
+        ),
+    )
+    panel_run_parser.add_argument(
+        "--output-format",
+        choices=["text", "json", "ndjson"],
+        default=argparse.SUPPRESS,
+        help=(
+            "Output format (same as the global --output-format, accepted "
+            "here so the flag may follow the subcommand; this position "
+            "wins when both are given)."
+        ),
+    )
     panel_run_parser.add_argument(
         "--personas",
         default=None,

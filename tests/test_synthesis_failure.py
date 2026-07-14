@@ -18,6 +18,7 @@ Covers the three call sites the bead calls out:
 from __future__ import annotations
 
 import json
+import re
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -360,6 +361,85 @@ class TestSynthesisOpenRouterRouting:
         # Every call (including the escalation strike) hit OpenRouter.
         assert seen_urls, "synthesis made no LLM call"
         assert all("openrouter.ai" in u for u in seen_urls)
+        # The synthesis itself is a fallback (empty tool input every time),
+        # surfacing the failure rather than pretending success.
+        assert synth.is_fallback is True
+
+
+# --- gh#571: native-provider synthesis escalation must stay in-family ------
+
+
+class TestSynthesisNativeGeminiRouting:
+    """gh#571 (sy-549 class): a native ``gemini-*`` synthesis run with ONLY
+    GEMINI_API_KEY set must keep the WHOLE synthesis call chain — including
+    the structured-output engine's final-strike escalation — on the Gemini
+    provider. Previously the final strike escalated to the bare ``sonnet``
+    alias on the direct Anthropic provider and failed the run with
+    "Missing API key for Anthropic"."""
+
+    def test_gemini_synthesis_never_demands_anthropic_key(self, monkeypatch):
+        from synth_panel.llm.client import LLMClient
+        from synth_panel.synthesis import synthesize_panel
+
+        # Gemini-only environment (the live gh#571 repro shape).
+        monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+        seen_urls: list[str] = []
+        seen_models: list[str] = []
+
+        def fake_post(url, **kwargs):
+            seen_urls.append(url)
+            seen_models.append(kwargs.get("json", {}).get("model", ""))
+            resp = MagicMock()
+            resp.status_code = 200
+            # Empty tool arguments every time so the structured engine
+            # exhausts its retries and reaches the final-strike escalation
+            # branch — the exact path that used to cross to Anthropic.
+            resp.json.return_value = {
+                "id": "x",
+                "model": "gemini-2.5-flash",
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "id": "t",
+                                    "type": "function",
+                                    "function": {"name": "synthesize", "arguments": "{}"},
+                                }
+                            ],
+                        },
+                        "finish_reason": "tool_calls",
+                    }
+                ],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            }
+            return resp
+
+        monkeypatch.setattr("httpx.post", fake_post)
+
+        results = _panelist_results(2)
+        # Should NOT raise "Missing API key for Anthropic".
+        synth = synthesize_panel(
+            LLMClient(),
+            results,
+            [{"text": "Q1"}],
+            model="gemini-2.5-flash",
+            panelist_model="gemini-2.5-flash",
+        )
+        # Every call (including the escalation strike) hit Gemini.
+        assert seen_urls, "synthesis made no LLM call"
+        # Regex host check (not a bare substring test on a URL literal) so
+        # CodeQL's py/incomplete-url-substring-sanitization heuristic does
+        # not misread this test assertion as URL sanitization logic.
+        assert all(re.search(r"generativelanguage\.googleapis\.com", u) for u in seen_urls)
+        # The escalation strike stayed in the Gemini family.
+        assert all(m.startswith("gemini-") for m in seen_models)
+        assert "gemini-2.5-pro" in seen_models
         # The synthesis itself is a fallback (empty tool input every time),
         # surfacing the failure rather than pretending success.
         assert synth.is_fallback is True

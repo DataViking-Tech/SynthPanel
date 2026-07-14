@@ -6,6 +6,28 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [Unreleased]
 
+### Fixed
+
+- **Synthesis judge final-strike escalation now stays in the run's
+  provider family for every provider (GH#571, sy-549 class).** A native
+  `--model gemini` run with only `GEMINI_API_KEY` set could complete all
+  panelists and then fail the whole run with "Missing API key for
+  Anthropic" when the structured-output judge exhausted its retries: the
+  escalation target was hard-coded to the bare `sonnet` alias for every
+  non-OpenRouter model. Escalation now maps per family — `gemini-*` →
+  `gemini-2.5-pro`, `grok-*` → `grok-4`, OpenAI-compat cheap tiers to
+  their bigger sibling on the same base URL (`gpt-4o-mini` → `gpt-4o`),
+  Anthropic and OpenRouter unchanged — and when no stronger same-family
+  model is known (local models, unrecognized ids) the final strike keeps
+  the original model and degrades to the documented fallback-synthesis
+  path instead of demanding another provider's credentials.
+- **`synthpanel panel run` now accepts `--model` and `--output-format`
+  after the subcommand (GH#571).** `synthpanel panel run --output-format
+  json` previously exited 2 with an argparse usage dump because both
+  flags were global-only. They are now also accepted in subcommand
+  position, where they override a global-position value; the global
+  position keeps working unchanged.
+
 ### Added
 
 - **`synthpanel mcp install` now targets every documented editor
