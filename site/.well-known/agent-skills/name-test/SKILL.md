@@ -24,7 +24,7 @@ You help the user decide between candidate names for a product, feature, or bran
 ## Available MCP Tools
 
 - **`mcp__synth_panel__run_quick_poll`** — Single-question poll across personas (fastest, cheapest).
-- **`mcp__synth_panel__run_panel`** — Full panel run using the bundled `name-test` branching instrument that probes meaning, pronounceability, or memorability based on first reactions. Its opening question has a `{candidates}` placeholder; see Step 2 for how to fill it.
+- **`mcp__synth_panel__run_panel`** — Full panel run using the bundled `name-test` branching instrument that probes meaning, pronounceability, or memorability based on first reactions. Its opening question has a `{candidates}` placeholder; fill it with the `vars` argument (see Step 2).
 - **`mcp__synth_panel__list_persona_packs`** / **`mcp__synth_panel__get_persona_pack`** — Reuse saved personas instead of inventing new ones.
 - **`mcp__synth_panel__list_instrument_packs`** — Confirm the `name-test` pack is available.
 
@@ -40,7 +40,7 @@ Ask for:
 ### Step 2: Choose Depth
 
 - **Quick gut check** → `run_quick_poll` with a question that has the description and candidate names written directly into the `question` string, e.g. *"Which of these names best fits a budget travel app — Wander, Roamly, Tr9? Why?"*
-- **Full branching evaluation** → `run_panel` with the bundled `name-test` instrument. The MCP tools do **not** substitute template variables (there is no `instrument_vars` argument — that is the CLI's `--var` feature), so fetch the pack with `get_instrument_pack`, replace the `{candidates}` placeholder in the opening question with the actual comma-separated names, and pass the edited body as the inline `instrument` argument. (CLI equivalent: `synthpanel panel run --instrument name-test --var 'candidates=Name A, Name B'`.) The instrument branches into meaning-probe, pronounce-probe, or memorability-probe based on what surfaces first.
+- **Full branching evaluation** → `run_panel` with `instrument_pack="name-test"` and `vars={"candidates": "Name A, Name B"}` — the comma-separated candidate names are substituted into the opening question's `{candidates}` placeholder before the panel runs. (CLI equivalent: `synthpanel panel run --instrument name-test --var 'candidates=Name A, Name B'`.) If you omit `vars`, the call fails fast with a typed `INVALID_TOOL_ARG` error naming the missing placeholder. The instrument branches into meaning-probe, pronounce-probe, or memorability-probe based on what surfaces first.
 
 ### Step 3: Run
 

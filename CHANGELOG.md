@@ -8,6 +8,17 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ### Added
 
+- **MCP `run_panel` gains a first-class `vars` parameter (GH#562).**
+  Template placeholders in a resolved instrument — whether loaded via
+  `instrument_pack` or passed inline as `instrument` — are substituted from
+  `vars: {key: value}`, reusing the same engine and fail-fast guard as the
+  CLI's `--var` / `--vars-file` (sp-6yi). **Behavior change:** a
+  placeholder-bearing instrument with missing (or omitted) `vars` now
+  returns a typed `INVALID_TOOL_ARG` envelope naming the missing keys
+  instead of "succeeding" while sending literal `{problem}` /
+  `{candidates}` text to panelists and silently corrupting results. The
+  `pricing-probe` and `name-test` skills now use `vars` directly instead of
+  the `get_instrument_pack` → substitute → inline-`instrument` workaround.
 - **The v1.0.0 agent contract is wired end to end on the MCP panel tools
   (P1-1).** `run_panel`, `run_quick_poll`, and `extend_panel` now route
   requests through the AC-4 grace shim (`apply_legacy_grace`): an omitted

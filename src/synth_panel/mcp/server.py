@@ -435,6 +435,41 @@ def _resolve_instrument_pack_or_error(name: str) -> tuple[dict[str, Any] | None,
         return None, _unknown_id_envelope("instrument pack", name, "instrument_pack", valid)
 
 
+def _substitute_instrument_vars_or_error(
+    instrument_obj: Instrument,
+    template_vars: dict[str, str] | None,
+) -> str | None:
+    """Substitute ``vars`` into *instrument_obj*, or return a typed error.
+
+    MCP twin of the CLI's ``--var`` / ``--vars-file`` flow (GH#562): reuses
+    the same shared engine (:mod:`synth_panel.templates`) for substitution
+    and the same fail-fast guard (sp-6yi). If any ``{placeholder}`` in the
+    instrument's question text lacks a value — including when ``vars`` is
+    omitted entirely — the run aborts with a typed ``INVALID_TOOL_ARG``
+    envelope naming the missing keys, instead of silently sending literal
+    braces to panelists and corrupting the run.
+
+    Returns ``None`` on success (mutating *instrument_obj* in place when
+    ``vars`` is non-empty), or the JSON error envelope string.
+    """
+    from synth_panel.templates import apply_vars_to_instrument, find_unresolved_in_instrument
+
+    tv = {str(k): str(v) for k, v in (template_vars or {}).items()}
+    unresolved = find_unresolved_in_instrument(instrument_obj, tv)
+    if unresolved:
+        keys = ", ".join(unresolved)
+        example = json.dumps({k: "..." for k in unresolved})
+        return _invalid_tool_arg(
+            f"Instrument has unsubstituted placeholders: {keys}. "
+            f"Pass a value for each via the vars parameter, e.g. vars={example}. "
+            f"(CLI equivalent: --var {unresolved[0]}=...)",
+            field_path="vars",
+        )
+    if tv:
+        apply_vars_to_instrument(instrument_obj, tv)
+    return None
+
+
 def _resolve_panel_result_or_error(result_id: str) -> tuple[dict[str, Any] | None, str | None]:
     """Load a saved panel result, returning ``(result, None)`` or ``(None, error_json)``."""
     try:
@@ -1575,6 +1610,7 @@ async def run_panel(
     pack_id: str | None = None,
     instrument: dict[str, Any] | None = None,
     instrument_pack: str | None = None,
+    vars: dict[str, str] | None = None,
     model: str | None = None,
     response_schema: dict[str, Any] | None = None,
     synthesis: bool = True,
@@ -1678,6 +1714,21 @@ async def run_panel(
             over ``questions``.
         instrument_pack: Name of an installed instrument pack.
             Takes precedence over both ``instrument`` and ``questions``.
+        vars: Template variables substituted into the resolved
+            instrument's question text (MCP equivalent of the CLI's
+            ``--var`` / ``--vars-file``). Bundled packs ship with
+            ``{placeholder}`` tokens — e.g. ``pricing-discovery`` needs
+            ``{"problem": "..."}`` and ``name-test`` needs
+            ``{"candidates": "Name A, Name B"}``. Applies to both
+            ``instrument_pack`` and inline ``instrument`` inputs.
+
+            **Fail-fast guard:** if any ``{placeholder}`` in the
+            instrument remains unsubstituted after ``vars`` is applied —
+            including when ``vars`` is omitted entirely — the call
+            returns a typed ``INVALID_TOOL_ARG`` envelope naming the
+            missing keys instead of sending literal braces to panelists.
+            Passing ``vars`` with plain ``questions`` (no instrument) is
+            also a typed error, since inline questions are sent verbatim.
         model: LLM model to use. Defaults to a cheap/fast model chosen
             from the configured provider credentials (haiku for Anthropic,
             gpt-4o-mini for OpenAI, etc.). When the auto-resolved default
@@ -1834,6 +1885,42 @@ async def run_panel(
         if len(questions) > MAX_QUESTIONS:
             return json.dumps({"error": f"Too many questions ({len(questions)}). Maximum is {MAX_QUESTIONS}."})
 
+    # ── GH#562: resolve the instrument once, up front, and substitute vars ─
+    # All three execution paths (sampling, ensemble, BYOK) previously
+    # re-resolved the instrument independently and none substituted template
+    # variables, so a pack like `pricing-discovery` sent literal `{problem}`
+    # to panelists. Resolve + parse + substitute here so every path sees the
+    # same rendered instrument, and fail fast (typed INVALID_TOOL_ARG) on
+    # any unsubstituted {placeholder} — even when `vars` is omitted.
+    # InstrumentError → clean JSON so caller-side typos in attachment
+    # payloads (hq-jviv) surface across the wire instead of crashing the
+    # tool with a generic ToolError.
+    instrument_obj: Instrument | None = None
+    if instrument_pack is not None or instrument is not None:
+        if instrument_pack is not None:
+            pack_body, ip_error = _resolve_instrument_pack_or_error(instrument_pack)
+            if ip_error is not None:
+                return ip_error
+            assert pack_body is not None
+            raw = pack_body.get("instrument", pack_body)
+        else:
+            assert instrument is not None
+            raw = instrument.get("instrument", instrument)
+        try:
+            instrument_obj = parse_instrument(raw)
+        except InstrumentError as exc:
+            return json.dumps({"error": str(exc)})
+        vars_error = _substitute_instrument_vars_or_error(instrument_obj, vars)
+        if vars_error is not None:
+            return vars_error
+    elif vars:
+        return _invalid_tool_arg(
+            "The vars parameter only applies to instrument / instrument_pack "
+            "inputs; inline questions are sent to panelists verbatim. Write "
+            "the values directly into the question text instead.",
+            field_path="vars",
+        )
+
     # ── Sampling fallback: route through MCP sampling when no BYOK creds ─
     # Ensemble mode is BYOK-only (sampling host exposes only one model),
     # so we only consult the decision in the non-ensemble branch.
@@ -1843,47 +1930,22 @@ async def run_panel(
             return json.dumps({"error": decision.error})
         if decision.mode == "sampling":
             # Resolve question stream for sampling — no v3 branching.
+            # The instrument itself was resolved + vars-substituted above.
             sampling_questions: list[dict[str, Any]]
-            if instrument_pack is not None:
-                pack_body, ip_error = _resolve_instrument_pack_or_error(instrument_pack)
-                if ip_error is not None:
-                    return ip_error
-                assert pack_body is not None
-                raw = pack_body.get("instrument", pack_body)
-                try:
-                    inst = parse_instrument(raw)
-                except InstrumentError as exc:
-                    return json.dumps({"error": str(exc)})
-                if len(inst.rounds) > 1:
+            if instrument_obj is not None:
+                if len(instrument_obj.rounds) > 1:
+                    source = "pack" if instrument_pack is not None else "instrument"
                     return json.dumps(
                         {
                             "error": (
                                 "Sampling mode does not support v3 branching "
                                 "instruments (multiple rounds). Set a provider "
                                 "API key (e.g. ANTHROPIC_API_KEY) to run this "
-                                "pack under BYOK."
+                                f"{source} under BYOK."
                             )
                         }
                     )
-                sampling_questions = [{"text": q["text"]} for q in inst.questions]
-            elif instrument is not None:
-                raw = instrument.get("instrument", instrument)
-                try:
-                    inst = parse_instrument(raw)
-                except InstrumentError as exc:
-                    return json.dumps({"error": str(exc)})
-                if len(inst.rounds) > 1:
-                    return json.dumps(
-                        {
-                            "error": (
-                                "Sampling mode does not support v3 branching "
-                                "instruments (multiple rounds). Set a provider "
-                                "API key (e.g. ANTHROPIC_API_KEY) to run this "
-                                "instrument under BYOK."
-                            )
-                        }
-                    )
-                sampling_questions = [{"text": q["text"]} for q in inst.questions]
+                sampling_questions = [{"text": q["text"]} for q in instrument_obj.questions]
             elif questions:
                 sampling_questions = questions
             else:
@@ -1935,26 +1997,13 @@ async def run_panel(
 
     # ── Ensemble mode: run with each model, compare across models ────────
     if models and len(models) >= 2:
-        if not questions and instrument is None and instrument_pack is None:
+        if not questions and instrument_obj is None:
             return json.dumps({"error": "Ensemble mode requires questions or instrument."})
         ens_questions = questions or []
-        if not ens_questions:
-            # Instruments: extract flat questions for ensemble (v1/v2 only)
-            try:
-                if instrument is not None:
-                    raw = instrument.get("instrument", instrument)
-                    inst = parse_instrument(raw)
-                    ens_questions = [{"text": q["text"]} for q in inst.questions]
-                elif instrument_pack is not None:
-                    pack_body, ip_error = _resolve_instrument_pack_or_error(instrument_pack)
-                    if ip_error is not None:
-                        return ip_error
-                    assert pack_body is not None
-                    raw = pack_body.get("instrument", pack_body)
-                    inst = parse_instrument(raw)
-                    ens_questions = [{"text": q["text"]} for q in inst.questions]
-            except InstrumentError as exc:
-                return json.dumps({"error": str(exc)})
+        if not ens_questions and instrument_obj is not None:
+            # Instruments: extract flat questions for ensemble (v1/v2 only).
+            # instrument_obj is already parsed + vars-substituted above.
+            ens_questions = [{"text": q["text"]} for q in instrument_obj.questions]
         try:
             ens_result = await asyncio.to_thread(
                 _run_ensemble_sync,
@@ -1989,26 +2038,8 @@ async def run_panel(
                 ens_result["warnings"] = list(decision_warnings)
         return json.dumps(apply_response_gate(ens_result), indent=2)
 
-    # Resolve instrument source (pack > inline instrument > questions).
-    # InstrumentError → clean JSON so caller-side typos in attachment
-    # payloads (hq-jviv) surface across the wire instead of crashing the
-    # tool with a generic ToolError.
-    instrument_obj: Instrument | None = None
-    if instrument_pack is not None:
-        pack_body, ip_error = _resolve_instrument_pack_or_error(instrument_pack)
-        if ip_error is not None:
-            return ip_error
-        assert pack_body is not None
-    try:
-        if instrument_pack is not None:
-            raw = pack_body.get("instrument", pack_body)
-            instrument_obj = parse_instrument(raw)
-        elif instrument is not None:
-            raw = instrument.get("instrument", instrument)
-            instrument_obj = parse_instrument(raw)
-    except InstrumentError as exc:
-        return json.dumps({"error": str(exc)})
-
+    # Instrument source (pack > inline instrument > questions) was resolved
+    # and vars-substituted in the GH#562 block above.
     if instrument_obj is not None:
         try:
             result = await _run_panel_async_instrument(

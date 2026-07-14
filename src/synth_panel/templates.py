@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import copy
 import string
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from synth_panel.synthesis import SynthesisResult
+
+if TYPE_CHECKING:  # pragma: no cover - import cycle guard (instrument imports nothing from here, but keep lazy)
+    from synth_panel.instrument import Instrument
 
 
 def build_template_context(synthesis: SynthesisResult) -> dict[str, str]:
@@ -147,3 +150,30 @@ def find_unresolved_in_questions(questions: list[dict[str, Any]], context: dict[
                     if isinstance(fu_text, str):
                         found.update(validate_template(fu_text, context))
     return sorted(found)
+
+
+def find_unresolved_in_instrument(instrument: Instrument, context: dict[str, str]) -> list[str]:
+    """Return sorted unique unresolved placeholder keys across every round.
+
+    Shared by the CLI (``--var`` fail-fast, sp-6yi) and the MCP ``run_panel``
+    ``vars`` parameter (GH#562) so both surfaces flag the same missing keys
+    for the same instrument.
+    """
+    return find_unresolved_in_questions(
+        [q for rnd in instrument.rounds for q in rnd.questions],
+        context,
+    )
+
+
+def apply_vars_to_instrument(instrument: Instrument, template_vars: dict[str, str]) -> None:
+    """Substitute ``template_vars`` into every round's question text.
+
+    Mutates the instrument in place: each ``Round.questions`` list is
+    replaced with its rendered form. Callers are expected to run
+    :func:`find_unresolved_in_instrument` first so missing keys fail fast
+    instead of sending literal ``{placeholder}`` text to panelists. Shared
+    by the CLI ``--var`` path and the MCP ``run_panel(vars=...)`` path
+    (GH#562).
+    """
+    for rnd in instrument.rounds:
+        rnd.questions = render_questions(rnd.questions, template_vars)
