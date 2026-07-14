@@ -19,6 +19,107 @@ from typing import Any
 
 DEFAULT_SERVER_NAME = "synth_panel"
 
+
+# ---------------------------------------------------------------------------
+# Host registry (synthbench#262): named MCP hosts the installer knows how to
+# target. Each host maps to a concrete config file, the JSON key its schema
+# nests servers under (Zed uses ``context_servers``, everyone else
+# ``mcpServers``), and any extra fields the entry needs (Zed requires
+# ``"source": "custom"``). The JSON written per host mirrors the README's
+# "Use with Claude Code / Cursor / Windsurf / Zed" section exactly.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class HostSpec:
+    """A named MCP host the installer can write a config for."""
+
+    key: str  # CLI value, e.g. "claude-code"
+    label: str  # human name for the restart hint, e.g. "Claude Code"
+    config_key: str = "mcpServers"  # JSON key the servers mapping lives under
+    # Extra fields prepended to the server entry (Zed: {"source": "custom"}).
+    entry_extra: tuple[tuple[str, str], ...] = ()
+    supports_project_scope: bool = False
+
+
+def _claude_desktop_path() -> Path:
+    """Platform-specific Claude Desktop config path."""
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA")
+        base = Path(appdata) if appdata else Path.home() / "AppData" / "Roaming"
+        return base / "Claude" / "claude_desktop_config.json"
+    return Path.home() / ".config" / "Claude" / "claude_desktop_config.json"
+
+
+HOSTS: dict[str, HostSpec] = {
+    "claude-code": HostSpec(
+        key="claude-code",
+        label="Claude Code",
+        supports_project_scope=True,
+    ),
+    "claude-desktop": HostSpec(
+        key="claude-desktop",
+        label="Claude Desktop",
+    ),
+    "cursor": HostSpec(
+        key="cursor",
+        label="Cursor",
+        supports_project_scope=True,
+    ),
+    "windsurf": HostSpec(
+        key="windsurf",
+        label="Windsurf",
+    ),
+    "zed": HostSpec(
+        key="zed",
+        label="Zed",
+        config_key="context_servers",
+        entry_extra=(("source", "custom"),),
+    ),
+}
+
+
+def host_config_path(host: HostSpec, scope: str = "user") -> Path:
+    """Resolve the config file a named host reads, honoring ``scope``.
+
+    Raises ValueError when ``scope == "project"`` for a host that has no
+    project-level config file.
+    """
+    if scope == "project" and not host.supports_project_scope:
+        raise ValueError(f"host {host.key!r} has no project-scope config; use --scope user (default).")
+    if host.key == "claude-code":
+        return Path.cwd() / ".mcp.json" if scope == "project" else Path.home() / ".claude.json"
+    if host.key == "claude-desktop":
+        return _claude_desktop_path()
+    if host.key == "cursor":
+        if scope == "project":
+            return Path.cwd() / ".cursor" / "mcp.json"
+        return Path.home() / ".cursor" / "mcp.json"
+    if host.key == "windsurf":
+        return Path.home() / ".codeium" / "windsurf" / "mcp_config.json"
+    if host.key == "zed":
+        return Path.home() / ".config" / "zed" / "settings.json"
+    raise ValueError(f"unknown host {host.key!r}")
+
+
+def detect_hosts() -> list[tuple[HostSpec, Path]]:
+    """Return (host, existing-config-path) pairs for hosts present on this machine.
+
+    Only user-scope configs that already exist on disk are reported —
+    auto-detection never invents a config file for a host that isn't
+    installed. Project-scope files (./.mcp.json, ./.cursor/mcp.json) are
+    deliberate opt-ins via ``--scope project`` and are not detected.
+    """
+    found: list[tuple[HostSpec, Path]] = []
+    for host in HOSTS.values():
+        path = host_config_path(host, "user")
+        if path.is_file():
+            found.append((host, path))
+    return found
+
+
 # sy-xyn: actionable copy used by every hard-error surface that detects
 # a missing `mcp` extra (install refusal + `mcp-serve` startup guard).
 # Distinct from MCP_EXTRA_WARNING (#512) which is the SOFT warning
@@ -143,12 +244,19 @@ def parse_env_pairs(pairs: list[str] | None) -> dict[str, str]:
     return out
 
 
-def build_entry(command: str, env: dict[str, str]) -> dict[str, Any]:
-    """Build the JSON object the host expects under ``mcpServers[<name>]``."""
-    entry: dict[str, Any] = {
-        "command": command,
-        "args": ["mcp-serve"],
-    }
+def build_entry(
+    command: str,
+    env: dict[str, str],
+    extra: tuple[tuple[str, str], ...] = (),
+) -> dict[str, Any]:
+    """Build the JSON object the host expects under its servers mapping.
+
+    ``extra`` fields (e.g. Zed's ``"source": "custom"``) are placed first
+    so the written JSON matches the README's per-host snippets verbatim.
+    """
+    entry: dict[str, Any] = dict(extra)
+    entry["command"] = command
+    entry["args"] = ["mcp-serve"]
     if env:
         entry["env"] = env
     return entry
@@ -191,21 +299,28 @@ def install(
     env: dict[str, str],
     force: bool,
     dry_run: bool,
+    config_key: str = "mcpServers",
+    entry_extra: tuple[tuple[str, str], ...] = (),
 ) -> InstallResult:
-    """Insert or update the named server entry."""
+    """Insert or update the named server entry.
+
+    ``config_key`` selects the JSON key the servers mapping nests under
+    (``"context_servers"`` for Zed, ``"mcpServers"`` everywhere else) and
+    ``entry_extra`` carries host-specific entry fields (synthbench#262).
+    """
     config = _load_config(target)
-    servers = config.get("mcpServers")
+    servers = config.get(config_key)
     if not isinstance(servers, dict):
         servers = {}
 
     existing = servers.get(name)
-    new_entry = build_entry(command, env)
+    new_entry = build_entry(command, env, entry_extra)
     warnings = None if mcp_extra_available() else [MCP_EXTRA_WARNING]
 
     if existing == new_entry:
         # No-op: report the current on-disk config as the resulting config
         # so dry-run consumers can still inspect the unchanged state.
-        config["mcpServers"] = servers
+        config[config_key] = servers
         return InstallResult(
             target=target,
             name=name,
@@ -222,7 +337,7 @@ def install(
         )
 
     servers[name] = new_entry
-    config["mcpServers"] = servers
+    config[config_key] = servers
     if dry_run:
         action = "would-update" if is_update else "would-install"
         return InstallResult(
@@ -246,8 +361,18 @@ def install(
     )
 
 
-def uninstall(*, target: Path, name: str, dry_run: bool) -> InstallResult:
-    """Remove the named server entry. No-op if it isn't present."""
+def uninstall(
+    *,
+    target: Path,
+    name: str,
+    dry_run: bool,
+    config_key: str = "mcpServers",
+) -> InstallResult:
+    """Remove the named server entry. No-op if it isn't present.
+
+    Removes exactly the one entry under ``config[config_key][name]`` —
+    every other server and every unrelated top-level key is preserved.
+    """
     if not target.exists():
         return InstallResult(
             target=target,
@@ -258,12 +383,12 @@ def uninstall(*, target: Path, name: str, dry_run: bool) -> InstallResult:
         )
 
     config = _load_config(target)
-    servers = config.get("mcpServers")
+    servers = config.get(config_key)
     if not isinstance(servers, dict) or name not in servers:
         # Surface the unchanged config so dry-run consumers see the
         # current state even on no-op.
         if isinstance(servers, dict):
-            config["mcpServers"] = servers
+            config[config_key] = servers
         return InstallResult(
             target=target,
             name=name,
@@ -276,7 +401,7 @@ def uninstall(*, target: Path, name: str, dry_run: bool) -> InstallResult:
         # Materialize the post-removal config without writing.
         preview_servers = {k: v for k, v in servers.items() if k != name}
         preview = dict(config)
-        preview["mcpServers"] = preview_servers
+        preview[config_key] = preview_servers
         return InstallResult(
             target=target,
             name=name,
@@ -286,7 +411,7 @@ def uninstall(*, target: Path, name: str, dry_run: bool) -> InstallResult:
         )
 
     del servers[name]
-    config["mcpServers"] = servers
+    config[config_key] = servers
     _atomic_write(target, config)
     return InstallResult(
         target=target,
@@ -344,11 +469,15 @@ def format_resulting_config(result: InstallResult) -> str | None:
 
 __all__ = [
     "DEFAULT_SERVER_NAME",
+    "HOSTS",
+    "HostSpec",
     "InstallResult",
     "build_entry",
+    "detect_hosts",
     "format_json",
     "format_resulting_config",
     "format_text",
+    "host_config_path",
     "install",
     "mcp_extra_available",
     "parse_env_pairs",

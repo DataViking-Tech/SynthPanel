@@ -462,14 +462,32 @@ each provider key picks.
 
 ## Use with Claude Code / Cursor / Windsurf / Zed
 
-Copy the JSON snippet for your editor into the listed config file, set
-your API key, and restart the editor. `synthpanel mcp-serve` is launched
-on demand over stdio — no long-running process to manage.
+One-liner for any supported editor (writes exactly the JSON shown in the
+sections below, merging non-destructively into your existing config):
+
+```bash
+synthpanel mcp install --host auto   # detect installed editors and confirm each
+```
+
+Or pick a host explicitly: `--host claude-code | claude-desktop | cursor |
+windsurf | zed`. `--dry-run` previews the change; `synthpanel mcp uninstall`
+removes exactly the entry it manages. No API key is written unless you pass
+`--env` — set a provider key in your environment or run `synthpanel login`
+(sampling-capable hosts need no key at all).
+
+Prefer to hand-edit? Copy the JSON snippet for your editor into the listed
+config file, set your API key, and restart the editor. `synthpanel mcp-serve`
+is launched on demand over stdio — no long-running process to manage.
 
 <details>
 <summary><b>Claude Code</b></summary>
 
-Add to `.mcp.json` at your project root (or `~/.claude.json` for all projects):
+```bash
+synthpanel mcp install                  # ~/.claude.json (all projects)
+synthpanel mcp install --scope project  # ./.mcp.json (checked in)
+```
+
+Or add to `.mcp.json` at your project root (or `~/.claude.json` for all projects):
 
 ```json
 {
@@ -500,7 +518,12 @@ steps and per-host guidance.
 <details>
 <summary><b>Cursor</b></summary>
 
-Add to `.cursor/mcp.json` at your project root (or `~/.cursor/mcp.json` for all projects):
+```bash
+synthpanel mcp install --host cursor                  # ~/.cursor/mcp.json (all projects)
+synthpanel mcp install --host cursor --scope project  # ./.cursor/mcp.json
+```
+
+Or add to `.cursor/mcp.json` at your project root (or `~/.cursor/mcp.json` for all projects):
 
 ```json
 {
@@ -519,7 +542,11 @@ Add to `.cursor/mcp.json` at your project root (or `~/.cursor/mcp.json` for all 
 <details>
 <summary><b>Windsurf</b></summary>
 
-Add to `~/.codeium/windsurf/mcp_config.json` (or open
+```bash
+synthpanel mcp install --host windsurf   # ~/.codeium/windsurf/mcp_config.json
+```
+
+Or add to `~/.codeium/windsurf/mcp_config.json` (or open
 **Settings → Windsurf Settings → MCP Servers → View Raw Config**):
 
 ```json
@@ -539,7 +566,11 @@ Add to `~/.codeium/windsurf/mcp_config.json` (or open
 <details>
 <summary><b>Zed</b></summary>
 
-Zed uses `context_servers` (not `mcpServers`). Add to `~/.config/zed/settings.json`:
+```bash
+synthpanel mcp install --host zed   # ~/.config/zed/settings.json (context_servers schema)
+```
+
+Or hand-edit — Zed uses `context_servers` (not `mcpServers`). Add to `~/.config/zed/settings.json`:
 
 ```json
 {
@@ -593,7 +624,11 @@ gives the subprocess room to import the MCP SDK on first launch.
 <details>
 <summary><b>Claude Desktop</b></summary>
 
-Open **Settings → Developer → Edit Config** (or edit the file directly):
+```bash
+synthpanel mcp install --host claude-desktop   # platform-specific config path
+```
+
+Or open **Settings → Developer → Edit Config** (or edit the file directly):
 
 - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
@@ -1057,6 +1092,19 @@ synthpanel panel run --personas p.yaml --instrument s.yaml --model gpt-4o
 OPENAI_BASE_URL=http://localhost:11434/v1 \
 synthpanel panel run --personas p.yaml --instrument s.yaml --model llama3
 ```
+
+> **Large panels and the OpenRouter default (synthbench#261):** when
+> `--model` is omitted, the default is resolved from whichever key is
+> present — for an OpenRouter-only environment that's `openrouter/auto`,
+> whose auto-router can pick a slow reasoning model and stall a
+> 20-persona panel for 15+ minutes. So for runs with **≥ 10 personas**
+> and no explicit model, synthpanel auto-selects a fast equivalent
+> (`openrouter/anthropic/claude-haiku-4.5`) and prints a one-line note.
+> This applies identically on the CLI, SDK, and MCP surfaces. Pass
+> `--model openrouter/auto` (or `model="openrouter/auto"`) explicitly to
+> opt back into the auto-router — treat it as the "highest fidelity,
+> accept the latency" option. Runs under 10 personas keep the normal
+> default.
 
 ### Model Aliases
 

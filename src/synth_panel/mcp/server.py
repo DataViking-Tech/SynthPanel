@@ -74,6 +74,7 @@ from synth_panel.cost import (
 )
 from synth_panel.cost import TokenUsage as CostTokenUsage
 from synth_panel.instrument import Instrument, InstrumentError, parse_instrument
+from synth_panel.llm import fast_default as _fast_default
 from synth_panel.llm.client import LLMClient
 from synth_panel.llm.models import (
     CompletionRequest,
@@ -186,14 +187,16 @@ def _resolve_mcp_default_model() -> str:
 # run to 25–40 s. Most entries in :data:`_MCP_DEFAULT_MODEL_PREFERENCE`
 # are already fast (haiku, gpt-4o-mini, gemini-2.5-flash) — only
 # ``openrouter/auto`` needs the swap today.
-LARGE_PANEL_PERSONA_THRESHOLD = 10
+#
+# synthbench#261: the policy now lives in the shared
+# :mod:`synth_panel.llm.fast_default` module so the CLI and SDK apply the
+# same swap; the names below are kept as re-exports for compatibility.
+LARGE_PANEL_PERSONA_THRESHOLD = _fast_default.LARGE_PANEL_PERSONA_THRESHOLD
 
 # Slow auto-resolved default → fast equivalent for large panels. Keyed on
 # the alias returned by :func:`_resolve_mcp_default_model`; aliases that
 # are already fast (or whose routing the user controls) are absent.
-_LARGE_PANEL_FAST_MODEL_SWAP: dict[str, str] = {
-    "openrouter/auto": "openrouter/anthropic/claude-haiku-4.5",
-}
+_LARGE_PANEL_FAST_MODEL_SWAP: dict[str, str] = _fast_default.FAST_MODEL_SWAP
 
 
 def _resolve_mcp_default_model_for_panel(persona_count: int) -> str:
@@ -211,18 +214,16 @@ def _resolve_mcp_default_model_for_panel(persona_count: int) -> str:
     user who deliberately asked for ``openrouter/auto`` still gets it.
     """
     base = _resolve_mcp_default_model()
-    if persona_count >= LARGE_PANEL_PERSONA_THRESHOLD:
-        swapped = _LARGE_PANEL_FAST_MODEL_SWAP.get(base)
-        if swapped is not None and swapped != base:
-            logger.info(
-                "auto-fast-model: persona_count=%d >= %d, swapping default %s → %s (sy-2ag)",
-                persona_count,
-                LARGE_PANEL_PERSONA_THRESHOLD,
-                base,
-                swapped,
-            )
-            return swapped
-    return base
+    model, swapped_from = _fast_default.fast_default_for_panel(base, persona_count)
+    if swapped_from is not None:
+        logger.info(
+            "auto-fast-model: persona_count=%d >= %d, swapping default %s → %s (sy-2ag)",
+            persona_count,
+            LARGE_PANEL_PERSONA_THRESHOLD,
+            swapped_from,
+            model,
+        )
+    return model
 
 
 def _serialize_content_block(block: Any) -> dict[str, Any]:

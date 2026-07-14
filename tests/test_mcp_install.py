@@ -640,3 +640,278 @@ class TestMcpExtraGuard:
         missing-extra hint reads from the same constant."""
         assert "synthpanel[mcp]" in mcp_install.MISSING_MCP_EXTRA_MESSAGE
         assert "pip install" in mcp_install.MISSING_MCP_EXTRA_MESSAGE
+
+
+# ---------------------------------------------------------------------------
+# Named hosts + `mcp uninstall` subcommand (synthbench#262)
+# ---------------------------------------------------------------------------
+
+
+class TestHostRegistry:
+    def test_host_config_paths_user_scope(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        home = Path.home()
+        assert mcp_install.host_config_path(mcp_install.HOSTS["claude-code"]) == home / ".claude.json"
+        assert mcp_install.host_config_path(mcp_install.HOSTS["cursor"]) == home / ".cursor" / "mcp.json"
+        assert (
+            mcp_install.host_config_path(mcp_install.HOSTS["windsurf"])
+            == home / ".codeium" / "windsurf" / "mcp_config.json"
+        )
+        assert mcp_install.host_config_path(mcp_install.HOSTS["zed"]) == home / ".config" / "zed" / "settings.json"
+        desktop = mcp_install.host_config_path(mcp_install.HOSTS["claude-desktop"])
+        assert desktop.name == "claude_desktop_config.json"
+
+    def test_project_scope_paths(self, monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        assert mcp_install.host_config_path(mcp_install.HOSTS["claude-code"], "project") == tmp_path / ".mcp.json"
+        assert mcp_install.host_config_path(mcp_install.HOSTS["cursor"], "project") == tmp_path / ".cursor" / "mcp.json"
+
+    def test_project_scope_rejected_for_user_only_hosts(self):
+        for key in ("claude-desktop", "windsurf", "zed"):
+            with pytest.raises(ValueError):
+                mcp_install.host_config_path(mcp_install.HOSTS[key], "project")
+
+    def test_zed_uses_context_servers_schema(self):
+        zed = mcp_install.HOSTS["zed"]
+        assert zed.config_key == "context_servers"
+        assert dict(zed.entry_extra) == {"source": "custom"}
+
+    def test_detect_hosts_reports_only_existing_configs(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.delenv("APPDATA", raising=False)
+        assert mcp_install.detect_hosts() == []
+
+        cursor_cfg = tmp_path / ".cursor" / "mcp.json"
+        cursor_cfg.parent.mkdir(parents=True)
+        cursor_cfg.write_text("{}")
+        zed_cfg = tmp_path / ".config" / "zed" / "settings.json"
+        zed_cfg.parent.mkdir(parents=True)
+        zed_cfg.write_text("{}")
+
+        detected = mcp_install.detect_hosts()
+        keys = [h.key for h, _ in detected]
+        assert keys == ["cursor", "zed"]
+        assert [p for _, p in detected] == [cursor_cfg, zed_cfg]
+
+
+class TestHostCLI:
+    def test_install_host_cursor_writes_user_config(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        rc = main(["mcp", "install", "--host", "cursor", "--command", "synthpanel"])
+        assert rc == 0
+        data = json.loads((tmp_path / ".cursor" / "mcp.json").read_text())
+        assert data["mcpServers"]["synth_panel"] == {
+            "command": "synthpanel",
+            "args": ["mcp-serve"],
+        }
+        out = capsys.readouterr().out
+        assert "Restart Cursor to pick up the server." in out
+
+    def test_install_host_windsurf_writes_config(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        rc = main(["mcp", "install", "--host", "windsurf", "--command", "synthpanel"])
+        assert rc == 0
+        data = json.loads((tmp_path / ".codeium" / "windsurf" / "mcp_config.json").read_text())
+        assert data["mcpServers"]["synth_panel"]["args"] == ["mcp-serve"]
+
+    def test_install_host_claude_desktop_writes_config(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        rc = main(["mcp", "install", "--host", "claude-desktop", "--command", "synthpanel"])
+        assert rc == 0
+        target = mcp_install.host_config_path(mcp_install.HOSTS["claude-desktop"])
+        data = json.loads(target.read_text())
+        assert data["mcpServers"]["synth_panel"]["command"] == "synthpanel"
+
+    def test_install_host_zed_writes_context_servers(self, monkeypatch, tmp_path, capsys):
+        """Zed's schema differs: context_servers + source: custom."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        settings = tmp_path / ".config" / "zed" / "settings.json"
+        settings.parent.mkdir(parents=True)
+        settings.write_text(json.dumps({"theme": "One Dark", "context_servers": {"other": {"command": "x"}}}))
+
+        rc = main(["mcp", "install", "--host", "zed", "--command", "synthpanel"])
+        assert rc == 0
+        data = json.loads(settings.read_text())
+        # Non-destructive merge: unrelated settings and other servers survive.
+        assert data["theme"] == "One Dark"
+        assert "other" in data["context_servers"]
+        assert data["context_servers"]["synth_panel"] == {
+            "source": "custom",
+            "command": "synthpanel",
+            "args": ["mcp-serve"],
+        }
+        assert "mcpServers" not in data
+        assert "Restart Zed to pick up the server." in capsys.readouterr().out
+
+    def test_install_host_project_scope_cursor(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.chdir(tmp_path)
+        rc = main(["mcp", "install", "--host", "cursor", "--scope", "project", "--command", "synthpanel"])
+        assert rc == 0
+        assert (tmp_path / ".cursor" / "mcp.json").is_file()
+
+    def test_install_host_project_scope_rejected_for_zed(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        rc = main(["mcp", "install", "--host", "zed", "--scope", "project"])
+        assert rc == 1
+        assert "no project-scope config" in capsys.readouterr().err
+
+    def test_install_without_env_prints_key_note(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        rc = main(["mcp", "install", "--host", "cursor", "--command", "synthpanel"])
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert "No API key was written" in err
+        assert "synthpanel login" in err
+
+    def test_install_with_env_skips_key_note(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        rc = main(
+            [
+                "mcp",
+                "install",
+                "--host",
+                "cursor",
+                "--command",
+                "synthpanel",
+                "--env",
+                "ANTHROPIC_API_KEY=sk-test",
+            ]
+        )
+        assert rc == 0
+        assert "No API key was written" not in capsys.readouterr().err
+
+    def test_install_host_dry_run_writes_nothing(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        rc = main(["mcp", "install", "--host", "zed", "--dry-run", "--command", "synthpanel"])
+        assert rc == 0
+        assert not (tmp_path / ".config" / "zed" / "settings.json").exists()
+        captured = capsys.readouterr()
+        assert "Would install" in captured.err
+        payload = json.loads(captured.out)
+        assert payload["context_servers"]["synth_panel"]["source"] == "custom"
+        # Dry-run never claims a restart is needed.
+        assert "Restart" not in captured.out
+
+
+class TestUninstallSubcommand:
+    def test_parser_registers_uninstall(self):
+        args = build_parser().parse_args(["mcp", "uninstall", "--host", "zed"])
+        assert args.command == "mcp"
+        assert args.mcp_command == "uninstall"
+        assert args.host == "zed"
+        assert args.name == "synth_panel"
+        assert args.dry_run is False
+
+    def test_uninstall_removes_only_our_entry(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        cfg = tmp_path / ".cursor" / "mcp.json"
+        cfg.parent.mkdir(parents=True)
+        cfg.write_text(
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "other": {"command": "other-server"},
+                        "synth_panel": {"command": "synthpanel", "args": ["mcp-serve"]},
+                    },
+                    "unrelated": True,
+                }
+            )
+        )
+        rc = main(["mcp", "uninstall", "--host", "cursor"])
+        assert rc == 0
+        data = json.loads(cfg.read_text())
+        assert "synth_panel" not in data["mcpServers"]
+        assert data["mcpServers"]["other"] == {"command": "other-server"}
+        assert data["unrelated"] is True
+        assert "Restart Cursor to pick up the server." in capsys.readouterr().out
+
+    def test_uninstall_zed_uses_context_servers(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        cfg = tmp_path / ".config" / "zed" / "settings.json"
+        cfg.parent.mkdir(parents=True)
+        cfg.write_text(
+            json.dumps(
+                {
+                    "context_servers": {
+                        "synth_panel": {"source": "custom", "command": "synthpanel", "args": ["mcp-serve"]},
+                        "keep": {"source": "custom", "command": "keep"},
+                    }
+                }
+            )
+        )
+        rc = main(["mcp", "uninstall", "--host", "zed"])
+        assert rc == 0
+        data = json.loads(cfg.read_text())
+        assert "synth_panel" not in data["context_servers"]
+        assert "keep" in data["context_servers"]
+
+    def test_uninstall_noop_when_absent(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        rc = main(["mcp", "uninstall", "--host", "cursor"])
+        assert rc == 0
+        assert "No changes needed" in capsys.readouterr().out
+
+    def test_uninstall_works_without_mcp_extra(self, monkeypatch, tmp_path):
+        """Cleanup must never be blocked by a missing optional dep."""
+        monkeypatch.setattr(mcp_install, "mcp_extra_available", lambda: False)
+        cfg = tmp_path / "cfg.json"
+        cfg.write_text(json.dumps({"mcpServers": {"synth_panel": {"command": "synthpanel"}}}))
+        rc = main(["mcp", "uninstall", "--target", str(cfg)])
+        assert rc == 0
+        assert "synth_panel" not in json.loads(cfg.read_text()).get("mcpServers", {})
+
+
+class TestAutoDetect:
+    def _seed_hosts(self, home: Path) -> tuple[Path, Path]:
+        cursor_cfg = home / ".cursor" / "mcp.json"
+        cursor_cfg.parent.mkdir(parents=True)
+        cursor_cfg.write_text("{}")
+        zed_cfg = home / ".config" / "zed" / "settings.json"
+        zed_cfg.parent.mkdir(parents=True)
+        zed_cfg.write_text("{}")
+        return cursor_cfg, zed_cfg
+
+    def test_auto_with_yes_installs_into_all_detected(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.delenv("APPDATA", raising=False)
+        cursor_cfg, zed_cfg = self._seed_hosts(tmp_path)
+
+        rc = main(["mcp", "install", "--host", "auto", "--yes", "--command", "synthpanel"])
+        assert rc == 0
+        assert "synth_panel" in json.loads(cursor_cfg.read_text())["mcpServers"]
+        assert json.loads(zed_cfg.read_text())["context_servers"]["synth_panel"]["source"] == "custom"
+        captured = capsys.readouterr()
+        assert "Detected MCP host configs" in captured.err
+        assert "Restart Cursor to pick up the server." in captured.out
+        assert "Restart Zed to pick up the server." in captured.out
+
+    def test_auto_without_yes_non_tty_errors(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.delenv("APPDATA", raising=False)
+        self._seed_hosts(tmp_path)
+        monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+
+        rc = main(["mcp", "install", "--host", "auto", "--command", "synthpanel"])
+        assert rc == 1
+        assert "--yes" in capsys.readouterr().err
+
+    def test_auto_prompts_and_honors_answers(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.delenv("APPDATA", raising=False)
+        cursor_cfg, zed_cfg = self._seed_hosts(tmp_path)
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+        answers = iter(["y", "n"])
+        monkeypatch.setattr(builtins, "input", lambda prompt="": next(answers))
+
+        rc = main(["mcp", "install", "--host", "auto", "--command", "synthpanel"])
+        assert rc == 0
+        assert "synth_panel" in json.loads(cursor_cfg.read_text())["mcpServers"]
+        assert "context_servers" not in json.loads(zed_cfg.read_text())
+
+    def test_auto_with_no_hosts_detected_errors(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.delenv("APPDATA", raising=False)
+        rc = main(["mcp", "install", "--host", "auto", "--yes"])
+        assert rc == 1
+        assert "no known MCP host configs detected" in capsys.readouterr().err

@@ -76,6 +76,7 @@ from synth_panel.cost import (
 from synth_panel.credentials import has_credential
 from synth_panel.diff import CategoricalQuestionDiff, RunDiff, TextQuestionDiff
 from synth_panel.instrument import Instrument, InstrumentError, parse_instrument
+from synth_panel.llm import fast_default as _fast_default
 from synth_panel.llm.client import LLMClient
 from synth_panel.metadata import PanelTimer, build_metadata
 from synth_panel.orchestrator import PanelistResult, RunAbortedError, run_panel_parallel
@@ -1521,6 +1522,24 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 for c in collisions
             ]
         personas = merged
+
+    # synthbench#261 / sy-2ag: when --model was NOT given and the
+    # auto-resolved default is a known-slow router (openrouter/auto), a
+    # ≥10-persona panel can hang for many minutes. Swap the default for a
+    # fast equivalent via the shared policy and say so on stderr. Explicit
+    # --model / --models / --best-model-for picks are honored verbatim
+    # (all three leave args.model / has_models truthy by this point).
+    if not getattr(args, "model", None) and not has_models:
+        fast_model, swapped_from = _fast_default.fast_default_for_panel(model, len(personas))
+        if swapped_from is not None:
+            model = fast_model
+            print(
+                "Note: "
+                + _fast_default.format_fast_default_note(
+                    fast_model, swapped_from, len(personas), override_hint="--model"
+                ),
+                file=sys.stderr,
+            )
 
     try:
         instrument = _load_instrument(args.instrument)
@@ -5669,71 +5688,31 @@ def handle_mcp_serve(args: argparse.Namespace, fmt: OutputFormat) -> int:
     return 0
 
 
-def handle_mcp_install(args: argparse.Namespace, fmt: OutputFormat) -> int:
-    """Register synthpanel as an MCP server in a host's JSON config (sy-skf).
+_MCP_INSTALL_KEY_NOTE = (
+    "No API key was written to the config. Sampling-capable hosts "
+    "(Claude Code, Claude Desktop, Cursor, Windsurf) can run panels with "
+    "no key at all; otherwise set a provider key (e.g. ANTHROPIC_API_KEY) "
+    "in your environment or run `synthpanel login` — see the README's "
+    "'LLM Provider Support' section."
+)
 
-    sy-xyn: refuse by default to write a host config that points at a
-    ``synthpanel mcp-serve`` command which will fail at runtime because
-    the ``mcp`` extra isn't installed in this env. ``--uninstall`` is
-    always allowed (so users can clean up a broken config) and
-    ``--allow-missing-extra`` opts out for cross-machine workflows.
-    """
+
+def _emit_mcp_install_result(
+    result: Any,
+    fmt: OutputFormat,
+    dry_run: bool,
+    host: Any | None,
+) -> None:
+    """Render a single InstallResult (shared by explicit and auto mode)."""
     from synth_panel.cli import mcp_install as helper
-
-    target = helper.resolve_target(getattr(args, "scope", "user"), getattr(args, "target", None))
-    name = getattr(args, "name", None) or helper.DEFAULT_SERVER_NAME
-    dry_run = bool(getattr(args, "dry_run", False))
-    allow_missing_extra = bool(getattr(args, "allow_missing_extra", False))
-
-    # sy-xyn: pre-flight extra check. Skip for uninstall (always safe)
-    # and for callers who explicitly opted out via --allow-missing-extra.
-    # The probe (added in #512 as mcp_extra_available) tells us whether
-    # writing this config would point the host at a `synthpanel mcp-serve`
-    # that crashes at launch.
-    is_uninstall = bool(getattr(args, "uninstall", False))
-    if not is_uninstall and not allow_missing_extra and not helper.mcp_extra_available():
-        print(
-            f"Error: refusing to install MCP config — {helper.MISSING_MCP_EXTRA_MESSAGE}. "
-            "Pass --allow-missing-extra to write the config anyway "
-            "(useful when the host runs synthpanel in a different env).",
-            file=sys.stderr,
-        )
-        return 1
-
-    try:
-        if getattr(args, "uninstall", False):
-            result = helper.uninstall(target=target, name=name, dry_run=dry_run)
-        else:
-            try:
-                env = helper.parse_env_pairs(getattr(args, "mcp_env", None))
-            except ValueError as exc:
-                print(f"Error: {exc}", file=sys.stderr)
-                return 1
-            command = helper.resolve_command(getattr(args, "mcp_command_override", None))
-            result = helper.install(
-                target=target,
-                name=name,
-                command=command,
-                env=env,
-                force=bool(getattr(args, "force", False)),
-                dry_run=dry_run,
-            )
-    except FileExistsError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return 1
-    except (ValueError, json.JSONDecodeError) as exc:
-        print(f"Error: failed to parse {target}: {exc}", file=sys.stderr)
-        return 1
-    except OSError as exc:
-        print(f"Error: failed to write {target}: {exc}", file=sys.stderr)
-        return 1
 
     if fmt is OutputFormat.JSON:
         # JSON mode already carries the resulting-config snapshot in the
         # payload (see helper.format_json); a single line on stdout
         # preserves the existing machine-readable contract.
         print(helper.format_json(result))
-    elif dry_run:
+        return
+    if dry_run:
         # sy-0k2 / gh-495: surface the actual config payload so dry-run
         # output is usable by agents and shell pipelines. Human prose
         # goes to stderr; stdout is pretty-printed JSON of the resulting
@@ -5746,11 +5725,160 @@ def handle_mcp_install(args: argparse.Namespace, fmt: OutputFormat) -> int:
         rendered = helper.format_resulting_config(result)
         if rendered is not None:
             print(rendered)
+        return
+    print(helper.format_text(result))
+    if result.warnings:
+        for warning in result.warnings:
+            print(f"Warning: {warning}", file=sys.stderr)
+    if result.action in ("installed", "updated", "removed"):
+        # synthbench#262: the host only re-reads its MCP config on launch.
+        label = host.label if host is not None else "your MCP host"
+        print(f"Restart {label} to pick up the server.")
+
+
+def handle_mcp_install(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Register synthpanel as an MCP server in a host's JSON config (sy-skf).
+
+    sy-xyn: refuse by default to write a host config that points at a
+    ``synthpanel mcp-serve`` command which will fail at runtime because
+    the ``mcp`` extra isn't installed in this env. ``--uninstall`` is
+    always allowed (so users can clean up a broken config) and
+    ``--allow-missing-extra`` opts out for cross-machine workflows.
+
+    synthbench#262: ``--host`` selects a named host (claude-code,
+    claude-desktop, cursor, windsurf, zed — Zed uses the
+    ``context_servers`` schema) or ``auto`` to detect installed hosts and
+    confirm each write. ``synthpanel mcp uninstall`` routes here too with
+    ``args.uninstall`` pre-set.
+    """
+    from synth_panel.cli import mcp_install as helper
+
+    name = getattr(args, "name", None) or helper.DEFAULT_SERVER_NAME
+    dry_run = bool(getattr(args, "dry_run", False))
+    allow_missing_extra = bool(getattr(args, "allow_missing_extra", False))
+    is_uninstall = bool(getattr(args, "uninstall", False))
+    host_arg = getattr(args, "host", None)
+    target_arg = getattr(args, "target", None)
+    scope = getattr(args, "scope", "user") or "user"
+    assume_yes = bool(getattr(args, "yes", False))
+
+    # sy-xyn: pre-flight extra check. Skip for uninstall (always safe)
+    # and for callers who explicitly opted out via --allow-missing-extra.
+    # The probe (added in #512 as mcp_extra_available) tells us whether
+    # writing this config would point the host at a `synthpanel mcp-serve`
+    # that crashes at launch.
+    if not is_uninstall and not allow_missing_extra and not helper.mcp_extra_available():
+        print(
+            f"Error: refusing to install MCP config — {helper.MISSING_MCP_EXTRA_MESSAGE}. "
+            "Pass --allow-missing-extra to write the config anyway "
+            "(useful when the host runs synthpanel in a different env).",
+            file=sys.stderr,
+        )
+        return 1
+
+    # Build the worklist of (host-or-None, config-path) pairs.
+    worklist: list[tuple[Any | None, Path]] = []
+    if target_arg:
+        # Explicit path override: host-agnostic, mcpServers schema.
+        worklist.append((None, Path(target_arg).expanduser()))
+    elif host_arg == "auto":
+        detected = helper.detect_hosts()
+        if not detected:
+            print(
+                "Error: no known MCP host configs detected (looked for "
+                "Claude Code, Claude Desktop, Cursor, Windsurf, Zed user "
+                "configs). Pass --host <name> to create one explicitly, or "
+                "--target PATH for any other host.",
+                file=sys.stderr,
+            )
+            return 1
+        verb = "Remove synthpanel from" if is_uninstall else "Install synthpanel into"
+        print(
+            "Detected MCP host configs: " + ", ".join(f"{h.label} ({p})" for h, p in detected),
+            file=sys.stderr,
+        )
+        for host, path in detected:
+            if assume_yes or dry_run:
+                worklist.append((host, path))
+                continue
+            if not sys.stdin.isatty():
+                print(
+                    "Error: --host auto needs confirmation for each detected "
+                    "host but stdin is not a TTY. Pass --yes to accept all, "
+                    "or pick one host with --host <name>.",
+                    file=sys.stderr,
+                )
+                return 1
+            answer = input(f"{verb} {path} ({host.label})? [y/N] ").strip().lower()
+            if answer in ("y", "yes"):
+                worklist.append((host, path))
+        if not worklist:
+            print("Nothing to do.", file=sys.stderr)
+            return 0
+    elif host_arg:
+        host = helper.HOSTS[host_arg]
+        try:
+            path = helper.host_config_path(host, scope)
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        worklist.append((host, path))
     else:
-        print(helper.format_text(result))
-        if result.warnings:
-            for warning in result.warnings:
-                print(f"Warning: {warning}", file=sys.stderr)
+        # Legacy default: Claude Code, honoring --scope (user → ~/.claude.json,
+        # project → ./.mcp.json).
+        worklist.append((helper.HOSTS["claude-code"], helper.resolve_target(scope, None)))
+
+    env: dict[str, str] = {}
+    command = ""
+    if not is_uninstall:
+        try:
+            env = helper.parse_env_pairs(getattr(args, "mcp_env", None))
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        command = helper.resolve_command(getattr(args, "mcp_command_override", None))
+
+    wrote_install = False
+    for host, target in worklist:
+        config_key = host.config_key if host is not None else "mcpServers"
+        entry_extra = host.entry_extra if host is not None else ()
+        try:
+            if is_uninstall:
+                result = helper.uninstall(
+                    target=target,
+                    name=name,
+                    dry_run=dry_run,
+                    config_key=config_key,
+                )
+            else:
+                result = helper.install(
+                    target=target,
+                    name=name,
+                    command=command,
+                    env=env,
+                    force=bool(getattr(args, "force", False)),
+                    dry_run=dry_run,
+                    config_key=config_key,
+                    entry_extra=entry_extra,
+                )
+        except FileExistsError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        except (ValueError, json.JSONDecodeError) as exc:
+            print(f"Error: failed to parse {target}: {exc}", file=sys.stderr)
+            return 1
+        except OSError as exc:
+            print(f"Error: failed to write {target}: {exc}", file=sys.stderr)
+            return 1
+
+        _emit_mcp_install_result(result, fmt, dry_run, host)
+        if result.action in ("installed", "updated"):
+            wrote_install = True
+
+    # synthbench#262: never bake secrets in by default — when the entry was
+    # written without an env block, point at `synthpanel login` instead.
+    if wrote_install and not env and fmt is not OutputFormat.JSON:
+        print(f"Note: {_MCP_INSTALL_KEY_NOTE}", file=sys.stderr)
     return 0
 
 

@@ -234,6 +234,11 @@ def _main(argv: list[str] | None) -> int:
         sub = getattr(args, "mcp_command", None)
         if sub == "install":
             return handle_mcp_install(args, output_format)
+        elif sub == "uninstall":
+            # synthbench#262: first-class mirror of `mcp install --uninstall`.
+            # Same handler; the flag selects the removal path.
+            args.uninstall = True
+            return handle_mcp_install(args, output_format)
         else:
             parser.parse_args(["mcp", "--help"])
             return 1

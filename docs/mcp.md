@@ -12,21 +12,36 @@ The server communicates over stdin/stdout using JSON-RPC (the MCP protocol). It 
 
 ## Editor Configuration
 
-### Claude Code / Cursor / Windsurf
+### Claude Code / Claude Desktop / Cursor / Windsurf / Zed
 
-The fastest path is the bundled installer (sy-skf):
+The fastest path is the bundled installer (sy-skf, synthbench#262):
 
 ```bash
-synthpanel mcp install                                 # writes ~/.claude.json
+synthpanel mcp install                                 # writes ~/.claude.json (Claude Code)
 synthpanel mcp install --scope project                 # writes ./.mcp.json (checked in)
-synthpanel mcp install --target ~/.cursor/mcp.json     # any host with mcpServers
-synthpanel mcp install --env ANTHROPIC_API_KEY=sk-...  # bake credentials into the entry
-synthpanel mcp install --uninstall                     # remove the entry
+synthpanel mcp install --host claude-desktop           # platform-specific Claude Desktop config
+synthpanel mcp install --host cursor                   # ~/.cursor/mcp.json (--scope project → ./.cursor/mcp.json)
+synthpanel mcp install --host windsurf                 # ~/.codeium/windsurf/mcp_config.json
+synthpanel mcp install --host zed                      # ~/.config/zed/settings.json (context_servers schema)
+synthpanel mcp install --host auto                     # detect installed hosts, confirm each (--yes accepts all)
+synthpanel mcp install --target /path/to/mcp.json      # any other host with an mcpServers map
+synthpanel mcp install --env ANTHROPIC_API_KEY=sk-...  # bake credentials into the entry (optional)
+synthpanel mcp uninstall --host zed                    # remove exactly the entry the installer manages
 ```
 
-The command merges into the host's existing `mcpServers` map, refuses to
-overwrite a clashing entry without `--force`, and writes user-scoped
-files with mode `0600`.
+The command merges into the host's existing servers map (`mcpServers`,
+or `context_servers` for Zed — the written JSON matches the README's
+per-host snippets exactly), never touches other servers or unrelated
+settings, refuses to overwrite a clashing entry without `--force`, and
+writes user-scoped files with mode `0600`. `--host auto` only offers
+hosts whose user-level config file already exists — it never creates a
+config for an editor that isn't installed. After a real write it prints
+`Restart <host> to pick up the server.`
+
+No secret is written unless you pass `--env` explicitly: by default the
+entry has no `env` block and the installer prints a note pointing at
+`synthpanel login` / provider env vars (sampling-capable hosts need no
+key at all — see [Sampling Mode](#sampling-mode)).
 
 The installer also refuses by default when the `mcp` optional extra
 isn't installed in the current Python env — without it,
@@ -461,6 +476,18 @@ order; the first match wins:
 | 5 | `XAI_API_KEY` | `grok-3` |
 | 6 | `OPENROUTER_API_KEY` | `openrouter/auto` |
 | (none) | — | `haiku` (terminal fallback; the LLM client surfaces the missing-creds error) |
+
+**Large-panel fast default (sy-2ag / GH#462 / synthbench#261):** when
+the panel has **≥ 10 personas** and `model` was *not* explicitly
+supplied, a known-slow auto-resolved default is swapped for a fast
+equivalent — today that means `openrouter/auto` →
+`openrouter/anthropic/claude-haiku-4.5` (OpenRouter's auto-router can
+pick a slow reasoning model, turning a 20-persona panel into a
+15-minute stall). The same policy applies on all three surfaces (MCP,
+SDK, `panel run`) via the shared `synth_panel.llm.fast_default` module,
+and each surface emits a one-line note when the swap fires. An explicit
+`model="openrouter/auto"` is always honored — the swap only touches the
+implicit default.
 
 Pass `model=` explicitly to override (e.g. `"opus"`, `"gpt-4o"`,
 `"gemini-2.5-pro"`). The CLI's weighted-spec syntax
