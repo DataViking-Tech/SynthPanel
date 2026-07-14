@@ -9,7 +9,7 @@
     </title>
     <meta
       name="description"
-      content="Open-source alternative to Synthetic Users, FocusPanel.ai, Delve.ai. CLI + MCP server, any LLM, SPS 0.90 on SynthBench. MIT-licensed."
+      content="Open-source alternative to Synthetic Users, FocusPanel.ai, Delve.ai. CLI + MCP server, any LLM, tops the SynthBench leaderboard (SPS ~0.88). MIT-licensed."
     />
     <meta
       name="keywords"
@@ -28,7 +28,7 @@
     />
     <meta
       property="og:description"
-      content="Open-source, LLM-agnostic synthetic focus group tool. CLI + MCP server. SPS 0.90 on SynthBench. pip install synthpanel[mcp]."
+      content="Open-source, LLM-agnostic synthetic focus group tool. CLI + MCP server. Tops the SynthBench leaderboard (SPS ~0.88). pip install synthpanel[mcp]."
     />
     <meta
       property="og:url"
@@ -68,7 +68,7 @@
         "@context": "https://schema.org",
         "@type": "TechArticle",
         "headline": "SynthPanel vs Synthetic Users vs FocusPanel.ai — When Open-Source MCP Beats the SaaS",
-        "description": "SynthPanel is the open-source, LLM-agnostic alternative to commercial synthetic-respondent tools. CLI + 12-tool MCP server, MIT-licensed, SPS 0.90 on SynthBench.",
+        "description": "SynthPanel is the open-source, LLM-agnostic alternative to commercial synthetic-respondent tools. CLI + 12-tool MCP server, MIT-licensed, tops the SynthBench leaderboard (SPS ~0.88 on opinionsqa/subpop).",
         "datePublished": "2026-04-15",
         "author": { "@type": "Organization", "name": "DataViking", "url": "https://dataviking.tech" },
         "publisher": { "@type": "Organization", "name": "synthpanel", "url": "https://synthpanel.dev" },
@@ -178,8 +178,9 @@
             12-tool MCP server you can drop into Claude Code, Cursor, Windsurf,
             or Zed. Install with
             <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">pip install synthpanel[mcp]</code>.
-            MIT-licensed. Scores <strong>0.90 SPS</strong> on the SynthBench
-            human-parity benchmark via 3-model ensembles.
+            MIT-licensed. Its 3-model ensemble leads the SynthBench leaderboard
+            at <strong>SPS ~0.88</strong> (opinionsqa 0.877, subpop 0.879; snapshot
+            2026-07-13).
           </p>
         </aside>
 
@@ -289,8 +290,10 @@
           Gemini 2.5 Flash, blend at
           <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">--models sonnet:0.34,gpt-4o:0.33,gemini:0.33</code>,
           and the framework emits per-model distributions <em>and</em> the
-          weighted ensemble. This is how SynthPanel earns its 0.90 SynthBench
-          score: you cannot get that number from any single model alone.
+          weighted ensemble. This is how SynthPanel tops the SynthBench
+          leaderboard: the blended ensemble beats every single model on each
+          dataset — by roughly 0.03–0.06 SPS — which you cannot get from any
+          single model alone.
         </p>
 
         <h2 class="mt-12 text-xl font-semibold text-white sm:text-2xl">
@@ -344,12 +347,15 @@
           </li>
           <li>
             <strong>It is portable.</strong> Bundle an instrument as a "pack"
-            (SynthPanel ships five —
+            (SynthPanel ships eight v3 branching packs —
+            <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">churn-diagnosis</code>,
+            <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">feature-prioritization</code>,
+            <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">general-survey</code>,
+            <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">landing-page-comprehension</code>,
+            <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">market-research</code>,
+            <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">name-test</code>,
             <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">pricing-discovery</code>,
-            <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">feature-evaluation</code>,
-            <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">churn-exit</code>,
-            <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">messaging-test</code>,
-            <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">onboarding-friction</code>),
+            <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">product-feedback</code>),
             install it like a library, and every consumer of that pack runs
             the exact same discussion guide.
           </li>
@@ -461,27 +467,33 @@
         </p>
 
         <h2 class="mt-12 text-xl font-semibold text-white sm:text-2xl">
-          6. Quantitative Proof: SynthBench SPS 0.90
+          6. Quantitative Proof: SynthBench SPS ~0.88
         </h2>
         <p class="mt-4 text-slate-300">
-          Claims are cheap. SynthPanel was the first harness to publish
-          head-to-head results on
+          Claims are cheap. SynthPanel publishes head-to-head results on
           <a
             href="https://synthbench.org"
             class="text-emerald-400 underline decoration-emerald-400/40 underline-offset-2 hover:text-emerald-300"
             >SynthBench</a
-          >, an independent open benchmark for synthetic-respondent quality.
+          >, an open, reproducible benchmark for synthetic-respondent quality.
+          Its data and scoring code are public — though, in the interest of
+          full disclosure, SynthBench is a sibling DataViking project operated
+          by the SynthPanel maintainers, not an independent third party.
           SynthBench computes a <strong>Synthetic-Parity Score (SPS)</strong>
-          — the fraction of responses from a synthetic panel that match the
-          distribution of a real-human control group on the same instrument.
+          — how closely a synthetic panel's response distribution matches a
+          real-human control group on the same instrument.
         </p>
         <p class="mt-4 text-slate-300">
           A 3-model ensemble of SynthPanel personas — blended via
           <code class="rounded bg-slate-900/80 px-1.5 py-0.5 text-emerald-300">synthpanel panel run --models haiku:0.33,gemini:0.33,gpt-4o-mini:0.34 --blend</code>
-          — scores <strong class="text-emerald-300">SPS 0.90</strong> on the
-          current SynthBench leaderboard. That is 90% human parity, measured
-          by an independent third party, on a benchmark whose data and
-          scoring code are both open.
+          — leads the current SynthBench leaderboard (generated 2026-07-13) at
+          <strong class="text-emerald-300">SPS 0.877</strong> on opinionsqa and
+          <strong class="text-emerald-300">0.879</strong> on subpop (0.813 on
+          globalopinionqa). That is roughly 0.03–0.06 above the best single
+          model on each dataset, and 0.10–0.12 above the random baseline
+          (~0.71–0.76), on a benchmark whose data and scoring code are both
+          open. Leaderboard numbers move as the board recomputes — check the
+          live board for the current figures.
         </p>
         <p class="mt-4 text-slate-300">
           Commercial competitors have not, at time of writing, published SPS

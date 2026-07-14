@@ -182,14 +182,11 @@
             </button>
           </div>
           <p class="mt-2 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs text-slate-500">
-            <span class="inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-400/5 px-2 py-0.5 font-medium text-emerald-300">
-              <span aria-hidden="true">✓</span>
-              <code class="text-emerald-200">[mcp]</code> extra built in
-            </span>
             <span>
-              Add <code class="text-slate-400">[mcp]</code> for
-              Claude&nbsp;Code&nbsp;/&nbsp;Cursor&nbsp;/&nbsp;Windsurf agent
-              integration.
+              Add the <code class="text-slate-400">[mcp]</code> extra —
+              <code class="text-slate-400">pip install "synthpanel[mcp]"</code>
+              — for Claude&nbsp;Code&nbsp;/&nbsp;Cursor&nbsp;/&nbsp;Windsurf
+              agent integration.
             </span>
           </p>
         </div>
@@ -532,22 +529,27 @@ synthpanel report &lt;result-id&gt; -o report.md</pre>
         class="mt-12 rounded-lg border border-emerald-400/20 bg-emerald-400/5 p-5 text-sm text-slate-300"
       >
         <p>
-          <span class="font-semibold text-emerald-300">Powered the
+          <span class="font-semibold text-emerald-300">Powers the
             <a
               class="underline decoration-emerald-400/60 underline-offset-2 hover:text-emerald-200"
               href="https://synthbench.org"
               >SynthBench</a
             >
-            public benchmark</span
+            open benchmark</span
           >
-          — independent, open evaluation of synthetic-respondent quality.
-          Ensemble blending of 3 models hits SPS 0.90 (90% human parity) on the
-          current
+          — an open, reproducible evaluation of synthetic-respondent quality
+          (public data + scoring code), operated by the SynthPanel maintainers
+          rather than an independent third party. On the current
           <a
             href="https://synthbench.org"
             class="underline decoration-emerald-400/60 underline-offset-2 hover:text-emerald-200"
             >leaderboard</a
-          >.
+          >
+          (generated 2026-07-13), the 3-model ensemble scores SPS 0.877 on
+          opinionsqa and 0.879 on subpop (0.813 on globalopinionqa) — roughly
+          0.03–0.06 above the best single model on each dataset and 0.10–0.12
+          above the random baseline (~0.71–0.76). Leaderboard numbers move as
+          the board recomputes.
         </p>
       </section>
 

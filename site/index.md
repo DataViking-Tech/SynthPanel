@@ -10,7 +10,7 @@ Zero-config inside Claude Desktop, Claude Code, Cursor, and other MCP hosts — 
 
 $ pip install synthpanel
 
-`[mcp]` extra built in  Add `[mcp]` for Claude Code / Cursor / Windsurf agent integration.
+Add the `[mcp]` extra — `pip install "synthpanel[mcp]"` — for Claude Code / Cursor / Windsurf agent integration.
 
 [GitHub repo →](https://github.com/DataViking-Tech/SynthPanel) [PyPI package](https://pypi.org/project/synthpanel/)
 
@@ -166,7 +166,7 @@ Open benchmark for synthetic survey quality. See the leaderboard at synthbench.o
 
 SynthBench-validated model picks by use case. Use `--best-model-for` to auto-select.
 
-Powered the [SynthBench](https://synthbench.org) public benchmark — independent, open evaluation of synthetic-respondent quality. Ensemble blending of 3 models hits SPS 0.90 (90% human parity) on the current [leaderboard](https://synthbench.org).
+Powers the [SynthBench](https://synthbench.org) open benchmark — an open, reproducible evaluation of synthetic-respondent quality (public data + scoring code), operated by the SynthPanel maintainers rather than an independent third party. On the current [leaderboard](https://synthbench.org) (generated 2026-07-13), the 3-model ensemble scores SPS 0.877 on opinionsqa and 0.879 on subpop (0.813 on globalopinionqa) — roughly 0.03–0.06 above the best single model on each dataset and 0.10–0.12 above the random baseline (~0.71–0.76). Leaderboard numbers move as the board recomputes.
 
 ## Further reading
 

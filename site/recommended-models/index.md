@@ -27,7 +27,7 @@ synthpanel panel run ... --best-model-for "Technology & Digital Life:globalopini
 Before the run, SynthPanel prints a recommendation line to stderr so you can cancel and override:
 
 ```
-synthbench: best model for globalopinionqa/Economy & Work → claude-haiku-4-5-20251001 · SPS 0.850 · JSD 0.091 · n=100 · $0.032/100q · cached 0h ago · source=synthbench.org
+synthbench: best model for globalopinionqa/Economy & Work → claude-haiku-4-5-20251001 · SPS 0.850 · JSD 0.091 · n=100 · $0.032/100q · cached 0h ago · source=live
 ```
 
 ## How it works
@@ -59,20 +59,20 @@ No recommendation is ever fatal. `--best-model-for` is advisory: a bad network d
 
 ## Use-case → top-ranked model
 
-Snapshot from `leaderboard.json` on 2026-04-24. The live data updates continuously — consult the CLI flag or [synthbench.org](https://synthbench.org) for current picks.
+Regenerated from the live `leaderboard.json` (`generated_at` 2026-07-13). Picks are the top-ranked *runnable single model* per filter (the 3-model ensemble leads several rows but isn't a plain `--model` value). The live data updates continuously — consult the CLI flag or [synthbench.org](https://synthbench.org) for current picks. Several topics are thinly sampled (small `n`); treat those as suggestive.
 
-| Use case | Dataset | Top SynthBench pick |
-|---|---|---|
-| General attitudes research | `globalopinionqa` | `claude-haiku-4-5-20251001` |
-| Economic / workplace surveys | `globalopinionqa` | `claude-haiku-4-5-20251001` |
-| Tech product discovery | `globalopinionqa` | `gemini-2.5-flash` |
-| Health & science messaging | `globalopinionqa` | see `--best-model-for "Health & Science"` |
-| International affairs / policy | `globalopinionqa` | see CLI |
-| Trust & wellbeing | `globalopinionqa` | see CLI |
+| Use case | Dataset | Topic / filter | Top SynthBench pick |
+|---|---|---|---|
+| General attitudes research | `globalopinionqa` | (overall SPS) | `openai/gpt-4o-mini` |
+| Economic / workplace surveys | `globalopinionqa` | "Economy & Work" (n=5) | `google/gemini-2.5-flash` |
+| Tech product discovery | `globalopinionqa` | "Technology & Digital Life" (n=3) | `google/gemini-2.5-flash-lite` |
+| Health & science messaging | `globalopinionqa` | "Health & Science" (n=2) | `anthropic/claude-sonnet-4.6` |
+| International affairs / policy | `globalopinionqa` | "International Relations & Security" (n=50) | `openai/gpt-4o-mini` |
+| Trust & wellbeing | `globalopinionqa` | "Trust & Wellbeing" (n=7) | `anthropic/claude-sonnet-4.6` |
 
 ## Caveats
 
-- **Ensembles & product configs.** Some leaderboard entries are SynthPanel product configs (`framework=product`, `is_ensemble=true`). These aren't runnable as a plain `--model` value, so SynthPanel falls back to the underlying base model inferred from the entry's `config_id`. A stderr note records the substitution.
+- **Display labels, ensembles & product configs (gh-519).** Some leaderboard entries are SynthPanel product configs (`framework=product`, `is_ensemble=true`) or carry a human-readable display label (e.g. `SynthPanel (Gemini Flash Lite)`) in their `model` field. SynthPanel never stamps such a label onto `--model`. Instead it substitutes a runnable id, preferring **(1)** the row's runnable `model_id` published by SynthBench (e.g. `google/gemini-2.5-flash-lite`, joined with `provider_id` when `model_id` is a bare slug), then **(2)** for product/ensemble rows without a `model_id`, a base model inferred from the entry's `config_id` (adopted only when it resolves to a recognized provider id or alias). If neither yields a runnable id the recommendation is **refused** with an actionable stderr message and your existing `--model`/default is kept. A stderr note records any substitution.
 
 - **Sparse topics.** When the top entry's `run_count < 3`, a low-confidence warning is emitted. Treat those recommendations as suggestive rather than authoritative.
 

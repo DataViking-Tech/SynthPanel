@@ -28,6 +28,15 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
   `SYNTHPANEL_DRIFT_DEGRADE=1`. Sampling-mode and ensemble runs (nothing
   persisted) echo the decision but carry no verdict — documented in
   docs/response-contract.md.
+- **MCP responses are compact by default with typed envelopes (#561).**
+  `quick_poll` and `extend_panel` now return the same typed response
+  envelope as `run_panel`, payloads are compact-by-default (verbose is
+  opt-in), and a `pack_id` field identifies the instrument pack a run
+  used.
+- **Skills tool-name conformance guard (#559).** The bundled skills and
+  their descriptors now reference the real MCP tool names, backed by a
+  CI conformance check that fails the build if a skill names a tool the
+  server does not expose.
 
 ### Changed
 
@@ -41,82 +50,206 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
   emitted this code on panel-run timeouts since v1.0.x; the schema now
   records it (enum-widening only). It was not renamed to `MODEL_TIMEOUT`
   because agents may already branch on the `PANEL_TIMEOUT` string.
+- **Claude Opus pricing corrected (#560).** The local cost table
+  overstated Claude Opus by ~3×; the entry is fixed and the model-alias
+  table refreshed alongside it.
+- **`--submit-to-synthbench` payloads pass the SynthBench validator
+  (#557).** The submission payload is reshaped to satisfy the current
+  SynthBench submission contract, so a `--submit-to-synthbench` run is
+  accepted rather than rejected at validation.
 
 ### Fixed
 
-- **`--best-model-for` substitutes a runnable upstream `model_id` (sy-i7a,
-  #519).** When the top SynthBench row's `model` field is a display label
-  (e.g. `SynthPanel (Gemini Flash Lite)`), SynthPanel now prefers the runnable
-  id the live leaderboard publishes in `model_id` (e.g.
-  `google/gemini-2.5-flash-lite`, joined with `provider_id` when `model_id` is
-  a bare slug) instead of refusing and falling through to the default model
-  (which, with only OpenRouter credentials present, landed on
-  `openrouter/auto`). A runnable `model_id` takes precedence over the
-  `config_id` base-model heuristic; a `model_id` that is itself a display
-  label is ignored, and rows with no resolvable runnable id are still refused
-  with the existing actionable message. The picked model is visible under
-  `--dry-run`.
-- **Saved-result provenance is populated (sy-g1g, #525).** Every `--save`
-  artifact now embeds the run `metadata` block (synthpanel/Python version,
-  `config_hash`, and the new `cost.pricing_snapshot_date`) that
-  `build_metadata` already produced but no save path persisted. As a
-  result, `synthpanel report` for a freshly saved run no longer degrades
-  `config_hash`/`synthpanel_version`/`python_version`/`pricing_snapshot_date`
-  to `(unknown)`/`(not recorded)`. Threaded through the CLI, MCP, and SDK
-  save paths. `runs list` on an empty checkpoint store now points at
-  `synthpanel results list` so a `--save` artifact isn't mistaken for lost.
-- **`pack import <registry-id>` resolves registry entries (sy-dwc, #520).**
-  When `panel run --personas <id>` misses, it suggests `pack import <id>` —
-  but that command used to fall to the local-file branch and echo the same
-  failing command back (a self-referential loop). `pack import` now treats a
-  bare slug that isn't a local file as a registry id: it resolves the entry to
-  its `gh:` source, imports it, and installs the pack under the registry id so
-  the follow-up `--personas <id>` works end to end. Ids absent from the
-  registry fall through to the existing local-file "not found" error (which
-  points at `pack search`), and path-like inputs are never sent through a
-  registry network probe.
-- **`poll-summary` respects declared question types (sy-oyl).** Open-text
-  questions whose prompt or responses contain numbers (e.g. version
-  strings like *"SynthPanel v1.5.1"*) are no longer misclassified as
-  scale questions. The classification probe (`_looks_numeric`) now
-  requires the *whole* response to be a numeric scale answer (`"4"`,
-  `"4/5"`, `"rating: 4"`) instead of pulling the first digit out of
-  arbitrary prose. Mixed open-text + scale instruments produce
-  `metric_average` / `metric_distribution` only for the bounded
-  question. `save_panel_result` now also persists the question list
-  with its `response_schema` on the SDK's `quick_poll`, single-round,
-  and multi-round paths so a reloaded saved result carries declared
-  question types through `poll-summary`.
+- **CLI v3 branching instruments run through the multi-round engine
+  (#556).** `panel run` now dispatches v3 branching instruments to the
+  multi-round engine so `route_when` routing executes from the CLI
+  instead of collapsing to a single round (the MCP path already did).
+
+## [1.5.7] - 2026-06-04
+
+### Changed
+
+- **Empty attachments now fail loud (#550).** An attachment that resolves
+  to empty content raises at the boundary instead of silently letting a
+  panel run and synthesize on nothing.
+- **Typed `response_schema` is enforced (#547).** Structured-output runs
+  validate persona output against the declared `response_schema` type
+  rather than accepting loosely-shaped JSON.
+
+### Fixed
+
+- **Synthesis routing follows the panel's provider (#549).** The
+  synthesis/judge step routes through the provider the panel actually ran
+  on instead of assuming a default, so cross-provider runs synthesize
+  correctly.
+- **Pre-flight model-reachability check (#546).** A panel run verifies the
+  resolved model is reachable before dispatching panelist work, failing
+  fast with a clear error instead of deep inside the run.
+
+## [1.5.6] - 2026-06-03
+
+### Added
+
+- **`--save` JSON output includes `result_id` and `saved_path` (sy-659).**
+  Callers get the stable handle and canonical path back directly instead
+  of scraping stderr.
+- **End-to-end agent quickstart** (CLI + MCP + structured output) added to
+  the docs (sy-0wi).
+
+### Fixed
+
+- **`--dry-run` guards the vision / text-only attachment conflict (#536).**
+  Attaching an image to a known text-only model is caught under
+  `--dry-run` instead of burning a real call.
+- **`mcp install` resolves an absolute `synthpanel` launcher path (#539).**
+  The generated host config points at the real executable so hosts that
+  don't inherit the shell `PATH` can still launch the server.
+- **Saved-result hints point at the real `cost` command (#538)** and
+  **`report` explains how to synthesize a flat-saved result (#537).**
+- **`main()` no longer leaks `SIGPIPE=SIG_DFL` into the process
+  (sy-6zq, sy-1n1).** Broken-pipe handling stays local to the CLI process.
+
+## [1.5.5] - 2026-05-23
+
+### Fixed
+
+- **`--best-model-for` substitutes a runnable `model_id` from the
+  leaderboard row (sy-i7a, #519).** When the top SynthBench row's `model`
+  field is a display label (e.g. `SynthPanel (Gemini Flash Lite)`),
+  SynthPanel prefers the runnable id the live leaderboard publishes in
+  `model_id` (e.g. `google/gemini-2.5-flash-lite`, joined with
+  `provider_id` when `model_id` is a bare slug) instead of refusing and
+  falling through to the default (which, with only OpenRouter credentials
+  present, had landed on `openrouter/auto`). A runnable `model_id` takes
+  precedence over the `config_id` base-model heuristic; rows with no
+  resolvable runnable id are still refused with an actionable message.
+  The picked model is visible under `--dry-run`.
+
+## [1.5.4] - 2026-05-23
 
 ### Added
 
 - **`synthpanel results list` / `results show` (sy-g1g, #525).** Saved
   `--save` results live in the results store (`~/.synthpanel/results`),
-  distinct from the checkpoint store that `runs list` shows — so they were
-  previously undiscoverable without a filesystem search. `results list`
-  enumerates saved results (newest first) by their stable ID; `results show
-  <id>` resolves that handle to a provenance summary and the canonical
-  `saved_path` (full result envelope + `saved_path` in JSON mode). The
-  `--save` confirmation now prints the exact follow-up commands
-  (`report` / `results show` / `results list`).
+  distinct from the checkpoint store that `runs list` shows — previously
+  undiscoverable without a filesystem search. `results list` enumerates
+  saved results (newest first) by stable ID; `results show <id>` resolves
+  that handle to a provenance summary and the canonical `saved_path`. The
+  `--save` confirmation prints the exact follow-up commands.
+
+### Fixed
+
+- **Saved-result provenance is populated (sy-g1g, #525).** Every `--save`
+  artifact embeds the run `metadata` block (synthpanel/Python version,
+  `config_hash`, and `cost.pricing_snapshot_date`), so `synthpanel report`
+  for a freshly saved run no longer degrades those fields to `(unknown)`.
+  Threaded through the CLI, MCP, and SDK save paths.
+- **Latest-release metadata aligned across release surfaces (sy-3aj).**
+
+## [1.5.3] - 2026-05-23
+
+### Added
+
+- **`python -m synthpanel` alias module (sy-het, #517).** A shim module so
+  `python -m synthpanel` works alongside the `synthpanel` console script.
+
+### Fixed
+
+- **`pack import <registry-id>` resolves registry entries (sy-dwc, #520).**
+  A bare slug that isn't a local file is treated as a registry id: it
+  resolves the entry to its `gh:` source, imports it, and installs the pack
+  under the registry id so a follow-up `--personas <id>` works end to end.
+  Ids absent from the registry fall through to the existing local-file
+  "not found" error; path-like inputs are never sent through a registry
+  network probe.
+- **`--best-model-for` refuses display-label model recommendations
+  (sy-kh3, #521).** A leaderboard row whose `model` is a display label
+  rather than a runnable id is refused with an actionable message instead
+  of being stamped onto `--model` (the first half of the gh-519 arc
+  completed by sy-i7a in 1.5.5).
+
+## [1.5.2] - 2026-05-23
+
+### Added
+
+- **Provenance `source=` tag on `--best-model-for` recommendations
+  (sy-klp, #515).** Every recommendation line now ends with
+  `source=live|cache|stale-cache|bundled-snapshot` so callers can tell how
+  current the pick is.
+- **`--personas` resolves bundled persona-pack names (sy-n80, #513).**
+
+### Changed
+
+- **`mcp install` / `mcp-serve` guard a missing `mcp` extra (sy-xyn, #514;
+  #512).** Both commands emit a clear "install `synthpanel[mcp]`" message
+  instead of an import traceback when the optional extra is absent.
+
+### Fixed
+
+- **`poll-summary` respects declared question types (sy-oyl, #516).**
+  Open-text answers containing numbers (e.g. version strings like
+  *"SynthPanel v1.5.1"*) are no longer misclassified as scale questions;
+  the whole response must be a numeric scale answer to count. Declared
+  question types are persisted with saved results so a reload carries them
+  through `poll-summary`.
+
+## [1.5.1] - 2026-05-22
+
+### Added
+
 - **`synthpanel doctor --install-only` (sy-e28).** Validates package,
-  dependency, bundled-pack, and checkpoint-root health without requiring
-  a provider credential. Designed for clean-room CI and post-`pip install`
-  agent smoke tests where keys haven't been provisioned yet. Credential
-  status is still reported in the output; only the exit-code gate
-  changes. JSON output gains `install_ok` and `install_only` fields
-  alongside the existing `credential_configured` and `checks_ok`, so
-  agents can branch on install vs. credential health independently.
-  `clean-install-smoke` in CI exercises the new mode against the built
-  wheel with no provider env set.
+  dependency, bundled-pack, and checkpoint-root health without requiring a
+  provider credential — for clean-room CI and post-`pip install` agent
+  smoke tests. JSON output gains `install_ok` and `install_only` alongside
+  `credential_configured` and `checks_ok`.
+- **`poll-summary` detects structured choice fields from `--schema` runs
+  (sy-bn7, #503).**
+
+### Fixed
+
+- **Bundled leaderboard snapshot fallback (sy-nkh, #502).**
+  `--best-model-for` degrades to a package-bundled leaderboard snapshot
+  (tagged `source=bundled-snapshot`) when there is no user cache and the
+  live fetch fails, instead of skipping the recommendation.
+- **`BrokenPipeError` handled cleanly when output is piped (sy-4bs).**
+
+## [1.5.0] - 2026-05-22
+
+### Added
+
 - **`synthpanel mcp install` CLI (sy-skf).** Registers synthpanel as a
   stdio MCP server in a host's JSON config — defaults to Claude Code's
   user-scope `~/.claude.json`, with `--scope project` for `./.mcp.json`
   and `--target` for arbitrary hosts (Cursor, Windsurf, …). Supports
-  `--env KEY=VALUE` for inline credentials, `--force` to overwrite an
-  existing entry, `--dry-run` to preview, and `--uninstall` to remove
-  the entry. Mirrors GH#463; eliminates the hand-edit-and-restart step
-  documented in the MCP README.
+  `--env KEY=VALUE`, `--force`, `--dry-run`, and `--uninstall`. Mirrors
+  GH#463; eliminates the hand-edit-and-restart step.
+- **Four canonical persona packs for common research jobs (sy-a0i).**
+- **Deterministic structured-response rollup for `poll-summary`
+  (sy-4yd).** `metric_average` / `metric_distribution` computed
+  deterministically from bounded questions.
+- **MCP auto-picks a fast model for panels of ≥10 personas (sy-2ag).**
+- **Hermes-compatible `synthpanel` director skill (sy-7pw).**
+
+### Changed
+
+- **Release + publish pipeline hardened.** PyPI publishing moved to
+  Trusted Publishing (OIDC, #493/#492); the auto-tag workflow bumps
+  `src/synth_panel/__version__.py` and re-renders the site before tagging
+  (sy-r87, sy-hs4) so version artifacts can't drift.
+
+### Docs
+
+- Schema-enforced polling promoted as the agent default (sy-v2d);
+  model-packs + ensemble guidance for agent-run panels (sy-8b4); builtin
+  vs. registry packs clarified in the README and `docs/registry.md`
+  (sy-6o3).
+
+## [1.4.1] - 2026-05-12
+
+### Fixed
+
+- **Auto-tag workflow fails loud on a missing semver label and re-fetches
+  fresh labels before tagging (sy-73j).**
 
 ## [1.4.0] - 2026-05-12
 
