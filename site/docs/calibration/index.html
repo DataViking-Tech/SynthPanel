@@ -35,25 +35,7 @@
     <meta name="twitter:image" content="https://synthpanel.dev/og-image.png" />
     <meta name="twitter:image:alt" content="synthpanel — Run synthetic focus groups with any LLM" />
 
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            fontFamily: {
-              mono: [
-                "ui-monospace",
-                "SFMono-Regular",
-                "Menlo",
-                "Monaco",
-                "Consolas",
-                "monospace",
-              ],
-            },
-          },
-        },
-      };
-    </script>
+    <link rel="stylesheet" href="/assets/tailwind.css" />
 
     <style>
       :root {
@@ -114,7 +96,7 @@
         <a
           href="https://dataviking.tech"
           rel="noopener"
-          class="inline-flex items-center gap-2 font-mono text-slate-500 transition hover:text-emerald-300"
+          class="inline-flex items-center gap-2 font-mono text-slate-400 transition hover:text-emerald-300"
         >
           <span aria-hidden="true" class="inline-flex h-5 w-5 items-center justify-center rounded bg-slate-900 text-[10px] font-bold text-emerald-400 ring-1 ring-slate-800">·</span>
           <span>DataViking</span>
@@ -162,13 +144,13 @@
           class="group relative rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-4 font-mono text-sm shadow-xl"
         >
           <pre class="text-slate-300 overflow-x-auto whitespace-pre">synthpanel pack calibrate &lt;PACK_YAML&gt;
-  --against DATASET:QUESTION   <span class="text-slate-500"># e.g. gss:HAPPY (v1 allowlist: gss, ntia)</span>
-  [--n 50]                     <span class="text-slate-500"># panel size</span>
-  [--models MODELS]            <span class="text-slate-500"># default: panel run default</span>
-  [--samples-per-question 15]  <span class="text-slate-500"># for stable JSD</span>
-  [--output PATH]              <span class="text-slate-500"># default: rewrite PACK_YAML in place</span>
-  [--dry-run]                  <span class="text-slate-500"># print what would be written</span>
-  [--yes]                      <span class="text-slate-500"># skip overwrite confirm</span></pre>
+  --against DATASET:QUESTION   <span class="text-slate-400"># e.g. gss:HAPPY (v1 allowlist: gss, ntia)</span>
+  [--n 50]                     <span class="text-slate-400"># panel size</span>
+  [--models MODELS]            <span class="text-slate-400"># default: panel run default</span>
+  [--samples-per-question 15]  <span class="text-slate-400"># for stable JSD</span>
+  [--output PATH]              <span class="text-slate-400"># default: rewrite PACK_YAML in place</span>
+  [--dry-run]                  <span class="text-slate-400"># print what would be written</span>
+  [--yes]                      <span class="text-slate-400"># skip overwrite confirm</span></pre>
         </div>
 
         <p class="mt-6 text-base text-slate-300">
@@ -179,7 +161,7 @@
         <div
           class="mt-4 rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-4 font-mono text-sm shadow-xl"
         >
-          <pre class="text-slate-300 overflow-x-auto whitespace-pre"><span class="text-slate-500">calibration:</span>
+          <pre class="text-slate-300 overflow-x-auto whitespace-pre"><span class="text-slate-400">calibration:</span>
   - dataset: gss
     question: HAPPY
     jsd: 0.18
@@ -333,7 +315,7 @@
           class="mt-3 group relative flex items-center justify-between rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-3 text-left font-mono text-sm shadow-xl"
         >
           <span class="select-all text-slate-300">
-            <span class="text-slate-500">$</span>
+            <span class="text-slate-400">$</span>
             <span class="text-emerald-400"> SYNTHBENCH_ALLOW_GATED=1</span>
             <span class="text-slate-300"> synthpanel pack calibrate ... --against wvs:Q1</span>
           </span>
@@ -471,7 +453,7 @@
             <div class="flex items-center justify-between">
               <h3 class="font-semibold text-white">MCP Server</h3>
               <span
-                class="text-slate-500 transition group-hover:text-emerald-300"
+                class="text-slate-400 transition group-hover:text-emerald-300"
                 >→</span
               >
             </div>
@@ -486,7 +468,7 @@
             <div class="flex items-center justify-between">
               <h3 class="font-semibold text-white">Source docs</h3>
               <span
-                class="text-slate-500 transition group-hover:text-emerald-300"
+                class="text-slate-400 transition group-hover:text-emerald-300"
                 >→</span
               >
             </div>
@@ -503,7 +485,7 @@
             <div class="flex items-center justify-between">
               <h3 class="font-semibold text-white">Report an issue</h3>
               <span
-                class="text-slate-500 transition group-hover:text-emerald-300"
+                class="text-slate-400 transition group-hover:text-emerald-300"
                 >→</span
               >
             </div>
@@ -530,7 +512,7 @@
                 DataViking
               </span>
             </a>
-            <p class="mt-3 text-xs text-slate-500">
+            <p class="mt-3 text-xs text-slate-400">
               Open-source synthetic focus groups.<br />
               A
               <a
@@ -579,7 +561,7 @@
         </div>
 
         <!-- Copyright + social row -->
-        <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 py-6 text-xs text-slate-500">
+        <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 py-6 text-xs text-slate-400">
           <span>
             &copy; 2026 DataViking · MIT-licensed ·
             <a
@@ -595,7 +577,7 @@
               target="_blank"
               rel="noopener noreferrer"
               aria-label="GitHub"
-              class="text-slate-500 transition-colors hover:text-emerald-300"
+              class="text-slate-400 transition-colors hover:text-emerald-300"
             >
               <svg class="size-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"></path>

@@ -5,8 +5,18 @@ Operational runbook for the static landing site served at <https://synthpanel.de
 ## Source
 
 - Files live in [`site/`](../site/) at the repo root.
-- Pure static HTML; Tailwind is loaded from `cdn.tailwindcss.com`. **No build
-  step is required for HTML.**
+- Pure static HTML; Tailwind is **precompiled** to `site/assets/tailwind.css`
+  and committed (gh-563 — the Play CDN is documented as not-for-production).
+  **No build step runs on Cloudflare Pages**; regenerate the stylesheet after
+  changing any Tailwind classes:
+
+  ```bash
+  cd scripts/site_tailwind && npm ci && npm run build
+  ```
+
+  CI's `site-tailwind-drift` job rebuilds with the pinned toolchain and fails
+  on any byte difference; `tests/test_site_tailwind.py` additionally asserts
+  every class used in the HTML has a rule in the committed CSS.
 - `site/_headers` ships the security header set (CSP, HSTS, frame deny, etc.)
   via the `/*` rule, plus RFC 8288 `Link` headers for agent discovery
   (`api-catalog`, `service-doc`) on the homepage `/` rule. A scoped block
@@ -61,7 +71,9 @@ python3 -m http.server --directory site 8080
 open http://localhost:8080/
 ```
 
-There is no test suite for the site — visual smoke check only.
+Site regression guards live in `tests/test_site_*.py` (headers, markdown
+renditions, version render, Tailwind CSS coverage); anything visual beyond
+that is a manual smoke check.
 
 ## Agent-discovery surface (`site/.well-known/`)
 
@@ -95,8 +107,12 @@ When you change `site/index.html`:
   fold. Discoverability of the install command is the page's main job.
 - Keep the SynthBench cross-link present. The bead authoring this site
   (sp-p3g) made the cross-link an explicit acceptance criterion.
-- If you bump Tailwind to the production build, drop the
-  `cdn.tailwindcss.com` entry from `site/_headers` CSP `script-src`.
+- If you add/remove Tailwind classes, rebuild the precompiled stylesheet
+  (`cd scripts/site_tailwind && npm ci && npm run build`) and commit the
+  updated `site/assets/tailwind.css` — CI fails on drift otherwise.
+- Keep text on the `#0f172a` background at WCAG AA contrast: `text-slate-400`
+  is the dimmest allowed for body/caption text (`text-slate-500` = 3.75:1
+  fails AA for normal text; decorative `aria-hidden` glyphs are exempt).
 
 When you change **any** `site/**/*.html`:
 

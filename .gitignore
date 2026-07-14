@@ -60,3 +60,6 @@ docs/internal/
 
 # Gas Town (added by gt)
 CLAUDE.md
+
+# Node toolchain for the site's precompiled Tailwind CSS (scripts/site_tailwind/)
+node_modules/

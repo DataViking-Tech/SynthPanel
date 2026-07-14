@@ -160,6 +160,39 @@ jobs:
       - name: Check site/CLI subcommand sync
         run: python scripts/check_site_cli_sync.py
 
+  site-tailwind-drift:
+    # gh-563: site/assets/tailwind.css is precompiled and committed because
+    # Cloudflare Pages deploys site/ raw (no build step). This job rebuilds
+    # the stylesheet with the pinned toolchain (scripts/site_tailwind/) and
+    # fails if the committed file drifts from the class usage in
+    # site/**/*.html — the byte-for-byte counterpart to the pure-Python
+    # coverage guard in tests/test_site_tailwind.py.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: scripts/site_tailwind/package-lock.json
+
+      - name: Rebuild site/assets/tailwind.css
+        working-directory: scripts/site_tailwind
+        run: |
+          npm ci
+          npm run build
+
+      - name: Fail on drift
+        run: |
+          git diff --exit-code -- site/assets/tailwind.css || {
+            echo "::error::site/assets/tailwind.css is out of sync with site HTML class usage."
+            echo "Regenerate: cd scripts/site_tailwind && npm ci && npm run build"
+            exit 1
+          }
+
   synthbench-contract:
     # Cross-repo contract gate (sp-ezz / gap-analysis P0-2): every
     # --submit-to-synthbench payload must pass SynthBench's real
