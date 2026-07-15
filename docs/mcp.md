@@ -201,6 +201,12 @@ envelope's `panel_verdict` key, alongside `synthesis`. Full reference:
 [docs/response-contract.md](response-contract.md). Migration guide:
 [docs/migration-v1.md](migration-v1.md).
 
+Running panels unattended (CI, agent pipelines)? The operational contract —
+typed errors and `retry_safe` semantics, partial-failure behavior, timeout
+budgets, cost gates, checkpoint/resume, determinism, credential handling,
+and log/stream discipline — is documented in
+[docs/production-operations.md](production-operations.md).
+
 ## Tools (12)
 
 > **Structured polling is the agent default.** Both `run_panel` and

@@ -1047,6 +1047,98 @@
         </p>
       </section>
 
+      <!-- Production notes -->
+      <section class="mt-16" id="production">
+        <h2
+          class="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Production notes
+        </h2>
+        <p class="mb-4 text-base text-slate-300">
+          Running panels unattended — CI gates, agent pipelines, scheduled
+          research? The operational contract is documented and verified
+          against the code:
+        </p>
+        <dl class="mt-6 space-y-6 text-base text-slate-300">
+          <div>
+            <dt class="font-semibold text-white">Typed errors, safe retries</dt>
+            <dd class="mt-2 text-sm text-slate-400">
+              Failures return a typed envelope
+              (<code class="text-slate-300">error_code</code>,
+              <code class="text-slate-300">retry_safe</code>,
+              <code class="text-slate-300">schema_version</code>) — retry only
+              on <code class="text-slate-300">MODEL_TIMEOUT</code> /
+              <code class="text-slate-300">PANEL_TIMEOUT</code> and
+              pre-exhaustion <code class="text-slate-300">SCHEMA_DRIFT</code>;
+              everything else is terminal by contract. Requests are validated
+              before any model call, so bad arguments cost zero tokens.
+            </dd>
+          </div>
+          <div>
+            <dt class="font-semibold text-white">Partial failure is contained</dt>
+            <dd class="mt-2 text-sm text-slate-400">
+              One failed panelist doesn&rsquo;t sink the panel: errors are
+              recorded per persona and per question, a failure-rate threshold
+              (default 50%) decides run validity, and every abort path —
+              cost ceiling, SIGINT, total failure — still emits valid partial
+              JSON with a machine-readable
+              <code class="text-slate-300">abort_reason</code>. A failed
+              synthesis is recoverable post-hoc with
+              <code class="text-slate-300">synthpanel panel synthesize</code>
+              — no panel re-spend.
+            </dd>
+          </div>
+          <div>
+            <dt class="font-semibold text-white">Cost is bounded, not hoped</dt>
+            <dd class="mt-2 text-sm text-slate-400">
+              <code class="text-slate-300">--dry-run</code> prints a cost
+              estimate before any provider call;
+              <code class="text-slate-300">--max-cost</code> enforces a hard
+              projected-total ceiling mid-run; every response carries per-turn
+              token and cost telemetry, and
+              <code class="text-slate-300">synthpanel cost summary</code>
+              reports spend across saved runs.
+            </dd>
+          </div>
+          <div>
+            <dt class="font-semibold text-white">Scale without babysitting</dt>
+            <dd class="mt-2 text-sm text-slate-400">
+              Checkpointing with <code class="text-slate-300">--resume</code>
+              (auto-flushed on SIGINT/SIGTERM),
+              <code class="text-slate-300">--max-concurrent</code> and
+              <code class="text-slate-300">--rate-limit-rps</code> throttles,
+              and convergence-based
+              <code class="text-slate-300">--auto-stop</code> that quits
+              paying for panelists once distributions stabilize.
+            </dd>
+          </div>
+          <div>
+            <dt class="font-semibold text-white">No secrets in configs</dt>
+            <dd class="mt-2 text-sm text-slate-400">
+              <code class="text-slate-300">synthpanel mcp install</code>
+              writes no API key unless you explicitly pass
+              <code class="text-slate-300">--env</code>; credentials come from
+              environment variables or the
+              <code class="text-slate-300">synthpanel login</code> store
+              (mode <code class="text-slate-300">0600</code>). Reproducibility
+              is stamped in: saved results carry model/version provenance and
+              a config hash.
+            </dd>
+          </div>
+        </dl>
+        <p class="mt-4 text-xs text-slate-400">
+          Full contract with code citations:
+          <a
+            href="https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/production-operations.md"
+            class="text-emerald-400 underline decoration-emerald-400/40 underline-offset-2 hover:text-emerald-300"
+            >docs/production-operations.md</a
+          >
+          — error and retry semantics, exit codes, partial-failure behavior,
+          cost gates, checkpoint/resume, determinism per provider, credential
+          handling, and observability.
+        </p>
+      </section>
+
       <!-- Data storage -->
       <section class="mt-16" id="storage">
         <h2
