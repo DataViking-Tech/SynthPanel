@@ -506,33 +506,113 @@ synthpanel report &lt;result-id&gt; -o report.md</pre>
         </a>
       </section>
 
-      <!-- SynthBench callout -->
-      <section
-        class="mt-12 rounded-lg border border-emerald-400/20 bg-emerald-400/5 p-5 text-sm text-slate-300"
-      >
-        <p>
-          <span class="font-semibold text-emerald-300">Powers the
-            <a
-              class="underline decoration-emerald-400/60 underline-offset-2 hover:text-emerald-200"
-              href="https://synthbench.org"
-              >SynthBench</a
-            >
-            open benchmark</span
-          >
-          — an open, reproducible evaluation of synthetic-respondent quality
-          (public data + scoring code), operated by the SynthPanel maintainers
-          rather than an independent third party. On the current
+      <!-- Measured against real humans (SynthBench evidence) -->
+      <section class="mt-12" id="evidence">
+        <h2 class="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400">
+          Measured against real humans
+        </h2>
+        <p class="mb-4 text-base text-slate-300">
+          The
           <a
             href="https://synthbench.org"
-            class="underline decoration-emerald-400/60 underline-offset-2 hover:text-emerald-200"
-            >leaderboard</a
+            class="text-emerald-400 underline decoration-emerald-400/40 underline-offset-2 hover:text-emerald-300"
+            >SynthBench</a
           >
-          (generated 2026-07-13), the 3-model ensemble scores SPS 0.877 on
-          opinionsqa and 0.879 on subpop (0.813 on globalopinionqa) — roughly
-          0.03–0.06 above the best single model on each dataset and 0.10–0.12
-          above the random baseline (~0.71–0.76). Leaderboard numbers move as
-          the board recomputes.
+          benchmark&rsquo;s ground truth is real survey respondents — the Pew
+          American Trends Panel, the General Social Survey, and the World
+          Values Survey, via the OpinionsQA, SubPOP, and GlobalOpinionQA
+          datasets — and every number below is recomputable from public data
+          and open code.
         </p>
+
+        <div class="rounded-lg border border-slate-800 bg-slate-900/40 p-5">
+          <p class="text-sm text-slate-400">
+            Real Pew American Trends Panel question (Wave 96, via SubPOP item
+            <code class="text-slate-400">BELIEVE_a_W96</code>):
+          </p>
+          <p class="mt-2 font-semibold text-white">
+            &ldquo;Do you believe in Heaven?&rdquo;
+          </p>
+          <div class="mt-4 max-w-2xl space-y-3">
+            <div>
+              <div class="flex items-center justify-between text-xs text-slate-400">
+                <span>Yes, I believe in this</span>
+                <span class="text-slate-300">55.4%</span>
+              </div>
+              <div class="mt-1 h-2 w-full rounded-full bg-slate-950/70">
+                <div class="h-2 rounded-full bg-emerald-400" style="width: 55.4%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="flex items-center justify-between text-xs text-slate-400">
+                <span>No, I do not believe in this</span>
+                <span class="text-slate-300">44.6%</span>
+              </div>
+              <div class="mt-1 h-2 w-full rounded-full bg-slate-950/70">
+                <div class="h-2 rounded-full bg-emerald-400" style="width: 44.6%"></div>
+              </div>
+            </div>
+          </div>
+          <p class="mt-4 text-sm text-slate-300">
+            That is the SynthPanel 3-model ensemble&rsquo;s synthetic answer
+            distribution (90 sampled responses). Measured divergence from the
+            real Pew respondents&rsquo; distribution:
+            <span class="font-semibold text-emerald-300">Jensen–Shannon
+            divergence 0.023</span>
+            (0 = identical distributions, 1 = disjoint).
+          </p>
+          <p class="mt-3 text-xs text-slate-400">
+            This item is one of the ensemble&rsquo;s closest matches, shown
+            because Pew&rsquo;s wording is short; across the full 200-question
+            SubPOP evaluation the same run&rsquo;s mean JSD is 0.209. The
+            human response data itself is license-gated for redistribution
+            (CC-BY-NC-SA) — view it signed-in at synthbench.org, or recompute
+            this exact number from the public
+            <a
+              href="https://huggingface.co/datasets/jjssuh/subpop"
+              rel="noopener"
+              class="text-emerald-400 underline decoration-emerald-400/40 underline-offset-2 hover:text-emerald-300"
+              >SubPOP dataset</a
+            >
+            and the open
+            <a
+              href="https://github.com/DataViking-Tech/SynthBench"
+              rel="noopener"
+              class="text-emerald-400 underline decoration-emerald-400/40 underline-offset-2 hover:text-emerald-300"
+              >SynthBench harness</a
+            >; the synthetic distribution and per-question JSD are published in
+            the repo (<code class="text-slate-400">leaderboard-results/subpop_ensemble_3blend_20260714_171917.json</code>,
+            run dated 2026-07-14).
+          </p>
+        </div>
+
+        <div
+          class="mt-4 rounded-lg border border-emerald-400/20 bg-emerald-400/5 p-5 text-sm text-slate-300"
+        >
+          <p>
+            <span class="font-semibold text-emerald-300">Powers the
+              <a
+                class="underline decoration-emerald-400/60 underline-offset-2 hover:text-emerald-200"
+                href="https://synthbench.org"
+                >SynthBench</a
+              >
+              open benchmark</span
+            >
+            — an open, reproducible evaluation of synthetic-respondent quality
+            (public data + scoring code), operated by the SynthPanel maintainers
+            rather than an independent third party. On the current
+            <a
+              href="https://synthbench.org/data/leaderboard.json"
+              class="underline decoration-emerald-400/60 underline-offset-2 hover:text-emerald-200"
+              >leaderboard</a
+            >
+            (generated 2026-07-15), the 3-model ensemble scores SPS 0.877 on
+            opinionsqa, 0.831 on subpop, and 0.813 on globalopinionqa — roughly
+            0.01–0.05 above the best single model on each dataset and
+            0.07–0.11 above the random baseline (~0.71–0.76). Leaderboard
+            numbers move as the board recomputes.
+          </p>
+        </div>
       </section>
 
       <!-- Further reading -->

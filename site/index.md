@@ -166,7 +166,23 @@ Open benchmark for synthetic survey quality. See the leaderboard at synthbench.o
 
 SynthBench-validated model picks by use case. Use `--best-model-for` to auto-select.
 
-Powers the [SynthBench](https://synthbench.org) open benchmark — an open, reproducible evaluation of synthetic-respondent quality (public data + scoring code), operated by the SynthPanel maintainers rather than an independent third party. On the current [leaderboard](https://synthbench.org) (generated 2026-07-13), the 3-model ensemble scores SPS 0.877 on opinionsqa and 0.879 on subpop (0.813 on globalopinionqa) — roughly 0.03–0.06 above the best single model on each dataset and 0.10–0.12 above the random baseline (~0.71–0.76). Leaderboard numbers move as the board recomputes.
+## Measured against real humans
+
+The [SynthBench](https://synthbench.org) benchmark’s ground truth is real survey respondents — the Pew American Trends Panel, the General Social Survey, and the World Values Survey, via the OpinionsQA, SubPOP, and GlobalOpinionQA datasets — and every number below is recomputable from public data and open code.
+
+Real Pew American Trends Panel question (Wave 96, via SubPOP item `BELIEVE_a_W96`):
+
+“Do you believe in Heaven?”
+
+Yes, I believe in this 55.4%
+
+No, I do not believe in this 44.6%
+
+That is the SynthPanel 3-model ensemble’s synthetic answer distribution (90 sampled responses). Measured divergence from the real Pew respondents’ distribution: Jensen–Shannon divergence 0.023 (0 = identical distributions, 1 = disjoint).
+
+This item is one of the ensemble’s closest matches, shown because Pew’s wording is short; across the full 200-question SubPOP evaluation the same run’s mean JSD is 0.209. The human response data itself is license-gated for redistribution (CC-BY-NC-SA) — view it signed-in at synthbench.org, or recompute this exact number from the public [SubPOP dataset](https://huggingface.co/datasets/jjssuh/subpop) and the open [SynthBench harness](https://github.com/DataViking-Tech/SynthBench); the synthetic distribution and per-question JSD are published in the repo (`leaderboard-results/subpop_ensemble_3blend_20260714_171917.json`, run dated 2026-07-14).
+
+Powers the [SynthBench](https://synthbench.org) open benchmark — an open, reproducible evaluation of synthetic-respondent quality (public data + scoring code), operated by the SynthPanel maintainers rather than an independent third party. On the current [leaderboard](https://synthbench.org/data/leaderboard.json) (generated 2026-07-15), the 3-model ensemble scores SPS 0.877 on opinionsqa, 0.831 on subpop, and 0.813 on globalopinionqa — roughly 0.01–0.05 above the best single model on each dataset and 0.07–0.11 above the random baseline (~0.71–0.76). Leaderboard numbers move as the board recomputes.
 
 ## Further reading
 

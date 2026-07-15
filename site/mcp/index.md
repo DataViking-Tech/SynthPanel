@@ -279,6 +279,22 @@ All panel runs (`run_panel`, `run_quick_poll`, `extend_panel`) return a uniform 
 
 For v1/v2 instruments and raw `questions` input, `path` is empty or linear and `warnings` is typically empty — the shape is uniform across versions.
 
+## Production notes
+
+Running panels unattended — CI gates, agent pipelines, scheduled research? The operational contract is documented and verified against the code:
+
+Typed errors, safe retries  Failures return a typed envelope (`error_code`, `retry_safe`, `schema_version`) — retry only on `MODEL_TIMEOUT` / `PANEL_TIMEOUT` and pre-exhaustion `SCHEMA_DRIFT`; everything else is terminal by contract. Requests are validated before any model call, so bad arguments cost zero tokens.
+
+Partial failure is contained  One failed panelist doesn’t sink the panel: errors are recorded per persona and per question, a failure-rate threshold (default 50%) decides run validity, and every abort path — cost ceiling, SIGINT, total failure — still emits valid partial JSON with a machine-readable `abort_reason`. A failed synthesis is recoverable post-hoc with `synthpanel panel synthesize` — no panel re-spend.
+
+Cost is bounded, not hoped `--dry-run` prints a cost estimate before any provider call; `--max-cost` enforces a hard projected-total ceiling mid-run; every response carries per-turn token and cost telemetry, and `synthpanel cost summary` reports spend across saved runs.
+
+Scale without babysitting  Checkpointing with `--resume` (auto-flushed on SIGINT/SIGTERM), `--max-concurrent` and `--rate-limit-rps` throttles, and convergence-based `--auto-stop` that quits paying for panelists once distributions stabilize.
+
+No secrets in configs `synthpanel mcp install` writes no API key unless you explicitly pass `--env`; credentials come from environment variables or the `synthpanel login` store (mode `0600`). Reproducibility is stamped in: saved results carry model/version provenance and a config hash.
+
+Full contract with code citations: [docs/production-operations.md](https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/production-operations.md) — error and retry semantics, exit codes, partial-failure behavior, cost gates, checkpoint/resume, determinism per provider, credential handling, and observability.
+
 ## Data storage
 
 Panel results, persona packs, and instrument packs are stored under `~/.synthpanel/` (configurable via `SYNTH_PANEL_DATA_DIR`):
