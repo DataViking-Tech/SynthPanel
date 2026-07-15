@@ -168,19 +168,43 @@ SynthBench-validated model picks by use case. Use `--best-model-for` to auto-sel
 
 ## Measured against real humans
 
-The [SynthBench](https://synthbench.org) benchmark’s ground truth is real survey respondents — the Pew American Trends Panel, the General Social Survey, and the World Values Survey, via the OpinionsQA, SubPOP, and GlobalOpinionQA datasets — and every number below is recomputable from public data and open code.
+The [SynthBench](https://synthbench.org) benchmark’s ground truth is real survey respondents — the General Social Survey (NORC), the Pew American Trends Panel (via the OpinionsQA, SubPOP, and GlobalOpinionQA datasets), and the World Values Survey — and every number below is recomputable from public data and open code. GSS is public-use, so for it the real human answer shares are shown directly.
+
+Real General Social Survey question (2024 wave, item `GSS_LIFE`) — GSS is public-use data, so the real human answer shares appear side by side with the synthetic ones:
+
+“In general, do you find life exciting, pretty routine, or dull?”
+
+Exciting humans 36.8% · synthetic 26.7%
+
+Pretty routine humans 56.7% · synthetic 73.3%
+
+Dull humans 5.7% · synthetic 0.0%
+
+Don’t know humans 0.7% · synthetic 0.0%
+
+Green = real humans: GSS 2024, NORC — public-use data, weighted shares (`wtssnrps`). Blue = synthetic: gemini-2.5-flash via the SynthBench harness, run 2026-07-15, 30 sampled responses.
+
+Measured divergence between the two distributions: Jensen–Shannon divergence 0.046 (0 = identical distributions, 1 = disjoint).
+
+This item is one of that run’s closest matches; across all 75 GSS questions the same run’s mean JSD is 0.301. Because NORC releases GSS into the public domain, the full per-question payload — real distribution included — is served openly at [synthbench.org/data/question/gss/GSS_LIFE.json](https://synthbench.org/data/question/gss/GSS_LIFE.json) (no sign-in), alongside 59 more GSS items, and is recomputable from the [NORC GSS release](https://gss.norc.org) with the open [SynthBench harness](https://github.com/DataViking-Tech/SynthBench) (`leaderboard-results/gss_openrouter_google_gemini-2.5-flash_20260715_175807.json`).
 
 Real Pew American Trends Panel question (Wave 96, via SubPOP item `BELIEVE_a_W96`):
 
 “Do you believe in Heaven?”
 
-Yes, I believe in this 55.4%
+Pew’s response data is license-gated (CC-BY-NC-SA), so this page shows only the *gap* between the SynthPanel 3-model ensemble (90 sampled responses) and the real Pew respondents — not the survey values themselves:
 
-No, I do not believe in this 44.6%
+Yes, I believe in this synthetic within ±13.8 pts
 
-That is the SynthPanel 3-model ensemble’s synthetic answer distribution (90 sampled responses). Measured divergence from the real Pew respondents’ distribution: Jensen–Shannon divergence 0.023 (0 = identical distributions, 1 = disjoint).
+No, I do not believe in this synthetic within ±15.1 pts
 
-This item is one of the ensemble’s closest matches, shown because Pew’s wording is short; across the full 200-question SubPOP evaluation the same run’s mean JSD is 0.209. The human response data itself is license-gated for redistribution (CC-BY-NC-SA) — view it signed-in at synthbench.org, or recompute this exact number from the public [SubPOP dataset](https://huggingface.co/datasets/jjssuh/subpop) and the open [SynthBench harness](https://github.com/DataViking-Tech/SynthBench); the synthetic distribution and per-question JSD are published in the repo (`leaderboard-results/subpop_ensemble_3blend_20260714_171917.json`, run dated 2026-07-14).
+Refused synthetic within ±1.3 pts
+
+Bars show |synthetic − human| per answer option, in percentage points (shorter = closer).
+
+Measured divergence from the real Pew respondents’ distribution: Jensen–Shannon divergence 0.023 (0 = identical distributions, 1 = disjoint).
+
+This item is one of the ensemble’s closest matches by JSD; across the full 200-question SubPOP evaluation the same run’s mean JSD is 0.209. View the underlying distributions signed-in at synthbench.org, or recompute these exact numbers from the public [SubPOP dataset](https://huggingface.co/datasets/jjssuh/subpop) and the open [SynthBench harness](https://github.com/DataViking-Tech/SynthBench); the synthetic distribution and per-question JSD are published in the repo (`leaderboard-results/subpop_ensemble_3blend_20260714_171917.json`, run dated 2026-07-14).
 
 Powers the [SynthBench](https://synthbench.org) open benchmark — an open, reproducible evaluation of synthetic-respondent quality (public data + scoring code), operated by the SynthPanel maintainers rather than an independent third party. On the current [leaderboard](https://synthbench.org/data/leaderboard.json) (generated 2026-07-15), the 3-model ensemble scores SPS 0.877 on opinionsqa, 0.831 on subpop, and 0.813 on globalopinionqa — roughly 0.01–0.05 above the best single model on each dataset and 0.07–0.11 above the random baseline (~0.71–0.76). Leaderboard numbers move as the board recomputes.
 
