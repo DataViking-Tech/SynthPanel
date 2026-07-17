@@ -79,10 +79,10 @@ echoed on every persisted-panel success envelope and every typed error
 [docs/methodology.md](docs/methodology.md).
 
 **Zero-config inside any MCP host that speaks sampling** (Claude Desktop,
-Claude Code, Cursor, Windsurf) — drop the config in and run a panel with **no
-API key set**. The host runs the model on your behalf, using its own
-subscription. Bring your own provider key when you want reproducibility,
-ensembles, or larger panels. Personas and instruments are plain YAML; every
+Claude Code, Cursor, Windsurf) — drop the config in and run `run_prompt` and
+small `run_quick_poll` calls (up to 3 personas) with **no API key set**. The
+host runs the model on your behalf, using its own subscription. Full panels,
+ensembles, and reproducible model pins need your own provider key. Personas and instruments are plain YAML; every
 response is schema-validated with per-turn cost telemetry.
 
 ## Why
@@ -142,8 +142,9 @@ run without one.
 Read `synthesis.recommendation` for the headline call, `synthesis.disagreements`
 for dissent, and `rounds[].results[]` for the per-panelist transcript. See
 [docs/response-contract.md](docs/response-contract.md) for the full v1.0.0
-envelope (note: `panel_verdict` fields like `convergence` and `flags[]` are
-defined but not yet emitted on the success path — see the note in the lede).
+envelope (as of v1.0.6, `panel_verdict` — `headline`, `convergence`,
+`dissent_count`, `flags[]` — is emitted on the success path of the MCP panel
+tools; see the note in the lede for the sampling-mode/ensemble exceptions).
 
 **Structured polling is the agent default.** For pick-one, Likert,
 confidence, and tagged-themes questions, pass a bounded
@@ -307,7 +308,9 @@ arguments to override. Provider keys are read from environment variables
 (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`/`GEMINI_API_KEY`,
 `XAI_API_KEY`) — pass whichever your model requires.
 
-Pin to a specific version (`:0.11.0`) in production rather than `:latest`.
+Pin to a version tag in production rather than `:latest` — either the exact
+release (`:1.5.7`) or the floating major.minor tag (`:1.5`), both published on
+every stable release.
 
 ## Use as a Python Library
 
@@ -1365,6 +1368,14 @@ modes.
 
 | Version | Highlights |
 |---------|-----------|
+| 1.5.x *(current)* | `synthpanel mcp install --host auto` one-liner host registration; four canonical persona packs; deterministic `poll-summary` rollups; MCP auto-picks a fast model for ≥10-persona panels; `results list`/`results show` for the saved-results store; `python -m synthpanel` alias; fail-loud empty attachments and typed `response_schema` enforcement; synthesis routing follows the panel's provider; PyPI Trusted Publishing + auto-tag version-drift guard |
+| 1.4.0 | Explicit `cost_estimated_usd` / `cost_actual_usd` (+ `per_model_breakdown`) on `EnsembleResult`, `ModelRunResult`, and `SynthesisResult` — estimate-vs-bill reconciliation without inspecting raw usage |
+| 1.3.0 | `trafilatura` moved to the `[full]` extra so bare `pip install synthpanel` works on pyodide/Cloudflare Python Workers (no `lxml` C extension required) |
+| 1.2.0 | Pyodide-safe / async-DI surface for `synth_panel.ensemble.synthesize_panel` — drive the judge call through your own async LLM client |
+| 1.1.0 | `synth_panel.ensemble` frozen as the supported public API for the ensemble/deliberation core |
+| 1.0.6 | Cross-town dogfood friction sweep on the v1.0.x line; `panel_verdict` emitted on the MCP success path; release-dogfood protocol codified |
+| 1.0.0 | Frozen MCP contract (`schemas/v1.0.0.json`, `schema_version` echoed on every response and typed error); multimodal attachments (images, URLs, PDFs, inline HTML) with stratified delivery and a URL-fetch security perimeter |
+| 0.12.0 | `--best-model-for TOPIC[:DATASET]` SynthBench-driven model picker, `--submit-to-synthbench`, `synthpanel pack calibrate`, six bundled packs deepened 5 → 15 personas |
 | 0.11.0 | `sp-i2ub` scaled-orchestration epic: panelist-level checkpointing with `--resume <run-id>` and auto-checkpoint on SIGINT/SIGTERM (every K=25 panelists), `--max-cost <USD>` mid-run projected-total cost gate that halts gracefully with valid partial JSON, and valid-partial-JSON discipline on every abort path (rate-exhaustion, SIGINT, cost-gate, panelist failure) with `run_invalid: true` + specific `abort_reason` and exit code 2; 6-bug loudness sweep turning silent failures loud across alias parse, synthesis partial payload, MCP `extend_panel`, condition evaluator, orchestrator follow-up exceptions, and the `test_aliases` fixture; auto-tag now fails loudly on unlabeled release PRs; `pip-audit` ignores CVE-2026-3219 in pip 26.0.1 |
 | 0.10.0 | `synthpanel report` post-hoc Markdown renderer for saved panel results (behind `[report]` extra); inline SynthBench calibration via `panel run --calibrate-against DATASET:QUESTION` with auto-derived `pick_one` schema and `per_question[key].calibration` sub-object wire format; decentralized pack registry — `pack import gh:<user>/<repo>` with `--unverified`, `pack search`, `pack list --registry`, 24h cache + offline fallback; optional `version:` field on persona packs with opt-in shadow warning |
 | 0.9.9 | `--synthesis-strategy=auto` now routes to map-reduce on context overflow instead of hard-failing; OpenRouter alias resolution tightened for sub-1¢ local-table sanity checks; `--personas-merge` warns (or errors via `--personas-merge-on-collision`) on name collisions with bundled packs; version single-sourced from `src/synth_panel/__version__.py` with templated site render |
@@ -1388,10 +1399,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, and how t
 
 ## Benchmarked on SynthBench
 
-synthpanel's ability to produce representative synthetic respondents is independently measured by [SynthBench](https://dataviking-tech.github.io/synthbench/), an open benchmark for synthetic survey quality.
+synthpanel's ability to produce representative synthetic respondents is measured by [SynthBench](https://synthbench.org), an open benchmark for synthetic survey quality (a sibling DataViking project, operated by the SynthPanel maintainers).
 
-- **Want proof it works?** Browse the [leaderboard](https://dataviking-tech.github.io/synthbench/leaderboard/) — ensemble blending of 3 models hits SPS 0.90 (90% human parity).
-- **Got a great configuration?** [Submit your scores](https://dataviking-tech.github.io/synthbench/submit/) and compare against baselines.
+- **Want proof it works?** Browse the [leaderboard](https://synthbench.org) — the 3-model ensemble blend scores SPS 0.877 on opinionsqa, 0.858 on subpop, and 0.813 on globalopinionqa (leaderboard generated 2026-07-17; numbers move as the board recomputes).
+- **Got a great configuration?** [Submit your scores](https://synthbench.org) and compare against baselines.
 - **Contributing an adapter?** Heavy PRs with substantial behavior changes benefit from SynthBench results — reviewers can evaluate empirical quality, not just code. See [docs/adapter-guide.md](docs/adapter-guide.md) for the full adapter workflow.
 
 ## License

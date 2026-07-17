@@ -524,7 +524,7 @@
           <pre class="text-slate-300 overflow-x-auto whitespace-pre">synthpanel panel run \
   --personas panel.yaml \
   --instrument survey.yaml \
-  --checkpoint-dir /tmp/runs \    <span class="text-slate-400"># opts in; default: ~/.synthpanel/checkpoints</span>
+  --checkpoint-dir /tmp/runs \    <span class="text-slate-400"># passing the flag opts in to checkpointing</span>
   --checkpoint-every 10           <span class="text-slate-400"># flush every 10 completed panelists</span></pre>
         </div>
         <p class="mt-3 text-sm text-slate-400">
@@ -540,6 +540,10 @@
           <pre class="text-slate-300 overflow-x-auto whitespace-pre">synthpanel panel run --resume &lt;run-id&gt;</pre>
         </div>
         <p class="mt-3 text-sm text-slate-400">
+          Without <code class="text-slate-300">--checkpoint-dir</code>, resume
+          looks up the run under
+          <code class="text-slate-300">$SYNTHPANEL_CHECKPOINT_ROOT</code> or
+          <code class="text-slate-300">~/.synthpanel/checkpoints</code>.
           When <code class="text-slate-300">--personas</code> and
           <code class="text-slate-300">--instrument</code> are omitted they are recovered from the
           checkpoint's saved CLI args. The resume refuses to start if the current
@@ -560,8 +564,8 @@
             <tbody class="divide-y divide-slate-800">
               <tr>
                 <td><code>--checkpoint-dir PATH</code></td>
-                <td class="text-slate-400"><code>~/.synthpanel/checkpoints</code></td>
-                <td class="text-slate-300">Directory for per-run snapshots. Setting this opts in to checkpointing.</td>
+                <td class="text-slate-400">off (no snapshots)</td>
+                <td class="text-slate-300">Directory for per-run snapshots. Setting this opts in to checkpointing; omit it (and <code>--resume</code>) to run without snapshots. A <code>--resume</code> without this flag reads from <code>$SYNTHPANEL_CHECKPOINT_ROOT</code> or <code>~/.synthpanel/checkpoints</code>.</td>
               </tr>
               <tr>
                 <td><code>--checkpoint-every N</code></td>

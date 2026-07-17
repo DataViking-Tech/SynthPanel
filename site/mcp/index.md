@@ -368,6 +368,8 @@ Panel results, persona packs, and instrument packs are stored under `~/.synthpan
 └── results/                # Panel results (JSON) + session data
 ```
 
+Note the two distinct locations: API keys saved by `synthpanel login` live in the credential store at `~/.config/synthpanel/credentials.json` (mode `0600`), while run data and packs live under `~/.synthpanel/` as shown above.
+
 ## Troubleshooting
 
 `command not found: synthpanel`  The MCP host can't find the binary on its `PATH`. MCP subprocesses inherit the host's environment, not your shell's. Fix by installing globally (`pip install "synthpanel[mcp]"`), pointing `command` at an absolute path (e.g. `/Users/you/.venv/bin/synthpanel`), or running through `uvx` (`"command": "uvx", "args": ["--from", "synthpanel[mcp]", "synthpanel", "mcp-serve"]`). Claude Desktop on macOS is especially strict — use an absolute path or `uvx`.

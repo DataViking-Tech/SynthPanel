@@ -154,7 +154,7 @@ For long or expensive runs, checkpointing writes per-panelist progress to disk s
 synthpanel panel run \
   --personas panel.yaml \
   --instrument survey.yaml \
-  --checkpoint-dir /tmp/runs \    # opts in; default: ~/.synthpanel/checkpoints
+  --checkpoint-dir /tmp/runs \    # passing the flag opts in to checkpointing
   --checkpoint-every 10           # flush every 10 completed panelists
 ```
 
@@ -166,11 +166,11 @@ The run id is printed to stderr. Each checkpoint is written to `<checkpoint-dir>
 synthpanel panel run --resume <run-id>
 ```
 
-When `--personas` and `--instrument` are omitted they are recovered from the checkpoint's saved CLI args. The resume refuses to start if the current config (model, temperature, questions) does not match the checkpointed config — pass `--allow-drift` to downgrade this to a warning and continue (statistically inconsistent results).
+Without `--checkpoint-dir`, resume looks up the run under `$SYNTHPANEL_CHECKPOINT_ROOT` or `~/.synthpanel/checkpoints`. When `--personas` and `--instrument` are omitted they are recovered from the checkpoint's saved CLI args. The resume refuses to start if the current config (model, temperature, questions) does not match the checkpointed config — pass `--allow-drift` to downgrade this to a warning and continue (statistically inconsistent results).
 
 | Flag | Default | Description |
 |---|---|---|
-| `--checkpoint-dir PATH` | `~/.synthpanel/checkpoints` | Directory for per-run snapshots. Setting this opts in to checkpointing. |
+| `--checkpoint-dir PATH` | off (no snapshots) | Directory for per-run snapshots. Setting this opts in to checkpointing; omit it (and `--resume`) to run without snapshots. A `--resume` without this flag reads from `$SYNTHPANEL_CHECKPOINT_ROOT` or `~/.synthpanel/checkpoints`. |
 | `--checkpoint-every N` | 25 | Flush a checkpoint every N completed panelists. |
 | `--resume RUN_ID` | — | Resume a checkpointed run. Skips already-completed panelists. |
 | `--allow-drift` | off | With `--resume`: downgrade config-mismatch errors to warnings. |
