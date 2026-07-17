@@ -17,7 +17,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from synth_panel.cost import ZERO_USAGE, resolve_cost
+from synth_panel.cost import ZERO_USAGE, CostGate, resolve_cost
 from synth_panel.cost import TokenUsage as CostTokenUsage
 from synth_panel.instrument import Instrument
 from synth_panel.llm.client import LLMClient
@@ -691,6 +691,7 @@ def run_panel_sync(
     attachment_bank: dict[str, dict[str, Any]] | None = None,
     allow_empty_attachments: bool = False,
     sessions_out: dict[str, Any] | None = None,
+    cost_gate: CostGate | None = None,
 ) -> tuple[
     list[PanelistResult],
     list[dict[str, Any]],
@@ -711,6 +712,16 @@ def run_panel_sync(
     keyed by persona name. Kept as an out-param rather than a seventh
     tuple element so existing unpack sites stay valid. The MCP server
     uses this to persist AC-7 decision-stamped transcripts.
+
+    ``cost_gate``: optional :class:`~synth_panel.cost.CostGate` (sp-utnk /
+    GH#576). Threaded to :func:`run_panel_parallel`, which records each
+    completing panelist's priced cost and soft-halts dispatch when the
+    projected run total exceeds the ceiling. When the gate has halted,
+    synthesis is skipped (same rationale as the CLI: synthesizing a
+    deliberately-truncated panel burns more budget without producing a
+    trustworthy result). The caller keeps the gate reference and is
+    expected to inspect ``cost_gate.should_halt()`` on return to shape
+    its partial-result envelope.
     """
     all_personas = list(personas)
     variant_names: set[str] = set()
@@ -728,6 +739,9 @@ def run_panel_sync(
                 variant_count += 1
         logger.info("Running panel with %d base + %d variant personas", len(personas), variant_count)
 
+    # GH#576: pass the gate only when armed so existing monkeypatched
+    # test doubles / caller shims with explicit signatures keep working.
+    _gate_kwargs: dict[str, Any] = {"cost_gate": cost_gate} if cost_gate is not None else {}
     panelist_results, _registry, _sessions = run_panel_parallel(
         client=client,
         personas=all_personas,
@@ -743,6 +757,7 @@ def run_panel_sync(
         extract_schema=extract_schema,
         attachment_bank=attachment_bank,
         allow_empty_attachments=allow_empty_attachments,
+        **_gate_kwargs,
     )
     if sessions_out is not None:
         sessions_out.update(_sessions)
@@ -773,6 +788,13 @@ def run_panel_sync(
     # ``synthesis_dict``. Callers (MCP server / SDK) detect this and lift
     # it to ``run_invalid=True`` + top-level ``synthesis_error`` on the
     # result envelope.
+    # GH#576: mirror the CLI's cost-gate discipline — a halted run is a
+    # deliberately-truncated partial, so spending more budget synthesizing
+    # it would produce an untrustworthy result. Skip synthesis entirely.
+    cost_gate_halted = cost_gate is not None and cost_gate.should_halt()
+    if synthesis and cost_gate_halted:
+        logger.warning("cost gate halted the panel; skipping synthesis on the partial result")
+        synthesis = False
     if synthesis:
         synth_model_for_check = synthesis_model or model
         overflow = detect_synthesis_context_overflow(
