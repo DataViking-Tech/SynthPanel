@@ -1710,6 +1710,9 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 file=sys.stderr,
             )
     if has_models:
+        # The demotion above nulls has_models and model_spec together, so a
+        # truthy has_models implies a parsed spec; assert for mypy's sake.
+        assert model_spec is not None
         # sp-zdul: warn if weighted sum is far from 1.0 — the user likely
         # intended an exact-ratio split and a typo (e.g. "0.3,0.3,0.3")
         # silently reweights their panel.
