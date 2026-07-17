@@ -1133,12 +1133,23 @@
               <code class="text-slate-300">cost</code>, so the loop is: pilot
               with <code class="text-slate-300">run_quick_poll</code>, gate on
               the returned cost, then scale to a full
-              <code class="text-slate-300">run_panel</code>. Note the hard
-              mid-run spend ceiling
-              (<code class="text-slate-300">--max-cost</code>) is a CLI flag —
-              there is no <code class="text-slate-300">max_cost</code> tool
-              argument on the MCP surface; unattended hard ceilings mean
-              driving the CLI.
+              <code class="text-slate-300">run_panel</code>. For unattended
+              hard ceilings, pass
+              <code class="text-slate-300">max_cost</code> (USD) to
+              <code class="text-slate-300">run_panel</code> /
+              <code class="text-slate-300">run_quick_poll</code> /
+              <code class="text-slate-300">extend_panel</code> — the MCP
+              analog of the CLI's
+              <code class="text-slate-300">--max-cost</code>, wired into the
+              same mid-run cost gate. On a trip the response is a valid
+              partial envelope with
+              <code class="text-slate-300">cost_exceeded: true</code>,
+              <code class="text-slate-300">abort_reason:
+              "cost_exceeded"</code>, a
+              <code class="text-slate-300">cost_gate</code> snapshot (spend
+              so far, cap, projection), and a
+              <code class="text-slate-300">resume</code> block naming the
+              persisted partial and the remaining personas.
             </dd>
           </div>
         </dl>
@@ -1222,11 +1233,13 @@
               <tr>
                 <td>Cost ceiling hit</td>
                 <td>
-                  <code>--max-cost</code> halts gracefully mid-run: pending
-                  panelists cancelled, valid partial JSON with
-                  <code>run_invalid: true</code>,
+                  <code>--max-cost</code> (CLI) or the <code>max_cost</code>
+                  tool argument (MCP) halts gracefully mid-run: pending
+                  panelists cancelled, synthesis skipped, valid partial JSON
+                  with <code>run_invalid: true</code>,
                   <code>cost_exceeded: true</code>,
-                  <code>halted_at_panelist</code>. Exit <code>2</code>.
+                  <code>halted_at_panelist</code>, and (MCP) a
+                  <code>resume</code> block. CLI exit <code>2</code>.
                 </td>
               </tr>
               <tr>

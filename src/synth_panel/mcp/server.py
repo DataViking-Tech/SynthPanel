@@ -66,6 +66,7 @@ from synth_panel._runners import (
 from synth_panel.cost import (
     ZERO_USAGE,
     CostEstimate,
+    CostGate,
     aggregate_per_model,
     build_cost_fallback_warnings,
     estimate_cost,
@@ -345,6 +346,93 @@ def _invalid_tool_arg(message: str, *, field_path: str | None = None) -> str:
     ).to_dict()
     env["error"] = message
     return json.dumps(env)
+
+
+def _validate_max_cost(max_cost: float | None) -> str | None:
+    """Boundary validation for the ``max_cost`` tool argument (GH#576).
+
+    Returns a typed ``INVALID_TOOL_ARG`` envelope string when the value is
+    unusable, or ``None`` when it is absent or valid. Mirrors the CLI's
+    ``--max-cost must be > 0`` check so both surfaces refuse the same way.
+    """
+    if max_cost is None:
+        return None
+    try:
+        value = float(max_cost)
+    except (TypeError, ValueError):
+        return _invalid_tool_arg(
+            f"'max_cost' must be a number (USD ceiling), got {max_cost!r}.",
+            field_path="max_cost",
+        )
+    if value <= 0:
+        return _invalid_tool_arg(
+            f"'max_cost' must be > 0 (a positive USD ceiling), got {max_cost!r}.",
+            field_path="max_cost",
+        )
+    return None
+
+
+def _attach_cost_gate_halt(
+    result: dict[str, Any],
+    *,
+    cost_gate: CostGate,
+    personas: list[dict[str, Any]],
+    completed_names: list[str],
+    result_id: str | None,
+    tool: str,
+    resume_hint: str | None = None,
+) -> None:
+    """Mark a response envelope as a cost-gate partial (GH#576).
+
+    Mirrors the CLI's ``--max-cost`` trip envelope (sp-utnk): the run is
+    flagged ``run_invalid`` with ``cost_exceeded: true``, a specific
+    ``abort_reason``, the panelist index at halt, and the machine-readable
+    ``cost_gate`` snapshot (spend so far, ceiling, projection). On top of
+    the CLI shape, an agent-legible ``resume`` block states exactly how to
+    continue: the completed prefix is already persisted under
+    ``result_id`` (the MCP analog of the CLI's checkpoint file), and the
+    remaining personas can be re-run in a follow-up call.
+    """
+    snap = cost_gate.snapshot()
+    completed_set = set(completed_names)
+    remaining = [p.get("name", "Anonymous") for p in personas if p.get("name", "Anonymous") not in completed_set]
+    result["run_invalid"] = True
+    result["cost_exceeded"] = True
+    result["abort_reason"] = "cost_exceeded"
+    result["halted_at_panelist"] = cost_gate.completed
+    result["cost_gate"] = snap
+    if resume_hint is None:
+        resume_hint = (
+            f"To finish the panel, call {tool} again with only remaining_personas "
+            "and a raised (or omitted) max_cost, then combine with the persisted partial. "
+            "Synthesis was skipped on this partial to avoid spending past the cap."
+        )
+    resume: dict[str, Any] = {
+        "completed_panelists": list(completed_names),
+        "remaining_personas": remaining,
+        "how_to_resume": (
+            f"The completed prefix ({len(completed_names)} panelist(s), "
+            f"${snap['running_cost_usd']:.4f} spent of the ${snap['max_cost_usd']:.4f} cap) "
+            + (
+                f"is persisted under result_id {result_id!r} — fetch it with get_panel_result({result_id!r}). "
+                if result_id
+                else "is returned in this envelope. "
+            )
+            + resume_hint
+        ),
+    }
+    if result_id:
+        resume["partial_result_id"] = result_id
+    result["resume"] = resume
+    warnings_list = result.setdefault("warnings", [])
+    if isinstance(warnings_list, list):
+        warnings_list.append(
+            "cost_exceeded: projected total "
+            f"${snap['projected_total_usd']:.4f} > max ${snap['max_cost_usd']:.4f} after "
+            f"{snap['completed']}/{snap['total_panelists']} panelists "
+            f"(running ${snap['running_cost_usd']:.4f}); pending panelists were cancelled "
+            "and synthesis was skipped"
+        )
 
 
 def _panel_timeout_envelope(
@@ -946,6 +1034,7 @@ def _server_run_panel_sync(
     synthesis_temperature: float | None = None,
     variants: int = 0,
     sessions_out: dict[str, Any] | None = None,
+    cost_gate: CostGate | None = None,
 ) -> tuple[
     list[PanelistResult], list[dict[str, Any]], CostTokenUsage, Any, dict[str, Any] | None, dict[str, Any] | None
 ]:
@@ -966,6 +1055,7 @@ def _server_run_panel_sync(
         synthesis_temperature=synthesis_temperature,
         variants=variants,
         sessions_out=sessions_out,
+        cost_gate=cost_gate,
     )
 
 
@@ -1285,6 +1375,7 @@ async def _run_panel_async(
     decision_being_informed: str | None = None,
     decision_warnings: list[str] | tuple[str, ...] = (),
     detail: str = "summary",
+    max_cost: float | None = None,
 ) -> dict[str, Any]:
     """Run panel via asyncio.to_thread with progress notifications.
 
@@ -1298,10 +1389,23 @@ async def _run_panel_async(
     panelist row; ``"summary"`` (the default) drops the top-level
     ``results`` mirror and ``rounds[].results`` via :func:`_apply_detail`
     so a large BYOK panel doesn't flood the caller's context.
+
+    ``max_cost`` (GH#576) arms a :class:`~synth_panel.cost.CostGate` sized
+    to the dispatched personas — the exact machinery behind the CLI's
+    ``--max-cost``. On a trip, the returned envelope is a valid partial
+    with ``run_invalid``, ``cost_exceeded``, ``abort_reason:
+    "cost_exceeded"``, the ``cost_gate`` snapshot, and a ``resume`` block
+    (see :func:`_attach_cost_gate_halt`).
     """
     total = len(personas)
     timer = PanelTimer()
     await ctx.report_progress(0, total)
+
+    # GH#576: arm the projected-total cost gate before dispatch. Sized to
+    # the personas actually being dispatched, same as the CLI wiring.
+    cost_gate: CostGate | None = None
+    if max_cost is not None:
+        cost_gate = CostGate(max_cost_usd=max_cost, total_panelists=total)
 
     # Run the blocking panel execution in a thread
     run_sessions: dict[str, Any] = {}
@@ -1329,6 +1433,7 @@ async def _run_panel_async(
             synthesis_temperature=synthesis_temperature,
             variants=variants,
             sessions_out=run_sessions,
+            cost_gate=cost_gate,
         ),
         timeout=PANELIST_TIMEOUT * total * (1 + variants),
     )
@@ -1468,6 +1573,20 @@ async def _run_panel_async(
     if synthesis_dict and isinstance(synthesis_dict.get("synthesis_error"), dict):
         result["run_invalid"] = True
         result["synthesis_error"] = synthesis_dict["synthesis_error"]
+
+    # GH#576: cost gate tripped mid-run — the orchestrator cancelled the
+    # pending panelists and ``result_dicts`` is a valid completed prefix.
+    # Surface the same typed partial-result markers the CLI emits, plus an
+    # agent-legible resume block.
+    if cost_gate is not None and cost_gate.should_halt():
+        _attach_cost_gate_halt(
+            result,
+            cost_gate=cost_gate,
+            personas=personas,
+            completed_names=[pr.persona_name for pr in panelist_results_full],
+            result_id=result_id,
+            tool="run_panel",
+        )
 
     if variant_data:
         result["robustness_scores"] = variant_data["robustness_scores"]
@@ -1624,6 +1743,7 @@ async def run_panel(
     models: list[str] | None = None,
     synthesis_temperature: float | None = None,
     variants: int | None = None,
+    max_cost: float | None = None,
     use_sampling: bool | None = None,
     accept_multimodal_sampling: bool = False,
     decision_being_informed: str | None = None,
@@ -1784,6 +1904,27 @@ async def run_panel(
             robustness analysis. When > 0, each persona is perturbed K times
             and all variants run through the same questions. Results include
             robustness_scores and per_persona_robustness. Default: no variants.
+        max_cost: Hard ceiling on total panel spend, in USD (the MCP
+            analog of the CLI's ``--max-cost``, GH#576). After each
+            panelist completes, ``running_cost / completed_n * total_n``
+            is compared against the ceiling; if the projected total
+            exceeds it the run soft-halts — the in-flight panelists
+            finish, no new panelists start, synthesis is skipped — and
+            the response is a valid *partial* envelope with
+            ``run_invalid: true``, ``cost_exceeded: true``,
+            ``abort_reason: "cost_exceeded"``, ``halted_at_panelist``, a
+            machine-readable ``cost_gate`` snapshot (spend so far, cap,
+            projection), and a ``resume`` block naming the persisted
+            partial ``result_id``, the completed panelists, and the
+            remaining personas to re-run. Composes with
+            ``detail="summary"`` and the ``panel_verdict`` envelope.
+            Must be > 0. BYOK inline-``questions`` runs only: typed
+            ``INVALID_TOOL_ARG`` when combined with sampling mode (the
+            host agent pays; no server-side cost accounting), ``models``
+            ensembles, ``variants``, or ``instrument`` /
+            ``instrument_pack`` inputs (parity with the CLI, which
+            refuses ``--max-cost`` on the multi-round engine). Default:
+            no ceiling.
         use_sampling: Explicit mode override. ``True`` forces sampling
             (error if unsupported or if limits exceeded), ``False`` forces
             BYOK. ``None`` auto-picks based on creds + client capability.
@@ -1844,6 +1985,37 @@ async def run_panel(
     variants_k = variants or 0
     if variants_k < 0 or variants_k > 20:
         return json.dumps({"error": "variants must be between 0 and 20."})
+
+    # ── GH#576: max_cost boundary checks ─────────────────────────────────
+    # The gate wires into the single-round BYOK orchestrator only (exact
+    # parity with the CLI's --max-cost support matrix); every unsupported
+    # combination refuses loudly before any LLM spend.
+    max_cost_error = _validate_max_cost(max_cost)
+    if max_cost_error is not None:
+        return max_cost_error
+    if max_cost is not None:
+        if models and len(models) >= 2:
+            return _invalid_tool_arg(
+                "max_cost is not supported with multi-model ensembles (models=[...]); "
+                "run each model separately with its own max_cost, or drop max_cost.",
+                field_path="max_cost",
+            )
+        if instrument is not None or instrument_pack is not None:
+            return _invalid_tool_arg(
+                "max_cost is not supported with instrument / instrument_pack inputs "
+                "(they dispatch through the multi-round engine, which the cost gate "
+                "does not cover — same refusal as the CLI's --max-cost). Pass the "
+                "instrument's questions inline via 'questions', or drop max_cost.",
+                field_path="max_cost",
+            )
+        if variants_k > 0:
+            return _invalid_tool_arg(
+                "max_cost is not supported together with variants (robustness "
+                "perturbation): the gate's projection is sized to the base panel "
+                "and variant expansion would skew it. Run the variant sweep "
+                "ungated, or pilot ungated variants on a smaller panel first.",
+                field_path="max_cost",
+            )
 
     # Resolve extract_schema name → dict before threading to orchestrator.
     try:
@@ -1930,6 +2102,19 @@ async def run_panel(
         if decision.mode == "error":
             return json.dumps({"error": decision.error})
         if decision.mode == "sampling":
+            # GH#576: sampling mode has no server-side cost accounting
+            # (tokens bill to the host agent's subscription), so a USD
+            # ceiling cannot be enforced. Refuse loudly rather than
+            # silently running unbounded.
+            if max_cost is not None:
+                return _invalid_tool_arg(
+                    "max_cost requires BYOK cost accounting; this call resolved to "
+                    "sampling mode, where token spend bills to the host agent and "
+                    "the server sees no per-panelist costs. Set a provider API key "
+                    "(e.g. ANTHROPIC_API_KEY) / pass use_sampling=false, or drop "
+                    "max_cost.",
+                    field_path="max_cost",
+                )
             # Resolve question stream for sampling — no v3 branching.
             # The instrument itself was resolved + vars-substituted above.
             sampling_questions: list[dict[str, Any]]
@@ -2107,6 +2292,7 @@ async def run_panel(
             decision_being_informed=decision_being_informed,
             decision_warnings=decision_warnings,
             detail=detail,
+            max_cost=max_cost,
         )
     except PanelTotalFailureError as exc:
         logger.error("run_panel: total failure: %s", exc)
@@ -2147,6 +2333,7 @@ async def run_quick_poll(
     synthesis_prompt: str | None = None,
     temperature: float | None = None,
     top_p: float | None = None,
+    max_cost: float | None = None,
     use_sampling: bool | None = None,
     accept_multimodal_sampling: bool = False,
     decision_being_informed: str | None = None,
@@ -2219,6 +2406,18 @@ async def run_quick_poll(
         synthesis_prompt: Custom synthesis prompt. Replaces the default.
         temperature: Sampling temperature (0.0-1.0). Controls randomness.
         top_p: Nucleus sampling threshold (0.0-1.0). Alternative to temperature.
+        max_cost: Hard ceiling on total poll spend, in USD (the MCP
+            analog of the CLI's ``--max-cost``, GH#576). Same semantics
+            as ``run_panel``'s ``max_cost``: soft-halt when the
+            projected total exceeds the ceiling — the in-flight
+            panelists finish, no new panelists start, synthesis is
+            skipped — and the response is a valid partial envelope
+            carrying ``run_invalid: true``, ``cost_exceeded: true``,
+            ``abort_reason: "cost_exceeded"``, ``halted_at_panelist``,
+            the ``cost_gate`` snapshot, and a ``resume`` block. Must be
+            > 0. BYOK only — typed ``INVALID_TOOL_ARG`` when the call
+            resolves to sampling mode (the host agent pays; no
+            server-side cost accounting). Default: no ceiling.
         use_sampling: Explicit mode override. ``True`` forces sampling
             (error if unsupported), ``False`` forces BYOK. ``None``
             auto-picks based on creds + client capability.
@@ -2253,6 +2452,11 @@ async def run_quick_poll(
     if spec_error is not None:
         return spec_error
     model_was_explicit = model is not None
+
+    # GH#576: max_cost boundary check (same rule as run_panel / the CLI).
+    max_cost_error = _validate_max_cost(max_cost)
+    if max_cost_error is not None:
+        return max_cost_error
 
     if not question or not question.strip():
         return json.dumps({"error": "Question text must be a non-empty string."})
@@ -2292,6 +2496,17 @@ async def run_quick_poll(
         return json.dumps({"error": decision.error})
 
     if decision.mode == "sampling":
+        # GH#576: no server-side cost accounting in sampling mode — a USD
+        # ceiling cannot be enforced. Refuse loudly (parity with run_panel).
+        if max_cost is not None:
+            return _invalid_tool_arg(
+                "max_cost requires BYOK cost accounting; this call resolved to "
+                "sampling mode, where token spend bills to the host agent and "
+                "the server sees no per-panelist costs. Set a provider API key "
+                "(e.g. ANTHROPIC_API_KEY) / pass use_sampling=false, or drop "
+                "max_cost.",
+                field_path="max_cost",
+            )
         if len(personas) > SAMPLING_MAX_PERSONAS:
             return json.dumps(
                 {
@@ -2333,6 +2548,7 @@ async def run_quick_poll(
             decision_being_informed=decision_being_informed,
             decision_warnings=decision_warnings,
             detail=detail,
+            max_cost=max_cost,
         )
     except PanelTotalFailureError as exc:
         # Same typed envelope run_panel returns — a knowingly-bad model
@@ -2681,6 +2897,7 @@ async def extend_panel(
     synthesis: bool = True,
     synthesis_model: str | None = None,
     synthesis_prompt: str | None = None,
+    max_cost: float | None = None,
     accept_multimodal_sampling: bool = False,
     decision_being_informed: str | None = None,
     ctx: Context = None,
@@ -2710,6 +2927,18 @@ async def extend_panel(
         synthesis: Whether to synthesize the new round.
         synthesis_model: Synthesis model. Defaults to panelist model.
         synthesis_prompt: Custom synthesis prompt for the new round.
+        max_cost: Hard ceiling on the extension round's spend, in USD
+            (the MCP analog of the CLI's ``--max-cost``, GH#576). Same
+            soft-halt semantics as ``run_panel``: the in-flight
+            panelists finish, no new panelists start, the round's
+            synthesis is skipped, and the response is a valid partial
+            envelope with ``run_invalid: true``, ``cost_exceeded:
+            true``, ``abort_reason: "cost_exceeded"``,
+            ``halted_at_panelist``, the ``cost_gate`` snapshot, and a
+            ``resume`` block naming the panelists still to be asked.
+            The partial extension round IS persisted onto the result
+            (and the pre-extend snapshot remains for rollback). Must
+            be > 0. Default: no ceiling.
         decision_being_informed: Required v1.0.0 contract field — the
             decision this extension informs, in 12-280 characters
             (trimmed), single line, UTF-8. Validation failures return a
@@ -2729,6 +2958,10 @@ async def extend_panel(
     )
     if spec_error is not None:
         return spec_error
+    # GH#576: max_cost boundary check (same rule as run_panel / the CLI).
+    max_cost_error = _validate_max_cost(max_cost)
+    if max_cost_error is not None:
+        return max_cost_error
     model = model or _resolve_mcp_default_model()
     logger.info("extend_panel: result_id=%s questions=%d model=%s", result_id, len(questions), model)
     existing, result_error = _resolve_panel_result_or_error(result_id)
@@ -2754,6 +2987,15 @@ async def extend_panel(
     if ctx is not None:
         await ctx.report_progress(0, len(personas))
 
+    # GH#576: arm the projected-total cost gate for the extension round.
+    # Sized to the panelists being re-asked (one per saved session), same
+    # machinery as the CLI's --max-cost. Passed conditionally so existing
+    # monkeypatched doubles with explicit signatures keep working.
+    cost_gate: CostGate | None = None
+    if max_cost is not None:
+        cost_gate = CostGate(max_cost_usd=max_cost, total_panelists=len(personas))
+    _gate_kwargs: dict[str, Any] = {"cost_gate": cost_gate} if cost_gate is not None else {}
+
     def _go() -> tuple[list[PanelistResult], dict[str, Any], Any, dict[str, Any] | None]:
         client = _get_shared_client()
         results, _registry, out_sessions = run_panel_parallel(
@@ -2764,10 +3006,15 @@ async def extend_panel(
             system_prompt_fn=persona_system_prompt,
             question_prompt_fn=build_question_prompt,
             sessions=sessions,
+            **_gate_kwargs,
         )
         synth = None
         synth_error: dict[str, Any] | None = None
-        if synthesis:
+        # GH#576: a cost-halted extension is a deliberately-truncated
+        # partial; synthesizing it would spend past the cap for an
+        # untrustworthy summary (same rationale as the CLI / run_panel).
+        run_synthesis = synthesis and not (cost_gate is not None and cost_gate.should_halt())
+        if run_synthesis:
             try:
                 synth = synthesize_panel(
                     client,
@@ -2882,6 +3129,28 @@ async def extend_panel(
         # sp-0ozi: top-level synthesis_error so MCP clients can gate on
         # envelope shape without inspecting the appended round.
         response["synthesis_error"] = synthesis_error
+
+    # GH#576: cost gate tripped mid-extension. The appended round is a
+    # valid completed prefix (already persisted above); surface the same
+    # typed partial markers run_panel emits plus the resume block.
+    if cost_gate is not None and cost_gate.should_halt():
+        _attach_cost_gate_halt(
+            response,
+            cost_gate=cost_gate,
+            personas=personas,
+            completed_names=[pr.persona_name for pr in panelist_results],
+            result_id=result_id,
+            tool="extend_panel",
+            resume_hint=(
+                "The partial extension round is already appended to the result "
+                "(the pre-extend snapshot remains for rollback). extend_panel "
+                "re-asks every saved panelist, so to cover remaining_personas "
+                "either call extend_panel again with a raised (or omitted) "
+                "max_cost — which appends a fresh full round — or accept the "
+                "partial. The round's synthesis was skipped to avoid spending "
+                "past the cap."
+            ),
+        )
 
     # v1.0.0 contract fields for the extension round.
     response = _finalize_contract_response(

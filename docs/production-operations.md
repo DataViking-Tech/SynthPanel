@@ -158,6 +158,18 @@ Two overflow safeguards on the synthesis step itself:
   `halted_at_panelist`, and a `cost_gate` snapshot. Exit code `2`.
   (`CostGate` in `src/synth_panel/cost.py`; wiring in
   `src/synth_panel/cli/commands.py`.)
+- **MCP `max_cost` (GH#576)** — the same gate on the MCP surface: the
+  `run_panel`, `run_quick_poll`, and `extend_panel` tools accept a
+  `max_cost` (USD) argument wired into the identical `CostGate` machinery
+  with the same soft-halt semantics. On a trip, the tool response is a
+  valid partial envelope with `run_invalid: true`, `cost_exceeded: true`,
+  `abort_reason: "cost_exceeded"`, `halted_at_panelist`, the `cost_gate`
+  snapshot, and an agent-legible `resume` block (persisted partial
+  `result_id`, completed panelists, remaining personas). Synthesis is
+  skipped on the partial. BYOK inline-`questions` runs only — sampling
+  mode, `models` ensembles, `variants`, and instrument inputs refuse
+  `max_cost` with a typed `INVALID_TOOL_ARG` (parity with the CLI's
+  multi-round refusal). See [docs/mcp.md](mcp.md#max_cost-hard-spend-ceiling).
 - **Per-turn telemetry** — token usage is tracked per turn in four buckets
   (input / output / cache-write / cache-read; `TokenUsage` and
   `UsageTracker` in `src/synth_panel/cost.py`). Every panelist row and the
@@ -286,4 +298,7 @@ Kept here so this page stays trustworthy:
   `--question-failure-budget` apply to single-round runs; multi-round
   (branching) instruments refuse these flags loudly up front rather than
   degrading silently (`_multi_round_flag_errors`,
-  `src/synth_panel/cli/commands.py`).
+  `src/synth_panel/cli/commands.py`). The MCP `max_cost` argument mirrors
+  the same matrix: instrument inputs (which always dispatch through the
+  multi-round engine on the MCP surface), ensembles, variants, and
+  sampling mode refuse it with a typed `INVALID_TOOL_ARG`.

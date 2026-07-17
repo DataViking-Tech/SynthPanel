@@ -227,9 +227,9 @@ and log/stream discipline — is documented in
 | Tool | Description |
 |------|-------------|
 | `run_prompt` | Send a single prompt to an LLM. No personas required. The simplest tool — ask a quick research question. **Does not require `decision_being_informed`.** |
-| `run_panel` | Run a full synthetic focus group panel. Each persona answers all questions independently in parallel, followed by synthesis. Accepts inline `questions`, an inline `instrument` dict (v1/v2/v3), or an `instrument_pack` name. Template placeholders in the instrument (e.g. the bundled packs' `{problem}` / `{candidates}`) are filled via the `vars` argument — the MCP equivalent of the CLI's `--var`. **Requires `decision_being_informed`.** |
-| `run_quick_poll` | Quick single-question poll across personas. A simplified `run_panel` for one question with synthesis. Accepts inline `personas` and/or a saved `pack_id` (merged; falls back to a built-in diverse set when both are omitted). **Requires `decision_being_informed`.** |
-| `extend_panel` | Append a single ad-hoc round to a saved panel result. Reuses each panelist's saved session for conversational context. **Not** a re-entry into the v3 DAG — use for human-in-the-loop follow-ups. **Requires `decision_being_informed`.** |
+| `run_panel` | Run a full synthetic focus group panel. Each persona answers all questions independently in parallel, followed by synthesis. Accepts inline `questions`, an inline `instrument` dict (v1/v2/v3), or an `instrument_pack` name. Template placeholders in the instrument (e.g. the bundled packs' `{problem}` / `{candidates}`) are filled via the `vars` argument — the MCP equivalent of the CLI's `--var`. Optional `max_cost` (USD) arms the mid-run cost gate (see [`max_cost`](#max_cost-hard-spend-ceiling)). **Requires `decision_being_informed`.** |
+| `run_quick_poll` | Quick single-question poll across personas. A simplified `run_panel` for one question with synthesis. Accepts inline `personas` and/or a saved `pack_id` (merged; falls back to a built-in diverse set when both are omitted). Optional `max_cost` (USD) spend ceiling. **Requires `decision_being_informed`.** |
+| `extend_panel` | Append a single ad-hoc round to a saved panel result. Reuses each panelist's saved session for conversational context. **Not** a re-entry into the v3 DAG — use for human-in-the-loop follow-ups. Optional `max_cost` (USD) spend ceiling for the extension round. **Requires `decision_being_informed`.** |
 
 ### Tool-call examples
 
@@ -406,6 +406,72 @@ saved panel.
 **Sampling** responses are never persisted (no `result_id`), so their transcript
 is not retrievable later — sampling always returns full transcripts regardless of
 `detail`. `extend_panel` returns its single appended round in full.
+
+### `max_cost`: hard spend ceiling
+
+`run_panel`, `run_quick_poll`, and `extend_panel` accept an optional
+**`max_cost`** argument — a hard ceiling on the run's total spend, in USD. It
+is the MCP analog of the CLI's `--max-cost` and wires into the same `CostGate`
+machinery (`src/synth_panel/cost.py`): after each panelist completes,
+`running_cost / completed_n * total_n` is compared against the ceiling.
+
+```jsonc
+// run_panel with a $2 ceiling
+{
+  "tool": "run_panel",
+  "arguments": {
+    "pack_id": "general-consumer",
+    "questions": [{ "text": "What would you pay for this?" }],
+    "max_cost": 2.0,
+    "decision_being_informed": "choosing launch tier price"
+  }
+}
+```
+
+When the projection exceeds the ceiling the run **soft-halts**: the current
+panelist(s) finish, no new panelists start, and synthesis is skipped (spending
+more to summarize a deliberately-truncated panel would produce an
+untrustworthy result). The response is still a **valid partial envelope** —
+the completed prefix is persisted under `result_id` as usual — carrying:
+
+```jsonc
+// response (truncated) after a cost-gate trip
+{
+  "run_invalid": true,
+  "cost_exceeded": true,
+  "abort_reason": "cost_exceeded",
+  "halted_at_panelist": 4,
+  "cost_gate": {
+    "max_cost_usd": 2.0,
+    "running_cost_usd": 1.62,          // spend so far
+    "projected_total_usd": 4.05,       // what tripped the gate
+    "completed": 4,
+    "total_panelists": 10,
+    "halted": true,
+    "halted_projection_usd": 4.05
+  },
+  "resume": {
+    "partial_result_id": "result-20260716-...",
+    "completed_panelists": ["..."],
+    "remaining_personas": ["..."],
+    "how_to_resume": "..."             // fetch partial via get_panel_result;
+                                       // re-run remaining_personas with a raised cap
+  },
+  "synthesis": null                    // skipped on the partial
+}
+```
+
+The partial envelope composes with `detail: "summary"` and still carries the
+`panel_verdict` contract fields; the full partial transcript stays retrievable
+via `get_panel_result(result_id)`.
+
+Support matrix (mirrors the CLI's `--max-cost`, which the multi-round engine
+refuses): `max_cost` applies to **BYOK** runs with inline `questions` (and
+`extend_panel`'s single extension round). Combining it with sampling mode (the
+host agent pays; the server sees no per-panelist costs), `models` ensembles,
+`variants`, or `instrument` / `instrument_pack` inputs returns a typed
+`INVALID_TOOL_ARG` on `max_cost` — a loud refusal before any spend, never a
+silently unenforced ceiling. `max_cost` must be > 0.
 
 ### Typed error envelopes
 
