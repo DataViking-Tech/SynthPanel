@@ -419,6 +419,7 @@ def synthesize_panel(
     pyodide_safe_mode: bool = False,
     llm_client: AsyncLLMClient | None = None,
     judge_enabled: bool = True,
+    provider_routing: dict[str, Any] | None = None,
 ) -> SynthesisResult | Coroutine[Any, Any, SynthesisResult]:
     """Synthesize panelist responses into a structured research finding.
 
@@ -450,6 +451,10 @@ def synthesize_panel(
             and return a degenerate :class:`SynthesisResult` with empty
             LLM-derived fields. Cost stays at zero. Default ``True``
             preserves v1.1.0 behavior.
+        provider_routing: Optional OpenRouter provider-routing preferences
+            (e.g. ``{"ignore": ["azure"]}``) forwarded to the synthesis
+            call. Used by the synthesis recovery ladder's reroute rung;
+            ignored by non-OpenRouter providers.
 
     Returns:
         :class:`SynthesisResult` (sync) for the default and
@@ -527,6 +532,7 @@ def synthesize_panel(
         temperature=temperature,
         top_p=top_p,
         seed=seed,
+        provider_routing=provider_routing,
     )
 
     # Convert usage
@@ -1217,6 +1223,7 @@ def synthesize_panel_mapreduce(
     personas: list[dict[str, Any]] | None = None,
     max_workers: int | None = None,
     auto_escalate: bool = False,
+    context_limit_override: int | None = None,
 ) -> SynthesisResult:
     """Map-reduce synthesis for large panels (sp-kkzz).
 
@@ -1253,6 +1260,14 @@ def synthesize_panel_mapreduce(
       question's map call is instead retried on a larger-context model
       (default: ``gemini-2.5-flash-lite``, 1M ctx) with a visible warning.
       Sub-chunking still runs if the escalated window is also insufficient.
+
+    ``context_limit_override`` (sp-rcvr) caps the effective per-map-call
+    token budget below the model's documented window. The synthesis
+    recovery ladder passes it when a downstream provider rejected a
+    prompt that *fit* the documented window — evidence that the actual
+    serving deployment has a smaller effective context — so the
+    per-question planner sub-chunks instead of re-sending a prompt the
+    documented number says is fine.
     """
     resolved_model = model or panelist_model or _DEFAULT_MODEL
     if not questions:
@@ -1291,6 +1306,8 @@ def synthesize_panel_mapreduce(
     # The plan is resolved up front so we can surface escalation warnings
     # in deterministic question order before any API calls fan out.
     base_limit = resolve_context_window(resolved_model) - _CONTEXT_HEADROOM
+    if context_limit_override is not None:
+        base_limit = min(base_limit, context_limit_override)
     escalated_limit = resolve_context_window(_ESCALATION_MODEL) - _CONTEXT_HEADROOM
     escalation_available = auto_escalate and escalated_limit > base_limit
 

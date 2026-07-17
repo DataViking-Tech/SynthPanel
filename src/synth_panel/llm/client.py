@@ -183,6 +183,8 @@ class LLMClient:
                 temperature=request.temperature,
                 top_p=request.top_p,
                 seed=request.seed,
+                cache_enabled=request.cache_enabled,
+                provider_routing=request.provider_routing,
             )
         return request
 

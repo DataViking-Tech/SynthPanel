@@ -198,6 +198,7 @@ class StructuredOutputEngine:
         temperature: float | None = None,
         top_p: float | None = None,
         seed: int | None = None,
+        provider_routing: dict[str, Any] | None = None,
     ) -> StructuredResult:
         """Run a completion with tool-use forcing and extract structured data.
 
@@ -216,6 +217,7 @@ class StructuredOutputEngine:
                     temperature=temperature,
                     top_p=top_p,
                     seed=seed,
+                    provider_routing=provider_routing,
                 )
             )
             return StructuredResult(data={}, response=response, total_usage=response.usage)
@@ -271,6 +273,7 @@ class StructuredOutputEngine:
                 temperature=temperature,
                 top_p=top_p,
                 seed=seed,
+                provider_routing=provider_routing,
             )
 
             try:

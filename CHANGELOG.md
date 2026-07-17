@@ -6,6 +6,39 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ## [Unreleased]
 
+### Added
+
+- **Synthesis failure recovery ladder (sp-rcvr).** A thrice-reproduced
+  production failure — a 20-persona panel whose questions embed ~14k-char
+  page dumps passed the synthesis pre-flight yet deterministically failed
+  with `OpenRouter (downstream: Azure) API error 400: Provider returned
+  error` — exposed a gap: the map-reduce overflow fallback only fired on
+  the PRE-FLIGHT token estimate, never on a downstream rejection, so a
+  provider 400 was treated as fatal. The synthesis stage (in `panel run`,
+  the MCP/SDK sync runner, and `panel synthesize`) is now wrapped in a
+  bounded recovery ladder: (1) classify the failure as overflow /
+  transient / fatal via the token-estimate machinery plus error-text
+  heuristics; (2) retry transient errors (429/5xx/timeout) once with
+  jitter; (3) route (suspected) context overflow into the existing
+  map-reduce synthesis — capping the effective per-call limit below the
+  documented window when the downstream rejected a prompt that
+  pre-flight said fits, so sub-chunking actually splits; (4) when the
+  OpenRouter error names the downstream provider, retry once with
+  `provider: {"ignore": [<slug>]}` routing preferences (new
+  `LLMError.downstream_provider` + `CompletionRequest.provider_routing`,
+  honored by both OR transports); (5) fail loud as before
+  (`synthesis_error`, `run_invalid`, exit 2), but the message now names
+  the exact `panel synthesize <id> --synthesis-model <model>` recovery
+  command with a concrete in-family large-context suggestion. Each rung
+  logs one stderr line and runs at most once; `--synthesis-strategy=
+  single` still disables the map-reduce rung (and the final error says
+  so). Verified against live OpenRouter: the reproduced downstream 400
+  now recovers end-to-end via capped map-reduce.
+- **`panel synthesize` warns when the global `--model` flag is passed.**
+  The flag was silently ignored (the synthesis model comes from
+  `--synthesis-model`, falling back to the saved panelist model); it now
+  warns and points at `--synthesis-model`.
+
 ### Fixed
 
 - **Synthesis judge final-strike escalation now stays in the run's

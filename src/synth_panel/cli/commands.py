@@ -2594,6 +2594,11 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         custom_prompt = getattr(args, "synthesis_prompt", None)
         synthesis_temperature = getattr(args, "synthesis_temperature", None)
         requested_strategy = getattr(args, "synthesis_strategy", "auto") or "auto"
+        # sp-rcvr: the recovery ladder may only fall back to map-reduce when
+        # the operator did NOT explicitly pin the single strategy (a custom
+        # synthesis prompt also pins single — map/reduce prompts are not
+        # overridable). Capture this before requested_strategy is rewritten.
+        recovery_map_reduce_allowed = requested_strategy != STRATEGY_SINGLE and custom_prompt is None
         # sp-kkzz: --synthesis-prompt only applies to the single-pass call.
         # Map/reduce prompts are not overridable (yet) — warn and force single.
         if custom_prompt is not None and requested_strategy == STRATEGY_MAP_REDUCE:
@@ -2701,26 +2706,66 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 )
                 run_invalid = True
             except Exception as exc:
-                # sp-avmm: fail loud — previously this was a WARN log and the
-                # run exited 0 with synthesis=null. That silent-skip made
-                # downstream consumers believe the run succeeded.
+                # sp-rcvr: synthesis recovery ladder — classify the failure,
+                # retry transients once, fall back to map-reduce on (suspected)
+                # context overflow, and reroute away from a failing OpenRouter
+                # downstream, before failing loud (sp-avmm) with a guided
+                # `panel synthesize` recovery command.
                 from synth_panel._runners import _sanitize_api_error
-
-                sanitized = _sanitize_api_error(exc)
-                logger.error("synthesis failed: %s", sanitized)
-                print(f"Error: synthesis call failed: {sanitized}", file=sys.stderr)
-                synthesis_error_payload = build_synthesis_error_payload(
-                    exc,
-                    error_type="synthesis_api_error",
-                    message=f"Synthesis call failed: {sanitized}",
-                    suggested_fix=(
-                        "Check provider credentials and model availability;"
-                        " if context-related, rerun with a larger-context synthesis model"
-                        " (e.g. gemini-2.5-flash-lite or gemini-2.5-pro)"
-                        " or --synthesis-strategy=map-reduce."
-                    ),
+                from synth_panel.synthesis_recovery import (
+                    RecoveryContext,
+                    SynthesisRecoveryError,
+                    recover_synthesis_failure,
                 )
-                run_invalid = True
+
+                recovery_exc: BaseException = exc
+                if resolved_strategy == STRATEGY_SINGLE:
+                    ctx = RecoveryContext(
+                        client=client,
+                        panelist_results=panelist_results,
+                        questions=questions,
+                        synthesis_model=synthesis_model,
+                        panelist_model=model,
+                        custom_prompt=custom_prompt,
+                        temperature=effective_synth_temp,
+                        top_p=top_p,
+                        seed=seed,
+                        personas=personas,
+                        allow_map_reduce=recovery_map_reduce_allowed,
+                        auto_escalate=getattr(args, "synthesis_auto_escalate", False),
+                    )
+                    try:
+                        synthesis_result = recover_synthesis_failure(exc, ctx)
+                    except SynthesisRecoveryError as rexc:
+                        recovery_exc = rexc
+
+                if synthesis_result is None:
+                    sanitized = _sanitize_api_error(recovery_exc)
+                    logger.error("synthesis failed: %s", sanitized)
+                    print(f"Error: synthesis call failed: {sanitized}", file=sys.stderr)
+                    if isinstance(recovery_exc, SynthesisRecoveryError):
+                        suggested = (
+                            f"Recover without re-running panelists: `{recovery_exc.suggested_command}` "
+                            "(requires --save; large-context in-family model). "
+                            "Also check provider credentials and model availability."
+                        )
+                        diagnostic: dict[str, Any] | None = {"recovery_rungs": recovery_exc.rungs}
+                    else:
+                        suggested = (
+                            "Check provider credentials and model availability;"
+                            " if context-related, rerun with a larger-context synthesis model"
+                            " (e.g. gemini-2.5-flash-lite or gemini-2.5-pro)"
+                            " or --synthesis-strategy=map-reduce."
+                        )
+                        diagnostic = None
+                    synthesis_error_payload = build_synthesis_error_payload(
+                        recovery_exc,
+                        error_type="synthesis_api_error",
+                        message=f"Synthesis call failed: {sanitized}",
+                        suggested_fix=suggested,
+                        diagnostic=diagnostic,
+                    )
+                    run_invalid = True
 
     # sy-549: a synthesis that returned a *fallback* result (judge exhausted
     # its schema-adherence retries, or returned a partial schema) is NOT a
@@ -6405,6 +6450,17 @@ def handle_panel_synthesize(args: argparse.Namespace, fmt: OutputFormat) -> int:
 
     from synth_panel.orchestrator import PanelistResult
 
+    # sp-rcvr: the global --model flag has no effect on this subcommand —
+    # the synthesis model comes from --synthesis-model (falling back to the
+    # saved panelist model). Silently ignoring it cost operators real
+    # debugging time; warn and point at the right flag.
+    if getattr(args, "model", None):
+        print(
+            f"warning: global --model {args.model!r} is ignored by 'panel synthesize'; "
+            f"use --synthesis-model {args.model} to pick the synthesis model.",
+            file=sys.stderr,
+        )
+
     result_ref = args.result
     path = Path(result_ref)
     if path.exists() and path.suffix == ".json":
@@ -6487,6 +6543,7 @@ def handle_panel_synthesize(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 extra={"run_invalid": True, "synthesis_error": payload},
             )
         return 2
+    source_id = data.get("id") or path.stem
     try:
         synth = synthesize_panel(
             client,
@@ -6497,34 +6554,56 @@ def handle_panel_synthesize(args: argparse.Namespace, fmt: OutputFormat) -> int:
             custom_prompt=custom_prompt,
         )
     except Exception as exc:
-        # sp-avmm: fail loud with a structured payload so MCP / CI consumers
-        # of `panel synthesize` see the same envelope as `panel run`.
+        # sp-rcvr: run the synthesis recovery ladder before failing loud
+        # (sp-avmm) — classify, retry transients once, map-reduce on
+        # (suspected) downstream context overflow, reroute away from a
+        # failing OpenRouter downstream.
         from synth_panel._runners import _sanitize_api_error
-
-        sanitized = _sanitize_api_error(exc)
-        payload = build_synthesis_error_payload(
-            exc,
-            error_type="synthesis_api_error",
-            message=f"Synthesis call failed: {sanitized}",
-            suggested_fix=(
-                "Check provider credentials and model availability;"
-                " if context-related, rerun with a larger-context synthesis model."
-            ),
+        from synth_panel.synthesis_recovery import (
+            RecoveryContext,
+            SynthesisRecoveryError,
+            recover_synthesis_failure,
         )
-        print(f"Error: synthesis failed: {sanitized}", file=sys.stderr)
-        if fmt is not OutputFormat.TEXT:
-            emit(
-                fmt,
+
+        saved_personas = data.get("personas")
+        ctx = RecoveryContext(
+            client=client,
+            panelist_results=panelist_results,
+            questions=questions,
+            synthesis_model=getattr(args, "synthesis_model", None),
+            panelist_model=panelist_model,
+            custom_prompt=custom_prompt,
+            personas=saved_personas if isinstance(saved_personas, list) else None,
+            allow_map_reduce=custom_prompt is None,
+            result_id=source_id,
+        )
+        try:
+            synth = recover_synthesis_failure(exc, ctx)
+        except SynthesisRecoveryError as rexc:
+            sanitized = _sanitize_api_error(rexc)
+            payload = build_synthesis_error_payload(
+                rexc,
+                error_type="synthesis_api_error",
                 message=f"Synthesis call failed: {sanitized}",
-                extra={"run_invalid": True, "synthesis_error": payload},
+                suggested_fix=(
+                    f"Retry with a large-context in-family model: `{rexc.suggested_command}`. "
+                    "Also check provider credentials and model availability."
+                ),
+                diagnostic={"recovery_rungs": rexc.rungs},
             )
-        return 2
+            print(f"Error: synthesis failed: {sanitized}", file=sys.stderr)
+            if fmt is not OutputFormat.TEXT:
+                emit(
+                    fmt,
+                    message=f"Synthesis call failed: {sanitized}",
+                    extra={"run_invalid": True, "synthesis_error": payload},
+                )
+            return 2
 
     synthesis_dict = synth.to_dict()
 
     from synth_panel.mcp.data import save_panel_synthesis
 
-    source_id = data.get("id") or path.stem
     ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     sidecar_name = save_panel_synthesis(
         source_id,
@@ -6543,6 +6622,8 @@ def handle_panel_synthesize(args: argparse.Namespace, fmt: OutputFormat) -> int:
     # loudly and exit non-zero so MCP / CI consumers don't treat the empty
     # synthesis as success.
     if synth.is_fallback:
+        from synth_panel.synthesis_recovery import format_recovery_command
+
         synth_err = synth.error or "synthesis judge did not return a valid structured result"
         payload = build_synthesis_error_payload(
             None,
@@ -6550,7 +6631,7 @@ def handle_panel_synthesize(args: argparse.Namespace, fmt: OutputFormat) -> int:
             message=f"Synthesis incomplete: {synth_err}",
             suggested_fix=(
                 "The synthesis judge returned an empty/partial result after all retries. "
-                "Rerun with a higher-quality --synthesis-model."
+                f"Rerun with a higher-quality synthesis model, e.g. `{format_recovery_command(source_id, synth.model)}`."
             ),
         )
         print(f"Error: synthesis incomplete: {synth_err}", file=sys.stderr)

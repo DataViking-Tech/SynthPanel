@@ -108,5 +108,6 @@ class RetryPolicy:
                 f"Retries exhausted after {attempt + 1} attempts: {last_error}",
                 LLMErrorCategory.RETRIES_EXHAUSTED,
                 cause=last_error,
+                downstream_provider=last_error.downstream_provider,
             )
         raise last_error
