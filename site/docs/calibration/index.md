@@ -33,10 +33,12 @@ calibration:
     models: [haiku:0.30, gemini-flash-lite:0.30, qwen3-plus:0.20, deepseek-v3:0.20]
     extractor: pick_one:auto-derived
     panelist_cost_usd: 0.6451
-    calibrated_at: 2026-04-26T14:23:00Z
-    synthpanel_version: 0.11.1
+    calibrated_at: 2026-07-16T14:23:00Z
+    synthpanel_version: 1.5.7
     methodology_url: https://synthpanel.dev/docs/calibration
 ```
+
+The 4-model `models:` mix above is an example blend, *not* the SynthBench leaderboard ensemble — the leaderboard’s “SynthPanel Ensemble (3-model)” entry is an equal-weight blend of Claude Haiku 4.5, Gemini 2.5 Flash Lite, and GPT-4o-mini.
 
 ## What JSD means
 

@@ -135,10 +135,11 @@
         <p class="mx-auto mt-3 max-w-2xl text-base text-slate-400">
           <span class="text-emerald-300">Zero-config inside Claude Desktop,
           Claude Code, Cursor, and other MCP hosts</span> — the host's own model
-          powers every panelist, so you drop the config in and run a panel with
-          <strong class="text-slate-200">no API key set</strong>. Or bring your
-          own key (Claude, GPT, Gemini, Grok, local) for reproducibility,
-          ensembles, and larger panels. Personas and instruments are plain YAML
+          answers, so you can drop the config in and run one-shot prompts and
+          quick polls of up to 3 personas with
+          <strong class="text-slate-200">no API key set</strong>. Bring your
+          own key (Claude, GPT, Gemini, Grok, local) for full panels,
+          ensembles, and reproducible model pins. Personas and instruments are plain YAML
           — run from your terminal, a pipeline, or an AI agent's tool call over
           MCP <span class="text-slate-400">(Model Context Protocol, the open
           standard that lets AI tools call external functions)</span>.
@@ -604,10 +605,13 @@ synthpanel report &lt;result-id&gt; -o report.md</pre>
             </div>
           </div>
           <p class="mt-3 text-xs text-slate-400">
-            <span class="text-emerald-300">Green</span> = real humans: GSS
-            2024, NORC — public-use data, weighted shares
+            For every option, the top bar (green) is the real human share
+            and the bottom bar (blue) is the synthetic share — the same
+            values printed as text beside each option label.
+            <span class="text-emerald-300">Humans</span>: GSS 2024, NORC —
+            public-use data, weighted shares
             (<code class="text-slate-400">wtssnrps</code>).
-            <span class="text-sky-300">Blue</span> = synthetic:
+            <span class="text-sky-300">Synthetic</span>:
             gemini-2.5-flash via the SynthBench harness, run 2026-07-15, 30
             sampled responses.
           </p>
@@ -665,46 +669,48 @@ synthpanel report &lt;result-id&gt; -o report.md</pre>
             <div>
               <div class="flex items-center justify-between text-xs text-slate-400">
                 <span>Yes, I believe in this</span>
-                <span class="text-slate-300">synthetic within &plusmn;13.8 pts</span>
+                <span class="text-slate-300">gap: 20.3 pts</span>
               </div>
               <div class="mt-1 h-2 w-full rounded-full bg-slate-950/70">
-                <div class="h-2 rounded-full bg-amber-400/80" style="width: 13.8%"></div>
+                <div class="h-2 rounded-full bg-amber-400/80" style="width: 20.3%"></div>
               </div>
             </div>
             <div>
               <div class="flex items-center justify-between text-xs text-slate-400">
                 <span>No, I do not believe in this</span>
-                <span class="text-slate-300">synthetic within &plusmn;15.1 pts</span>
+                <span class="text-slate-300">gap: 16.0 pts</span>
               </div>
               <div class="mt-1 h-2 w-full rounded-full bg-slate-950/70">
-                <div class="h-2 rounded-full bg-amber-400/80" style="width: 15.1%"></div>
+                <div class="h-2 rounded-full bg-amber-400/80" style="width: 16.0%"></div>
               </div>
             </div>
             <div>
               <div class="flex items-center justify-between text-xs text-slate-400">
                 <span>Refused</span>
-                <span class="text-slate-300">synthetic within &plusmn;1.3 pts</span>
+                <span class="text-slate-300">gap: 4.3 pts</span>
               </div>
               <div class="mt-1 h-2 w-full rounded-full bg-slate-950/70">
-                <div class="h-2 rounded-full bg-amber-400/80" style="width: 1.3%"></div>
+                <div class="h-2 rounded-full bg-amber-400/80" style="width: 4.3%"></div>
               </div>
             </div>
           </div>
           <p class="mt-3 text-xs text-slate-400">
-            Bars show |synthetic &minus; human| per answer option, in
-            percentage points (shorter = closer).
+            Each bar is the measured option-level gap
+            |synthetic &minus; human| for that answer option, in percentage
+            points (shorter bar = closer match). These are observed
+            differences on this one question, not an error bound.
           </p>
           <p class="mt-4 text-sm text-slate-300">
             Measured divergence from the real Pew respondents&rsquo;
             distribution:
             <span class="font-semibold text-emerald-300">Jensen–Shannon
-            divergence 0.023</span>
+            divergence 0.035</span>
             (0 = identical distributions, 1 = disjoint).
           </p>
           <p class="mt-3 text-xs text-slate-400">
-            This item is one of the ensemble&rsquo;s closest matches by JSD;
+            This item sits in the run&rsquo;s closest decile by JSD;
             across the full 200-question SubPOP evaluation the same
-            run&rsquo;s mean JSD is 0.209. View the underlying distributions
+            run&rsquo;s mean JSD is 0.208. View the underlying distributions
             signed-in at synthbench.org, or recompute these exact numbers
             from the public
             <a
@@ -720,8 +726,8 @@ synthpanel report &lt;result-id&gt; -o report.md</pre>
               class="text-emerald-400 underline decoration-emerald-400/40 underline-offset-2 hover:text-emerald-300"
               >SynthBench harness</a
             >; the synthetic distribution and per-question JSD are published in
-            the repo (<code class="text-slate-400">leaderboard-results/subpop_ensemble_3blend_20260714_171917.json</code>,
-            run dated 2026-07-14).
+            the repo (<code class="text-slate-400">leaderboard-results/subpop_ensemble_3blend_20260716_192413.json</code>,
+            run dated 2026-07-16).
           </p>
         </div>
 
@@ -745,10 +751,10 @@ synthpanel report &lt;result-id&gt; -o report.md</pre>
               class="underline decoration-emerald-400/60 underline-offset-2 hover:text-emerald-200"
               >leaderboard</a
             >
-            (generated 2026-07-15), the 3-model ensemble scores SPS 0.877 on
-            opinionsqa, 0.831 on subpop, and 0.813 on globalopinionqa — roughly
-            0.01–0.05 above the best single model on each dataset and
-            0.07–0.11 above the random baseline (~0.71–0.76). Leaderboard
+            (generated 2026-07-17), the 3-model ensemble scores SPS 0.877 on
+            opinionsqa, 0.858 on subpop, and 0.813 on globalopinionqa — roughly
+            0.03–0.05 above the best single model on each dataset and
+            0.10–0.11 above the random baseline (~0.71–0.76). Leaderboard
             numbers move as the board recomputes.
           </p>
         </div>
@@ -767,6 +773,7 @@ synthpanel report &lt;result-id&gt; -o report.md</pre>
               >SynthPanel vs Synthetic Users vs FocusPanel.ai — when open-source MCP beats the SaaS →</a
             >
             <time datetime="2026-04-15" class="text-xs text-slate-400">2026-04-15</time>
+            <span class="text-xs text-slate-500">&middot; updated <time datetime="2026-07-16">2026-07-16</time></span>
           </li>
         </ul>
       </section>

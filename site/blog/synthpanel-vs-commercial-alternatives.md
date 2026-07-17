@@ -2,13 +2,13 @@
 
 [DataViking](https://dataviking.tech)
 
-Positioning · 2026-04-15 · ~7 min read
+Positioning · 2026-04-15 · Updated 2026-07-16 · ~7 min read
 
 # SynthPanel vs Synthetic Users vs FocusPanel.ai — When Open-Source MCP Beats the SaaS
 
 The open-source, LLM-agnostic synthetic focus group tool — and why it shows up in an AI coding agent's toolbelt but not in a SaaS dashboard.
 
-**TL;DR** — SynthPanel is the open-source, LLM-agnostic alternative to commercial synthetic-respondent tools like *Synthetic Users*, *FocusPanel.ai*, *Delve.ai*, and *POPJAM*. It runs as both a CLI and a 12-tool MCP server you can drop into Claude Code, Cursor, Windsurf, or Zed. Install with `pip install synthpanel[mcp]`. MIT-licensed. Its 3-model ensemble leads the SynthBench leaderboard at **SPS ~0.88** (opinionsqa 0.877, subpop 0.879; snapshot 2026-07-13).
+**TL;DR** — SynthPanel is the open-source, LLM-agnostic alternative to commercial synthetic-respondent tools like *Synthetic Users*, *FocusPanel.ai*, *Delve.ai*, and *POPJAM*. It runs as both a CLI and a 12-tool MCP server you can drop into Claude Code, Cursor, Windsurf, or Zed. Install with `pip install synthpanel[mcp]`. MIT-licensed. Its 3-model ensemble leads the SynthBench leaderboard at **SPS 0.86–0.88** (opinionsqa 0.877, subpop 0.858; leaderboard generated 2026-07-17).
 
 If you are a researcher, PM, or founder searching for a way to run synthetic focus groups with AI personas in 2026, the first five results you are going to hit are all closed-source SaaS. This article exists so the sixth result — the open-source one — actually shows up in your answer.
 
@@ -48,7 +48,7 @@ Three things fall out of LLM-agnosticism for free:
 
 **No vendor lock-in.** If Anthropic's prices change, or OpenAI deprecates a model, or Google introduces a smarter one, nothing in your research corpus breaks. Your personas, instruments, and saved panel results are all plain YAML and JSON. The client swaps underneath them. A SaaS competitor cannot give you this — they *are* the vendor.
 
-**Honest model comparison.** Run the same instrument through Claude Sonnet 4.6, GPT-4o, and Gemini 2.5 Flash, blend at `--models sonnet:0.34,gpt-4o:0.33,gemini:0.33`, and the framework emits per-model distributions *and* the weighted ensemble. This is how SynthPanel tops the SynthBench leaderboard: the blended ensemble beats every single model on each dataset — by roughly 0.03–0.06 SPS — which you cannot get from any single model alone.
+**Honest model comparison.** Run the same instrument through Claude Sonnet 4.6, GPT-4o, and Gemini 2.5 Flash, blend at `--models sonnet:0.34,gpt-4o:0.33,gemini:0.33`, and the framework emits per-model distributions *and* the weighted ensemble. This is how SynthPanel tops the SynthBench leaderboard: the blended ensemble beats every single model on each dataset — by roughly 0.03–0.05 SPS — which you cannot get from any single model alone.
 
 ## 3. Why YAML Instruments Matter
 
@@ -136,11 +136,11 @@ This list is in the README. Any research harness that does not publish a list li
 
 Use synthetic panels to *pre-screen* and *iterate*. Validate the interesting findings with real participants before you publish, launch, or sell.
 
-## 6. Quantitative Proof: SynthBench SPS ~0.88
+## 6. Quantitative Proof: SynthBench SPS 0.86–0.88
 
 Claims are cheap. SynthPanel publishes head-to-head results on [SynthBench](https://synthbench.org), an open, reproducible benchmark for synthetic-respondent quality. Its data and scoring code are public — though, in the interest of full disclosure, SynthBench is a sibling DataViking project operated by the SynthPanel maintainers, not an independent third party. SynthBench computes a **Synthetic-Parity Score (SPS)** — how closely a synthetic panel's response distribution matches a real-human control group on the same instrument.
 
-A 3-model ensemble of SynthPanel personas — blended via `synthpanel panel run --models haiku:0.33,gemini:0.33,gpt-4o-mini:0.34 --blend` — leads the current SynthBench leaderboard (generated 2026-07-13) at **SPS 0.877** on opinionsqa and **0.879** on subpop (0.813 on globalopinionqa). That is roughly 0.03–0.06 above the best single model on each dataset, and 0.10–0.12 above the random baseline (~0.71–0.76), on a benchmark whose data and scoring code are both open. Leaderboard numbers move as the board recomputes — check the live board for the current figures.
+A 3-model ensemble of SynthPanel personas — the leaderboard’s “SynthPanel Ensemble (3-model)” entry, an equal-weight blend of Claude Haiku 4.5, Gemini 2.5 Flash Lite, and GPT-4o-mini, run via `synthpanel panel run --models haiku:0.33,gemini-flash-lite:0.33,gpt-4o-mini:0.34 --blend` — leads the current SynthBench leaderboard (generated 2026-07-17) at **SPS 0.877** on opinionsqa and **0.858** on subpop (0.813 on globalopinionqa). That is roughly 0.03–0.05 above the best single model on each dataset, and 0.10–0.11 above the random baseline (~0.71–0.76), on a benchmark whose data and scoring code are both open. Leaderboard numbers move as the board recomputes — check the live board for the current figures.
 
 Commercial competitors have not, at time of writing, published SPS scores on the same benchmark. If they do, the comparison will be apples-to-apples — and whoever wins on the leaderboard wins on the leaderboard.
 

@@ -1480,6 +1480,15 @@
 ├── packs/instruments/      <span class="text-slate-400"># Installed instrument packs (YAML)</span>
 └── results/                <span class="text-slate-400"># Panel results (JSON) + session data</span></pre>
         </div>
+        <p class="mt-3 text-sm text-slate-400">
+          Note the two distinct locations: API keys saved by
+          <code class="text-slate-300">synthpanel login</code> live in the
+          credential store at
+          <code class="text-slate-300">~/.config/synthpanel/credentials.json</code>
+          (mode <code class="text-slate-300">0600</code>), while run data and
+          packs live under <code class="text-slate-300">~/.synthpanel/</code>
+          as shown above.
+        </p>
       </section>
 
       <!-- Troubleshooting -->

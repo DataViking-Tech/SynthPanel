@@ -6,7 +6,7 @@
 
 Run synthetic focus groups with any LLM.
 
-Zero-config inside Claude Desktop, Claude Code, Cursor, and other MCP hosts — the host's own model powers every panelist, so you drop the config in and run a panel with **no API key set**. Or bring your own key (Claude, GPT, Gemini, Grok, local) for reproducibility, ensembles, and larger panels. Personas and instruments are plain YAML — run from your terminal, a pipeline, or an AI agent's tool call over MCP (Model Context Protocol, the open standard that lets AI tools call external functions).
+Zero-config inside Claude Desktop, Claude Code, Cursor, and other MCP hosts — the host's own model answers, so you can drop the config in and run one-shot prompts and quick polls of up to 3 personas with **no API key set**. Bring your own key (Claude, GPT, Gemini, Grok, local) for full panels, ensembles, and reproducible model pins. Personas and instruments are plain YAML — run from your terminal, a pipeline, or an AI agent's tool call over MCP (Model Context Protocol, the open standard that lets AI tools call external functions).
 
 $ pip install synthpanel
 
@@ -182,7 +182,7 @@ Dull humans 5.7% · synthetic 0.0%
 
 Don’t know humans 0.7% · synthetic 0.0%
 
-Green = real humans: GSS 2024, NORC — public-use data, weighted shares (`wtssnrps`). Blue = synthetic: gemini-2.5-flash via the SynthBench harness, run 2026-07-15, 30 sampled responses.
+For every option, the top bar (green) is the real human share and the bottom bar (blue) is the synthetic share — the same values printed as text beside each option label. Humans: GSS 2024, NORC — public-use data, weighted shares (`wtssnrps`). Synthetic: gemini-2.5-flash via the SynthBench harness, run 2026-07-15, 30 sampled responses.
 
 Measured divergence between the two distributions: Jensen–Shannon divergence 0.046 (0 = identical distributions, 1 = disjoint).
 
@@ -194,20 +194,20 @@ Real Pew American Trends Panel question (Wave 96, via SubPOP item `BELIEVE_a_W96
 
 Pew’s response data is license-gated (CC-BY-NC-SA), so this page shows only the *gap* between the SynthPanel 3-model ensemble (90 sampled responses) and the real Pew respondents — not the survey values themselves:
 
-Yes, I believe in this synthetic within ±13.8 pts
+Yes, I believe in this gap: 20.3 pts
 
-No, I do not believe in this synthetic within ±15.1 pts
+No, I do not believe in this gap: 16.0 pts
 
-Refused synthetic within ±1.3 pts
+Refused gap: 4.3 pts
 
-Bars show |synthetic − human| per answer option, in percentage points (shorter = closer).
+Each bar is the measured option-level gap |synthetic − human| for that answer option, in percentage points (shorter bar = closer match). These are observed differences on this one question, not an error bound.
 
-Measured divergence from the real Pew respondents’ distribution: Jensen–Shannon divergence 0.023 (0 = identical distributions, 1 = disjoint).
+Measured divergence from the real Pew respondents’ distribution: Jensen–Shannon divergence 0.035 (0 = identical distributions, 1 = disjoint).
 
-This item is one of the ensemble’s closest matches by JSD; across the full 200-question SubPOP evaluation the same run’s mean JSD is 0.209. View the underlying distributions signed-in at synthbench.org, or recompute these exact numbers from the public [SubPOP dataset](https://huggingface.co/datasets/jjssuh/subpop) and the open [SynthBench harness](https://github.com/DataViking-Tech/SynthBench); the synthetic distribution and per-question JSD are published in the repo (`leaderboard-results/subpop_ensemble_3blend_20260714_171917.json`, run dated 2026-07-14).
+This item sits in the run’s closest decile by JSD; across the full 200-question SubPOP evaluation the same run’s mean JSD is 0.208. View the underlying distributions signed-in at synthbench.org, or recompute these exact numbers from the public [SubPOP dataset](https://huggingface.co/datasets/jjssuh/subpop) and the open [SynthBench harness](https://github.com/DataViking-Tech/SynthBench); the synthetic distribution and per-question JSD are published in the repo (`leaderboard-results/subpop_ensemble_3blend_20260716_192413.json`, run dated 2026-07-16).
 
-Powers the [SynthBench](https://synthbench.org) open benchmark — an open, reproducible evaluation of synthetic-respondent quality (public data + scoring code), operated by the SynthPanel maintainers rather than an independent third party. On the current [leaderboard](https://synthbench.org/data/leaderboard.json) (generated 2026-07-15), the 3-model ensemble scores SPS 0.877 on opinionsqa, 0.831 on subpop, and 0.813 on globalopinionqa — roughly 0.01–0.05 above the best single model on each dataset and 0.07–0.11 above the random baseline (~0.71–0.76). Leaderboard numbers move as the board recomputes.
+Powers the [SynthBench](https://synthbench.org) open benchmark — an open, reproducible evaluation of synthetic-respondent quality (public data + scoring code), operated by the SynthPanel maintainers rather than an independent third party. On the current [leaderboard](https://synthbench.org/data/leaderboard.json) (generated 2026-07-17), the 3-model ensemble scores SPS 0.877 on opinionsqa, 0.858 on subpop, and 0.813 on globalopinionqa — roughly 0.03–0.05 above the best single model on each dataset and 0.10–0.11 above the random baseline (~0.71–0.76). Leaderboard numbers move as the board recomputes.
 
 ## Further reading
 
-- [SynthPanel vs Synthetic Users vs FocusPanel.ai — when open-source MCP beats the SaaS →](/blog/synthpanel-vs-commercial-alternatives.html) 2026-04-15
+- [SynthPanel vs Synthetic Users vs FocusPanel.ai — when open-source MCP beats the SaaS →](/blog/synthpanel-vs-commercial-alternatives.html) 2026-04-15 · updated 2026-07-16
