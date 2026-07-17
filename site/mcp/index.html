@@ -198,6 +198,29 @@
           iterative use.
         </p>
 
+        <!-- Production operations pointer — the one link unattended operators need -->
+        <div
+          class="mt-6 rounded-lg border border-emerald-400/30 bg-emerald-400/5 p-4 text-sm text-slate-300"
+        >
+          <p>
+            <span class="font-semibold text-emerald-300"
+              >Running this unattended?</span
+            >
+            The full operational contract — typed errors and retry semantics,
+            cost gates, checkpoint/resume, determinism per provider,
+            credential handling, logs — is one page with code citations:
+            <a
+              href="https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/production-operations.md"
+              class="text-emerald-400 underline decoration-emerald-400/40 underline-offset-2 hover:text-emerald-300"
+              >docs/production-operations.md</a
+            >. Condensed on this page:
+            <a class="text-emerald-400 underline decoration-emerald-400/40 underline-offset-2 hover:text-emerald-300" href="#agent-patterns">agent patterns</a>,
+            <a class="text-emerald-400 underline decoration-emerald-400/40 underline-offset-2 hover:text-emerald-300" href="#production">ops runbook</a>,
+            <a class="text-emerald-400 underline decoration-emerald-400/40 underline-offset-2 hover:text-emerald-300" href="#determinism">determinism</a>,
+            <a class="text-emerald-400 underline decoration-emerald-400/40 underline-offset-2 hover:text-emerald-300" href="#observability">observability</a>.
+          </p>
+        </div>
+
         <!-- Install command -->
         <div class="mt-8 max-w-xl">
           <div
@@ -1047,85 +1070,257 @@
         </p>
       </section>
 
-      <!-- Production notes -->
+      <!-- Agent integration patterns -->
+      <section class="mt-16" id="agent-patterns">
+        <h2
+          class="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Agent integration patterns
+        </h2>
+        <p class="mb-4 text-base text-slate-300">
+          Three patterns that hold up when an agent — not a human — is
+          driving the tools:
+        </p>
+        <dl class="mt-6 space-y-6 text-base text-slate-300">
+          <div>
+            <dt class="font-semibold text-white">
+              Summary first, transcripts on demand
+            </dt>
+            <dd class="mt-2 text-sm text-slate-400">
+              <code class="text-slate-300">run_panel</code> and
+              <code class="text-slate-300">run_quick_poll</code> default to
+              <code class="text-slate-300">detail: "summary"</code>: synthesis,
+              verdict, costs and warnings come back, but per-panelist
+              transcripts are dropped (a full 100-persona panel can serialize
+              to megabytes — that would flood the agent's context window). The
+              envelope marks the omission
+              (<code class="text-slate-300">results_omitted: true</code>) and
+              points at the full copy via
+              <code class="text-slate-300">transcript_uri</code>. When the
+              agent actually needs quotes, it calls
+              <code class="text-slate-300">get_panel_result</code>
+              (defaults to <code class="text-slate-300">detail: "full"</code>)
+              or reads the
+              <code class="text-slate-300">panel-result://{result_id}</code>
+              resource.
+            </dd>
+          </div>
+          <div>
+            <dt class="font-semibold text-white">
+              Structured polling — no prose parsing
+            </dt>
+            <dd class="mt-2 text-sm text-slate-400">
+              Both run tools accept a
+              <code class="text-slate-300">response_schema</code> argument
+              (JSON Schema) that forces structured output at generation time —
+              forced-choice, Likert, tagged themes, ranking — so downstream
+              code branches on fields, not on regexes over prose. Pattern
+              catalogue:
+              <a
+                href="https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/structured-polling.md"
+                class="text-emerald-400 underline decoration-emerald-400/40 underline-offset-2 hover:text-emerald-300"
+                >docs/structured-polling.md</a
+              >.
+            </dd>
+          </div>
+          <div>
+            <dt class="font-semibold text-white">Budget-gated iteration</dt>
+            <dd class="mt-2 text-sm text-slate-400">
+              MCP mode defaults to <code class="text-slate-300">haiku</code>
+              and caps panels at 100 personas × 50 questions. Every response
+              carries in-band <code class="text-slate-300">total_cost</code>
+              and per-panelist <code class="text-slate-300">usage</code> /
+              <code class="text-slate-300">cost</code>, so the loop is: pilot
+              with <code class="text-slate-300">run_quick_poll</code>, gate on
+              the returned cost, then scale to a full
+              <code class="text-slate-300">run_panel</code>. Note the hard
+              mid-run spend ceiling
+              (<code class="text-slate-300">--max-cost</code>) is a CLI flag —
+              there is no <code class="text-slate-300">max_cost</code> tool
+              argument on the MCP surface; unattended hard ceilings mean
+              driving the CLI.
+            </dd>
+          </div>
+        </dl>
+        <p class="mt-4 text-xs text-slate-400">
+          Full tool semantics:
+          <a
+            href="https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/mcp.md"
+            class="text-emerald-400 underline decoration-emerald-400/40 underline-offset-2 hover:text-emerald-300"
+            >docs/mcp.md</a
+          >
+          · operational contract:
+          <a
+            href="https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/production-operations.md"
+            class="text-emerald-400 underline decoration-emerald-400/40 underline-offset-2 hover:text-emerald-300"
+            >docs/production-operations.md</a
+          >.
+        </p>
+      </section>
+
+      <!-- Ops runbook -->
       <section class="mt-16" id="production">
         <h2
           class="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400"
         >
-          Production notes
+          Ops runbook
         </h2>
         <p class="mb-4 text-base text-slate-300">
-          Running panels unattended — CI gates, agent pipelines, scheduled
-          research? The operational contract is documented and verified
-          against the code:
+          What actually happens when a panel run goes sideways. Failures
+          return typed envelopes
+          (<code class="text-slate-300">error_code</code>,
+          <code class="text-slate-300">retry_safe</code>,
+          <code class="text-slate-300">schema_version</code>) — retry only on
+          <code class="text-slate-300">MODEL_TIMEOUT</code> /
+          <code class="text-slate-300">PANEL_TIMEOUT</code> and pre-exhaustion
+          <code class="text-slate-300">SCHEMA_DRIFT</code>; everything else is
+          terminal by contract. Requests are validated before any model call,
+          so bad arguments cost zero tokens.
         </p>
-        <dl class="mt-6 space-y-6 text-base text-slate-300">
-          <div>
-            <dt class="font-semibold text-white">Typed errors, safe retries</dt>
-            <dd class="mt-2 text-sm text-slate-400">
-              Failures return a typed envelope
-              (<code class="text-slate-300">error_code</code>,
-              <code class="text-slate-300">retry_safe</code>,
-              <code class="text-slate-300">schema_version</code>) — retry only
-              on <code class="text-slate-300">MODEL_TIMEOUT</code> /
-              <code class="text-slate-300">PANEL_TIMEOUT</code> and
-              pre-exhaustion <code class="text-slate-300">SCHEMA_DRIFT</code>;
-              everything else is terminal by contract. Requests are validated
-              before any model call, so bad arguments cost zero tokens.
-            </dd>
-          </div>
-          <div>
-            <dt class="font-semibold text-white">Partial failure is contained</dt>
-            <dd class="mt-2 text-sm text-slate-400">
-              One failed panelist doesn&rsquo;t sink the panel: errors are
-              recorded per persona and per question, a failure-rate threshold
-              (default 50%) decides run validity, and every abort path —
-              cost ceiling, SIGINT, total failure — still emits valid partial
-              JSON with a machine-readable
-              <code class="text-slate-300">abort_reason</code>. A failed
-              synthesis is recoverable post-hoc with
-              <code class="text-slate-300">synthpanel panel synthesize</code>
-              — no panel re-spend.
-            </dd>
-          </div>
-          <div>
-            <dt class="font-semibold text-white">Cost is bounded, not hoped</dt>
-            <dd class="mt-2 text-sm text-slate-400">
-              <code class="text-slate-300">--dry-run</code> prints a cost
-              estimate before any provider call;
-              <code class="text-slate-300">--max-cost</code> enforces a hard
-              projected-total ceiling mid-run; every response carries per-turn
-              token and cost telemetry, and
-              <code class="text-slate-300">synthpanel cost summary</code>
-              reports spend across saved runs.
-            </dd>
-          </div>
-          <div>
-            <dt class="font-semibold text-white">Scale without babysitting</dt>
-            <dd class="mt-2 text-sm text-slate-400">
-              Checkpointing with <code class="text-slate-300">--resume</code>
-              (auto-flushed on SIGINT/SIGTERM),
-              <code class="text-slate-300">--max-concurrent</code> and
-              <code class="text-slate-300">--rate-limit-rps</code> throttles,
-              and convergence-based
-              <code class="text-slate-300">--auto-stop</code> that quits
-              paying for panelists once distributions stabilize.
-            </dd>
-          </div>
-          <div>
-            <dt class="font-semibold text-white">No secrets in configs</dt>
-            <dd class="mt-2 text-sm text-slate-400">
-              <code class="text-slate-300">synthpanel mcp install</code>
-              writes no API key unless you explicitly pass
-              <code class="text-slate-300">--env</code>; credentials come from
-              environment variables or the
-              <code class="text-slate-300">synthpanel login</code> store
-              (mode <code class="text-slate-300">0600</code>). Reproducibility
-              is stamped in: saved results carry model/version provenance and
-              a config hash.
-            </dd>
-          </div>
-        </dl>
+        <div class="overflow-x-auto rounded-lg border border-slate-800 bg-slate-900/40">
+          <table class="w-full text-sm">
+            <thead>
+              <tr>
+                <th class="w-1/4">Failure</th>
+                <th>What happens</th>
+              </tr>
+            </thead>
+            <tbody class="text-slate-300">
+              <tr>
+                <td>K of N panelists fail</td>
+                <td>
+                  Errors are recorded per persona and per question
+                  (<code>error</code> field per row), the panel continues, and
+                  <code>failure_stats</code> reports the rate. The run is
+                  invalid only past <code>--failure-threshold</code> (default
+                  0.5) — then synthesis is auto-disabled and the CLI exits
+                  <code>2</code>. <code>--strict</code> = zero tolerance.
+                </td>
+              </tr>
+              <tr>
+                <td>Synthesis fails</td>
+                <td>
+                  Never shaped like success: the envelope carries
+                  <code>synthesis_error</code> and the run is marked invalid —
+                  but panelist data is saved. Recover post-hoc without
+                  re-running the panel:
+                  <code>synthpanel panel synthesize &lt;result-id&gt;
+                  --synthesis-model sonnet</code>. A synthesis-model outage
+                  costs one cheap retry, not the panel spend.
+                </td>
+              </tr>
+              <tr>
+                <td>Rate limits</td>
+                <td>
+                  <code>--max-concurrent</code> caps in-flight requests;
+                  <code>--rate-limit-rps</code> adds a token-bucket cap
+                  (fractional values accepted). Rate-limit exhaustion is
+                  classified distinctly in <code>abort_reason</code> — the
+                  signal is "raise the throttle," not "chase a model bug."
+                </td>
+              </tr>
+              <tr>
+                <td>Cost ceiling hit</td>
+                <td>
+                  <code>--max-cost</code> halts gracefully mid-run: pending
+                  panelists cancelled, valid partial JSON with
+                  <code>run_invalid: true</code>,
+                  <code>cost_exceeded: true</code>,
+                  <code>halted_at_panelist</code>. Exit <code>2</code>.
+                </td>
+              </tr>
+              <tr>
+                <td>SIGINT / SIGTERM</td>
+                <td>
+                  With checkpointing active, a final checkpoint is flushed and
+                  the run marked aborted; stdout still emits a complete,
+                  parseable envelope with
+                  <code>abort_reason: "sigint"</code>. Resume picks up where
+                  it stopped.
+                </td>
+              </tr>
+              <tr>
+                <td>Every panelist fails</td>
+                <td>
+                  Loud, not shaped like success: a structured total-failure
+                  diagnostic names the upstream cause (bad model id, provider
+                  400). MCP serializes
+                  <code>{"error", "run_invalid": true, "total_failure"}</code>;
+                  the CLI exits <code>2</code>.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 class="mt-8 mb-3 text-base font-semibold text-white">
+          CLI exit codes
+        </h3>
+        <div class="overflow-x-auto rounded-lg border border-slate-800 bg-slate-900/40">
+          <table class="w-full text-sm">
+            <thead>
+              <tr>
+                <th class="w-1/4">Exit</th>
+                <th>Meaning</th>
+              </tr>
+            </thead>
+            <tbody class="text-slate-300">
+              <tr>
+                <td><code>0</code></td>
+                <td>Run completed and is valid.</td>
+              </tr>
+              <tr>
+                <td><code>1</code></td>
+                <td>Startup/config error (bad flags, missing files, refused flag combos).</td>
+              </tr>
+              <tr>
+                <td><code>2</code></td>
+                <td>
+                  Run completed but <strong>invalid</strong>
+                  (<code>run_invalid: true</code>): failure rate over
+                  threshold, total failure, cost gate tripped, SIGINT, or
+                  synthesis failure. The envelope is still valid JSON —
+                  CI gates on <code>abort_reason</code>, not stderr.
+                </td>
+              </tr>
+              <tr>
+                <td><code>3</code></td>
+                <td><code>--strict</code> violation: any panelist-question error at all.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 class="mt-8 mb-3 text-base font-semibold text-white">
+          Checkpoint + resume
+        </h3>
+        <div
+          class="group relative rounded-lg border border-slate-700 bg-slate-950/70 p-4 font-mono text-sm leading-relaxed shadow"
+        >
+<pre class="whitespace-pre-wrap text-slate-300"><span class="text-slate-400"># snapshot every 25 panelists (atomic, per-run lock)</span>
+<span class="text-emerald-400">synthpanel panel run</span> ... --checkpoint-dir .synthpanel-ckpt
+
+<span class="text-slate-400"># interrupted? resume skips completed panelists, merges into one result</span>
+<span class="text-emerald-400">synthpanel panel run</span> --resume &lt;run-id&gt; --checkpoint-dir .synthpanel-ckpt</pre>
+          <button
+            type="button"
+            class="copy-btn absolute right-3 top-3 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-emerald-400/50 hover:text-emerald-300"
+            data-copy="synthpanel panel run --resume <run-id> --checkpoint-dir .synthpanel-ckpt"
+            aria-label="Copy resume command"
+          >
+            Copy
+          </button>
+        </div>
+        <p class="mt-3 text-xs text-slate-400">
+          Resume refuses to continue if the config hash drifted from the
+          checkpointed one (<code class="text-slate-400">--allow-drift</code>
+          downgrades to a warning). Credentials stay out of configs:
+          <code class="text-slate-400">synthpanel mcp install</code> writes no
+          API key unless you pass <code class="text-slate-400">--env</code>;
+          keys come from env vars or the
+          <code class="text-slate-400">synthpanel login</code> store (mode
+          <code class="text-slate-400">0600</code>).
+        </p>
         <p class="mt-4 text-xs text-slate-400">
           Full contract with code citations:
           <a
@@ -1133,10 +1328,136 @@
             class="text-emerald-400 underline decoration-emerald-400/40 underline-offset-2 hover:text-emerald-300"
             >docs/production-operations.md</a
           >
-          — error and retry semantics, exit codes, partial-failure behavior,
-          cost gates, checkpoint/resume, determinism per provider, credential
-          handling, and observability.
+          — error and retry semantics, partial-failure behavior, cost gates,
+          timeout budgets, convergence auto-stop, and credential handling.
         </p>
+      </section>
+
+      <!-- Determinism contract -->
+      <section class="mt-16" id="determinism">
+        <h2
+          class="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Determinism contract
+        </h2>
+        <div
+          class="rounded-lg border border-slate-800 bg-slate-900/40 p-5 text-sm text-slate-400"
+        >
+          <p class="mb-3 text-base text-slate-300">
+            What is and isn&rsquo;t guaranteed when you re-run a panel:
+          </p>
+          <ul class="space-y-2">
+            <li>
+              <code class="text-slate-300">--seed</code> is forwarded to
+              providers that support it: OpenAI, Gemini, xAI, OpenRouter.
+              <strong class="text-slate-300">Anthropic has no seed
+              parameter</strong> — the client warns once per provider and
+              proceeds; use <code class="text-slate-300">--temperature 0</code>
+              for closer-to-deterministic Claude output.
+            </li>
+            <li>
+              <code class="text-slate-300">--resume</code> replays a
+              previously-cached run instead of re-sampling — the
+              reproducibility tool for &ldquo;give me the same panel
+              again.&rdquo;
+            </li>
+            <li>
+              Otherwise, same-config reruns are
+              <strong class="text-slate-300">equivalent, not
+              identical</strong>: treat seeds as best-effort bias reduction,
+              not a bit-exactness guarantee. There is no cross-provider
+              bit-exact replay.
+            </li>
+            <li>
+              Every saved result stamps provenance in metadata: resolved
+              models, generation params, synthpanel + Python versions, and a
+              SHA-256 <code class="text-slate-300">config_hash</code> —
+              template <code class="text-slate-300">--var</code> values are
+              folded in as one-way hashes, so substitution-only differences
+              don&rsquo;t collide and raw values are never persisted.
+            </li>
+          </ul>
+          <p class="mt-4 text-xs text-slate-400">
+            Full contract:
+            <a
+              href="https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/production-operations.md#determinism-and-reproducibility"
+              class="text-emerald-400 underline decoration-emerald-400/40 underline-offset-2 hover:text-emerald-300"
+              >production-operations.md#determinism</a
+            >
+            ·
+            <a
+              href="https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/reproducibility.md"
+              class="text-emerald-400 underline decoration-emerald-400/40 underline-offset-2 hover:text-emerald-300"
+              >docs/reproducibility.md</a
+            >.
+          </p>
+        </div>
+      </section>
+
+      <!-- Observability contract -->
+      <section class="mt-16" id="observability">
+        <h2
+          class="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400"
+        >
+          Observability contract
+        </h2>
+        <div
+          class="rounded-lg border border-slate-800 bg-slate-900/40 p-5 text-sm text-slate-400"
+        >
+          <ul class="space-y-2">
+            <li>
+              <strong class="text-slate-300">stderr</strong> — structured logs
+              (<code class="text-slate-300">%(asctime)s %(name)s
+              %(levelname)s %(message)s</code>) on the
+              <code class="text-slate-300">synth_panel</code> logger
+              namespace; level via <code class="text-slate-300">--verbose</code>,
+              <code class="text-slate-300">SYNTHPANEL_LOG_LEVEL</code>, or
+              <code class="text-slate-300">--debug-all</code>.
+            </li>
+            <li>
+              <strong class="text-slate-300">stdout stays JSON-pure</strong> —
+              with <code class="text-slate-300">--output-format json</code>,
+              stdout carries exactly one JSON document; progress, hints, and
+              warnings go to stderr. Pipe to
+              <code class="text-slate-300">jq</code> without filtering.
+            </li>
+            <li>
+              <strong class="text-slate-300">Handles in-band</strong> —
+              <code class="text-slate-300">--save</code> puts
+              <code class="text-slate-300">result_id</code> and
+              <code class="text-slate-300">saved_path</code> in the envelope;
+              checkpointed runs add
+              <code class="text-slate-300">run_id</code>. Agents get follow-up
+              handles from stdout, never by scraping stderr.
+            </li>
+            <li>
+              <strong class="text-slate-300">Telemetry in-band</strong> —
+              <code class="text-slate-300">failure_stats</code>,
+              <code class="text-slate-300">run_invalid</code>,
+              <code class="text-slate-300">abort_reason</code>,
+              <code class="text-slate-300">cost_gate</code>,
+              <code class="text-slate-300">convergence</code>, and
+              <code class="text-slate-300">warnings[]</code> live in the
+              result envelope; token usage is tracked per turn in four buckets
+              (input / output / cache-write / cache-read) with cost on every
+              panelist row and the envelope total.
+            </li>
+            <li>
+              <strong class="text-slate-300">Post-hoc spend</strong> —
+              <code class="text-slate-300">synthpanel cost summary</code>
+              reports spend across saved runs, grouped by model or run,
+              filterable by date.
+            </li>
+          </ul>
+          <p class="mt-4 text-xs text-slate-400">
+            Full contract:
+            <a
+              href="https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/production-operations.md#observability"
+              class="text-emerald-400 underline decoration-emerald-400/40 underline-offset-2 hover:text-emerald-300"
+              >production-operations.md#observability</a
+            >.
+          </p>
+        </div>
       </section>
 
       <!-- Data storage -->
