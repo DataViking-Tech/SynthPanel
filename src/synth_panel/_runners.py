@@ -811,18 +811,45 @@ def run_panel_sync(
                 )
                 synthesis_dict = synthesis_result.to_dict()
             except Exception as exc:
-                logger.error("Synthesis failed: %s", exc, exc_info=True)
-                synthesis_dict = {
-                    "synthesis_error": build_synthesis_error_payload(
-                        exc,
-                        error_type="synthesis_api_error",
-                        message=f"Synthesis call failed: {_sanitize_api_error(exc)}",
-                        suggested_fix=(
-                            "Check provider credentials and model availability;"
-                            " if context-related, rerun with a larger-context synthesis model."
-                        ),
-                    )
-                }
+                # sp-rcvr: synthesis recovery ladder — classify, retry
+                # transients once, map-reduce on (suspected) downstream
+                # context overflow, reroute away from a failing OpenRouter
+                # downstream — before surfacing the structured error.
+                from synth_panel.synthesis_recovery import (
+                    RecoveryContext,
+                    SynthesisRecoveryError,
+                    recover_synthesis_failure,
+                )
+
+                ctx = RecoveryContext(
+                    client=client,
+                    panelist_results=base_results,
+                    questions=questions,
+                    synthesis_model=synthesis_model,
+                    panelist_model=model,
+                    custom_prompt=synthesis_prompt,
+                    temperature=synthesis_temperature,
+                    top_p=top_p,
+                    seed=seed,
+                    personas=personas,
+                    allow_map_reduce=synthesis_prompt is None,
+                )
+                try:
+                    synthesis_dict = recover_synthesis_failure(exc, ctx).to_dict()
+                except SynthesisRecoveryError as rexc:
+                    logger.error("Synthesis failed: %s", rexc, exc_info=True)
+                    synthesis_dict = {
+                        "synthesis_error": build_synthesis_error_payload(
+                            rexc,
+                            error_type="synthesis_api_error",
+                            message=f"Synthesis call failed: {_sanitize_api_error(rexc)}",
+                            suggested_fix=(
+                                f"Retry with a large-context in-family model: `{rexc.suggested_command}`. "
+                                "Also check provider credentials and model availability."
+                            ),
+                            diagnostic={"recovery_rungs": rexc.rungs},
+                        )
+                    }
 
     variant_data: dict[str, Any] | None = None
     if variants > 0 and variant_mapping:

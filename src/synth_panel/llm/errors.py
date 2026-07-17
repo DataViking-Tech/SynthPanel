@@ -44,12 +44,19 @@ class LLMError(Exception):
         status_code: int | None = None,
         retry_after: float | None = None,
         cause: Exception | None = None,
+        downstream_provider: str | None = None,
     ) -> None:
         super().__init__(message)
         self.category = category
         self.status_code = status_code
         self.retry_after = retry_after
         self.__cause__ = cause
+        # Synthesis recovery ladder: name of the downstream provider that
+        # actually rejected the request, when an aggregator (OpenRouter)
+        # surfaces it in the error body (e.g. "Azure"). ``None`` for
+        # direct-provider errors. Lets callers build provider-routing
+        # exclusions instead of string-matching the message.
+        self.downstream_provider = downstream_provider
 
     @property
     def retryable(self) -> bool:

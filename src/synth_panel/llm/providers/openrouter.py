@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
+from typing import Any
 
 import httpx
 
@@ -106,6 +107,7 @@ def _openrouter_error_from_response(resp: httpx.Response) -> LLMError:
         base.category,
         status_code=base.status_code,
         retry_after=base.retry_after,
+        downstream_provider=upstream,
     )
 
 
@@ -148,7 +150,20 @@ def _rebind_model(request: CompletionRequest, new_model: str) -> CompletionReque
         top_p=request.top_p,
         seed=request.seed,
         cache_enabled=request.cache_enabled,
+        provider_routing=request.provider_routing,
     )
+
+
+def _apply_provider_routing(body: dict[str, Any], request: CompletionRequest) -> None:
+    """Attach OpenRouter provider-routing preferences to the request body.
+
+    OpenRouter accepts a ``provider`` object (``ignore`` / ``order`` /
+    ``only`` / ...) on its endpoints. Used by the synthesis recovery
+    ladder to exclude a downstream provider that just rejected the call
+    (e.g. ``{"ignore": ["azure"]}``). No-op when unset.
+    """
+    if request.provider_routing:
+        body["provider"] = request.provider_routing
 
 
 class OpenRouterProvider(LLMProvider):
@@ -199,6 +214,7 @@ class OpenRouterProvider(LLMProvider):
     def _send_anthropic(self, request: CompletionRequest) -> CompletionResponse:
         url = f"{self._base_url}/v1/messages"
         body = build_anthropic_body(request)
+        _apply_provider_routing(body, request)
         try:
             resp = httpx.post(
                 url,
@@ -238,6 +254,7 @@ class OpenRouterProvider(LLMProvider):
         # providers omit ``usage`` entirely, causing synthpanel to compute
         # $0 for the whole panel. See sp-2xy.
         body["usage"] = {"include": True}
+        _apply_provider_routing(body, request)
         try:
             resp = httpx.post(url, headers=self._headers(), json=body, timeout=120.0)
         except httpx.HTTPError as exc:
@@ -289,9 +306,11 @@ class OpenRouterProvider(LLMProvider):
             temperature=request.temperature,
             top_p=request.top_p,
             cache_enabled=request.cache_enabled,
+            provider_routing=request.provider_routing,
         )
         url = f"{self._base_url}/v1/messages"
         body = build_anthropic_body(request)
+        _apply_provider_routing(body, request)
         try:
             with httpx.stream(
                 "POST",
@@ -317,6 +336,7 @@ class OpenRouterProvider(LLMProvider):
         # Mirror send(): ensure OpenRouter emits usage details in the final
         # stream chunk so synthpanel can track cost accurately.
         body["usage"] = {"include": True}
+        _apply_provider_routing(body, request)
         try:
             with httpx.stream(
                 "POST",

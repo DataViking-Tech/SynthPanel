@@ -275,6 +275,11 @@ class CompletionRequest:
     top_p: float | None = None
     seed: int | None = None
     cache_enabled: bool = True
+    # Synthesis recovery ladder: OpenRouter provider-routing preferences
+    # (e.g. ``{"ignore": ["azure"]}``) forwarded verbatim as the request
+    # body's ``provider`` object. Only the OpenRouter provider reads it;
+    # every other provider ignores it. ``None`` (default) sends nothing.
+    provider_routing: dict[str, Any] | None = None
 
 
 # ---------------------------------------------------------------------------
