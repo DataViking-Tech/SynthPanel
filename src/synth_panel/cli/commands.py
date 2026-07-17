@@ -1690,6 +1690,29 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         except ValueError as exc:
             print(f"Error parsing --models: {exc}", file=sys.stderr)
             return 1
+        # gh-r4: a one-entry weight-free spec ("--models X") is a plain
+        # single-model run, not an ensemble. Routing it through the
+        # ensemble branch silently skipped synthesis, exited 0 with a bare
+        # "Ensemble complete", and bypassed the standard-path cost gate /
+        # summary. Demote it to the same path "--model X" takes; ensemble
+        # comparison needs >= 2 models. (--blend keeps its own validation.)
+        if ensemble_mode and not blend_mode and len(model_spec) == 1:
+            model = model_spec[0][0]
+            args.model = model
+            has_model = model
+            has_models = None
+            model_spec = None
+            ensemble_mode = False
+            print(
+                f"Note: --models with a single model ({model}) runs a standard "
+                "panel run (synthesis included). Ensemble comparison requires "
+                "two or more models.",
+                file=sys.stderr,
+            )
+    if has_models:
+        # The demotion above nulls has_models and model_spec together, so a
+        # truthy has_models implies a parsed spec; assert for mypy's sake.
+        assert model_spec is not None
         # sp-zdul: warn if weighted sum is far from 1.0 — the user likely
         # intended an exact-ratio split and a typo (e.g. "0.3,0.3,0.3")
         # silently reweights their panel.
@@ -1968,6 +1991,12 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         from synth_panel._runners import format_panelist_result as _fmt_panelist
 
         output = build_ensemble_output(ens_result, panelist_formatter=_fmt_panelist)
+        # gh-r4: the ensemble path never runs synthesis. Say so explicitly
+        # in the payload instead of leaving consumers to infer it from a
+        # missing key ("panel inspect" showed only 'Synthesis: not run'
+        # with no explanation, and text stdout said nothing at all).
+        output["synthesis"] = None
+        output["synthesis_status"] = "skipped"
         # sp-atvc: attach a metadata bundle whose cost.per_model covers
         # every ensemble model, not just the first in the spec.
         ens_per_model_meta = {mr.model: (mr.usage, mr.cost) for mr in ens_result.model_results}
@@ -2021,7 +2050,41 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
             output["result_id"] = ensemble_result_id
             output["saved_path"] = str(_results_dir() / f"{ensemble_result_id}.json")
 
-        emit(fmt, message="Ensemble complete", extra=output)
+        # gh-r4: text-mode stdout used to be the single line "Ensemble
+        # complete" — no cost, no error count, no synthesis status, no
+        # pointer to the results. Print a terse run summary instead.
+        # JSON/NDJSON keep the same message and carry everything in extra.
+        if fmt is OutputFormat.TEXT:
+            n_models = len(ensemble_models)
+            incidents = output.get("ensemble_incidents") or []
+            print(
+                f"Ensemble complete: {n_models} model(s) x "
+                f"{ens_result.persona_count} persona(s) x "
+                f"{ens_result.question_count} question(s)"
+            )
+            print(f"  Models:    {', '.join(ensemble_models)}")
+            print(f"  Errors:    {len(incidents)} incident(s)")
+            print(f"  Cost:      {ens_result.total_cost.format_usd()} (recorded)")
+            if ensemble_result_id is not None:
+                print(
+                    "  Synthesis: skipped — ensemble runs never synthesize "
+                    "automatically. Run: "
+                    f"synthpanel panel synthesize {ensemble_result_id}"
+                )
+                print(f"  Results:   {output['saved_path']}")
+            else:
+                print(
+                    "  Synthesis: skipped — ensemble runs never synthesize "
+                    "automatically. Re-run with --save, then run: "
+                    "synthpanel panel synthesize <result-id>"
+                )
+                print(
+                    "  Results:   not saved — re-run with --save to persist "
+                    "them (full per-model payload available via "
+                    "--output-format json)"
+                )
+        else:
+            emit(fmt, message="Ensemble complete", extra=output)
 
         if ensemble_result_id is not None:
             _print_saved_result_hint(ensemble_result_id)
@@ -3106,6 +3169,31 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 hb_n = convergence_baseline_payload.get("converged_at")
                 if hb_n is not None:
                     print(f"  human baseline: converged_at=n={hb_n}")
+
+        # gh-r4: terse end-of-run summary so a default (text) run states
+        # panel size, error count, recorded cost, synthesis status, and
+        # where the results live — previously synthesis status and result
+        # location were only discoverable via --save/--output-format json.
+        if synthesis_dict:
+            synthesis_status = f"completed (cost: {synthesis_dict['cost']})"
+        elif getattr(args, "no_synthesis", False):
+            synthesis_status = "skipped (--no-synthesis)"
+        elif skip_synthesis:
+            synthesis_status = "skipped (run halted or invalid)"
+        else:
+            synthesis_status = "FAILED — see stderr above; recover with: synthpanel panel synthesize <result-id>"
+        print(f"\n{'=' * 60}")
+        print("RUN SUMMARY")
+        print(f"{'=' * 60}")
+        print(
+            f"  Personas:  {len(personas)}    Questions: {len(questions)}    Errors: {failure_stats['errored_pairs']}"
+        )
+        print(f"  Cost:      {total_cost_est.format_usd()} (recorded)")
+        print(f"  Synthesis: {synthesis_status}")
+        if saved_result_path is not None:
+            print(f"  Results:   {saved_result_path}")
+        else:
+            print("  Results:   not saved — re-run with --save to persist (then: synthpanel report <result-id>)")
     else:
         # sp-efip: mirror the TEXT-mode behaviour and print the fatal
         # banner to stderr even when JSON/NDJSON is the primary output.
@@ -6110,6 +6198,101 @@ def handle_cost_summary(args: argparse.Namespace, fmt: OutputFormat) -> int:
     return 0
 
 
+def handle_cost_show(args: argparse.Namespace, fmt: OutputFormat) -> int:
+    """Per-run cost breakdown for one saved result (gh-r4).
+
+    Thin alias over the cost section of ``panel inspect`` — same result
+    resolution (ID or JSON path), same :class:`InspectReport` data, but
+    only the cost/usage fields. ``cost summary`` aggregates across runs;
+    this answers "what did run X cost?" without wading through the full
+    inspect output.
+    """
+    from synth_panel.analysis.inspect import build_inspect_report
+
+    result_ref = args.result
+    path = Path(result_ref)
+    if path.exists() and path.suffix == ".json":
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            msg = f"Error: not valid JSON: {result_ref}: {exc}"
+            if fmt is OutputFormat.TEXT:
+                print(msg, file=sys.stderr)
+            else:
+                emit(fmt, message=msg, extra={"error": "invalid_json"})
+            return 1
+        data.setdefault("id", path.stem)
+    else:
+        from synth_panel.mcp.data import get_panel_result
+
+        try:
+            data = get_panel_result(result_ref)
+        except FileNotFoundError:
+            msg = f"Error: panel result not found: {result_ref}"
+            if fmt is OutputFormat.TEXT:
+                print(msg, file=sys.stderr)
+            else:
+                emit(fmt, message=msg, extra={"error": "not_found"})
+            return 1
+
+    if not isinstance(data, dict):
+        msg = "Error: panel result is not a JSON object"
+        if fmt is OutputFormat.TEXT:
+            print(msg, file=sys.stderr)
+        else:
+            emit(fmt, message=msg, extra={"error": "invalid_shape"})
+        return 1
+
+    report = build_inspect_report(data)
+    cost_payload: dict[str, Any] = {
+        "result_id": report.result_id,
+        "total_cost": report.total_cost,
+        "panelist_cost": report.panelist_cost,
+        "total_tokens": report.total_tokens,
+        "per_model": [
+            {
+                "model": m.model,
+                "total_tokens": m.total_tokens,
+                "input_tokens": m.input_tokens,
+                "output_tokens": m.output_tokens,
+                "cost_usd": m.cost_usd,
+            }
+            for m in report.model_rollup
+        ],
+        "synthesis": {
+            "ran": report.synthesis.ran,
+            "model": report.synthesis.model,
+            "cost": report.synthesis.cost,
+        },
+    }
+
+    if fmt is OutputFormat.TEXT:
+        print(f"Cost for {report.result_id or result_ref}")
+        print(f"  Total cost:    {report.total_cost or '(not recorded)'}")
+        if report.panelist_cost:
+            print(f"  Panelist cost: {report.panelist_cost}")
+        if report.synthesis.ran:
+            synth_line = report.synthesis.cost or "(not recorded)"
+            if report.synthesis.model:
+                synth_line += f" ({report.synthesis.model})"
+            print(f"  Synthesis:     {synth_line}")
+        else:
+            print("  Synthesis:     not run")
+        print(f"  Total tokens:  {report.total_tokens}")
+        if report.model_rollup:
+            print("  Per model:")
+            for m in report.model_rollup:
+                cost_str = f"${m.cost_usd:.4f}" if m.cost_usd is not None else "(unknown)"
+                print(
+                    f"    {m.model}: {cost_str} "
+                    f"(tokens={m.total_tokens} input={m.input_tokens} output={m.output_tokens})"
+                )
+    else:
+        emit(fmt, message="Cost show", extra={"cost": cost_payload})
+
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # Instruments subcommands (sp-xsu)
 # ---------------------------------------------------------------------------
@@ -7444,8 +7627,7 @@ def _print_saved_result_hint(result_id: str) -> None:
     print(f"  synthpanel report {result_id}          # full Markdown report (incl. cost rollup)", file=sys.stderr)
     print(f"  synthpanel results show {result_id}    # raw saved result", file=sys.stderr)
     print("  synthpanel results list                # all saved results", file=sys.stderr)
-    # #538: there is no per-result `cost <id>` command — the per-run cost
-    # rollup lives in `report` above. `cost summary` aggregates across runs.
+    print(f"  synthpanel cost show {result_id}       # this run's cost breakdown", file=sys.stderr)
     print("  synthpanel cost summary                # cost rollup across saved runs", file=sys.stderr)
 
 

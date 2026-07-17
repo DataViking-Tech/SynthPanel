@@ -215,6 +215,10 @@ def _main(argv: list[str] | None) -> int:
         sub = getattr(args, "cost_command", None)
         if sub == "summary":
             return handle_cost_summary(args, output_format)
+        elif sub == "show":
+            from synth_panel.cli.commands import handle_cost_show
+
+            return handle_cost_show(args, output_format)
         else:
             parser.parse_args(["cost", "--help"])
             return 1

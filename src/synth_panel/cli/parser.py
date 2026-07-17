@@ -138,11 +138,12 @@ def build_parser() -> argparse.ArgumentParser:
     panel_run_parser.add_argument(
         "--personas",
         default=None,
-        metavar="PATH",
+        metavar="NAME_OR_PATH",
         help=(
-            "Path to a YAML file defining personas. Required unless "
-            "--resume <run-id> is given, in which case the original "
-            "personas path is recovered from the checkpoint."
+            "Name of a bundled/installed persona pack (see 'synthpanel pack "
+            "list', e.g. general-consumer) or a path to a YAML file defining "
+            "personas. Required unless --resume <run-id> is given, in which "
+            "case the original personas path is recovered from the checkpoint."
         ),
     )
     panel_run_parser.add_argument(
@@ -173,11 +174,13 @@ def build_parser() -> argparse.ArgumentParser:
     panel_run_parser.add_argument(
         "--instrument",
         default=None,
-        metavar="PATH",
+        metavar="NAME_OR_PATH",
         help=(
-            "Path to a YAML file defining the survey/instrument. "
-            "Required unless --resume <run-id> is given, in which case "
-            "the original instrument path is recovered from the checkpoint."
+            "Name of a bundled/installed instrument (see 'synthpanel "
+            "instruments list', e.g. general-survey) or a path to a YAML "
+            "file defining the survey/instrument. Required unless "
+            "--resume <run-id> is given, in which case the original "
+            "instrument path is recovered from the checkpoint."
         ),
     )
     panel_run_parser.add_argument(
@@ -1215,6 +1218,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Cost reporting for saved panel runs.",
     )
     cost_subparsers = cost_parser.add_subparsers(dest="cost_command")
+
+    cost_show_parser = cost_subparsers.add_parser(
+        "show",
+        help="Per-run cost breakdown for one saved panel result (alias for the cost section of 'panel inspect').",
+    )
+    cost_show_parser.add_argument(
+        "result",
+        metavar="RESULT",
+        help="Panel result ID or path to a result JSON file.",
+    )
 
     cost_summary_parser = cost_subparsers.add_parser(
         "summary",
