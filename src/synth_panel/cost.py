@@ -613,6 +613,25 @@ def resolve_cost(
     provider_total = float(usage.provider_reported_cost)
     local_total = local.total_cost
 
+    # gh-r4: a provider-reported cost of exactly $0 for a run that consumed
+    # tokens is almost never a real bill — OpenRouter returns ``usage.cost:
+    # 0`` for BYOK keys (the upstream provider bills directly) and some
+    # upstreams omit native cost. Trusting the zero verbatim recorded runs
+    # as $0.0000 and starved CostGate, so --max-cost could never trip.
+    # Fall back to the local pricing table whenever it prices the same
+    # usage as nonzero; genuinely free models (local table also prices $0)
+    # still record $0.
+    if provider_total == 0.0 and usage.total_tokens > 0 and local_total > 0:
+        logger.warning(
+            "Provider reported $0.00 for %d tokens on model=%s (BYOK or "
+            "missing native cost); recording the local pricing-table "
+            "estimate $%.6f instead.",
+            usage.total_tokens,
+            model,
+            local_total,
+        )
+        return local
+
     if local_total > 0 and provider_total > 0:
         ratio = abs(provider_total - local_total) / max(provider_total, local_total)
         if ratio > _DIVERGENCE_WARN_RATIO:

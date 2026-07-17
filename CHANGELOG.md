@@ -8,6 +8,14 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ### Added
 
+- **`cost show <result-id>`.** Per-run cost breakdown for one saved
+  panel result — total/panelist cost, per-model token + USD rollup, and
+  synthesis cost — as a thin alias over the cost section of `panel
+  inspect` (same result resolution: ID or JSON path). Previously the
+  `cost` subcommand only had `summary` (cross-run aggregate) and per-run
+  cost required reading the full `panel inspect` output. The
+  "Result saved" follow-up hint now lists it.
+
 - **Synthesis failure recovery ladder (sp-rcvr).** A thrice-reproduced
   production failure — a 20-persona panel whose questions embed ~14k-char
   page dumps passed the synthesis pre-flight yet deterministically failed
@@ -41,6 +49,42 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ### Fixed
 
+- **A one-entry `--models` spec no longer routes through the ensemble
+  path, silently skipping synthesis.** `panel run --models <one-model>`
+  (weight-free spec, single entry) was classified as an "ensemble" and
+  took the ensemble branch, which never runs synthesis, never engages the
+  standard-path cost summary, and exited 0 with a bare "Ensemble
+  complete" on stdout — a naive single-model run got no synthesis and no
+  signal that anything was skipped. Single-entry specs are now demoted to
+  the standard single-model path (identical to `--model X`, synthesis
+  included) with a stderr note; ensemble comparison requires two or more
+  models.
+- **Runs with token usage no longer record $0.0000 when the provider
+  reports a zero cost.** OpenRouter returns `usage.cost: 0` for BYOK keys
+  (and some upstreams omit native cost); `resolve_cost` trusted the zero
+  verbatim, so a run with tens of thousands of tokens recorded
+  `total_cost $0.0000` / `cost_usd 0.0` — and, because the orchestrator's
+  cost gate accrues via the same path, `--max-cost` could never trip.
+  A provider-reported $0 for usage the local pricing table prices as
+  nonzero now falls back to the local estimate (with a stderr-visible
+  warning); genuinely free models still record $0. Dry-run estimates and
+  synthesis costs (which always used the local table) were already
+  correct — the mismatch between them and the $0 run cost was the tell.
+- **Ensemble runs now state synthesis status and results location on
+  stdout.** Text-mode output for a completed (>=2 model) ensemble run was
+  the single line "Ensemble complete"; it now prints a terse summary —
+  models x personas x questions, incident count, recorded cost,
+  "Synthesis: skipped" with the exact `panel synthesize <result-id>`
+  follow-up (or the `--save` prerequisite), and where the results live.
+  JSON output carries `synthesis: null` + `synthesis_status: "skipped"`
+  explicitly. Single-model text runs likewise end with a RUN SUMMARY
+  block (personas, questions, errors, recorded cost, synthesis status,
+  results path or the `--save` hint).
+- **`--personas` / `--instrument` help text documents bundled names.**
+  Both flags said "Path to a YAML file..." although bundled
+  pack/instrument names (e.g. `general-consumer`, `general-survey`) are
+  accepted and are the primary happy path; the help now points at
+  `pack list` / `instruments list` and keeps the YAML-path alternative.
 - **Synthesis judge final-strike escalation now stays in the run's
   provider family for every provider (GH#571, sy-549 class).** A native
   `--model gemini` run with only `GEMINI_API_KEY` set could complete all
