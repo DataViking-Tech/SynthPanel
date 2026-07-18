@@ -9,6 +9,10 @@ on:
     # Weekly Monday 06:17 UTC — off-peak, off-the-hour to avoid runner contention.
     - cron: "17 6 * * 1"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
 
