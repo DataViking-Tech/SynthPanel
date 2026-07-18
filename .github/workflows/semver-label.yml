@@ -10,24 +10,22 @@ name: Semver Label
 # It is wired as a required status check on main separately (branch ruleset,
 # managed in dataviking-infra) — this file only defines the check.
 #
-# Two design constraints, both forced by auto-tag.yml's "Verify CI checks
-# passed" step, which refuses to tag while ANY non-green check run sits on
-# the merged head SHA:
+# Labels are fetched fresh from the API, not read from the event payload.
+# Label events don't move the head SHA, and reruns replay the original
+# payload — a payload-based `opened` run that failed before the label was
+# added could never be manually rerun to green.
 #
-#   1. Labels are fetched fresh from the API, not read from the event
-#      payload. Label events don't move the head SHA, and reruns replay the
-#      original payload — a payload-based run that failed before the label
-#      was added could never be rerun to green, permanently poisoning the
-#      SHA for auto-tag.
+# A failed `opened` run superseded moments later by a green `labeled` run
+# is harmless: both GitHub's merge box and auto-tag.yml's verify step
+# (.github/scripts/verify-ci-checks.sh) evaluate only the LATEST run per
+# check name on the SHA. This workflow briefly (PR #584) carried a
+# self-heal step that re-ran superseded non-green runs of itself so they
+# wouldn't block auto-tag — dead weight once the verify step stopped
+# counting superseded runs, so it was removed (with its actions:write
+# permission).
 #
-#   2. Once the check passes, it re-runs any superseded non-green runs of
-#      itself on the same SHA (e.g. the `opened` run that correctly failed
-#      before the label existed, moments later). Thanks to (1), those
-#      reruns re-fetch the labels and flip green, leaving the SHA clean.
-#
-# No concurrency/cancel-in-progress: a cancelled run is just another
-# non-green conclusion parked on the SHA (this exact failure blocked the
-# v1.6.0 recovery), and runs here take ~2 seconds anyway.
+# No concurrency/cancel-in-progress: runs take ~2 seconds, and the newest
+# run wins everywhere that matters anyway.
 
 on:
   pull_request:
@@ -35,7 +33,6 @@ on:
 
 permissions:
   contents: read
-  actions: write # rerun superseded runs of this workflow (step 2)
 
 jobs:
   semver-label:
@@ -73,23 +70,3 @@ jobs:
               exit 1
               ;;
           esac
-
-      - name: Flip superseded non-green runs of this check green
-        env:
-          GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-          RUN_IDS=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/semver-label.yml/runs?head_sha=${HEAD_SHA}&per_page=100" \
-            --jq ".workflow_runs[] | select(.status == \"completed\" and .conclusion != \"success\" and .id != ${GITHUB_RUN_ID}) | .id")
-
-          if [ -z "$RUN_IDS" ]; then
-            echo "No superseded non-green runs on ${HEAD_SHA} — nothing to heal."
-            exit 0
-          fi
-
-          for id in $RUN_IDS; do
-            echo "Re-running superseded run ${id} so it re-fetches labels and goes green"
-            gh api -X POST "repos/${GITHUB_REPOSITORY}/actions/runs/${id}/rerun" \
-              || echo "::warning::Could not re-run ${id} (fork PR token lacks actions:write?). Re-run it manually before merge, or Auto Semver Tag will refuse to tag this SHA."
-          done

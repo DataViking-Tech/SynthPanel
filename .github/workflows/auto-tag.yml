@@ -74,40 +74,19 @@ jobs:
           echo "skipped=false" >> "$GITHUB_OUTPUT"
           echo "Bump type: $BUMP"
 
+      # Latest run per check name only. The check-runs API returns runs from
+      # every check suite on the SHA, so a workflow double-triggered on one
+      # SHA (label events don't move the head) parks superseded red/cancelled
+      # runs there forever — counting them blocked the first v1.6.0 attempt.
+      # The logic lives in a standalone script so it can be exercised
+      # directly against any SHA (see the script header for usage).
       - name: Verify CI checks passed
         if: steps.check.outputs.skipped != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          echo "Verifying CI status for PR head commit: $HEAD_SHA"
-
-          RUNS=$(gh api "repos/${{ github.repository }}/commits/${HEAD_SHA}/check-runs" \
-            --paginate --jq '.check_runs[] | select(.name != "auto-tag") | {name: .name, status: .status, conclusion: .conclusion}')
-
-          if [ -z "$RUNS" ]; then
-            echo "::error::No CI check runs found for commit $HEAD_SHA — refusing to tag"
-            exit 1
-          fi
-
-          echo "Check runs:"
-          echo "$RUNS" | jq -s '.'
-
-          INCOMPLETE=$(echo "$RUNS" | jq -s '[.[] | select(.status != "completed")] | length')
-          if [ "$INCOMPLETE" -gt 0 ]; then
-            echo "::error::${INCOMPLETE} check(s) still running — refusing to tag"
-            echo "$RUNS" | jq -s '[.[] | select(.status != "completed")]'
-            exit 1
-          fi
-
-          FAILED=$(echo "$RUNS" | jq -s '[.[] | select(.conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral")] | length')
-          if [ "$FAILED" -gt 0 ]; then
-            echo "::error::${FAILED} check(s) did not pass — refusing to tag"
-            echo "$RUNS" | jq -s '[.[] | select(.conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral")]'
-            exit 1
-          fi
-
-          echo "All CI checks passed ✓"
+        run: bash .github/scripts/verify-ci-checks.sh
 
       - name: Compute next version
         if: steps.check.outputs.skipped != 'true'
@@ -222,9 +201,11 @@ jobs:
           # because render_site_markdown.py may rewrite multiple .md
           # files (docs/, blog/, mcp/, recommended-models/) on a single
           # bump; constraining to specific paths here would silently
-          # drop a refreshed file from the bump commit.
+          # drop a refreshed file from the bump commit. Root server.json
+          # is the second descriptor render_server_card.py rewrites —
+          # omitting it here left it drifted on main and bit PR #583.
           git add src/synth_panel/__version__.py site/index.html site/ \
-                  site/.well-known/mcp/server-card.json
+                  site/.well-known/mcp/server-card.json server.json
           if git diff --staged --quiet; then
             echo "Version artifacts already at ${NEW_TAG} (pre-bumped in PR) — nothing to commit."
           else
