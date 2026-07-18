@@ -1,0 +1,61 @@
+name: Semver Label
+
+# Pre-merge guard: every PR must carry exactly one semver:* label
+# (semver:patch, semver:minor, semver:major, or semver:skip) BEFORE merge.
+#
+# The post-merge Auto Semver Tag workflow (auto-tag.yml) fails loud when a
+# merged PR lacks a label — but by then the omission has already shipped and
+# needs a manual label + rerun to recover. This check surfaces the same
+# requirement on the PR itself, while it can still be fixed with one click.
+# It is wired as a required status check on main separately (branch ruleset,
+# managed in dataviking-infra) — this file only defines the check.
+#
+# `labeled` / `unlabeled` are in the trigger list so the check re-evaluates
+# immediately when labels change; the event payload's label set reflects the
+# state after the change.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  semver-label:
+    name: Semver Label
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require exactly one semver label
+        env:
+          LABELS_JSON: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          set -euo pipefail
+          echo "PR labels: ${LABELS_JSON}"
+
+          SEMVER_LABELS=$(echo "$LABELS_JSON" | jq -r '.[] | select(startswith("semver:"))')
+          COUNT=$(echo "$SEMVER_LABELS" | grep -c . || true)
+
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::error::No semver label on this PR. Add exactly one of: semver:patch, semver:minor, semver:major, semver:skip."
+            exit 1
+          fi
+
+          if [ "$COUNT" -gt 1 ]; then
+            echo "::error::Multiple semver labels found: $(echo "$SEMVER_LABELS" | tr '\n' ' '). Use exactly one."
+            exit 1
+          fi
+
+          case "$SEMVER_LABELS" in
+            semver:patch|semver:minor|semver:major|semver:skip)
+              echo "Semver label OK: $SEMVER_LABELS"
+              ;;
+            *)
+              echo "::error::Unrecognized semver label '$SEMVER_LABELS'. Valid labels: semver:patch, semver:minor, semver:major, semver:skip."
+              exit 1
+              ;;
+          esac

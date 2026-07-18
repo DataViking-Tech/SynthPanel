@@ -6,7 +6,6 @@
 .github
 .gitignore
 .pre-commit-config.yaml
-.devcontainer
 .claude
 .claude-plugin
 .runtime

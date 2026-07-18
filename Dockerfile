@@ -3,9 +3,7 @@
 # Production runtime image for synthpanel.
 #
 # This image is sized for ephemeral / serverless invocation (Lambda, Cloud Run,
-# GitHub Actions, n8n, etc.) — small footprint, no editor tooling. The
-# devcontainer at .devcontainer/devcontainer.json remains the source of truth
-# for *development*; this file is a slimmed-down production sibling.
+# GitHub Actions, n8n, etc.) — small footprint, no editor tooling.
 #
 # Default CMD launches the MCP server on stdio. Override with any synthpanel
 # subcommand:
