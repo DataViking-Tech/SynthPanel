@@ -1,7 +1,7 @@
 name: Publish Dev to TestPyPI
 
 # Every merge to main publishes a dev build to test.pypi.org.
-# Version is auto-generated: {pyproject.toml version}.dev{run_number}
+# Version is auto-generated: {src/synth_panel/__version__.py version}.dev{run_number}
 #
 # ONE-TIME MANUAL SETUP (required before the first successful publish):
 #
@@ -47,9 +47,19 @@ jobs:
         id: version
         run: |
           set -euo pipefail
-          BASE=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          # pyproject.toml declares `dynamic = ["version"]` and reads the
+          # version from src/synth_panel/__version__.py, so that file — not
+          # pyproject.toml — is what must be rewritten here. The previous
+          # pyproject-based sed silently no-oped after the dynamic-version
+          # migration and every push re-uploaded the same wheel, which
+          # TestPyPI rejected with "400 File already exists".
+          BASE=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/synth_panel/__version__.py)
+          if [ -z "$BASE" ]; then
+            echo "::error::Could not read base version from src/synth_panel/__version__.py"
+            exit 1
+          fi
           DEV_VERSION="${BASE}.dev${GITHUB_RUN_NUMBER}"
-          sed -i "s/^version = \".*\"/version = \"${DEV_VERSION}\"/" pyproject.toml
+          printf '__version__ = "%s"\n' "$DEV_VERSION" > src/synth_panel/__version__.py
           echo "version=$DEV_VERSION" >> "$GITHUB_OUTPUT"
           echo "Dev version: $DEV_VERSION"
 
@@ -58,6 +68,13 @@ jobs:
 
       - name: Build package
         run: python -m build
+
+      - name: Assert dev suffix applied
+        run: |
+          # Tripwire: if the version rewrite above ever silently no-ops again
+          # (e.g. the version source moves), fail loud here instead of letting
+          # TestPyPI reject a duplicate upload with an opaque 400.
+          ls dist/*.dev* >/dev/null || { echo "::error::dev suffix not applied"; exit 1; }
 
       - name: Show built artifacts
         run: ls -lh dist/

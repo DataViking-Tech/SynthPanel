@@ -45,7 +45,7 @@ import.
 
 ## A. Current Integration Surfaces (Inventory)
 
-SynthPanel ships six integration surfaces today:
+SynthPanel ships five integration surfaces today:
 
 | Surface | State | Agent-Reachable? |
 |---|---|---|
@@ -54,7 +54,6 @@ SynthPanel ships six integration surfaces today:
 | **MCP server** (12 tools, 4 resources, 3 prompts) | FastMCP, stdio transport, defaults to haiku | Yes — primary agent interface |
 | **Claude Code plugin** (`.claude-plugin/plugin.json`) | Wraps MCP server + ships `/focus-group` skill | Yes — Claude Code only |
 | **Claude Code skill** (`skills/focus-group/SKILL.md`) | Structured focus-group workflow | Yes — Claude Code only |
-| **Devcontainer** (`.devcontainer/devcontainer.json`) | GitHub Codespaces / dev environments | Partial — dev-only, not agent-facing |
 
 **Key observations:**
 - The MCP server is the only general-purpose agent interface.
@@ -270,14 +269,11 @@ docker run -e ANTHROPIC_API_KEY=sk-... synthpanel/synthpanel mcp-serve
 **Why it matters:**
 - Agents in serverless environments (Lambda, Cloud Run, GitHub Actions)
   can spin up a SynthPanel container as a tool-call target.
-- Devcontainer already exists (`.devcontainer/devcontainer.json`) with a
-  base image (`ghcr.io/dataviking-tech/ai-dev-base:edge`). A production
-  image is a subset.
 - n8n, Zapier, and custom orchestrators that support Docker-based tools
   get a zero-install path.
 
-**Effort:** 1-2 days. Dockerfile based on existing devcontainer. Publish to
-GHCR and Docker Hub.
+**Effort:** 1-2 days. Dockerfile based on an official `python:*-slim` image.
+Publish to GHCR and Docker Hub.
 
 **Impact:** MEDIUM. Enables specific use cases (serverless, ephemeral) but
 most developers will pip-install. Worth doing after the top 3.
@@ -374,7 +370,7 @@ in examples that prove MCP works.
 | REST API | No | Yes | Yes |
 | Custom GPT | No | Unknown | Unknown |
 | LangChain/CrewAI wrapper | No (MCP bridge works) | No | No |
-| Docker image | No (devcontainer exists) | Unknown | Unknown |
+| Docker image | No | Unknown | Unknown |
 | Composio listing | No | No | No |
 | Open source | Yes (MIT) | Yes (MIT) | No (SaaS) |
 | Pricing | Free (BYOK) | SaaS | SaaS |
@@ -468,7 +464,6 @@ they form a complete strategy:
 - `src/synth_panel/mcp/server.py`: 12 tool handlers wrapping orchestrator functions
 - `.claude-plugin/plugin.json`: MCP server config + skill reference
 - `skills/focus-group/SKILL.md`: 5-step workflow skill
-- `.devcontainer/devcontainer.json`: `ghcr.io/dataviking-tech/ai-dev-base:edge`
 
 ---
 

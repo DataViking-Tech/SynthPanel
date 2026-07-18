@@ -1,8 +1,9 @@
 name: CodeQL
 
+# No `push: branches: [main]` trigger: every change reaches main through a
+# PR, so a push trigger would scan each change twice. The weekly cron covers
+# newly-published CodeQL queries against an unchanged main.
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
   schedule:

@@ -32,10 +32,6 @@ state.json
 gastown-*.json
 CLAUDE.local.md
 
-# DevContainer temp files
-.devcontainer/.env
-.devcontainer/tmp/
-
 # synthpanel data
 .synthpanel/
 sessions/
