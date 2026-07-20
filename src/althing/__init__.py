@@ -12,27 +12,9 @@ extra — the SDK itself works on a plain ``pip install althing``.
 
 from __future__ import annotations
 
-import os as _os
-import warnings as _warnings
-
-# SynthPanel → Althing rename (1.0): honor legacy SYNTHPANEL_* environment
-# variables for one deprecation cycle by mirroring them into their ALTHING_*
-# equivalents when the new name is unset. Central bridge here so every
-# downstream os.environ reader inherits the fallback.
-_legacy = [k for k in _os.environ if k.startswith("SYNTHPANEL_")]
-for _k in _legacy:
-    _new = "ALTHING_" + _k[len("SYNTHPANEL_") :]
-    _os.environ.setdefault(_new, _os.environ[_k])
-if _legacy:
-    _warnings.warn(
-        f"SYNTHPANEL_* environment variables are deprecated after the rename "
-        f"to althing — set {', '.join(sorted(('ALTHING_' + k[len('SYNTHPANEL_'):]) for k in _legacy))} "
-        f"instead. Legacy names will stop working in a future major release.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-del _legacy
-
+# Legacy SYNTHPANEL_* env-var bridge — must run before any submodule reads
+# os.environ, hence first import.
+from althing import _compat_env as _compat_env
 from althing.__version__ import __version__
 from althing.sdk import (
     PanelResult,

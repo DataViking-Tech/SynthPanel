@@ -223,7 +223,11 @@ jobs:
         # Installed after althing so its `althing>=0.2.0` dependency
         # is already satisfied by the editable install and pip does not
         # pull a published althing wheel over the checkout.
-        run: pip install "synthbench @ git+https://github.com/DataViking-Tech/SynthBench.git"
+        # NOTE: the dist name is synthbench-eval (the bare `synthbench` name on
+        # PyPI belongs to an unrelated project); pip >= 25 hard-errors on a
+        # requested-name/metadata mismatch, so the requirement must use the
+        # real dist name. The import package is still `synthbench`.
+        run: pip install "synthbench-eval @ git+https://github.com/DataViking-Tech/SynthBench.git"
 
       - name: Run the submission contract tests against synthbench validate()
         run: pytest tests/test_synthbench_contract.py -v --no-cov
