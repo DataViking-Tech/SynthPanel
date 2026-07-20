@@ -1,0 +1,22 @@
+{
+  "name": "althing",
+  "version": "0.0.1",
+  "description": "Namespace reservation for Althing — the synthetic-population research harness (CLI + MCP server). The real package is on PyPI: pip install althing",
+  "homepage": "https://althing.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DataViking-Tech/Althing.git"
+  },
+  "license": "MIT",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "README.md"
+  ],
+  "keywords": [
+    "althing",
+    "synthetic-research",
+    "mcp",
+    "focus-groups"
+  ]
+}

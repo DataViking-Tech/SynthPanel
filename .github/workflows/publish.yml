@@ -83,3 +83,43 @@ jobs:
             echo "- PyPI: https://pypi.org/project/althing/${REF#v}/"
             echo "- Install: \`pip install althing==${REF#v}\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # npm namespace package (npm/). Publishes via npm Trusted Publishing (OIDC)
+  # — no token. Trusted publisher must be registered on npmjs.com for the
+  # `althing` package with:
+  #   organization = DataViking-Tech
+  #   repository   = Althing
+  #   workflow     = publish.yml
+  #   environment  = pypi
+  # Skips cleanly when npm/package.json's version is already published, so
+  # tag-driven Python releases don't fail on an unchanged placeholder.
+  publish-npm:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Ensure npm >= 11.5 (OIDC trusted publishing support)
+        run: npm install -g npm@latest && npm --version
+
+      - name: Publish npm package if version is new
+        working-directory: npm
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          LOCAL=$(node -p "require('./package.json').version")
+          PUBLISHED=$(npm view "$NAME" version 2>/dev/null || echo "none")
+          if [ "$LOCAL" = "$PUBLISHED" ]; then
+            echo "npm: $NAME@$LOCAL already published — skipping."
+          else
+            npm publish
+          fi
