@@ -786,8 +786,9 @@ def run_panel_sync(
     synthesis_dict: dict[str, Any] | None = None
     # sp-avmm: synthesis failures surface as a ``synthesis_error`` key on
     # ``synthesis_dict``. Callers (MCP server / SDK) detect this and lift
-    # it to ``run_invalid=True`` + top-level ``synthesis_error`` on the
-    # result envelope.
+    # it to a top-level ``synthesis_error`` + warning on the result
+    # envelope. It does not invalidate the run — panelist responses are
+    # complete; consumers can re-synthesize the saved result.
     # GH#576: mirror the CLI's cost-gate discipline — a halted run is a
     # deliberately-truncated partial, so spending more budget synthesizing
     # it would produce an untrustworthy result. Skip synthesis entirely.

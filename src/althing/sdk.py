@@ -240,8 +240,10 @@ class PollResult(_DictLikeMixin):
     total_usage: dict[str, Any]
     total_cost: str
     metadata: dict[str, Any] | None = None
-    # sp-avmm: synthesis failure surfaced at the top-level so consumers can
-    # gate on validity without walking into the nested synthesis dict.
+    # sp-avmm: synthesis failure surfaced at the top-level (synthesis_error)
+    # so consumers see it without walking into the nested synthesis dict.
+    # run_invalid stays False for synthesis-stage failures — panelist
+    # responses are complete; it flags panelist-level invalidity only.
     run_invalid: bool = False
     synthesis_error: dict[str, Any] | None = None
     # sy-4yd: deterministic structured-response rollup (vote counts,
@@ -311,7 +313,8 @@ class PanelResult(_DictLikeMixin):
     terminal_round: str | None = None
     results: list[dict[str, Any]] = field(default_factory=list)
     metadata: dict[str, Any] | None = None
-    # sp-avmm: synthesis failure markers, mirroring PollResult.
+    # sp-avmm: synthesis failure markers, mirroring PollResult. run_invalid
+    # is not set by synthesis-stage failures (see PollResult).
     run_invalid: bool = False
     synthesis_error: dict[str, Any] | None = None
     # sy-4yd: deterministic structured-response rollup. See PollResult
@@ -543,13 +546,19 @@ def _build_panel_result_from_single_round(
     # otherwise the single ``model`` is the only candidate.
     cost_warnings = build_cost_fallback_warnings(contributing_models if contributing_models is not None else [model])
     # sp-avmm: carry synthesis failure markers onto the top-level result
-    # so MCP/CI consumers can branch on run validity without walking into
-    # the nested synthesis envelope.
+    # so MCP/CI consumers can spot the failure without walking into the
+    # nested synthesis envelope. A synthesis-stage failure does NOT set
+    # run_invalid — the panelist responses are complete and usable, so
+    # degrade to a warning + synthesis_error instead of invalidating.
     synthesis_error = synthesis_dict.get("synthesis_error") if isinstance(synthesis_dict, dict) else None
     # sp-g59o: surface synthesis-level heuristic warnings (e.g. degenerate
     # structured output) at the top level so MCP consumers don't have to
     # walk into the nested synthesis dict to find them.
     synthesis_warnings = list(synthesis_dict.get("warnings") or []) if isinstance(synthesis_dict, dict) else []
+    if isinstance(synthesis_error, dict):
+        synthesis_warnings.append(
+            f"synthesis_failed: {synthesis_error.get('message', 'synthesis failed')} — panelist responses are complete"
+        )
     poll_summary_payload = _compute_poll_summary_payload(
         result_dicts=result_dicts,
         questions=questions,
@@ -577,7 +586,7 @@ def _build_panel_result_from_single_round(
         terminal_round=None,
         results=result_dicts,
         metadata=metadata,
-        run_invalid=bool(synthesis_error),
+        run_invalid=False,
         synthesis_error=synthesis_error if isinstance(synthesis_error, dict) else None,
         poll_summary=poll_summary_payload,
     )
@@ -896,7 +905,10 @@ def quick_poll(
         total_usage=total_usage.to_dict(),
         total_cost=total_cost.format_usd(),
         metadata=metadata,
-        run_invalid=bool(synthesis_error),
+        # A synthesis-stage failure does not invalidate the poll — the
+        # panelist responses are complete; synthesis_error carries the
+        # failure detail for consumers that want to re-synthesize.
+        run_invalid=False,
         synthesis_error=synthesis_error if isinstance(synthesis_error, dict) else None,
         poll_summary=poll_summary_payload,
     )

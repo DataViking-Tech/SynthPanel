@@ -14,9 +14,10 @@ produced data conforming to the wire schema.
 
 from __future__ import annotations
 
-from typing import Annotated
+import re
+from typing import Annotated, Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class RankedItem(BaseModel):
@@ -82,6 +83,11 @@ class AnnotatedChoice(BaseModel):
     attachment_id: str = ""
 
 
+# Leading bullet / enumeration markers stripped when coercing a
+# newline-bulleted string into list items: "-", "*", "•", "–", "1.", "1)".
+_BULLET_PREFIX_RE = re.compile(r"^\s*(?:[-*•–]|\d+[.)])\s+")  # noqa: RUF001 — en dash is a real bullet variant we strip
+
+
 class PartialSummary(BaseModel):
     """Per-question map-phase synthesis partial (v1.0.3 P2).
 
@@ -91,6 +97,12 @@ class PartialSummary(BaseModel):
     single map call surfaces as a :class:`pydantic.ValidationError`
     instead of silently propagating empty themes through to the final
     synthesis.
+
+    List fields tolerate a string value by splitting it into items
+    (newline-bulleted lists like ``"\\n- A\\n- B"`` are the observed
+    provider drift). The single-pass synthesis path never re-validates
+    these fields, so a string slips through it unchanged — the map
+    boundary must not be stricter than single-pass for the same drift.
     """
 
     summary: str
@@ -99,6 +111,14 @@ class PartialSummary(BaseModel):
     disagreements: list[str]
     surprises: list[str]
     recommendation: str
+
+    @field_validator("themes", "agreements", "disagreements", "surprises", mode="before")
+    @classmethod
+    def _coerce_string_to_list(cls, v: Any) -> Any:
+        if not isinstance(v, str):
+            return v
+        items = [_BULLET_PREFIX_RE.sub("", line).strip() for line in v.splitlines()]
+        return [item for item in items if item]
 
 
 MODEL_REGISTRY: dict[str, type[BaseModel]] = {

@@ -329,14 +329,14 @@ MISTRAL_MEDIUM_PRICING = ModelPricing(
 )
 
 # Meta Llama 3.3 70B Instruct (OpenRouter: ``meta-llama/llama-3.3-70b-instruct``).
-# OR feed (2026-05-10): $0.10/M input, $0.32/M output. Prior rates
-# ($0.23/$0.40) overstated cost ~2x — OR's blended provider rate has
-# dropped as more low-cost providers came online.
+# OR feed (2026-07-19): $0.13/M input, $0.40/M output. The 2026-05-10
+# snapshot ($0.10/$0.32) understated provider-reported cost ~30% on live
+# runs — OR's blended provider rate moved back up.
 LLAMA_3_3_70B_PRICING = ModelPricing(
-    input_cost_per_million=0.10,
-    output_cost_per_million=0.32,
-    cache_creation_cost_per_million=0.10,
-    cache_read_cost_per_million=0.10,
+    input_cost_per_million=0.13,
+    output_cost_per_million=0.40,
+    cache_creation_cost_per_million=0.13,
+    cache_read_cost_per_million=0.13,
 )
 
 DEFAULT_PRICING = SONNET_PRICING
