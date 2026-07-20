@@ -169,7 +169,7 @@ def _acquire_dir_lock(directory: Path) -> int | None:
     if fcntl is None:  # pragma: no cover - Windows path
         return None
     path = _lock_path(directory)
-    fd = os.open(str(path), os.O_RDWR | os.O_CREAT, 0o644)
+    fd = os.open(str(path), os.O_RDWR | os.O_CREAT, 0o600)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except (BlockingIOError, OSError) as exc:

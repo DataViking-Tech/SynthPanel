@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from unittest.mock import patch
+from urllib.parse import urlparse
 
 import pytest
 import yaml
@@ -47,7 +48,8 @@ def test_calibration_entry_to_yaml_dict_drops_none_alignment_error():
     assert d["dataset"] == "gss"
     assert d["jsd"] == 0.18
     assert d["models"] == ["haiku:0.5", "gemini-flash-lite:0.5"]
-    assert d["methodology_url"].startswith("https://althing.dev")
+    methodology = urlparse(d["methodology_url"])
+    assert (methodology.scheme, methodology.hostname) == ("https", "althing.dev")
 
 
 def test_calibration_entry_keeps_alignment_error_when_set():

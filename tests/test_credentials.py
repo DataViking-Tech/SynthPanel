@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import stat
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pytest
 
@@ -352,7 +354,8 @@ class TestMissingApiKeyMessage:
         assert "Claude Code" in msg
         assert "OAuth" in msg
         assert "NOT reusable" in msg
-        assert "console.anthropic.com" in msg
+        linked_hosts = [urlparse(u).hostname for u in re.findall(r"https?://[^\s]+", msg)]
+        assert "console.anthropic.com" in linked_hosts
 
     def test_openai_message_names_provider_and_skips_oauth_note(self):
         msg = missing_api_key_message("OPENAI_API_KEY")
