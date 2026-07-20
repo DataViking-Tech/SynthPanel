@@ -1,18 +1,19 @@
-"""sp-avmm: synthesis failure must fail loud, not silently return success.
+"""sp-avmm: synthesis failure must surface loudly — without invalidating
+an otherwise-complete run.
 
 Covers the three call sites the bead calls out:
 
-* ``cmd_panel_run`` (non-ensemble CLI path) — previously caught the
-  exception, logged a WARN, then emitted a result with ``synthesis: null``
-  and exit 0. Now: pre-flight context check + structured ``synthesis_error``
-  + ``run_invalid: true`` + exit 2.
-* ``handle_panel_synthesize`` (re-synthesize saved result) — previously
-  exited 1 with a bare stderr line. Now: exit 2 and a structured envelope
-  in JSON/NDJSON mode so MCP/CI consumers see the same shape.
-* ``run_panel_sync`` (MCP/SDK sync runner) — previously set
-  ``{"synthesis_error": "Synthesis failed — see logs for details."}``
-  without flagging ``run_invalid``. Now: structured payload and, via the
-  server/sdk envelope, ``run_invalid=True``.
+* ``cmd_panel_run`` (non-ensemble CLI path) — a synthesis-stage failure
+  emits a structured ``synthesis_error`` + a ``synthesis_failed`` warning
+  but keeps ``run_invalid: false`` and exits 0: every panelist response
+  completed and is present in the output, so the run degrades to
+  ``synthesis: null`` instead of being discarded.
+* ``handle_panel_synthesize`` (re-synthesize saved result) — synthesis IS
+  the command's sole deliverable, so failure there still exits 2 with a
+  structured envelope in JSON/NDJSON mode.
+* ``run_panel_sync`` (MCP/SDK sync runner) — surfaces the structured
+  ``synthesis_error`` payload; the server/sdk envelope carries it at the
+  top level as a warning, not as ``run_invalid``.
 """
 
 from __future__ import annotations
@@ -64,9 +65,13 @@ class TestCliNonEnsembleSynthesisFailure:
     @patch("synth_panel.cli.commands.synthesize_panel")
     @patch("synth_panel.cli.commands.run_panel_parallel")
     @patch("synth_panel.cli.commands.LLMClient")
-    def test_synthesis_api_error_sets_run_invalid(self, _mock_client, mock_run, mock_synth, capsys, tmp_path):
-        """When synthesize_panel raises an API error, the run must exit 2,
-        set run_invalid=True, and carry a structured synthesis_error payload.
+    def test_synthesis_api_error_degrades_gracefully(self, _mock_client, mock_run, mock_synth, capsys, tmp_path):
+        """When synthesize_panel raises an API error but every panelist
+        completed, the run must exit 0 with run_invalid=False, keep the
+        panelist responses in the output, carry a structured
+        synthesis_error payload, and surface a synthesis_failed warning —
+        NOT invalidate the whole run (regression: synthesis-stage failure
+        used to exit 2 with message="PANEL RUN INVALID").
         """
         from synth_panel.orchestrator import WorkerRegistry
 
@@ -85,18 +90,25 @@ class TestCliNonEnsembleSynthesisFailure:
                 _write_instrument(tmp_path / "survey.yaml"),
             ]
         )
-        assert code == 2, "sp-avmm requires exit code 2 on synthesis failure"
+        assert code == 0, "synthesis failure on a complete panel must not fail the run"
         captured = capsys.readouterr()
         assert "synthesis call failed" in captured.err.lower()
         assert "262000" in captured.err or "262k" in captured.err or "200000" in captured.err
 
         payload = json.loads(captured.out)
-        assert payload["run_invalid"] is True
+        assert payload["run_invalid"] is False
+        assert payload.get("message") != "PANEL RUN INVALID"
+        # Panelist responses survived the synthesis failure.
+        flat = payload["rounds"][0]["results"]
+        assert len(flat) == 2
+        assert all(r["responses"] for r in flat)
+        assert payload["synthesis"] is None
         err = payload["synthesis_error"]
         assert isinstance(err, dict), "synthesis_error must be a structured dict"
         assert err["error_type"] == "synthesis_api_error"
         assert "message" in err
         assert "suggested_fix" in err
+        assert any("synthesis_failed" in w for w in payload["warnings"])
         mock_synth.assert_called_once()
 
     @patch("synth_panel.cli.commands.synthesize_panel")
@@ -141,18 +153,20 @@ class TestCliNonEnsembleSynthesisFailure:
                 "single",
             ]
         )
-        assert code == 2
+        assert code == 0, "pre-flight rejection must not invalidate a complete panel"
         captured = capsys.readouterr()
         assert "pre-flight" in captured.err.lower() or "exceeds" in captured.err.lower()
         mock_synth.assert_not_called(), "pre-flight must short-circuit BEFORE the API call"
 
         payload = json.loads(captured.out)
-        assert payload["run_invalid"] is True
+        assert payload["run_invalid"] is False
+        assert payload["synthesis"] is None
         err = payload["synthesis_error"]
         assert err["error_type"] == "synthesis_context_overflow"
         diag = err["diagnostic"]
         assert diag["context_window"] == 200_000
         assert diag["estimated_tokens"] > diag["effective_limit"]
+        assert any("synthesis_failed" in w for w in payload["warnings"])
 
 
 # --- sp-avmm: handle_panel_synthesize (re-synthesize) path ----------------
@@ -451,7 +465,8 @@ class TestSynthesisNativeGeminiRouting:
 class TestSynthesisFallbackSurfaced:
     """sy-549 (2): a fallback synthesis (judge exhausted retries / partial
     schema) must not be persisted as a silent success — it carries an
-    ``is_fallback`` marker in to_dict() and fails the run loudly."""
+    ``is_fallback`` marker in to_dict() and surfaces a structured
+    synthesis_error + warning (without invalidating the completed panel)."""
 
     def test_to_dict_marks_fallback(self):
         from synth_panel.synthesis import SynthesisResult
@@ -488,7 +503,7 @@ class TestSynthesisFallbackSurfaced:
     @patch("synth_panel.cli.commands.synthesize_panel")
     @patch("synth_panel.cli.commands.run_panel_parallel")
     @patch("synth_panel.cli.commands.LLMClient")
-    def test_inrun_fallback_sets_run_invalid(self, _mock_client, mock_run, mock_synth, capsys, tmp_path):
+    def test_inrun_fallback_degrades_gracefully(self, _mock_client, mock_run, mock_synth, capsys, tmp_path):
         from synth_panel.orchestrator import WorkerRegistry
         from synth_panel.synthesis import SynthesisResult
 
@@ -516,13 +531,14 @@ class TestSynthesisFallbackSurfaced:
                 _write_instrument(tmp_path / "survey.yaml"),
             ]
         )
-        assert code == 2
+        assert code == 0, "fallback synthesis on a complete panel must not fail the run"
         captured = capsys.readouterr()
         assert "incomplete" in captured.err.lower()
         payload = json.loads(captured.out)
-        assert payload["run_invalid"] is True
+        assert payload["run_invalid"] is False
         err = payload["synthesis_error"]
         assert err["error_type"] == "synthesis_fallback"
+        assert any("synthesis_failed" in w for w in payload["warnings"])
 
     @patch("synth_panel.cli.commands.synthesize_panel")
     def test_resynthesize_fallback_exits_two(self, mock_synth, capsys, tmp_path):

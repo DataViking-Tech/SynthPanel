@@ -1568,11 +1568,17 @@ async def _run_panel_async(
 
     # sp-avmm: synthesis failure must surface loudly at the envelope
     # top-level. Without this, MCP callers see synthesis: {synthesis_error:
-    # …} buried inside the result and cannot gate on run validity without
-    # inspecting the nested payload.
+    # …} buried inside the result and cannot spot the failure without
+    # inspecting the nested payload. It does NOT set run_invalid — the
+    # panelist responses are complete and usable; degrade to a warning so
+    # callers can re-synthesize instead of discarding the run.
     if synthesis_dict and isinstance(synthesis_dict.get("synthesis_error"), dict):
-        result["run_invalid"] = True
         result["synthesis_error"] = synthesis_dict["synthesis_error"]
+        result["warnings"].append(
+            "synthesis_failed: "
+            f"{synthesis_dict['synthesis_error'].get('message', 'synthesis failed')}"
+            " — panelist responses are complete"
+        )
 
     # GH#576: cost gate tripped mid-run — the orchestrator cancelled the
     # pending panelists and ``result_dicts`` is a valid completed prefix.

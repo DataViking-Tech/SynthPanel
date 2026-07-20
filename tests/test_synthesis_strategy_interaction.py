@@ -176,13 +176,15 @@ class TestSingleStillRejectsOnOverflow:
             ]
         )
 
-        assert code == 2
+        assert code == 0, "pre-flight rejection degrades gracefully; panel responses are complete"
         captured = capsys.readouterr()
         assert "pre-flight" in captured.err.lower() or "exceeds" in captured.err.lower()
         mock_synth_single.assert_not_called()
         mock_synth_mr.assert_not_called()
 
         payload = json.loads(captured.out)
+        assert payload["run_invalid"] is False
+        assert payload["synthesis"] is None
         err = payload["synthesis_error"]
         assert err["error_type"] == "synthesis_context_overflow"
 
@@ -367,8 +369,9 @@ class TestCliMapChunkOverflowErrorShape:
             ]
         )
 
-        assert code == 2
+        assert code == 0, "chunk overflow degrades gracefully; panel responses are complete"
         payload = json.loads(capsys.readouterr().out)
+        assert payload["run_invalid"] is False
         err = payload["synthesis_error"]
         assert err["error_type"] == "synthesis_map_chunk_overflow"
         assert err["diagnostic"]["question_index"] == 0
