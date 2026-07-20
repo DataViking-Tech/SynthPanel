@@ -19,7 +19,7 @@ for _k in _legacy:
 if _legacy:
     _warnings.warn(
         f"SYNTHPANEL_* environment variables are deprecated after the rename "
-        f"to althing — set {', '.join(sorted(('ALTHING_' + k[len('SYNTHPANEL_'):]) for k in _legacy))} "
+        f"to althing — set {', '.join(sorted(('ALTHING_' + k[len('SYNTHPANEL_') :]) for k in _legacy))} "
         f"instead. Legacy names will stop working in a future major release.",
         DeprecationWarning,
         stacklevel=2,

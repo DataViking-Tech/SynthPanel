@@ -153,9 +153,7 @@ class TestPyodideImportCliff:
             "print('ok')\n"
         )
         assert result.returncode == 0, (
-            f"`import althing.ensemble` failed under pyodide-sim.\n"
-            f"stdout:\n{result.stdout}\n"
-            f"stderr:\n{result.stderr}"
+            f"`import althing.ensemble` failed under pyodide-sim.\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
         )
         assert "ok" in result.stdout
 

@@ -799,9 +799,7 @@ def build_parser() -> argparse.ArgumentParser:
     pack_list_parser.add_argument(
         "--registry",
         action="store_true",
-        help=(
-            "List packs from the althing registry instead of local installs. Prints id, name, ref, version columns."
-        ),
+        help=("List packs from the althing registry instead of local installs. Prints id, name, ref, version columns."),
     )
 
     # pack search

@@ -189,8 +189,7 @@ def load_credentials() -> dict[str, str]:
             stored_hash = ""
         if stored_hash != actual_hash:
             raise CredentialIntegrityError(
-                f"Credential file {path} failed integrity check — "
-                "re-run `althing login` to restore your credentials."
+                f"Credential file {path} failed integrity check — re-run `althing login` to restore your credentials."
             )
     else:
         # Migration: generate sidecar on first successful read
