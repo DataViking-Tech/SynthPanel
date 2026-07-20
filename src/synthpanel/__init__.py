@@ -32,7 +32,9 @@ _warnings.warn(
     stacklevel=2,
 )
 
-__path__ = list(_althing.__path__)
+# Own directory first so the shim's __main__.py (rename notice) wins;
+# everything else falls through to the canonical source tree.
+__path__ = [str(__import__("pathlib").Path(__file__).parent), *_althing.__path__]
 
 # Mirror modules already loaded under the canonical name so they show up
 # under the alias too (see docstring; keeps module identity single).
