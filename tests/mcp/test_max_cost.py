@@ -4,7 +4,7 @@ The CLI's ``--max-cost`` projected-total spend gate previously had no MCP
 analog — agents could only budget-gate by piloting small, reading in-band
 ``total_cost``, and scaling manually. ``run_panel`` / ``run_quick_poll`` /
 ``extend_panel`` now accept ``max_cost`` (USD) and wire it into the same
-:class:`~synth_panel.cost.CostGate` machinery the CLI uses, with the same
+:class:`~althing.cost.CostGate` machinery the CLI uses, with the same
 soft-halt semantics: in-flight panelists finish, no new panelists start,
 synthesis is skipped, and the response is a valid *partial* envelope with
 ``run_invalid: true``, ``cost_exceeded: true``, ``abort_reason:
@@ -30,8 +30,8 @@ pytest.importorskip("mcp")
 def _data_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("SYNTH_PANEL_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-placeholder")
-    monkeypatch.delenv("SYNTHPANEL_SCHEMA_MIN", raising=False)
-    monkeypatch.delenv("SYNTHPANEL_DRIFT_DEGRADE", raising=False)
+    monkeypatch.delenv("ALTHING_SCHEMA_MIN", raising=False)
+    monkeypatch.delenv("ALTHING_DRIFT_DEGRADE", raising=False)
 
 
 from .test_decision_wiring import _stub_synthesize_panel, _StubMcpContext
@@ -50,9 +50,9 @@ def _gate_aware_run_panel_parallel(per_panelist_cost: float, captured: dict):
     ``run_panel_parallel`` documents. The real :class:`CostGate` does the
     projection math; nothing about the trip is faked.
     """
-    from synth_panel.cost import TokenUsage
-    from synth_panel.orchestrator import PanelistResult
-    from synth_panel.persistence import ConversationMessage, Session
+    from althing.cost import TokenUsage
+    from althing.orchestrator import PanelistResult
+    from althing.persistence import ConversationMessage, Session
 
     def _fake(client=None, personas=None, questions=None, model=None, sessions=None, cost_gate=None, **kwargs):
         captured["cost_gate"] = cost_gate
@@ -87,18 +87,18 @@ def _gate_aware_run_panel_parallel(per_panelist_cost: float, captured: dict):
 
 
 async def _run_panel_tool(max_cost, per_panelist_cost: float = 10.0, captured: dict | None = None, **extra):
-    from synth_panel.mcp import server as _server
+    from althing.mcp import server as _server
 
     captured = captured if captured is not None else {}
     synth_mock = MagicMock(side_effect=_stub_synthesize_panel)
     with (
         patch(
-            "synth_panel._runners.run_panel_parallel",
+            "althing._runners.run_panel_parallel",
             side_effect=_gate_aware_run_panel_parallel(per_panelist_cost, captured),
         ),
-        patch("synth_panel._runners.synthesize_panel", synth_mock),
-        patch("synth_panel.mcp.server._shared_client", None),
-        patch("synth_panel.mcp.server.LLMClient", MagicMock()),
+        patch("althing._runners.synthesize_panel", synth_mock),
+        patch("althing.mcp.server._shared_client", None),
+        patch("althing.mcp.server.LLMClient", MagicMock()),
     ):
         raw = await _server.run_panel(
             personas=list(_PERSONAS),
@@ -121,7 +121,7 @@ class TestMaxCostPlumbing:
     @pytest.mark.asyncio
     async def test_run_panel_builds_gate_from_max_cost(self):
         """max_cost reaches run_panel_parallel as a real CostGate sized to the panel."""
-        from synth_panel.cost import CostGate
+        from althing.cost import CostGate
 
         data, captured, _synth = await _run_panel_tool(max_cost=50.0, per_panelist_cost=0.01)
         gate = captured["cost_gate"]
@@ -142,18 +142,18 @@ class TestMaxCostPlumbing:
 
     @pytest.mark.asyncio
     async def test_run_quick_poll_builds_gate(self):
-        from synth_panel.cost import CostGate
-        from synth_panel.mcp import server as _server
+        from althing.cost import CostGate
+        from althing.mcp import server as _server
 
         captured: dict = {}
         with (
             patch(
-                "synth_panel._runners.run_panel_parallel",
+                "althing._runners.run_panel_parallel",
                 side_effect=_gate_aware_run_panel_parallel(0.01, captured),
             ),
-            patch("synth_panel._runners.synthesize_panel", side_effect=_stub_synthesize_panel),
-            patch("synth_panel.mcp.server._shared_client", None),
-            patch("synth_panel.mcp.server.LLMClient", MagicMock()),
+            patch("althing._runners.synthesize_panel", side_effect=_stub_synthesize_panel),
+            patch("althing.mcp.server._shared_client", None),
+            patch("althing.mcp.server.LLMClient", MagicMock()),
         ):
             raw = await _server.run_quick_poll(
                 question="What would you pay?",
@@ -228,17 +228,17 @@ class TestGateTripEnvelope:
 
     @pytest.mark.asyncio
     async def test_run_quick_poll_trip_envelope(self):
-        from synth_panel.mcp import server as _server
+        from althing.mcp import server as _server
 
         captured: dict = {}
         with (
             patch(
-                "synth_panel._runners.run_panel_parallel",
+                "althing._runners.run_panel_parallel",
                 side_effect=_gate_aware_run_panel_parallel(10.0, captured),
             ),
-            patch("synth_panel._runners.synthesize_panel", side_effect=_stub_synthesize_panel),
-            patch("synth_panel.mcp.server._shared_client", None),
-            patch("synth_panel.mcp.server.LLMClient", MagicMock()),
+            patch("althing._runners.synthesize_panel", side_effect=_stub_synthesize_panel),
+            patch("althing.mcp.server._shared_client", None),
+            patch("althing.mcp.server.LLMClient", MagicMock()),
         ):
             raw = await _server.run_quick_poll(
                 question="What would you pay?",
@@ -262,8 +262,8 @@ class TestGateTripEnvelope:
 
 
 def _extend_fake_parallel(per_panelist_cost: float, captured: dict):
-    from synth_panel.cost import TokenUsage
-    from synth_panel.orchestrator import PanelistResult
+    from althing.cost import TokenUsage
+    from althing.orchestrator import PanelistResult
 
     def _fake(client=None, personas=None, questions=None, model=None, sessions=None, cost_gate=None, **kwargs):
         captured["cost_gate"] = cost_gate
@@ -288,22 +288,22 @@ def _extend_fake_parallel(per_panelist_cost: float, captured: dict):
 
 class TestExtendPanelMaxCost:
     async def _call(self, max_cost, per_panelist_cost=10.0):
-        from synth_panel.mcp import server as _server
+        from althing.mcp import server as _server
 
         captured: dict = {}
         fake_existing = {"rounds": [], "path": [], "question_count": 0}
         fake_sessions = {"Alice": object(), "Bob": object(), "Cara": object()}
         synth_mock = MagicMock(side_effect=_stub_synthesize_panel)
         with (
-            patch("synth_panel.mcp.server._data_get_panel_result", return_value=fake_existing),
-            patch("synth_panel.mcp.server.load_panel_sessions", return_value=fake_sessions),
+            patch("althing.mcp.server._data_get_panel_result", return_value=fake_existing),
+            patch("althing.mcp.server.load_panel_sessions", return_value=fake_sessions),
             patch(
-                "synth_panel.mcp.server.run_panel_parallel",
+                "althing.mcp.server.run_panel_parallel",
                 side_effect=_extend_fake_parallel(per_panelist_cost, captured),
             ),
-            patch("synth_panel.mcp.server.synthesize_panel", synth_mock),
-            patch("synth_panel.mcp.server.update_panel_result"),
-            patch("synth_panel.mcp.server._get_shared_client", return_value=object()),
+            patch("althing.mcp.server.synthesize_panel", synth_mock),
+            patch("althing.mcp.server.update_panel_result"),
+            patch("althing.mcp.server._get_shared_client", return_value=object()),
         ):
             raw = await _server.extend_panel(
                 result_id="r-576",
@@ -317,7 +317,7 @@ class TestExtendPanelMaxCost:
 
     @pytest.mark.asyncio
     async def test_gate_plumbed_and_no_trip(self):
-        from synth_panel.cost import CostGate
+        from althing.cost import CostGate
 
         data, captured, _synth = await self._call(max_cost=100.0, per_panelist_cost=0.01)
         gate = captured["cost_gate"]
@@ -357,7 +357,7 @@ class TestMaxCostValidation:
     @pytest.mark.asyncio
     @pytest.mark.parametrize("bad", [0, -1, -0.5])
     async def test_non_positive_rejected_run_panel(self, bad):
-        from synth_panel.mcp import server as _server
+        from althing.mcp import server as _server
 
         data = json.loads(
             await _server.run_panel(
@@ -373,7 +373,7 @@ class TestMaxCostValidation:
 
     @pytest.mark.asyncio
     async def test_non_positive_rejected_run_quick_poll(self):
-        from synth_panel.mcp import server as _server
+        from althing.mcp import server as _server
 
         data = json.loads(
             await _server.run_quick_poll(
@@ -388,7 +388,7 @@ class TestMaxCostValidation:
 
     @pytest.mark.asyncio
     async def test_non_positive_rejected_extend_panel(self):
-        from synth_panel.mcp import server as _server
+        from althing.mcp import server as _server
 
         data = json.loads(
             await _server.extend_panel(
@@ -404,7 +404,7 @@ class TestMaxCostValidation:
 
     @pytest.mark.asyncio
     async def test_rejected_with_ensemble_models(self):
-        from synth_panel.mcp import server as _server
+        from althing.mcp import server as _server
 
         data = json.loads(
             await _server.run_panel(
@@ -422,7 +422,7 @@ class TestMaxCostValidation:
 
     @pytest.mark.asyncio
     async def test_rejected_with_instrument(self):
-        from synth_panel.mcp import server as _server
+        from althing.mcp import server as _server
 
         data = json.loads(
             await _server.run_panel(
@@ -439,7 +439,7 @@ class TestMaxCostValidation:
 
     @pytest.mark.asyncio
     async def test_rejected_with_variants(self):
-        from synth_panel.mcp import server as _server
+        from althing.mcp import server as _server
 
         data = json.loads(
             await _server.run_panel(
@@ -457,11 +457,11 @@ class TestMaxCostValidation:
 
     @pytest.mark.asyncio
     async def test_rejected_in_sampling_mode_run_panel(self):
-        from synth_panel.mcp import server as _server
-        from synth_panel.mcp.sampling import SamplingDecision
+        from althing.mcp import server as _server
+        from althing.mcp.sampling import SamplingDecision
 
         with patch(
-            "synth_panel.mcp.server._decide_sampling_mode",
+            "althing.mcp.server._decide_sampling_mode",
             return_value=SamplingDecision(mode="sampling"),
         ):
             data = json.loads(
@@ -479,11 +479,11 @@ class TestMaxCostValidation:
 
     @pytest.mark.asyncio
     async def test_rejected_in_sampling_mode_run_quick_poll(self):
-        from synth_panel.mcp import server as _server
-        from synth_panel.mcp.sampling import SamplingDecision
+        from althing.mcp import server as _server
+        from althing.mcp.sampling import SamplingDecision
 
         with patch(
-            "synth_panel.mcp.server._decide_sampling_mode",
+            "althing.mcp.server._decide_sampling_mode",
             return_value=SamplingDecision(mode="sampling"),
         ):
             data = json.loads(

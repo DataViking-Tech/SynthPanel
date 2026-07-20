@@ -1,10 +1,10 @@
-"""SynthPanel + LlamaIndex.
+"""Althing + LlamaIndex.
 
-Expose SynthPanel's MCP tools to a LlamaIndex FunctionAgent via the
+Expose Althing's MCP tools to a LlamaIndex FunctionAgent via the
 llama-index-tools-mcp bridge. All 12 tools become callable with no wrapper code.
 
 Install:
-    pip install llama-index-tools-mcp llama-index-llms-anthropic synthpanel[mcp]
+    pip install llama-index-tools-mcp llama-index-llms-anthropic althing[mcp]
 
 Run:
     export ANTHROPIC_API_KEY=sk-...
@@ -19,14 +19,14 @@ from llama_index.tools.mcp import BasicMCPClient, McpToolSpec
 
 
 async def main() -> None:
-    mcp_client = BasicMCPClient("synthpanel", args=["mcp-serve"])
+    mcp_client = BasicMCPClient("althing", args=["mcp-serve"])
     tool_spec = McpToolSpec(client=mcp_client)
     tools = await tool_spec.to_tool_list_async()
 
     agent = FunctionAgent(
         tools=tools,
         llm=Anthropic(model="claude-haiku-4-5"),
-        system_prompt="You run synthetic focus groups via the synthpanel tools.",
+        system_prompt="You run synthetic focus groups via the althing tools.",
     )
     response = await agent.run(
         "Run a quick_poll with three designer personas on: 'Would you pay $19/mo for an AI design critique tool?'"

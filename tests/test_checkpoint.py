@@ -22,7 +22,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from synth_panel.checkpoint import (
+from althing.checkpoint import (
     CheckpointCollisionError,
     CheckpointDriftError,
     CheckpointFormatError,
@@ -39,20 +39,20 @@ from synth_panel.checkpoint import (
     new_run_id,
     save_checkpoint,
 )
-from synth_panel.llm.models import (
+from althing.llm.models import (
     CompletionResponse,
     StopReason,
     TextBlock,
 )
-from synth_panel.llm.models import (
+from althing.llm.models import (
     TokenUsage as LLMTokenUsage,
 )
-from synth_panel.metadata_migrations import (
+from althing.metadata_migrations import (
     CURRENT_SCHEMA_VERSION,
     migrate_to_current,
     migrate_v1_to_v2,
 )
-from synth_panel.orchestrator import PanelistResult, run_panel_parallel
+from althing.orchestrator import PanelistResult, run_panel_parallel
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -524,8 +524,8 @@ def _simulate_run_with_abort(
             and LLMTokenUsage(input_tokens=7, output_tokens=3),
         )
         # We're reusing LLMTokenUsage, but PanelistResult.usage is
-        # synth_panel.cost.TokenUsage — convert.
-        from synth_panel.cost import TokenUsage as CostTokenUsage
+        # althing.cost.TokenUsage — convert.
+        from althing.cost import TokenUsage as CostTokenUsage
 
         pr.usage = CostTokenUsage(input_tokens=7, output_tokens=3)
         partial.append(pr)
@@ -671,11 +671,11 @@ class TestSignalHandlers:
 
 class TestCLIHelpers:
     def test_panelist_result_round_trips_through_dict(self) -> None:
-        from synth_panel.cli.commands import (
+        from althing.cli.commands import (
             _panelist_result_from_dict,
             _panelist_result_to_ckpt_dict,
         )
-        from synth_panel.cost import TokenUsage as CostTokenUsage
+        from althing.cost import TokenUsage as CostTokenUsage
 
         pr = PanelistResult(
             persona_name="Alice",
@@ -695,7 +695,7 @@ class TestCLIHelpers:
         assert restored.model == "sonnet"
 
     def test_build_run_config_fingerprint_is_stable(self) -> None:
-        from synth_panel.cli.commands import _build_run_config_fingerprint
+        from althing.cli.commands import _build_run_config_fingerprint
 
         cfg_a = _build_run_config_fingerprint(
             personas=[{"name": "Alice"}, {"name": "Bob"}],
@@ -810,7 +810,7 @@ class TestCheckpointCliArgs:
     def test_build_resume_cli_args_captures_fields(self) -> None:
         from argparse import Namespace
 
-        from synth_panel.cli.commands import _build_resume_cli_args
+        from althing.cli.commands import _build_resume_cli_args
 
         ns = Namespace(
             personas="examples/p.yaml",
@@ -827,7 +827,7 @@ class TestCheckpointCliArgs:
     def test_apply_resume_cli_args_fills_missing_only(self) -> None:
         from argparse import Namespace
 
-        from synth_panel.cli.commands import _apply_resume_cli_args
+        from althing.cli.commands import _apply_resume_cli_args
 
         # User omitted both --personas and --instrument.
         ns = Namespace(
@@ -853,7 +853,7 @@ class TestCheckpointCliArgs:
     def test_apply_resume_cli_args_user_explicit_wins(self) -> None:
         from argparse import Namespace
 
-        from synth_panel.cli.commands import _apply_resume_cli_args
+        from althing.cli.commands import _apply_resume_cli_args
 
         # User passed --personas explicitly; saved value must NOT clobber.
         ns = Namespace(
@@ -871,7 +871,7 @@ class TestCheckpointCliArgs:
 
 
 # ---------------------------------------------------------------------------
-# End-to-end CLI: synthpanel panel run --resume <id> (no --personas/--instrument)
+# End-to-end CLI: althing panel run --resume <id> (no --personas/--instrument)
 # ---------------------------------------------------------------------------
 
 
@@ -898,7 +898,7 @@ def _seed_partial_checkpoint(
     matches what a real ``handle_panel_run`` will compute for the same
     personas + questions on resume.
     """
-    from synth_panel.cli.commands import _build_run_config_fingerprint
+    from althing.cli.commands import _build_run_config_fingerprint
 
     cfg = _build_run_config_fingerprint(
         personas=[{"name": n} for n in persona_names],
@@ -944,7 +944,7 @@ def _seed_partial_checkpoint(
 
 
 class TestResumeFromCheckpointCli:
-    """Bare ``synthpanel panel run --resume <id>`` recovers paths and skips done panelists.
+    """Bare ``althing panel run --resume <id>`` recovers paths and skips done panelists.
 
     These tests dispatch ``handle_panel_run`` directly rather than ``main()``
     so they don't trigger ``setup_logging`` and pollute downstream
@@ -953,13 +953,13 @@ class TestResumeFromCheckpointCli:
 
     @staticmethod
     def _parsed(argv: list[str]):
-        from synth_panel.cli.parser import build_parser
+        from althing.cli.parser import build_parser
 
         return build_parser().parse_args(argv)
 
     @staticmethod
     def _fmt():
-        from synth_panel.cli.output import OutputFormat
+        from althing.cli.output import OutputFormat
 
         return OutputFormat("text")
 
@@ -968,13 +968,13 @@ class TestResumeFromCheckpointCli:
     ) -> None:
         from unittest.mock import patch
 
-        from synth_panel.cli.commands import handle_panel_run
-        from synth_panel.cost import TokenUsage as CostTokenUsage
-        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+        from althing.cli.commands import handle_panel_run
+        from althing.cost import TokenUsage as CostTokenUsage
+        from althing.orchestrator import PanelistResult, WorkerRegistry
 
         # Anchor checkpoint root + creds so the CLI doesn't need real env.
         ckpt_root = tmp_path / "ckpts"
-        monkeypatch.setenv("SYNTHPANEL_CHECKPOINT_ROOT", str(ckpt_root))
+        monkeypatch.setenv("ALTHING_CHECKPOINT_ROOT", str(ckpt_root))
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
 
         personas_file = tmp_path / "personas.yaml"
@@ -1024,8 +1024,8 @@ class TestResumeFromCheckpointCli:
             ]
         )
         with (
-            patch("synth_panel.cli.commands.run_panel_parallel", side_effect=fake_run_panel_parallel),
-            patch("synth_panel.cli.commands.LLMClient"),
+            patch("althing.cli.commands.run_panel_parallel", side_effect=fake_run_panel_parallel),
+            patch("althing.cli.commands.LLMClient"),
         ):
             code = handle_panel_run(args, self._fmt())
 
@@ -1036,7 +1036,7 @@ class TestResumeFromCheckpointCli:
     def test_missing_personas_without_resume_errors(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        from synth_panel.cli.commands import handle_panel_run
+        from althing.cli.commands import handle_panel_run
 
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
         instrument_file = tmp_path / "survey.yaml"
@@ -1058,10 +1058,10 @@ class TestResumeFromCheckpointCli:
     def test_resume_drift_refuses_by_default(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        from synth_panel.cli.commands import handle_panel_run
+        from althing.cli.commands import handle_panel_run
 
         ckpt_root = tmp_path / "ckpts"
-        monkeypatch.setenv("SYNTHPANEL_CHECKPOINT_ROOT", str(ckpt_root))
+        monkeypatch.setenv("ALTHING_CHECKPOINT_ROOT", str(ckpt_root))
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
 
         personas_file = tmp_path / "personas.yaml"
@@ -1101,12 +1101,12 @@ class TestResumeFromCheckpointCli:
     ) -> None:
         from unittest.mock import patch
 
-        from synth_panel.cli.commands import handle_panel_run
-        from synth_panel.cost import TokenUsage as CostTokenUsage
-        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+        from althing.cli.commands import handle_panel_run
+        from althing.cost import TokenUsage as CostTokenUsage
+        from althing.orchestrator import PanelistResult, WorkerRegistry
 
         ckpt_root = tmp_path / "ckpts"
-        monkeypatch.setenv("SYNTHPANEL_CHECKPOINT_ROOT", str(ckpt_root))
+        monkeypatch.setenv("ALTHING_CHECKPOINT_ROOT", str(ckpt_root))
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
 
         personas_file = tmp_path / "personas.yaml"
@@ -1154,8 +1154,8 @@ class TestResumeFromCheckpointCli:
             ]
         )
         with (
-            patch("synth_panel.cli.commands.run_panel_parallel", side_effect=fake_run_panel_parallel),
-            patch("synth_panel.cli.commands.LLMClient"),
+            patch("althing.cli.commands.run_panel_parallel", side_effect=fake_run_panel_parallel),
+            patch("althing.cli.commands.LLMClient"),
         ):
             code = handle_panel_run(args, self._fmt())
 
@@ -1171,17 +1171,17 @@ class TestResumeFromCheckpointCli:
 
 
 class TestCollisionCli:
-    """``synthpanel panel run --checkpoint-dir`` must refuse to clobber an existing run."""
+    """``althing panel run --checkpoint-dir`` must refuse to clobber an existing run."""
 
     @staticmethod
     def _parsed(argv: list[str]):
-        from synth_panel.cli.parser import build_parser
+        from althing.cli.parser import build_parser
 
         return build_parser().parse_args(argv)
 
     @staticmethod
     def _fmt():
-        from synth_panel.cli.output import OutputFormat
+        from althing.cli.output import OutputFormat
 
         return OutputFormat("text")
 
@@ -1193,7 +1193,7 @@ class TestCollisionCli:
     ) -> None:
         from unittest.mock import patch
 
-        from synth_panel.cli.commands import handle_panel_run
+        from althing.cli.commands import handle_panel_run
 
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
 
@@ -1226,7 +1226,7 @@ class TestCollisionCli:
                 "--no-synthesis",
             ]
         )
-        with patch("synth_panel.cli.commands.new_run_id", return_value=seeded_id):
+        with patch("althing.cli.commands.new_run_id", return_value=seeded_id):
             code = handle_panel_run(args, self._fmt())
 
         assert code == 1, "colliding run id should fail the run"
@@ -1243,9 +1243,9 @@ class TestCollisionCli:
     ) -> None:
         from unittest.mock import patch
 
-        from synth_panel.cli.commands import handle_panel_run
-        from synth_panel.cost import TokenUsage as CostTokenUsage
-        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+        from althing.cli.commands import handle_panel_run
+        from althing.cost import TokenUsage as CostTokenUsage
+        from althing.orchestrator import PanelistResult, WorkerRegistry
 
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
 
@@ -1294,9 +1294,9 @@ class TestCollisionCli:
             ]
         )
         with (
-            patch("synth_panel.cli.commands.new_run_id", return_value=seeded_id),
-            patch("synth_panel.cli.commands.run_panel_parallel", side_effect=fake_run),
-            patch("synth_panel.cli.commands.LLMClient"),
+            patch("althing.cli.commands.new_run_id", return_value=seeded_id),
+            patch("althing.cli.commands.run_panel_parallel", side_effect=fake_run),
+            patch("althing.cli.commands.LLMClient"),
         ):
             code = handle_panel_run(args, self._fmt())
 
@@ -1382,7 +1382,7 @@ class TestSchemaMigration:
             "config": cfg,
         }
         (directory / "state.json").write_text(json.dumps(future_data))
-        with pytest.raises(CheckpointSchemaTooNewError, match="newer than this synthpanel"):
+        with pytest.raises(CheckpointSchemaTooNewError, match="newer than this althing"):
             load_checkpoint("run-future", tmp_path)
 
     def test_migrate_v1_to_v2_adds_defaults(self) -> None:
@@ -1427,7 +1427,7 @@ class TestSchemaMigration:
 
     def test_migrate_to_current_raises_on_future_version(self) -> None:
         data = {"schema_version": CURRENT_SCHEMA_VERSION + 1}
-        with pytest.raises(ValueError, match="newer than this synthpanel"):
+        with pytest.raises(ValueError, match="newer than this althing"):
             migrate_to_current(data)
 
     def test_round_trip_preserves_schema_version(self, tmp_path: Path) -> None:

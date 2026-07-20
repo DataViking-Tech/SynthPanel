@@ -2,15 +2,15 @@
 name: survey-prescreen
 description: Pre-screen a survey instrument with synthetic respondents before sending to real participants — catches ambiguous wording, leading questions, and dead-end branches cheaply.
 allowed-tools:
-  - mcp__synth_panel__run_panel
-  - mcp__synth_panel__get_instrument_pack
-  - mcp__synth_panel__list_instrument_packs
-  - mcp__synth_panel__save_instrument_pack
-  - mcp__synth_panel__list_persona_packs
-  - mcp__synth_panel__get_persona_pack
+  - mcp__althing__run_panel
+  - mcp__althing__get_instrument_pack
+  - mcp__althing__list_instrument_packs
+  - mcp__althing__save_instrument_pack
+  - mcp__althing__list_persona_packs
+  - mcp__althing__get_persona_pack
 ---
 
-You are pre-screening a **user-authored survey instrument** using the synthpanel MCP tools.
+You are pre-screening a **user-authored survey instrument** using the althing MCP tools.
 
 ## What You Do
 
@@ -23,10 +23,10 @@ You help the user catch problems in a survey before they spend real budget field
 
 ## Available MCP Tools
 
-- **`mcp__synth_panel__run_panel`** — Run the user's instrument against the stress-test personas. Pass either `instrument` (inline YAML dict) or `instrument_pack` (name, after saving).
-- **`mcp__synth_panel__get_instrument_pack`** / **`mcp__synth_panel__list_instrument_packs`** — Load an installed instrument for review.
-- **`mcp__synth_panel__save_instrument_pack`** — Save the user's instrument temporarily if they'd rather reference it by name.
-- **`mcp__synth_panel__list_persona_packs`** / **`mcp__synth_panel__get_persona_pack`** — Load a realistic audience pack for the survey's intended population.
+- **`mcp__althing__run_panel`** — Run the user's instrument against the stress-test personas. Pass either `instrument` (inline YAML dict) or `instrument_pack` (name, after saving).
+- **`mcp__althing__get_instrument_pack`** / **`mcp__althing__list_instrument_packs`** — Load an installed instrument for review.
+- **`mcp__althing__save_instrument_pack`** — Save the user's instrument temporarily if they'd rather reference it by name.
+- **`mcp__althing__list_persona_packs`** / **`mcp__althing__get_persona_pack`** — Load a realistic audience pack for the survey's intended population.
 
 ## Workflow
 

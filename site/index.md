@@ -1,22 +1,22 @@
-# synthpanel — Run synthetic focus groups with any LLM
+# althing — Run synthetic focus groups with any LLM
 
  v1.6.0 — public beta
 
-# synthpanel
+# althing
 
 Run synthetic focus groups with any LLM.
 
 Zero-config inside Claude Desktop, Claude Code, Cursor, and other MCP hosts — the host's own model answers, so you can drop the config in and run one-shot prompts and quick polls of up to 3 personas with **no API key set**. Bring your own key (Claude, GPT, Gemini, Grok, local) for full panels, ensembles, and reproducible model pins. Personas and instruments are plain YAML — run from your terminal, a pipeline, or an AI agent's tool call over MCP (Model Context Protocol, the open standard that lets AI tools call external functions).
 
-$ pip install synthpanel
+$ pip install althing
 
-Add the `[mcp]` extra — `pip install "synthpanel[mcp]"` — for Claude Code / Cursor / Windsurf agent integration.
+Add the `[mcp]` extra — `pip install "althing[mcp]"` — for Claude Code / Cursor / Windsurf agent integration.
 
-[GitHub repo →](https://github.com/DataViking-Tech/SynthPanel) [PyPI package](https://pypi.org/project/synthpanel/)
+[GitHub repo →](https://github.com/DataViking-Tech/Althing) [PyPI package](https://pypi.org/project/althing/)
 
 ## Who is this for?
 
-Three jobs synthpanel does well — pick the one closest to yours.
+Three jobs althing does well — pick the one closest to yours.
 
 Startup PM
 
@@ -34,11 +34,11 @@ AI engineer
 
 ### Panels as a tool inside your agent
 
-Embed synthpanel in an agent pipeline via MCP tool calls, or drive it from Python to validate prompts, evals, and routing decisions against simulated audiences at every build.
+Embed althing in an agent pipeline via MCP tool calls, or drive it from Python to validate prompts, evals, and routing decisions against simulated audiences at every build.
 
 Who this isn't for
 
-synthpanel is **CLI-first, local-first, BYOK-first** by design. It does **not** ship:
+althing is **CLI-first, local-first, BYOK-first** by design. It does **not** ship:
 
 - a hosted web UI or dashboard
 
@@ -48,7 +48,7 @@ synthpanel is **CLI-first, local-first, BYOK-first** by design. It does **not** 
 
 - SOC 2 (or equivalent) compliance attestation
 
-These are **deliberate non-features**, not a roadmap gap. If you need a hosted GUI or enterprise compliance artifacts for a vendor review, synthpanel isn't your product — and that's intentional.
+These are **deliberate non-features**, not a roadmap gap. If you need a hosted GUI or enterprise compliance artifacts for a vendor review, althing isn't your product — and that's intentional.
 
 ## See it in action
 
@@ -96,8 +96,8 @@ Give your AI coding assistant access to synthetic focus groups. Drop this config
 // Claude Code · Cursor · Windsurf · Zed
 {
   "mcpServers": {
-    "synth_panel": {
-      "command": "synthpanel",
+    "althing": {
+      "command": "althing",
       "args": ["mcp-serve"],
       "env": { "ANTHROPIC_API_KEY": "sk-..." }
     }
@@ -107,34 +107,34 @@ Give your AI coding assistant access to synthetic focus groups. Drop this config
 
 Claude Code Cursor Windsurf Zed Claude Desktop [Full MCP docs →](/mcp)
 
-Requires `pip install synthpanel[mcp]`. 12 tools: run prompts, run panels, manage persona & instrument packs, and more.
+Requires `pip install althing[mcp]`. 12 tools: run prompts, run panels, manage persona & instrument packs, and more.
 
 ## Quick start
 
 ```
 # 1. install
-pip install synthpanel
+pip install althing
 
 # 2. add a key — env var (one-shot) or stored (persistent)
 export ANTHROPIC_API_KEY="sk-..."             # env var
-# or: synthpanel login --provider anthropic --api-key sk-...   # persisted
+# or: althing login --provider anthropic --api-key sk-...   # persisted
 
 # 3. one-shot prompt against the default model
-synthpanel prompt "What do you think of the name Traitprint?"
+althing prompt "What do you think of the name Traitprint?"
 
 # 4. run a full panel and save the result
-synthpanel panel run \
+althing panel run \
   --personas examples/personas.yaml \
   --instrument examples/survey.yaml \
   --save
 
 # 5. render a shareable Markdown report from the saved result
-synthpanel report <result-id> -o report.md
+althing report <result-id> -o report.md
 ```
 
-More commands: `synthpanel pack calibrate` (calibrate a persona pack against a SynthBench baseline), `synthpanel instruments` (manage branching instrument packs), `synthpanel analyze` (statistics on saved results), `synthpanel results` (list and inspect saved runs by ID), `synthpanel cost` (spend summary), `synthpanel login` / `whoami` (credential management). Run `synthpanel --help` for the full list.
+More commands: `althing pack calibrate` (calibrate a persona pack against a SynthBench baseline), `althing instruments` (manage branching instrument packs), `althing analyze` (statistics on saved results), `althing results` (list and inspect saved runs by ID), `althing cost` (spend summary), `althing login` / `whoami` (credential management). Run `althing --help` for the full list.
 
-Every `synthpanel report` output opens with a mandatory synthetic-panel banner — *“Synthetic panel. All responses below were generated by AI personas, not human respondents. Do not cite as user-research data.”* — so the rendered Markdown can’t be mistaken for real-user research. Markdown v1 only; HTML deferred to v2. See the [sp-viz-layer spec](https://github.com/DataViking-Tech/SynthPanel/tree/main/specs/sp-viz-layer).
+Every `althing report` output opens with a mandatory synthetic-panel banner — *“Synthetic panel. All responses below were generated by AI personas, not human respondents. Do not cite as user-research data.”* — so the rendered Markdown can’t be mistaken for real-user research. Markdown v1 only; HTML deferred to v2. See the [sp-viz-layer spec](https://github.com/DataViking-Tech/Althing/tree/main/specs/sp-viz-layer).
 
 ### [MCP server](/mcp)
 
@@ -142,13 +142,13 @@ Every `synthpanel report` output opens with a mandatory synthetic-panel banner �
 
 Drop-in config for Claude Code, Cursor, Windsurf, Zed, and Claude Desktop. 12 tools.
 
-### [PyPI](https://pypi.org/project/synthpanel/)
+### [PyPI](https://pypi.org/project/althing/)
 
 →
 
-Pip-installable package. `pip install synthpanel`.
+Pip-installable package. `pip install althing`.
 
-### [GitHub](https://github.com/DataViking-Tech/SynthPanel)
+### [GitHub](https://github.com/DataViking-Tech/Althing)
 
 →
 
@@ -192,7 +192,7 @@ Real Pew American Trends Panel question (Wave 96, via SubPOP item `BELIEVE_a_W96
 
 “Do you believe in Heaven?”
 
-Pew’s response data is license-gated (CC-BY-NC-SA), so this page shows only the *gap* between the SynthPanel 3-model ensemble (90 sampled responses) and the real Pew respondents — not the survey values themselves:
+Pew’s response data is license-gated (CC-BY-NC-SA), so this page shows only the *gap* between the Althing 3-model ensemble (90 sampled responses) and the real Pew respondents — not the survey values themselves:
 
 Yes, I believe in this gap: 20.3 pts
 
@@ -206,8 +206,8 @@ Measured divergence from the real Pew respondents’ distribution: Jensen–Shan
 
 This item sits in the run’s closest decile by JSD; across the full 200-question SubPOP evaluation the same run’s mean JSD is 0.208. View the underlying distributions signed-in at synthbench.org, or recompute these exact numbers from the public [SubPOP dataset](https://huggingface.co/datasets/jjssuh/subpop) and the open [SynthBench harness](https://github.com/DataViking-Tech/SynthBench); the synthetic distribution and per-question JSD are published in the repo (`leaderboard-results/subpop_ensemble_3blend_20260716_192413.json`, run dated 2026-07-16).
 
-Powers the [SynthBench](https://synthbench.org) open benchmark — an open, reproducible evaluation of synthetic-respondent quality (public data + scoring code), operated by the SynthPanel maintainers rather than an independent third party. On the current [leaderboard](https://synthbench.org/data/leaderboard.json) (generated 2026-07-17), the 3-model ensemble scores SPS 0.877 on opinionsqa, 0.858 on subpop, and 0.813 on globalopinionqa — roughly 0.03–0.05 above the best single model on each dataset and 0.10–0.11 above the random baseline (~0.71–0.76). Leaderboard numbers move as the board recomputes.
+Powers the [SynthBench](https://synthbench.org) open benchmark — an open, reproducible evaluation of synthetic-respondent quality (public data + scoring code), operated by the Althing maintainers rather than an independent third party. On the current [leaderboard](https://synthbench.org/data/leaderboard.json) (generated 2026-07-17), the 3-model ensemble scores SPS 0.877 on opinionsqa, 0.858 on subpop, and 0.813 on globalopinionqa — roughly 0.03–0.05 above the best single model on each dataset and 0.10–0.11 above the random baseline (~0.71–0.76). Leaderboard numbers move as the board recomputes.
 
 ## Further reading
 
-- [SynthPanel vs Synthetic Users vs FocusPanel.ai — when open-source MCP beats the SaaS →](/blog/synthpanel-vs-commercial-alternatives.html) 2026-04-15 · updated 2026-07-16
+- [Althing vs Synthetic Users vs FocusPanel.ai — when open-source MCP beats the SaaS →](/blog/althing-vs-commercial-alternatives.html) 2026-04-15 · updated 2026-07-16

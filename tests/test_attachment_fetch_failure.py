@@ -14,12 +14,12 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock
 
-from synth_panel import orchestrator as orch_mod
-from synth_panel.fetch import lower as lower_mod
-from synth_panel.fetch.perimeter import PerimeterDeny
-from synth_panel.llm.models import CompletionResponse, StopReason, TextBlock
-from synth_panel.llm.models import TokenUsage as LLMTokenUsage
-from synth_panel.orchestrator import run_panel_parallel
+from althing import orchestrator as orch_mod
+from althing.fetch import lower as lower_mod
+from althing.fetch.perimeter import PerimeterDeny
+from althing.llm.models import CompletionResponse, StopReason, TextBlock
+from althing.llm.models import TokenUsage as LLMTokenUsage
+from althing.orchestrator import run_panel_parallel
 
 
 def _text_response(text: str = "Hello!") -> CompletionResponse:
@@ -114,7 +114,7 @@ def test_allow_empty_attachments_proceeds_best_effort(monkeypatch):
 
 def test_successful_fetch_records_ok_status(monkeypatch):
     """A successful fetch records an ok status and the response is healthy."""
-    from synth_panel.fetch.ladder import AttachmentIntent, LadderResult
+    from althing.fetch.ladder import AttachmentIntent, LadderResult
 
     def ok(url, cfg):
         return LadderResult(

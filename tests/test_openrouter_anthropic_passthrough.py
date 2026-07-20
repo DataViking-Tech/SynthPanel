@@ -1,6 +1,6 @@
 """Regression coverage for hq-olrk: ``openrouter/anthropic/*`` routing.
 
-The bug (hq-m333): synthpanel's OpenRouter provider sent every request,
+The bug (hq-m333): althing's OpenRouter provider sent every request,
 including ``openrouter/anthropic/claude-sonnet-4.5``, through OR's
 ``/v1/chat/completions`` (OpenAI-shape) endpoint. For Anthropic-upstream
 models, OR's downstream conversion from OpenAI ``image_url`` to Anthropic
@@ -30,8 +30,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from synth_panel.llm.errors import LLMError
-from synth_panel.llm.models import (
+from althing.llm.errors import LLMError
+from althing.llm.models import (
     CompletionRequest,
     ImageBlock,
     InlineSource,
@@ -91,7 +91,7 @@ def _mock_httpx_response(data: dict, status_code: int = 200) -> MagicMock:
 
 
 def _provider():
-    from synth_panel.llm.providers.openrouter import OpenRouterProvider
+    from althing.llm.providers.openrouter import OpenRouterProvider
 
     with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}, clear=False):
         return OpenRouterProvider()
@@ -268,7 +268,7 @@ class TestAnthropicPassthroughResponseParsing:
 
         OR's passthrough may not populate ``usage.cost`` the way
         chat-completions does; the Anthropic-native token counts are the
-        canonical signal and what synthpanel's cost tables key off.
+        canonical signal and what althing's cost tables key off.
         """
         provider = _provider()
         payload = _anthropic_json_response()
@@ -302,7 +302,7 @@ class TestAnthropicPassthroughResponseParsing:
         """Both transports must agree on response.model conventions.
 
         The existing chat-completions path returns the stripped upstream
-        id (``anthropic/claude-...``), not the synthpanel-prefixed form
+        id (``anthropic/claude-...``), not the althing-prefixed form
         — see ``_send_openai`` in openrouter.py and ``test_send_success``
         in test_providers.py. Locking that parity in keeps cost tables
         and persistence working uniformly across transports.

@@ -1,4 +1,4 @@
-"""Tests for synth_panel.persistence — SPEC.md Section 6."""
+"""Tests for althing.persistence — SPEC.md Section 6."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ import os
 
 import pytest
 
-from synth_panel.cost import TokenUsage
-from synth_panel.persistence import (
+from althing.cost import TokenUsage
+from althing.persistence import (
     ConversationMessage,
     Session,
     SessionFormatError,

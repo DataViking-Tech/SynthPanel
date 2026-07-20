@@ -1,6 +1,6 @@
 # API Stability Policy
 
-synthpanel is currently **pre-1.0** (0.x.y). This document describes what contributors and users can expect about breaking changes.
+althing is currently **pre-1.0** (0.x.y). This document describes what contributors and users can expect about breaking changes.
 
 ## Pre-1.0 stance
 
@@ -17,10 +17,10 @@ synthpanel is currently **pre-1.0** (0.x.y). This document describes what contri
 
 The following are considered **public** and we try hard not to break them:
 
-- `synth_panel.llm.providers.base.LLMProvider` — the adapter base class
+- `althing.llm.providers.base.LLMProvider` — the adapter base class
 - `ProviderConfig`, `CompletionRequest`, `CompletionResponse`, `StreamEvent` — adapter contract types
-- `synth_panel.cost.lookup_pricing_by_provider(provider_string)` — returns `(ModelPricing | None, is_estimated: bool)` for synthbench-format provider strings; used by downstream cost integrations
-- `synthpanel` CLI commands (`prompt`, `panel run`, `pack list`, `instruments list|show`, etc.)
+- `althing.cost.lookup_pricing_by_provider(provider_string)` — returns `(ModelPricing | None, is_estimated: bool)` for synthbench-format provider strings; used by downstream cost integrations
+- `althing` CLI commands (`prompt`, `panel run`, `pack list`, `instruments list|show`, etc.)
 - MCP tool signatures (12 tools — see [MCP docs](./mcp.md))
 - Instrument YAML formats (v1 flat, v2 linear, v3 branching)
 - Persona pack YAML format
@@ -29,8 +29,8 @@ The following are considered **public** and we try hard not to break them:
 
 These may change without notice between minor versions:
 
-- `synth_panel.runtime.*`
-- `synth_panel.orchestrator.*` internals (the orchestrator public methods are stable; internal state is not)
-- `synth_panel.plugins.*` — plugin system is evolving
-- `synth_panel.structured.*` — structured output subsystem is evolving
+- `althing.runtime.*`
+- `althing.orchestrator.*` internals (the orchestrator public methods are stable; internal state is not)
+- `althing.plugins.*` — plugin system is evolving
+- `althing.structured.*` — structured output subsystem is evolving
 - Anything not listed above as public

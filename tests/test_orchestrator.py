@@ -8,17 +8,17 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from synth_panel.cost import TokenUsage
-from synth_panel.llm.models import (
+from althing.cost import TokenUsage
+from althing.llm.models import (
     CompletionResponse,
     StopReason,
     TextBlock,
     ToolInvocationBlock,
 )
-from synth_panel.llm.models import (
+from althing.llm.models import (
     TokenUsage as LLMTokenUsage,
 )
-from synth_panel.orchestrator import (
+from althing.orchestrator import (
     FailureKind,
     InvalidTransitionError,
     WorkerNotFoundError,
@@ -27,8 +27,8 @@ from synth_panel.orchestrator import (
     _extract_text,
     run_panel_parallel,
 )
-from synth_panel.persistence import ConversationMessage
-from synth_panel.runtime import TurnSummary
+from althing.persistence import ConversationMessage
+from althing.runtime import TurnSummary
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -612,7 +612,7 @@ def _make_tool_response(data: dict, usage: LLMTokenUsage | None = None) -> Compl
 class TestStructuredOutputIntegration:
     def test_structured_output_returns_data_dict(self):
         """When response_schema is provided, responses contain structured data."""
-        from synth_panel.llm.models import CompletionRequest
+        from althing.llm.models import CompletionRequest
 
         structured_data = {"sentiment": "positive", "summary": "Looks great!"}
 
@@ -786,7 +786,7 @@ class TestSessionReuse:
 
     def test_partial_sessions_creates_missing(self):
         """If sessions dict only has some personas, missing ones get fresh sessions."""
-        from synth_panel.persistence import Session
+        from althing.persistence import Session
 
         existing_session = Session()
         responses = [_make_text_response("A"), _make_text_response("B")]
@@ -828,7 +828,7 @@ _EXTRACT_SCHEMA = {
 class TestExtractionPass:
     def test_extract_schema_adds_extraction_key(self):
         """When extract_schema is provided, responses include 'extraction' alongside 'response'."""
-        from synth_panel.llm.models import CompletionRequest
+        from althing.llm.models import CompletionRequest
 
         extracted_data = {"themes": ["usability", "pricing"], "sentiment": "negative"}
 
@@ -866,7 +866,7 @@ class TestExtractionPass:
 
     def test_extract_schema_ignored_when_response_schema_set(self):
         """When both --schema and --extract-schema are set, structured mode wins (no extraction)."""
-        from synth_panel.llm.models import CompletionRequest
+        from althing.llm.models import CompletionRequest
 
         structured_data = {"sentiment": "positive", "summary": "Great!"}
 
@@ -899,7 +899,7 @@ class TestExtractionPass:
 
     def test_extract_schema_with_multiple_questions(self):
         """Each question in text mode gets its own extraction call."""
-        from synth_panel.llm.models import CompletionRequest
+        from althing.llm.models import CompletionRequest
 
         call_count = {"text": 0, "extract": 0}
         lock = threading.Lock()
@@ -937,7 +937,7 @@ class TestExtractionPass:
 
     def test_extract_schema_error_captured_gracefully(self):
         """If the extraction call fails, the response still has text and an error marker."""
-        from synth_panel.llm.models import CompletionRequest
+        from althing.llm.models import CompletionRequest
 
         def send_side_effect(request):
             if isinstance(request, CompletionRequest) and request.tool_choice is not None:
@@ -1257,7 +1257,7 @@ class TestConditionalFollowUps:
 # v3 multi-round panel runs through the SDK boundary (hq-83ye)
 #
 # Companion to ``TestRunPanelMultiRoundV3`` in test_mcp_server.py: the
-# same shape, but driven via ``synth_panel.sdk.run_panel`` instead of the
+# same shape, but driven via ``althing.sdk.run_panel`` instead of the
 # MCP wire layer. If the bug is at the orchestrator level, both surfaces
 # fail; if it's at the MCP wrapper, only the MCP test fails. Splitting
 # the coverage isolates the bisect.
@@ -1282,8 +1282,8 @@ def _sdk_stub_run_panel_parallel(
     panel_shared_attachments=None,
 ):
     """Minimal stub for the LLM-touching seam used by run_multi_round_panel."""
-    from synth_panel.cost import TokenUsage as CostTokenUsage
-    from synth_panel.orchestrator import PanelistResult
+    from althing.cost import TokenUsage as CostTokenUsage
+    from althing.orchestrator import PanelistResult
 
     results = [
         PanelistResult(
@@ -1309,8 +1309,8 @@ def _sdk_stub_synthesize_panel(
     seed=None,
     **_kwargs,
 ):
-    from synth_panel.cost import TokenUsage as CostTokenUsage
-    from synth_panel.synthesis import SynthesisResult
+    from althing.cost import TokenUsage as CostTokenUsage
+    from althing.synthesis import SynthesisResult
 
     return SynthesisResult(
         summary="stub",
@@ -1325,7 +1325,7 @@ def _sdk_stub_synthesize_panel(
 
 
 class TestSDKRunPanelMultiRoundV3:
-    """v3 multi-round panel runs via :func:`synth_panel.sdk.run_panel`."""
+    """v3 multi-round panel runs via :func:`althing.sdk.run_panel`."""
 
     PERSONAS = [{"name": "Alice"}, {"name": "Bob"}]
 
@@ -1371,14 +1371,14 @@ class TestSDKRunPanelMultiRoundV3:
 
         return [
             _patch(
-                "synth_panel.orchestrator.run_panel_parallel",
+                "althing.orchestrator.run_panel_parallel",
                 side_effect=_sdk_stub_run_panel_parallel,
             ),
             _patch(
-                "synth_panel._runners.synthesize_panel",
+                "althing._runners.synthesize_panel",
                 side_effect=_sdk_stub_synthesize_panel,
             ),
-            _patch("synth_panel.sdk.LLMClient"),
+            _patch("althing.sdk.LLMClient"),
         ]
 
     def test_branching_v3_runs_three_rounds_via_sdk(self, tmp_path, monkeypatch):
@@ -1386,7 +1386,7 @@ class TestSDKRunPanelMultiRoundV3:
         monkeypatch.setenv("SYNTH_PANEL_DATA_DIR", str(tmp_path))
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-placeholder")
 
-        from synth_panel import run_panel
+        from althing import run_panel
 
         patches = self._patch_runtime()
         for p in patches:
@@ -1413,14 +1413,14 @@ class TestSDKRunPanelMultiRoundV3:
 
         The orchestrator-side fix already pinned the SDK behavior in
         ``test_compat_matrix.py``; this test exercises the *public* SDK
-        entry (``synth_panel.sdk.run_panel``) so the contract is asserted
+        entry (``althing.sdk.run_panel``) so the contract is asserted
         at the boundary callers actually consume — not just at
         ``run_multi_round_panel`` directly.
         """
         monkeypatch.setenv("SYNTH_PANEL_DATA_DIR", str(tmp_path))
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-placeholder")
 
-        from synth_panel import run_panel
+        from althing import run_panel
 
         patches = self._patch_runtime()
         for p in patches:

@@ -13,15 +13,15 @@ from typing import Any
 
 import pytest
 
-from synth_panel.cost import ZERO_USAGE
-from synth_panel.orchestrator import (
+from althing.cost import ZERO_USAGE
+from althing.orchestrator import (
     Flag,
     FlagExtension,
     PanelistResult,
     PanelState,
     _raise_flags,
 )
-from synth_panel.schemas import load
+from althing.schemas import load
 
 
 def _pr(name: str = "P", *, error: str | None = None, responses: list[dict[str, Any]] | None = None) -> PanelistResult:

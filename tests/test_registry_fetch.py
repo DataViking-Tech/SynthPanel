@@ -1,4 +1,4 @@
-"""Tests for the raw-HTTP registry fetcher (``synth_panel.registry.fetch``)."""
+"""Tests for the raw-HTTP registry fetcher (``althing.registry.fetch``)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from collections.abc import Callable
 import httpx
 import pytest
 
-from synth_panel.registry.fetch import (
+from althing.registry.fetch import (
     DEFAULT_REGISTRY_URL,
     REGISTRY_URL_ENV,
     RegistryFetchError,
@@ -26,7 +26,7 @@ SAMPLE_REGISTRY = {
             "name": "Traitprint Cloud ICPs",
             "description": "Buyer archetypes for Traitprint Cloud.",
             "repo": "example/traitprint",
-            "path": "synthpanel-pack.yaml",
+            "path": "althing-pack.yaml",
             "ref": "v0.2.0",
             "author": {"github": "example"},
             "tags": ["b2b", "saas"],

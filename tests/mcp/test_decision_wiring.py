@@ -4,7 +4,7 @@ Covers the previously-dormant v1.0.0 contract plumbing:
 
 * AC-4 grace — omitting the field synthesizes ``"unspecified-legacy-call"``
   and surfaces a ``W_DECISION_MISSING`` nudge in the response ``warnings[]``;
-  ``SYNTHPANEL_SCHEMA_MIN>=1.1.0`` flips omission into a typed
+  ``ALTHING_SCHEMA_MIN>=1.1.0`` flips omission into a typed
   ``MISSING_DECISION`` reject.
 * AC-7 — the decision is persisted in the saved result JSON and stamped on
   the persisted panelist sessions (and their JSONL transcript rows).
@@ -31,12 +31,12 @@ pytest.importorskip("mcp")
 def _data_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("SYNTH_PANEL_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-placeholder")
-    monkeypatch.delenv("SYNTHPANEL_SCHEMA_MIN", raising=False)
-    monkeypatch.delenv("SYNTHPANEL_DRIFT_DEGRADE", raising=False)
+    monkeypatch.delenv("ALTHING_SCHEMA_MIN", raising=False)
+    monkeypatch.delenv("ALTHING_DRIFT_DEGRADE", raising=False)
 
 
-from synth_panel.mcp.compat import LEGACY_DECISION_PLACEHOLDER, W_DECISION_MISSING
-from synth_panel.structured.validate import validate_response
+from althing.mcp.compat import LEGACY_DECISION_PLACEHOLDER, W_DECISION_MISSING
+from althing.structured.validate import validate_response
 
 _VALID_DECISION = "Should we ship the new pricing tier next quarter?"
 
@@ -50,12 +50,12 @@ def _stub_run_panel_parallel_with_sessions(**response_overrides):
     """Stub for ``run_panel_parallel`` producing real Session objects.
 
     Unlike the sentinel-based stub in test_mcp_server.py, this returns
-    genuine :class:`~synth_panel.persistence.Session` instances so the
+    genuine :class:`~althing.persistence.Session` instances so the
     AC-7 stamping/persistence path is exercised for real.
     """
-    from synth_panel.cost import TokenUsage
-    from synth_panel.orchestrator import PanelistResult
-    from synth_panel.persistence import ConversationMessage, Session
+    from althing.cost import TokenUsage
+    from althing.orchestrator import PanelistResult
+    from althing.persistence import ConversationMessage, Session
 
     def _fake(
         client,
@@ -102,8 +102,8 @@ def _stub_run_panel_parallel_with_sessions(**response_overrides):
 
 
 def _stub_synthesize_panel(*_args, **_kwargs):
-    from synth_panel.cost import TokenUsage as CostTokenUsage
-    from synth_panel.synthesis import SynthesisResult
+    from althing.cost import TokenUsage as CostTokenUsage
+    from althing.synthesis import SynthesisResult
 
     return SynthesisResult(
         summary="Panel leans positive on the new tier.",
@@ -118,7 +118,7 @@ def _stub_synthesize_panel(*_args, **_kwargs):
 
 
 async def _run_panel_tool(decision: str | None, **extra):
-    from synth_panel.mcp import server as _server
+    from althing.mcp import server as _server
 
     kwargs: dict = {
         "personas": [{"name": "Alice"}, {"name": "Bob"}],
@@ -132,15 +132,15 @@ async def _run_panel_tool(decision: str | None, **extra):
 
     with (
         patch(
-            "synth_panel.orchestrator.run_panel_parallel",
+            "althing.orchestrator.run_panel_parallel",
             side_effect=_stub_run_panel_parallel_with_sessions(),
         ),
         patch(
-            "synth_panel._runners.run_panel_parallel",
+            "althing._runners.run_panel_parallel",
             side_effect=_stub_run_panel_parallel_with_sessions(),
         ),
-        patch("synth_panel._runners.synthesize_panel", side_effect=_stub_synthesize_panel),
-        patch("synth_panel.mcp.server._shared_client", None),
+        patch("althing._runners.synthesize_panel", side_effect=_stub_synthesize_panel),
+        patch("althing.mcp.server._shared_client", None),
     ):
         raw = await _server.run_panel(**kwargs)
     return json.loads(raw)
@@ -177,7 +177,7 @@ async def test_omitted_decision_synthesizes_placeholder_and_warns(tmp_path):
 
 @pytest.mark.asyncio
 async def test_schema_min_1_1_0_hard_rejects_omitted_decision(monkeypatch):
-    monkeypatch.setenv("SYNTHPANEL_SCHEMA_MIN", "1.1.0")
+    monkeypatch.setenv("ALTHING_SCHEMA_MIN", "1.1.0")
     data = await _run_panel_tool(decision=None)
 
     assert data["error_code"] == "MISSING_DECISION"
@@ -219,7 +219,7 @@ async def test_supplied_decision_stamped_on_persisted_sessions(tmp_path):
 @pytest.mark.asyncio
 async def test_stamped_session_jsonl_rows_carry_decision(tmp_path):
     """Every JSONL transcript row is self-describing (persistence AC-7)."""
-    from synth_panel.persistence import Session
+    from althing.persistence import Session
 
     data = await _run_panel_tool(decision=_VALID_DECISION)
 
@@ -249,19 +249,19 @@ async def test_supplied_decision_echoed_in_verdict_meta():
 
 @pytest.mark.asyncio
 async def test_quick_poll_byok_carries_contract_fields(tmp_path):
-    from synth_panel.mcp import server as _server
+    from althing.mcp import server as _server
 
     with (
         patch(
-            "synth_panel.orchestrator.run_panel_parallel",
+            "althing.orchestrator.run_panel_parallel",
             side_effect=_stub_run_panel_parallel_with_sessions(),
         ),
         patch(
-            "synth_panel._runners.run_panel_parallel",
+            "althing._runners.run_panel_parallel",
             side_effect=_stub_run_panel_parallel_with_sessions(),
         ),
-        patch("synth_panel._runners.synthesize_panel", side_effect=_stub_synthesize_panel),
-        patch("synth_panel.mcp.server._shared_client", None),
+        patch("althing._runners.synthesize_panel", side_effect=_stub_synthesize_panel),
+        patch("althing.mcp.server._shared_client", None),
     ):
         raw = await _server.run_quick_poll(
             question="What would you pay?",
@@ -286,7 +286,7 @@ async def test_quick_poll_byok_carries_contract_fields(tmp_path):
 
 @pytest.mark.asyncio
 async def test_extend_panel_records_extension_decision(tmp_path):
-    from synth_panel.mcp import server as _server
+    from althing.mcp import server as _server
 
     first = await _run_panel_tool(decision=_VALID_DECISION)
     result_id = first["result_id"]
@@ -294,11 +294,11 @@ async def test_extend_panel_records_extension_decision(tmp_path):
     extension_decision = "Should the follow-up round change our launch copy?"
     with (
         patch(
-            "synth_panel.mcp.server.run_panel_parallel",
+            "althing.mcp.server.run_panel_parallel",
             side_effect=_stub_run_panel_parallel_with_sessions(),
         ),
-        patch("synth_panel.mcp.server.synthesize_panel", side_effect=_stub_synthesize_panel),
-        patch("synth_panel.mcp.server._shared_client", None),
+        patch("althing.mcp.server.synthesize_panel", side_effect=_stub_synthesize_panel),
+        patch("althing.mcp.server._shared_client", None),
     ):
         raw = await _server.extend_panel(
             result_id=result_id,

@@ -1,4 +1,4 @@
-"""Public-surface contract tests for ``synth_panel.ensemble``.
+"""Public-surface contract tests for ``althing.ensemble``.
 
 Pins the v1.1.0 promise (sy-0gy) that external callers can import the
 full deliberation engine — runner, blender, judge, map-reduce, seed
@@ -6,7 +6,7 @@ pin — from one module path. These tests intentionally exercise the
 *re-exports* and ``__all__`` rather than the underlying implementations
 (those are covered by ``test_ensemble.py``, ``test_synthesis*.py``).
 
-If a future refactor splits ``synth_panel.ensemble`` into a sub-package
+If a future refactor splits ``althing.ensemble`` into a sub-package
 or moves the judge primitives elsewhere, this test should be the first
 thing that breaks — that breakage is a deliberate signal that the
 public contract is changing and consumers (e.g. boardroom) need a
@@ -21,9 +21,9 @@ import pytest
 
 
 def test_ensemble_module_importable() -> None:
-    import synth_panel.ensemble as ens
+    import althing.ensemble as ens
 
-    assert hasattr(ens, "__all__"), "synth_panel.ensemble must declare __all__"
+    assert hasattr(ens, "__all__"), "althing.ensemble must declare __all__"
     assert isinstance(ens.__all__, list)
     assert ens.__all__, "__all__ must not be empty"
 
@@ -46,7 +46,7 @@ def test_ensemble_module_importable() -> None:
     ],
 )
 def test_runner_surface_exposed(name: str) -> None:
-    import synth_panel.ensemble as ens
+    import althing.ensemble as ens
 
     assert hasattr(ens, name), f"public runner surface missing: {name}"
     assert name in ens.__all__, f"{name} must be listed in __all__"
@@ -62,7 +62,7 @@ def test_runner_surface_exposed(name: str) -> None:
     ["blend_distributions", "BlendedResult", "BlendedQuestion"],
 )
 def test_blender_surface_exposed(name: str) -> None:
-    import synth_panel.ensemble as ens
+    import althing.ensemble as ens
 
     assert hasattr(ens, name), f"public blender surface missing: {name}"
     assert name in ens.__all__, f"{name} must be listed in __all__"
@@ -70,7 +70,7 @@ def test_blender_surface_exposed(name: str) -> None:
 
 def test_blend_distributions_supports_model_weights() -> None:
     """Model-weighted scoring is part of the public contract."""
-    from synth_panel.ensemble import blend_distributions
+    from althing.ensemble import blend_distributions
 
     sig = inspect.signature(blend_distributions)
     assert "weights" in sig.parameters, (
@@ -79,15 +79,15 @@ def test_blend_distributions_supports_model_weights() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Surface: judge (re-exported from synth_panel.synthesis)
+# Surface: judge (re-exported from althing.synthesis)
 # ---------------------------------------------------------------------------
 
 
 def test_judge_reexported_under_ensemble() -> None:
     """The single-judge synthesis primitive is reachable via the ensemble namespace."""
-    from synth_panel.ensemble import SynthesisResult, synthesize_panel
-    from synth_panel.synthesis import SynthesisResult as _SR
-    from synth_panel.synthesis import synthesize_panel as _sp
+    from althing.ensemble import SynthesisResult, synthesize_panel
+    from althing.synthesis import SynthesisResult as _SR
+    from althing.synthesis import synthesize_panel as _sp
 
     # Re-exports must be the same object — not a wrapper.
     assert SynthesisResult is _SR
@@ -95,7 +95,7 @@ def test_judge_reexported_under_ensemble() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Surface: map-reduce (re-exported from synth_panel.synthesis)
+# Surface: map-reduce (re-exported from althing.synthesis)
 # ---------------------------------------------------------------------------
 
 
@@ -115,15 +115,15 @@ def test_judge_reexported_under_ensemble() -> None:
     ],
 )
 def test_mapreduce_surface_exposed(name: str) -> None:
-    import synth_panel.ensemble as ens
+    import althing.ensemble as ens
 
     assert hasattr(ens, name), f"public map-reduce surface missing: {name}"
     assert name in ens.__all__, f"{name} must be listed in __all__"
 
 
 def test_mapreduce_reexports_match_synthesis_module() -> None:
-    from synth_panel import ensemble as ens
-    from synth_panel import synthesis as syn
+    from althing import ensemble as ens
+    from althing import synthesis as syn
 
     for name in (
         "synthesize_panel_mapreduce",
@@ -146,7 +146,7 @@ def test_mapreduce_reexports_match_synthesis_module() -> None:
 
 def test_ensemble_run_accepts_seed() -> None:
     """Seed pinning is part of the public ensemble contract."""
-    from synth_panel.ensemble import ensemble_run
+    from althing.ensemble import ensemble_run
 
     sig = inspect.signature(ensemble_run)
     assert "seed" in sig.parameters, (
@@ -156,7 +156,7 @@ def test_ensemble_run_accepts_seed() -> None:
 
 def test_completion_request_carries_seed() -> None:
     """The underlying request shape — what the seed pins onto — is stable."""
-    from synth_panel.llm.models import CompletionRequest
+    from althing.llm.models import CompletionRequest
 
     # `CompletionRequest` is the surface the seed pin lives on. If the
     # field name changes, the ensemble seed contract breaks silently;
@@ -171,14 +171,14 @@ def test_completion_request_carries_seed() -> None:
 
 def test_all_entries_are_actually_exported() -> None:
     """Every name in __all__ must resolve to a real attribute."""
-    import synth_panel.ensemble as ens
+    import althing.ensemble as ens
 
     missing = [name for name in ens.__all__ if not hasattr(ens, name)]
     assert not missing, f"__all__ lists names that don't exist on the module: {missing}"
 
 
 def test_no_private_names_in_all() -> None:
-    import synth_panel.ensemble as ens
+    import althing.ensemble as ens
 
     private = [name for name in ens.__all__ if name.startswith("_")]
     assert not private, f"__all__ must not list private names: {private}"
@@ -197,7 +197,7 @@ def test_no_private_names_in_all() -> None:
 
 def test_synthesize_panel_accepts_pyodide_kwargs() -> None:
     """The new pyodide-safe kwargs are part of the public synthesize_panel contract."""
-    from synth_panel.ensemble import synthesize_panel
+    from althing.ensemble import synthesize_panel
 
     sig = inspect.signature(synthesize_panel)
     for kwarg in ("pyodide_safe_mode", "llm_client", "judge_enabled"):
@@ -215,7 +215,7 @@ def test_synthesize_panel_accepts_pyodide_kwargs() -> None:
 
 def test_async_llm_client_protocol_exposed() -> None:
     """AsyncLLMClient + AsyncCompletion are the public DI surface."""
-    from synth_panel.ensemble import AsyncCompletion, AsyncLLMClient
+    from althing.ensemble import AsyncCompletion, AsyncLLMClient
 
     # AsyncLLMClient must be a runtime-checkable Protocol so consumers
     # can isinstance-check their adapters in tests.
@@ -228,7 +228,7 @@ def test_async_llm_client_protocol_exposed() -> None:
 
 
 def test_pyodide_surface_listed_in_all() -> None:
-    import synth_panel.ensemble as ens
+    import althing.ensemble as ens
 
     for name in ("AsyncCompletion", "AsyncLLMClient"):
         assert name in ens.__all__, f"{name} must be in __all__ for v1.2.0"

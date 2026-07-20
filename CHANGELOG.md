@@ -1,10 +1,28 @@
 # Changelog
 
-All notable changes to synthpanel are documented here.
+All notable changes to althing (formerly synthpanel) are documented here.
 
 For auto-generated release notes, see [GitHub Releases](https://github.com/DataViking-Tech/SynthPanel/releases).
 
 ## [Unreleased]
+
+### Changed
+
+- **Renamed: synthpanel → althing.** The project is now **Althing**
+  (althing.dev) — named for the Norse general assembly. Everything ships
+  under the new name: PyPI distribution `althing`, canonical import
+  `import althing` (retiring the historical `synth_panel`-vs-`synthpanel`
+  module split from #509), CLI `althing`, env vars `ALTHING_*`, container
+  `ghcr.io/dataviking-tech/althing`, and site https://althing.dev.
+  Compatibility for one deprecation cycle, removed next major release:
+  - `import synthpanel` and `import synth_panel` still work (shim modules
+    that re-export `althing`, with a `DeprecationWarning`)
+  - the `synthpanel` console script still works (prints a rename notice)
+  - `SYNTHPANEL_*` environment variables are honored when the `ALTHING_*`
+    equivalent is unset (one-time `DeprecationWarning`)
+  - `pip install synthpanel` remains published as a shim distribution that
+    depends on `althing`
+  Historical changelog entries below retain the old name.
 
 ### Added
 

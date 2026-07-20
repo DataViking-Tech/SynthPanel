@@ -1,6 +1,6 @@
-# SynthPanel Distribution Surfaces + DataViking Elevator Pitch
+# Althing Distribution Surfaces + DataViking Elevator Pitch
 
-**Author:** cpo (synthpanel)
+**Author:** cpo (althing)
 **Date:** 2026-04-19
 **Subject:** (1) AI-era distribution channels beyond MCP, ranked by reach-to-effort. (2) Three candidate DataViking elevator pitches, with a recommendation.
 
@@ -10,7 +10,7 @@
 
 ### What's already shipped (baseline)
 
-Through the MCP server alone, SynthPanel is reachable from: Claude
+Through the MCP server alone, Althing is reachable from: Claude
 Code, Claude Desktop, Cursor, Windsurf, Zed, VS Code (1.102+), OpenAI
 Agents SDK, LangChain / LangGraph, LlamaIndex, CrewAI, Microsoft Agent
 Framework, n8n, and Composio. That is roughly 13 surfaces for the cost
@@ -34,7 +34,7 @@ entirely submission + listing copy.
 | **VS Code MCP registry / marketplace** | 0.5d | VS Code MCP-native users | 1.102+ has auto-discovery; a marketplace listing with one-click config JSON still earns installs. |
 | **Windsurf plugin store** | 0.5d | Windsurf users | Small but native-MCP audience. |
 | **Zed extensions** | 0.5d | Zed's engineer-heavy userbase | Miami crowd is over-indexed on Zed. |
-| **Claude Code /plugin registry** | verify already-live `/plugin install synthpanel` (0.25d) | Claude Code users | Already shipped per CHANGELOG; confirm discoverability. |
+| **Claude Code /plugin registry** | verify already-live `/plugin install althing` (0.25d) | Claude Code users | Already shipped per CHANGELOG; confirm discoverability. |
 
 **Total TIER 1 effort:** ~4 developer-days across one focused sprint.
 This is the single most important block of work after tonight's demo.
@@ -46,14 +46,14 @@ Engineer Miami / agent-builder audience.
 
 | Channel | Effort | Reach | Why it matters |
 |---|---|---|---|
-| **Anthropic Cookbook PR** | 1-2d | Anthropic-developer inbound | A cookbook notebook showing "MCP + sampling + SynthPanel end-to-end" is the single highest-trust referral we can earn. Miami attendees grep the Cookbook. |
+| **Anthropic Cookbook PR** | 1-2d | Anthropic-developer inbound | A cookbook notebook showing "MCP + sampling + Althing end-to-end" is the single highest-trust referral we can earn. Miami attendees grep the Cookbook. |
 | **OpenAI Cookbook PR** | 1-2d | OpenAI-developer inbound | Same argument, different tribe. Use the Agents SDK example we already have. |
-| **Hugging Face Space** | 1-2d | ML/AI researcher crowd | A public Space running `synthpanel mcp-serve` behind a Gradio UI turns the README into a live try-it-now link. HF has outsized reach into the research community. |
-| **ChatGPT custom GPT ("SynthPanel Research Assistant")** | 2-3d | Non-dev PMM/founder audience who live in ChatGPT | This is how we reach buyers who will never `pip install` anything. Wraps `run_quick_poll` as GPT Actions against a hosted endpoint. |
+| **Hugging Face Space** | 1-2d | ML/AI researcher crowd | A public Space running `althing mcp-serve` behind a Gradio UI turns the README into a live try-it-now link. HF has outsized reach into the research community. |
+| **ChatGPT custom GPT ("Althing Research Assistant")** | 2-3d | Non-dev PMM/founder audience who live in ChatGPT | This is how we reach buyers who will never `pip install` anything. Wraps `run_quick_poll` as GPT Actions against a hosted endpoint. |
 | **GPT Store listing** | 0.5d after the GPT exists | GPT Store browse | Free distribution once the GPT is built. |
 | **n8n Community Node (official)** | 2-3d | n8n operator audience | Upgrade from the workflow-JSON example we ship to an official n8n node with first-class UX. n8n's marketplace is where no-code ops people live. |
 | **Zapier MCP connector** | 2-3d | Zapier's entire long tail | Zapier added MCP support in 2026; listing earns a meaningful SMB channel. |
-| **LangChain Hub template** | 1d | LangChain users | Submit a LangGraph template using the synthpanel MCP adapter. Lands in LangChain docs surface area. |
+| **LangChain Hub template** | 1d | LangChain users | Submit a LangGraph template using the althing MCP adapter. Lands in LangChain docs surface area. |
 | **CrewAI community tools repo PR** | 1d | CrewAI users | Same pattern. |
 | **Raycast extension** | 2-3d | Mac power-user audience | "Run a synthetic focus group from Raycast" is novel enough to get organic Twitter pickup. Low priority but high delight. |
 
@@ -62,7 +62,7 @@ this is one engineer's quarter.
 
 ### TIER 3 — Watch / skip
 
-- **Replicate** — SynthPanel is not a model; poor fit. **Skip.**
+- **Replicate** — Althing is not a model; poor fit. **Skip.**
 - **Slack/Discord bots** — customer-specific. Only build if a specific
   design-partner requests it. **Skip for now.**
 - **Notion AI connector** — immature ecosystem, low reach. **Skip.**
@@ -77,7 +77,7 @@ this is one engineer's quarter.
 - awesome-mcp-servers merge
 - mcp.so and Smithery.ai listings
 - VS Code + Cursor + Zed + Windsurf listings
-- `/plugin install synthpanel` verified discoverable
+- `/plugin install althing` verified discoverable
 
 If any of these are missing when a Miami attendee searches post-talk,
 they will assume we are earlier-stage than we are. Ship this block
@@ -93,7 +93,7 @@ inside seven days.
 
 Of those three, **the Anthropic Cookbook PR is the single highest
 ROI post-Miami investment.** It turns every future "how do I use MCP?"
-search into a synthpanel impression.
+search into a althing impression.
 
 ### ROI summary
 
@@ -136,7 +136,7 @@ From https://traitprint.com/wesley-johnson:
 - **Traitprint** — represents real people. A career-identity platform
   that turns a professional into a structured, durable profile ("trait
   print").
-- **SynthPanel** — represents synthetic people. Personas-as-research-
+- **Althing** — represents synthetic people. Personas-as-research-
   instruments for teams that need to learn fast and cheap.
 - **SynthBench** — measures whether synthetic people are any good.
   A benchmark comparing synthetic responses to real human data across
@@ -151,7 +151,7 @@ representations of human signal.
 
 > DataViking Technologies builds AI-native infrastructure for
 > understanding people. Traitprint captures who professionals
-> actually are — durable, structured, portable. SynthPanel runs
+> actually are — durable, structured, portable. Althing runs
 > synthetic focus groups in your terminal or your agent's tool call.
 > SynthBench measures whether those synthetic responses match real
 > humans. Three products, one stack: we turn messy human signal into
@@ -170,7 +170,7 @@ listen; listener may need the second sentence before it clicks.
 
 > Real user research is expensive and slow. DataViking builds the
 > research stack for teams that can't afford either. Traitprint turns
-> a career into a queryable profile in minutes. SynthPanel runs a
+> a career into a queryable profile in minutes. Althing runs a
 > synthetic focus group in seconds, from your terminal or any MCP
 > host. SynthBench tells you how close the synthetic answers are to
 > real humans. One founder, three tools — we ship the infrastructure
@@ -188,7 +188,7 @@ a stretch — Traitprint is identity, not research. Honesty risk.
 ### Candidate pitch 3 — "Measurable AI research, not vibes"
 
 > The AI research industry runs on vibes. We're building the version
-> that runs on measurement. SynthPanel lets any team run synthetic
+> that runs on measurement. Althing lets any team run synthetic
 > focus groups through their existing AI agent. SynthBench publishes
 > an open leaderboard of how well synthetic responses match real
 > human data — so you can pick the model that actually works for
@@ -226,7 +226,7 @@ Why pitch 1 wins:
 
 > DataViking Technologies builds AI-native infrastructure for
 > understanding people. **Traitprint** captures who professionals
-> really are — structured, durable, portable. **SynthPanel** runs
+> really are — structured, durable, portable. **Althing** runs
 > synthetic focus groups from your terminal or any AI agent's tool
 > call. **SynthBench** measures how close those synthetic responses
 > are to real humans — open leaderboard, any provider. One stack:

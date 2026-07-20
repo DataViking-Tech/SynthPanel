@@ -24,8 +24,8 @@ from collections.abc import Callable
 import httpx
 import pytest
 
-from synth_panel.main import main
-from synth_panel.registry import cache as registry_cache
+from althing.main import main
+from althing.registry import cache as registry_cache
 
 SAMPLE_PACK_YAML = """\
 name: Example Pack
@@ -48,7 +48,7 @@ REGISTRY_WITH_ENTRY = {
             "name": "Demo Pack",
             "description": "Example registered pack.",
             "repo": "example/demo",
-            "path": "synthpanel-pack.yaml",
+            "path": "althing-pack.yaml",
             "ref": "main",
             "author": {"github": "example"},
             "added_at": "2026-04-22",
@@ -124,7 +124,7 @@ class TestGhHappyPath:
         _seed_registry_cache(tmp_data_dir, REGISTRY_WITH_ENTRY)
 
         def handler(request: httpx.Request) -> httpx.Response:
-            if request.url.path.endswith("synthpanel-pack.yaml"):
+            if request.url.path.endswith("althing-pack.yaml"):
                 return httpx.Response(200, text=SAMPLE_PACK_YAML)
             return httpx.Response(404)
 
@@ -134,8 +134,8 @@ class TestGhHappyPath:
         captured = capsys.readouterr()
         assert code == 0, captured.err
         assert "Imported pack" in captured.out
-        assert "not in the synthpanel registry" not in captured.err
-        assert "not in the synthpanel registry" not in captured.out
+        assert "not in the althing registry" not in captured.err
+        assert "not in the althing registry" not in captured.out
 
     def test_unregistered_requires_unverified_flag(self, tmp_data_dir, monkeypatch, capsys):
         """Unregistered ``gh:`` source without ``--unverified`` fails with guidance."""
@@ -149,7 +149,7 @@ class TestGhHappyPath:
         code = main(["pack", "import", "gh:stranger/pack"])
         err = capsys.readouterr().err
         assert code == 1
-        assert "not in the synthpanel registry" in err
+        assert "not in the althing registry" in err
         assert "--unverified" in err
 
     def test_unverified_prints_warning_block(self, tmp_data_dir, monkeypatch, capsys):
@@ -164,8 +164,8 @@ class TestGhHappyPath:
         code = main(["pack", "import", "gh:stranger/pack", "--unverified"])
         captured = capsys.readouterr()
         assert code == 0, captured.err
-        assert "not in the synthpanel registry" in captured.err
-        assert "raw.githubusercontent.com/stranger/pack/main/synthpanel-pack.yaml" in captured.err
+        assert "not in the althing registry" in captured.err
+        assert "raw.githubusercontent.com/stranger/pack/main/althing-pack.yaml" in captured.err
         assert "sha256:" in captured.err
         assert "Imported as: pack" in captured.err  # default id from repo slug
         assert "Imported pack" in captured.out
@@ -220,7 +220,7 @@ class TestCollisions:
 
     def test_saved_id_collision_requires_force(self, tmp_data_dir, monkeypatch, capsys):
         """Remote import colliding with a saved pack id refuses without ``--force``."""
-        from synth_panel.mcp.data import save_persona_pack
+        from althing.mcp.data import save_persona_pack
 
         save_persona_pack("Existing", [{"name": "Pre-existing"}], pack_id="mine")
 
@@ -248,7 +248,7 @@ class TestCollisions:
 
     def test_saved_id_collision_accepts_force(self, tmp_data_dir, monkeypatch, capsys):
         """``--force`` overwrites an existing user-saved pack."""
-        from synth_panel.mcp.data import get_persona_pack, save_persona_pack
+        from althing.mcp.data import get_persona_pack, save_persona_pack
 
         save_persona_pack("Existing", [{"name": "Pre-existing"}], pack_id="mine")
 
@@ -294,7 +294,7 @@ class TestFetchFailures:
         _install_httpx_mock(monkeypatch, handler)
 
         # Explicit path bypasses the root-yaml fallback probe in the resolver.
-        code = main(["pack", "import", "gh:ghost/vanished:synthpanel-pack.yaml", "--unverified"])
+        code = main(["pack", "import", "gh:ghost/vanished:althing-pack.yaml", "--unverified"])
         err = capsys.readouterr().err
         assert code == 1
         assert "private" in err.lower()
@@ -332,7 +332,7 @@ class TestLocalPathRegression:
         assert "Imported pack 'Local'" in captured.out
         # Remote-only features must not appear in the local branch.
         assert "Checksum:" not in captured.err
-        assert "synthpanel registry" not in captured.err
+        assert "althing registry" not in captured.err
 
 
 # ---------------------------------------------------------------------------
@@ -353,7 +353,7 @@ class TestBareRegistryId:
         _seed_registry_cache(tmp_data_dir, REGISTRY_WITH_ENTRY)
 
         def handler(request: httpx.Request) -> httpx.Response:
-            if request.url.path.endswith("synthpanel-pack.yaml"):
+            if request.url.path.endswith("althing-pack.yaml"):
                 return httpx.Response(200, text=SAMPLE_PACK_YAML)
             return httpx.Response(404)
 
@@ -364,12 +364,12 @@ class TestBareRegistryId:
         assert code == 0, captured.err
         assert "Imported pack" in captured.out
         # Resolved from a registered entry: no --unverified gate, no warning.
-        assert "not in the synthpanel registry" not in captured.err
+        assert "not in the althing registry" not in captured.err
         assert "--unverified" not in captured.err
 
     def test_bare_registry_id_installs_under_registry_id(self, tmp_data_dir, monkeypatch):
         """The installed pack id equals the registry id so `--personas <id>` resolves."""
-        from synth_panel.mcp.data import get_persona_pack
+        from althing.mcp.data import get_persona_pack
 
         _seed_registry_cache(tmp_data_dir, REGISTRY_WITH_ENTRY)
 
@@ -387,7 +387,7 @@ class TestBareRegistryId:
 
     def test_bare_registry_id_respects_id_override(self, tmp_data_dir, monkeypatch):
         """An explicit --id overrides the default of using the registry id."""
-        from synth_panel.mcp.data import get_persona_pack
+        from althing.mcp.data import get_persona_pack
 
         _seed_registry_cache(tmp_data_dir, REGISTRY_WITH_ENTRY)
 
@@ -417,7 +417,7 @@ class TestBareRegistryId:
 
     def test_path_like_source_is_not_treated_as_registry_id(self):
         """Helper guard: path-like inputs never trigger a registry probe."""
-        from synth_panel.cli.commands import _looks_like_pack_id
+        from althing.cli.commands import _looks_like_pack_id
 
         assert _looks_like_pack_id("icp-demo") is True
         assert _looks_like_pack_id("pricing-discovery") is True

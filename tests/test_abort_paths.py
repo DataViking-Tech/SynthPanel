@@ -24,25 +24,25 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from synth_panel.checkpoint import (
+from althing.checkpoint import (
     CheckpointWriter,
     checkpoint_dir_for,
     load_checkpoint,
     new_run_id,
 )
-from synth_panel.cli.commands import _classify_total_failure_abort_reason
-from synth_panel.cost import TokenUsage as CostTokenUsage
-from synth_panel.llm.errors import LLMError, LLMErrorCategory
-from synth_panel.llm.models import CompletionResponse, StopReason, TextBlock
-from synth_panel.llm.models import TokenUsage as LLMTokenUsage
-from synth_panel.main import main
-from synth_panel.orchestrator import (
+from althing.cli.commands import _classify_total_failure_abort_reason
+from althing.cost import TokenUsage as CostTokenUsage
+from althing.llm.errors import LLMError, LLMErrorCategory
+from althing.llm.models import CompletionResponse, StopReason, TextBlock
+from althing.llm.models import TokenUsage as LLMTokenUsage
+from althing.main import main
+from althing.orchestrator import (
     PanelistResult,
     RunAbortedError,
     run_panel_parallel,
 )
-from synth_panel.persistence import ConversationMessage
-from synth_panel.runtime import TurnSummary
+from althing.persistence import ConversationMessage
+from althing.runtime import TurnSummary
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -210,8 +210,8 @@ class TestOrchestratorSigint:
 # ---------------------------------------------------------------------------
 
 
-@patch("synth_panel.orchestrator.AgentRuntime")
-@patch("synth_panel.cli.commands.LLMClient")
+@patch("althing.orchestrator.AgentRuntime")
+@patch("althing.cli.commands.LLMClient")
 def test_cli_cost_exceeded_emits_partial_json(
     _mock_client_cls: MagicMock,
     mock_runtime_cls: MagicMock,
@@ -267,8 +267,8 @@ def test_cli_cost_exceeded_emits_partial_json(
         assert "responses" in row
 
 
-@patch("synth_panel.orchestrator.AgentRuntime")
-@patch("synth_panel.cli.commands.LLMClient")
+@patch("althing.orchestrator.AgentRuntime")
+@patch("althing.cli.commands.LLMClient")
 def test_cli_sigint_emits_partial_json(
     _mock_client_cls: MagicMock,
     mock_runtime_cls: MagicMock,
@@ -331,8 +331,8 @@ def test_cli_sigint_emits_partial_json(
     assert "interrupted" in captured.err.lower() or "sigint" in captured.err.lower()
 
 
-@patch("synth_panel.orchestrator.AgentRuntime")
-@patch("synth_panel.cli.commands.LLMClient")
+@patch("althing.orchestrator.AgentRuntime")
+@patch("althing.cli.commands.LLMClient")
 def test_cli_rate_limit_exhausted_emits_partial_json(
     _mock_client_cls: MagicMock,
     mock_runtime_cls: MagicMock,
@@ -385,8 +385,8 @@ def test_cli_rate_limit_exhausted_emits_partial_json(
     assert tf.get("sample_errors"), "total_failure envelope must carry sample errors"
 
 
-@patch("synth_panel.orchestrator.AgentRuntime")
-@patch("synth_panel.cli.commands.LLMClient")
+@patch("althing.orchestrator.AgentRuntime")
+@patch("althing.cli.commands.LLMClient")
 def test_cli_total_failure_non_rate_limit_emits_total_failure_reason(
     _mock_client_cls: MagicMock,
     mock_runtime_cls: MagicMock,

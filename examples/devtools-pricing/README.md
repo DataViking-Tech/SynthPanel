@@ -54,7 +54,7 @@ You get four kinds of signal:
 ## Run it
 
 ```bash
-synthpanel panel run \
+althing panel run \
   --personas examples/devtools-pricing/personas.yaml \
   --instrument examples/devtools-pricing/instrument.yaml
 ```
@@ -62,25 +62,25 @@ synthpanel panel run \
 Render the routing graph (4-way branch from discovery):
 
 ```bash
-synthpanel instruments graph \
+althing instruments graph \
   examples/devtools-pricing/instrument.yaml --format mermaid
 ```
 
 Validate without running (catches DAG / theme issues):
 
 ```bash
-synthpanel instruments install \
+althing instruments install \
   examples/devtools-pricing/instrument.yaml --name devtools-pricing-test
 ```
 
 ## Pack substitution
 
-The bundled [`developer.yaml`](../../src/synth_panel/packs/developer.yaml)
+The bundled [`developer.yaml`](../../src/althing/packs/developer.yaml)
 pack covers similar ground with 16 personas spanning a wider stack.
 For richer breadth:
 
 ```bash
-synthpanel panel run \
+althing panel run \
   --personas-pack developer \
   --instrument examples/devtools-pricing/instrument.yaml
 ```

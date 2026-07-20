@@ -1,4 +1,4 @@
-"""Tests for synth_panel.mcp.data persistence layer."""
+"""Tests for althing.mcp.data persistence layer."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ def _data_dir(tmp_path, monkeypatch):
 
 
 # --- import after env is set so _data_dir() picks it up ---
-from synth_panel.mcp.data import (
+from althing.mcp.data import (
     PackValidationError,
     get_panel_result,
     get_persona_pack,
@@ -32,7 +32,7 @@ from synth_panel.mcp.data import (
     update_panel_result,
     validate_persona_pack,
 )
-from synth_panel.persistence import ConversationMessage, Session
+from althing.persistence import ConversationMessage, Session
 
 # ---------------------------------------------------------------------------
 # Persona packs
@@ -661,7 +661,7 @@ class TestUpdatePanelResult:
         update_panel_result(rid, {"model": "haiku", "extended": True})
 
         # Snapshot exists with original data
-        from synth_panel.mcp.data import _results_dir
+        from althing.mcp.data import _results_dir
 
         snapshot = _results_dir() / f"{rid}.pre-extend.json"
         assert snapshot.exists()
@@ -690,7 +690,7 @@ class TestUpdatePanelResult:
         update_panel_result(rid, {"version": 2})
 
         # Snapshot should be from the version=1 update, not original
-        from synth_panel.mcp.data import _results_dir
+        from althing.mcp.data import _results_dir
 
         snapshot = _results_dir() / f"{rid}.pre-extend.json"
         snap_data = json.loads(snapshot.read_text())
@@ -708,7 +708,7 @@ class TestInstrumentPacks:
             "name": "pricing-probe",
             "version": "1.0.0",
             "description": "Branching probe for pricing-sensitive panels",
-            "author": "synthpanel",
+            "author": "althing",
             "instrument": {
                 "version": 3,
                 "rounds": [
@@ -724,7 +724,7 @@ class TestInstrumentPacks:
         listing = list_instrument_packs()
         saved = [p for p in listing if p["id"] == "pricing-probe"]
         assert len(saved) == 1
-        assert saved[0]["author"] == "synthpanel"
+        assert saved[0]["author"] == "althing"
 
         loaded = load_instrument_pack("pricing-probe")
         # round-trip preserves the body

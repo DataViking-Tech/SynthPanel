@@ -1,4 +1,4 @@
-"""Tests for `synthpanel plugin lint` (sy-0rr)."""
+"""Tests for `althing plugin lint` (sy-0rr)."""
 
 from __future__ import annotations
 
@@ -10,10 +10,10 @@ from pathlib import Path
 import pytest
 import yaml
 
-from synth_panel.cli.commands import handle_plugin_lint
-from synth_panel.cli.output import OutputFormat
-from synth_panel.cli.parser import build_parser
-from synth_panel.plugins.lint import lint_plugin
+from althing.cli.commands import handle_plugin_lint
+from althing.cli.output import OutputFormat
+from althing.cli.parser import build_parser
+from althing.plugins.lint import lint_plugin
 
 FIXTURES = Path(__file__).parent / "fixtures" / "plugins"
 
@@ -229,7 +229,7 @@ def test_cli_smoke_good_fixture() -> None:
         [
             sys.executable,
             "-m",
-            "synth_panel",
+            "althing",
             "plugin",
             "lint",
             str(FIXTURES / "good"),
@@ -247,7 +247,7 @@ def test_cli_smoke_bad_fixture_nonzero() -> None:
         [
             sys.executable,
             "-m",
-            "synth_panel",
+            "althing",
             "plugin",
             "lint",
             str(FIXTURES / "bad-hooks"),

@@ -2,15 +2,15 @@
 name: name-test
 description: Quickly test 1-3 candidate product or feature names with a synthetic panel — surfaces confusion, pronounceability, and memorability concerns in one pass.
 allowed-tools:
-  - mcp__synth_panel__run_quick_poll
-  - mcp__synth_panel__run_panel
-  - mcp__synth_panel__list_persona_packs
-  - mcp__synth_panel__get_persona_pack
-  - mcp__synth_panel__list_instrument_packs
-  - mcp__synth_panel__get_instrument_pack
+  - mcp__althing__run_quick_poll
+  - mcp__althing__run_panel
+  - mcp__althing__list_persona_packs
+  - mcp__althing__get_persona_pack
+  - mcp__althing__list_instrument_packs
+  - mcp__althing__get_instrument_pack
 ---
 
-You are running a **quick name test** using the synthpanel MCP tools.
+You are running a **quick name test** using the althing MCP tools.
 
 ## What You Do
 
@@ -23,10 +23,10 @@ You help the user decide between candidate names for a product, feature, or bran
 
 ## Available MCP Tools
 
-- **`mcp__synth_panel__run_quick_poll`** — Single-question poll across personas (fastest, cheapest).
-- **`mcp__synth_panel__run_panel`** — Full panel run using the bundled `name-test` branching instrument that probes meaning, pronounceability, or memorability based on first reactions. Its opening question has a `{candidates}` placeholder; fill it with the `vars` argument (see Step 2).
-- **`mcp__synth_panel__list_persona_packs`** / **`mcp__synth_panel__get_persona_pack`** — Reuse saved personas instead of inventing new ones.
-- **`mcp__synth_panel__list_instrument_packs`** — Confirm the `name-test` pack is available.
+- **`mcp__althing__run_quick_poll`** — Single-question poll across personas (fastest, cheapest).
+- **`mcp__althing__run_panel`** — Full panel run using the bundled `name-test` branching instrument that probes meaning, pronounceability, or memorability based on first reactions. Its opening question has a `{candidates}` placeholder; fill it with the `vars` argument (see Step 2).
+- **`mcp__althing__list_persona_packs`** / **`mcp__althing__get_persona_pack`** — Reuse saved personas instead of inventing new ones.
+- **`mcp__althing__list_instrument_packs`** — Confirm the `name-test` pack is available.
 
 ## Workflow
 
@@ -40,7 +40,7 @@ Ask for:
 ### Step 2: Choose Depth
 
 - **Quick gut check** → `run_quick_poll` with a question that has the description and candidate names written directly into the `question` string, e.g. *"Which of these names best fits a budget travel app — Wander, Roamly, Tr9? Why?"*
-- **Full branching evaluation** → `run_panel` with `instrument_pack="name-test"` and `vars={"candidates": "Name A, Name B"}` — the comma-separated candidate names are substituted into the opening question's `{candidates}` placeholder before the panel runs. (CLI equivalent: `synthpanel panel run --instrument name-test --var 'candidates=Name A, Name B'`.) If you omit `vars`, the call fails fast with a typed `INVALID_TOOL_ARG` error naming the missing placeholder. The instrument branches into meaning-probe, pronounce-probe, or memorability-probe based on what surfaces first.
+- **Full branching evaluation** → `run_panel` with `instrument_pack="name-test"` and `vars={"candidates": "Name A, Name B"}` — the comma-separated candidate names are substituted into the opening question's `{candidates}` placeholder before the panel runs. (CLI equivalent: `althing panel run --instrument name-test --var 'candidates=Name A, Name B'`.) If you omit `vars`, the call fails fast with a typed `INVALID_TOOL_ARG` error naming the missing placeholder. The instrument branches into meaning-probe, pronounce-probe, or memorability-probe based on what surfaces first.
 
 ### Step 3: Run
 

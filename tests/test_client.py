@@ -7,9 +7,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from synth_panel.llm.client import LLMClient
-from synth_panel.llm.errors import LLMError, LLMErrorCategory
-from synth_panel.llm.models import (
+from althing.llm.client import LLMClient
+from althing.llm.errors import LLMError, LLMErrorCategory
+from althing.llm.models import (
     CompletionRequest,
     CompletionResponse,
     ImageBlock,
@@ -43,7 +43,7 @@ class TestProviderResolution:
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-test"}):
             client = LLMClient()
             provider = client._resolve_provider("claude-sonnet-4-6-20250414")
-            from synth_panel.llm.providers.anthropic import AnthropicProvider
+            from althing.llm.providers.anthropic import AnthropicProvider
 
             assert isinstance(provider, AnthropicProvider)
 
@@ -52,7 +52,7 @@ class TestProviderResolution:
         with patch.dict(os.environ, {"XAI_API_KEY": "xai-test"}):
             client = LLMClient()
             provider = client._resolve_provider("grok-3")
-            from synth_panel.llm.providers.xai import XAIProvider
+            from althing.llm.providers.xai import XAIProvider
 
             assert isinstance(provider, XAIProvider)
 
@@ -61,7 +61,7 @@ class TestProviderResolution:
         with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}):
             client = LLMClient()
             provider = client._resolve_provider("openrouter/meta-llama/llama-3")
-            from synth_panel.llm.providers.openrouter import OpenRouterProvider
+            from althing.llm.providers.openrouter import OpenRouterProvider
 
             assert isinstance(provider, OpenRouterProvider)
 
@@ -78,7 +78,7 @@ class TestProviderResolution:
         with patch.dict(os.environ, env, clear=False):
             client = LLMClient()
             provider = client._resolve_provider("some-unknown-model")
-            from synth_panel.llm.providers.openai_compat import OpenAICompatibleProvider
+            from althing.llm.providers.openai_compat import OpenAICompatibleProvider
 
             assert isinstance(provider, OpenAICompatibleProvider)
 
@@ -102,7 +102,7 @@ class TestProviderResolution:
 class TestAliasResolution:
     def test_alias_is_resolved_in_send(self):
         """Short aliases like 'sonnet' are resolved before provider lookup."""
-        from synth_panel.llm.aliases import resolve_alias
+        from althing.llm.aliases import resolve_alias
 
         canonical = resolve_alias("sonnet")
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-test"}):
@@ -123,7 +123,7 @@ class TestAliasResolution:
 class TestLocalModelResolution:
     def test_ollama_prefix_creates_local_provider(self):
         """ollama:llama3 creates an OpenAI-compat provider with Ollama base URL."""
-        from synth_panel.llm.providers.openai_compat import OpenAICompatibleProvider
+        from althing.llm.providers.openai_compat import OpenAICompatibleProvider
 
         client = LLMClient()
         mock_provider = MagicMock()
@@ -139,7 +139,7 @@ class TestLocalModelResolution:
 
     def test_local_prefix_creates_lmstudio_provider(self):
         """local:phi3 creates an OpenAI-compat provider with LM Studio base URL."""
-        from synth_panel.llm.providers.openai_compat import OpenAICompatibleProvider
+        from althing.llm.providers.openai_compat import OpenAICompatibleProvider
 
         client = LLMClient()
         prepared = client._prepare(_simple_request(model="local:phi3"))

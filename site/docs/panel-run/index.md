@@ -1,4 +1,4 @@
-# panel run Reference — synthpanel · Run synthetic focus groups with any LLM
+# panel run Reference — althing · Run synthetic focus groups with any LLM
 
 [DataViking](https://dataviking.tech)
 
@@ -6,7 +6,7 @@ Docs · panel run
 
 # panel run reference
 
-Full reference for `synthpanel panel run`. Covers the advanced flags for multi-model panels, persona variants, structured extraction, synthesis tuning, convergence auto-stop, checkpointing, and SynthBench integration.
+Full reference for `althing panel run`. Covers the advanced flags for multi-model panels, persona variants, structured extraction, synthesis tuning, convergence auto-stop, checkpointing, and SynthBench integration.
 
 ## Multi-model — `--models`, `--blend`
 
@@ -17,7 +17,7 @@ Full reference for `synthpanel panel run`. Covers the advanced flags for multi-m
 A spec with colons splits the panel across models in the given ratio. Weights are normalized — `a:2,b:3` and `a:0.4,b:0.6` behave identically. Per-persona `model:` fields in the YAML always win over the `--models` assignment.
 
 ```
-synthpanel panel run \
+althing panel run \
   --personas examples/personas.yaml \
   --instrument examples/survey.yaml \
   --models 'haiku:0.5,gemini-2.5-flash:0.5'
@@ -41,7 +41,7 @@ Totals: haiku=3, gemini-2.5-flash=3
 A spec without colons runs the full panel once per model. Combine with `--blend` to weight-average the response distributions across models for each question.
 
 ```
-synthpanel panel run \
+althing panel run \
   --personas examples/personas.yaml \
   --instrument pricing-discovery \
   --models 'haiku,sonnet,gemini-2.5-flash' \
@@ -62,7 +62,7 @@ With 6 personas and 3 models, this runs 18 sessions total. `--blend` then comput
 Generate N LLM-perturbed variants per persona before running the panel. The original personas are replaced by `N × M` variants (M = number of original personas). Each variant perturbs one axis — trait swap, mood context, demographic shift, or background rephrase — via a single LLM call per variant.
 
 ```
-synthpanel panel run \
+althing panel run \
   --personas small-panel.yaml \    # 5 personas
   --instrument survey.yaml \
   --variants 4                     # → 20 total panelists
@@ -75,7 +75,7 @@ Useful for stress-testing whether results are stable across plausible persona pe
 Append additional YAML files to `--personas`. Repeatable. Files are merged in order; later entries override earlier ones on name collision (controlled by `--personas-merge-on-collision`).
 
 ```
-synthpanel panel run \
+althing panel run \
   --personas base-panel.yaml \
   --personas-merge extra-personas.yaml \
   --personas-merge regional-overrides.yaml \
@@ -93,7 +93,7 @@ synthpanel panel run \
 Unlike `--schema` (which forces structured-only output and replaces free text), `--extract-schema` preserves the full free-text response and adds a second LLM call that extracts structured data into an `extraction` key alongside the raw `response`.
 
 ```
-synthpanel panel run \
+althing panel run \
   --personas panel.yaml \
   --instrument feedback-survey.yaml \
   --extract-schema '{"type":"object","properties":{"sentiment":{"type":"string","enum":["positive","neutral","negative"]},"themes":{"type":"array","items":{"type":"string"}}}}'
@@ -130,7 +130,7 @@ In `map-reduce` mode, a single question whose responses overflow context normall
 By default the orchestrator fires one concurrent request per panelist (bounded by `--max-concurrent`). `--rate-limit-rps` adds a token-bucket that smooths bursts — useful when a provider enforces a requests-per-second limit on top of a concurrency cap.
 
 ```
-synthpanel panel run \
+althing panel run \
   --personas large-panel.yaml \
   --instrument survey.yaml \
   --max-concurrent 20 \
@@ -151,7 +151,7 @@ For long or expensive runs, checkpointing writes per-panelist progress to disk s
 ### Starting a checkpointed run
 
 ```
-synthpanel panel run \
+althing panel run \
   --personas panel.yaml \
   --instrument survey.yaml \
   --checkpoint-dir /tmp/runs \    # passing the flag opts in to checkpointing
@@ -163,14 +163,14 @@ The run id is printed to stderr. Each checkpoint is written to `<checkpoint-dir>
 ### Resuming
 
 ```
-synthpanel panel run --resume <run-id>
+althing panel run --resume <run-id>
 ```
 
-Without `--checkpoint-dir`, resume looks up the run under `$SYNTHPANEL_CHECKPOINT_ROOT` or `~/.synthpanel/checkpoints`. When `--personas` and `--instrument` are omitted they are recovered from the checkpoint's saved CLI args. The resume refuses to start if the current config (model, temperature, questions) does not match the checkpointed config — pass `--allow-drift` to downgrade this to a warning and continue (statistically inconsistent results).
+Without `--checkpoint-dir`, resume looks up the run under `$ALTHING_CHECKPOINT_ROOT` or `~/.althing/checkpoints`. When `--personas` and `--instrument` are omitted they are recovered from the checkpoint's saved CLI args. The resume refuses to start if the current config (model, temperature, questions) does not match the checkpointed config — pass `--allow-drift` to downgrade this to a warning and continue (statistically inconsistent results).
 
 | Flag | Default | Description |
 |---|---|---|
-| `--checkpoint-dir PATH` | off (no snapshots) | Directory for per-run snapshots. Setting this opts in to checkpointing; omit it (and `--resume`) to run without snapshots. A `--resume` without this flag reads from `$SYNTHPANEL_CHECKPOINT_ROOT` or `~/.synthpanel/checkpoints`. |
+| `--checkpoint-dir PATH` | off (no snapshots) | Directory for per-run snapshots. Setting this opts in to checkpointing; omit it (and `--resume`) to run without snapshots. A `--resume` without this flag reads from `$ALTHING_CHECKPOINT_ROOT` or `~/.althing/checkpoints`. |
 | `--checkpoint-every N` | 25 | Flush a checkpoint every N completed panelists. |
 | `--resume RUN_ID` | — | Resume a checkpointed run. Skips already-completed panelists. |
 | `--allow-drift` | off | With `--resume`: downgrade config-mismatch errors to warnings. |
@@ -183,7 +183,7 @@ At large-n scales most of the token budget goes toward diminishing returns — o
 Convergence tracking applies only to **bounded** question types (Likert, yes/no, pick-one, any question with a JSON Schema `enum`). Free-text questions are not tracked.
 
 ```
-synthpanel panel run \
+althing panel run \
   --personas panel.yaml \
   --instrument pricing-discovery \
   --convergence-check-every 20 \  # compute JSD every 20 panelists
@@ -219,7 +219,7 @@ When the run finishes the JSON output contains a `convergence` key:
 | `--convergence-min-n N` | 50 | Minimum panelists before `--auto-stop` is allowed to fire. |
 | `--convergence-m N` | 3 | Consecutive checks below epsilon required to declare convergence. |
 | `--convergence-log PATH` | stderr | Write each convergence check as a JSON line to PATH (for dashboards). |
-| `--convergence-baseline DATASET:Q` | — | Load a human baseline convergence curve from SynthBench and include in the report. Requires `pip install 'synthpanel[convergence]'`. |
+| `--convergence-baseline DATASET:Q` | — | Load a human baseline convergence curve from SynthBench and include in the report. Requires `pip install 'althing[convergence]'`. |
 
 ## SynthBench — `--calibrate-against`, `--best-model-for`, `--submit-to-synthbench`
 
@@ -227,10 +227,10 @@ When the run finishes the JSON output contains a `convergence` key:
 
 Attaches inline calibration to a panel run by comparing the extracted response distribution against a published human baseline. Forces convergence tracking; pair with `--convergence-check-every` to control cadence (it is never implicit). v1 supports `gss` and `ntia`.
 
-Auto-derives a pick-one extractor schema from the baseline when option count ≤ 5; otherwise pass `--extract-schema` explicitly. Requires `pip install 'synthpanel[convergence]'`.
+Auto-derives a pick-one extractor schema from the baseline when option count ≤ 5; otherwise pass `--extract-schema` explicitly. Requires `pip install 'althing[convergence]'`.
 
 ```
-synthpanel panel run \
+althing panel run \
   --personas panel.yaml \
   --instrument happiness-probe \
   --calibrate-against gss:HAPPY \
@@ -242,13 +242,13 @@ synthpanel panel run \
 Consult the SynthBench leaderboard and use the top-ranked model for the given topic instead of the default. A recommendation line is printed to stderr before the run. Overrides `--model`; mutually exclusive with `--models`.
 
 ```
-synthpanel panel run \
+althing panel run \
   --personas panel.yaml \
   --instrument survey.yaml \
   --best-model-for 'political-opinion:globalopinionqa'
 ```
 
-Format: `TOPIC` (ranked against the default dataset `globalopinionqa`), `TOPIC:DATASET` (specific dataset), or `:DATASET` (rank by SPS across the full dataset). The leaderboard is cached for 24 h at `~/.synthpanel/synthbench-cache.json`.
+Format: `TOPIC` (ranked against the default dataset `globalopinionqa`), `TOPIC:DATASET` (specific dataset), or `:DATASET` (rank by SPS across the full dataset). The leaderboard is cached for 24 h at `~/.althing/synthbench-cache.json`.
 
 ### --submit-to-synthbench
 
@@ -257,7 +257,7 @@ After a calibrated run, upload the per-question JSD and distributions to the Syn
 ```
 export SYNTHBENCH_API_KEY=sk_synthbench_...
 
-synthpanel panel run \
+althing panel run \
   --personas panel.yaml \
   --instrument happiness-probe \
   --calibrate-against gss:HAPPY \
@@ -265,11 +265,11 @@ synthpanel panel run \
   --submit-to-synthbench
 ```
 
-The submission step is non-fatal — a slow or rejecting SynthBench emits a warning but does not affect the panel run's exit code or output. See [docs/synthbench-integration.md](https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/synthbench-integration.md) for the privacy model and what gets uploaded.
+The submission step is non-fatal — a slow or rejecting SynthBench emits a warning but does not affect the panel run's exit code or output. See [docs/synthbench-integration.md](https://github.com/DataViking-Tech/Althing/blob/main/docs/synthbench-integration.md) for the privacy model and what gets uploaded.
 
 | Flag | Default | Description |
 |---|---|---|
-| `--calibrate-against DATASET:Q` | — | Inline calibration vs a human baseline. v1 allowlist: `gss`, `ntia`. Requires `synthpanel[convergence]`. |
+| `--calibrate-against DATASET:Q` | — | Inline calibration vs a human baseline. v1 allowlist: `gss`, `ntia`. Requires `althing[convergence]`. |
 | `--best-model-for TOPIC[:DATASET]` | — | Use the SynthBench leaderboard top model for the topic. Overrides `--model`. |
 | `--submit-to-synthbench` | off | Upload calibration results to SynthBench after the run. Requires `--calibrate-against` and `SYNTHBENCH_API_KEY`. |
 | `--yes` | off | Bypass the SynthBench consent prompt (for CI/non-interactive use). |
@@ -288,13 +288,13 @@ Calibrate a persona pack against a human baseline and embed the JSD into the pac
 
 Run panels from your AI editor via the MCP `run_panel` tool.
 
-### [Ensemble deep-dive](https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/ensemble.md)
+### [Ensemble deep-dive](https://github.com/DataViking-Tech/Althing/blob/main/docs/ensemble.md)
 
 →
 
 Full algorithm, edge cases, and MCP equivalents for `--models` and `--blend`.
 
-### [Convergence deep-dive](https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/convergence.md)
+### [Convergence deep-dive](https://github.com/DataViking-Tech/Althing/blob/main/docs/convergence.md)
 
 →
 

@@ -1,12 +1,12 @@
-# CLI subcommand coverage manifest for synthpanel.dev
+# CLI subcommand coverage manifest for althing.dev
 #
-# This file lists every top-level subcommand exposed by `synthpanel --help`.
+# This file lists every top-level subcommand exposed by `althing --help`.
 # The CI job scripts/check_site_cli_sync.py compares this list against the
 # live --help output and fails the build on any drift.
 #
 # Workflow when adding a new subcommand:
-#   1. Add the subcommand to the CLI (src/synth_panel/cli/parser.py)
-#   2. Document it on the site (synthpanel.dev) or file a docs ticket
+#   1. Add the subcommand to the CLI (src/althing/cli/parser.py)
+#   2. Document it on the site (althing.dev) or file a docs ticket
 #   3. Add the subcommand name to this file to keep CI green
 #
 # Removing a subcommand: delete its line here.

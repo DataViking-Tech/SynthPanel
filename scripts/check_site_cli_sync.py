@@ -1,7 +1,7 @@
-"""Check that synthpanel's top-level subcommand list matches the site coverage manifest.
+"""Check that althing's top-level subcommand list matches the site coverage manifest.
 
 Run after installing the package (pip install -e .) to verify that every
-subcommand in `synthpanel --help` is tracked in site/cli-coverage.txt.
+subcommand in `althing --help` is tracked in site/cli-coverage.txt.
 Exits 0 on match, 1 on drift, 2 on parse failure.
 """
 
@@ -18,7 +18,7 @@ MANIFEST_PATH = REPO_ROOT / "site" / "cli-coverage.txt"
 
 def get_cli_subcommands() -> set[str]:
     result = subprocess.run(
-        [sys.executable, "-m", "synth_panel", "--help"],
+        [sys.executable, "-m", "althing", "--help"],
         capture_output=True,
         text=True,
         check=False,
@@ -48,7 +48,7 @@ def main() -> None:
         print(f"OK: CLI subcommands match manifest ({len(cli)} subcommands)")
         return
 
-    print("DRIFT DETECTED between `synthpanel --help` and site/cli-coverage.txt")
+    print("DRIFT DETECTED between `althing --help` and site/cli-coverage.txt")
     print()
     if only_in_cli:
         print("New subcommands not in manifest (document on site then add to site/cli-coverage.txt):")

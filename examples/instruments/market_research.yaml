@@ -1,10 +1,10 @@
 # market_research: competitive preference, purchase intent, pricing sensitivity.
 #
 # Usage:
-#   synthpanel panel run --personas examples/personas.yaml --instrument examples/instruments/market_research.yaml --var problem="expense tracking"
+#   althing panel run --personas examples/personas.yaml --instrument examples/instruments/market_research.yaml --var problem="expense tracking"
 #
 # Also available as a bundled pack:
-#   synthpanel panel run --personas examples/personas.yaml --instrument market-research --var problem="expense tracking"
+#   althing panel run --personas examples/personas.yaml --instrument market-research --var problem="expense tracking"
 instrument:
   version: 3
   rounds:

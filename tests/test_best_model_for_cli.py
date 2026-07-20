@@ -3,7 +3,7 @@
 These exercise ``_apply_best_model_for``: the bridge between a SynthBench
 :class:`Recommendation` and ``args.model``. The core regression guarded here
 is that a non-runnable recommendation (a product/ensemble display label like
-``"SynthPanel (Gemini Flash Lite)"``) must NOT be stamped onto ``--model`` —
+``"Althing (Gemini Flash Lite)"``) must NOT be stamped onto ``--model`` —
 it has to be refused with an actionable message and fall back to the existing
 selection, instead of deferring an opaque provider "not a valid model ID"
 failure to call time.
@@ -16,9 +16,9 @@ from datetime import datetime, timezone
 
 import pytest
 
-from synth_panel import synthbench
-from synth_panel.cli.commands import _apply_best_model_for
-from synth_panel.synthbench import Recommendation
+from althing import synthbench
+from althing.cli.commands import _apply_best_model_for
+from althing.synthbench import Recommendation
 
 
 def _rec(*, model: str, runnable: bool, is_ensemble: bool = False, framework: str | None = None) -> Recommendation:
@@ -58,7 +58,7 @@ def test_nonrunnable_recommendation_is_refused_not_stamped(
         synthbench,
         "recommend",
         lambda spec: _rec(
-            model="SynthPanel (Gemini Flash Lite)",
+            model="Althing (Gemini Flash Lite)",
             runnable=False,
             is_ensemble=True,
             framework="product",
@@ -74,7 +74,7 @@ def test_nonrunnable_recommendation_is_refused_not_stamped(
 
     err = capsys.readouterr().err
     # The display label is surfaced verbatim and the message is actionable.
-    assert "SynthPanel (Gemini Flash Lite)" in err
+    assert "Althing (Gemini Flash Lite)" in err
     assert "display label" in err
     assert "--model" in err
 
@@ -98,10 +98,10 @@ def test_display_label_with_model_id_is_stamped_end_to_end(
     board = {
         "entries": [
             {
-                "config_id": "synthpanel-gemini-flash-lite-tdefault-ba37570c",
-                "model": "SynthPanel (Gemini Flash Lite)",
+                "config_id": "althing-gemini-flash-lite-tdefault-ba37570c",
+                "model": "Althing (Gemini Flash Lite)",
                 "model_id": "google/gemini-2.5-flash-lite",
-                "provider": "SynthPanel (Gemini Flash Lite)",
+                "provider": "Althing (Gemini Flash Lite)",
                 "dataset": "globalopinionqa",
                 "is_ensemble": False,
                 "sps": 0.901,

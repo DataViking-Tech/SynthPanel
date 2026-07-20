@@ -47,23 +47,23 @@ def _block_network(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPat
 
 @pytest.fixture(autouse=True)
 def _isolate_credentials_store(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Point the SynthPanel credential store at a unique tmp path per test.
+    """Point the Althing credential store at a unique tmp path per test.
 
-    Prevents a developer's real ``~/.config/synthpanel/credentials.json``
+    Prevents a developer's real ``~/.config/althing/credentials.json``
     from bleeding into tests that assume ``MISSING_CREDENTIALS`` (sp-lve).
     Individual tests can still write to the path by calling
-    :func:`synth_panel.credentials.save_credential`.
+    :func:`althing.credentials.save_credential`.
     """
-    sandbox: Path = tmp_path_factory.mktemp("synthpanel-creds")
-    monkeypatch.setenv("SYNTHPANEL_CREDENTIALS_PATH", str(sandbox / "credentials.json"))
+    sandbox: Path = tmp_path_factory.mktemp("althing-creds")
+    monkeypatch.setenv("ALTHING_CREDENTIALS_PATH", str(sandbox / "credentials.json"))
 
 
 @pytest.fixture(autouse=True)
 def _restore_sigpipe_disposition():
     """Snapshot and restore the process-global SIGPIPE handler around each test.
 
-    ``synth_panel.main.main`` and its ``_quiet_broken_pipe`` helper deliberately
-    install ``SIGPIPE=SIG_DFL`` so piped CLI output (``synthpanel … | head``)
+    ``althing.main.main`` and its ``_quiet_broken_pipe`` helper deliberately
+    install ``SIGPIPE=SIG_DFL`` so piped CLI output (``althing … | head``)
     ends silently like a normal Unix tool. The disposition is *process-global*,
     so a test that calls ``main()`` or ``_quiet_broken_pipe()`` can leave
     SIG_DFL installed for the remainder of the pytest session. After that, any

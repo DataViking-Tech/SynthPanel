@@ -6,14 +6,14 @@
 
 **Two internal substitution engines:**
 - `scripts/render_site.py:45-52` — regex-based `{{ key }}` placeholder substitution for site HTML. No dotted access, filters, or inheritance.
-- `src/synth_panel/templates.py:38-84` — `_SafeFormatter` subclass of `string.Formatter` for question-text `{placeholder}` substitution. Blocks dotted/bracket access; returns literal placeholder on missing keys.
+- `src/althing/templates.py:38-84` — `_SafeFormatter` subclass of `string.Formatter` for question-text `{placeholder}` substitution. Blocks dotted/bracket access; returns literal placeholder on missing keys.
 
 **No Markdown renderer, no HTML template lib, no static-site generator** in deps or code.
 
 ## 2. Site HTML Pipeline
 
 - Entry: `scripts/render_site.py` (CLI script; also `render()` importable function).
-- Placeholders: `{{ version }}` ← `src/synth_panel/__version__.py` (regex at 25-32); `{{ release_date }}` ← `CHANGELOG.md` `## [X.Y.Z] - YYYY-MM-DD` (35-42).
+- Placeholders: `{{ version }}` ← `src/althing/__version__.py` (regex at 25-32); `{{ release_date }}` ← `CHANGELOG.md` `## [X.Y.Z] - YYYY-MM-DD` (35-42).
 - Template: `site/index.html.j2` (515 lines); Output: `site/index.html`. Writes via `OUTPUT_PATH.write_text()` (55-62).
 - **Not reusable for panel-result rendering** — substitution engine supports only simple key lookups, no schema/loops/conditionals; tailored to static site metadata only.
 

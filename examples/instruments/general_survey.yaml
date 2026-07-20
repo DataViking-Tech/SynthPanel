@@ -1,10 +1,10 @@
 # general_survey: broad opinion survey for smoke-testing panel setups.
 #
 # Usage:
-#   synthpanel panel run --personas examples/personas.yaml --instrument examples/instruments/general_survey.yaml
+#   althing panel run --personas examples/personas.yaml --instrument examples/instruments/general_survey.yaml
 #
 # This is also available as a bundled pack (no file path needed):
-#   synthpanel panel run --personas examples/personas.yaml --instrument general-survey
+#   althing panel run --personas examples/personas.yaml --instrument general-survey
 instrument:
   version: 3
   rounds:

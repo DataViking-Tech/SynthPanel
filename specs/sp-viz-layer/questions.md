@@ -17,7 +17,7 @@ Panel results land as JSON files today. Non-terminal humans — PMs, stakeholder
 
 ### 2. Existing downstream consumers of panel results
 
-- What code reads `panel-result.json` today — inside `synthpanel`, inside SynthBench, inside any mayor/agent workflow?
+- What code reads `panel-result.json` today — inside `althing`, inside SynthBench, inside any mayor/agent workflow?
 - What subsets do those consumers use? (e.g. just `total_cost`, just `per_model_results`, just `synthesis`)
 - Are there any existing transform/extract utilities (e.g. `analyze`, `inspect`, `synthesize`) that already produce human-readable summaries, and what format do they emit?
 - What command-line flags, API functions, or MCP tools already accept a saved panel result as input?
@@ -52,7 +52,7 @@ Panel results land as JSON files today. Non-terminal humans — PMs, stakeholder
 
 ### 7. Boundary conditions for any future rendering path
 
-- What's the largest panel-result JSON size observed in the self-audit artifacts (`mayor/results/synthpanel-self-audit/`)? At what n does it cross 1 MB, 10 MB?
+- What's the largest panel-result JSON size observed in the self-audit artifacts (`mayor/results/althing-self-audit/`)? At what n does it cross 1 MB, 10 MB?
 - Which sections of the output are safe to render verbatim vs need summarization (e.g. raw panelist text vs per-model cost)?
 - Are there any privacy / redaction concerns with rendering panel results — PII in personas, BYOK credentials anywhere in the output?
 - What's the current provenance / audit trail per panel (config_hash, timestamps, model versions) and how would a rendered report preserve it?

@@ -22,14 +22,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from synth_panel.cost import CostGate
-from synth_panel.cost import TokenUsage as CostTokenUsage
-from synth_panel.llm.models import CompletionResponse, StopReason, TextBlock
-from synth_panel.llm.models import TokenUsage as LLMTokenUsage
-from synth_panel.main import main
-from synth_panel.orchestrator import run_panel_parallel
-from synth_panel.persistence import ConversationMessage
-from synth_panel.runtime import TurnSummary
+from althing.cost import CostGate
+from althing.cost import TokenUsage as CostTokenUsage
+from althing.llm.models import CompletionResponse, StopReason, TextBlock
+from althing.llm.models import TokenUsage as LLMTokenUsage
+from althing.main import main
+from althing.orchestrator import run_panel_parallel
+from althing.persistence import ConversationMessage
+from althing.runtime import TurnSummary
 
 # ---------------------------------------------------------------------------
 # CostGate unit tests
@@ -132,7 +132,7 @@ class TestCostGateUnit:
         projected $10.50, which would have tripped a $10 gate near $3.50 of
         *actual* spend — the reported bug.
         """
-        from synth_panel.cost import OPUS_PRICING, ModelPricing, TokenUsage, estimate_cost
+        from althing.cost import OPUS_PRICING, ModelPricing, TokenUsage, estimate_cost
 
         usage = TokenUsage(input_tokens=20_000, output_tokens=10_000)
         per_panelist = estimate_cost(usage, OPUS_PRICING).total_cost
@@ -155,7 +155,7 @@ class TestCostGateUnit:
         """The corrected tier must not disable the gate — an opus run that
         genuinely exceeds the ceiling still halts. $0.35/panelist * 10 = $3.50
         projected trips a $3.00 ceiling."""
-        from synth_panel.cost import OPUS_PRICING, TokenUsage, estimate_cost
+        from althing.cost import OPUS_PRICING, TokenUsage, estimate_cost
 
         per_panelist = estimate_cost(TokenUsage(input_tokens=20_000, output_tokens=10_000), OPUS_PRICING).total_cost
         gate = CostGate(max_cost_usd=3.00, total_panelists=10)
@@ -336,8 +336,8 @@ def _cheap_turn_summary(text: str = "cheap response") -> TurnSummary:
     )
 
 
-@patch("synth_panel.orchestrator.AgentRuntime")
-@patch("synth_panel.cli.commands.LLMClient")
+@patch("althing.orchestrator.AgentRuntime")
+@patch("althing.cli.commands.LLMClient")
 def test_cli_max_cost_emits_valid_partial_json(
     mock_client_cls: MagicMock,
     mock_runtime_cls: MagicMock,
@@ -427,8 +427,8 @@ def test_cli_max_cost_emits_valid_partial_json(
     assert "cost" in captured.err.lower() and "halt" in captured.err.lower()
 
 
-@patch("synth_panel.orchestrator.AgentRuntime")
-@patch("synth_panel.cli.commands.LLMClient")
+@patch("althing.orchestrator.AgentRuntime")
+@patch("althing.cli.commands.LLMClient")
 def test_cli_below_ceiling_completes_normally(
     mock_client_cls: MagicMock,
     mock_runtime_cls: MagicMock,

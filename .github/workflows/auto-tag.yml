@@ -131,9 +131,9 @@ jobs:
           echo "tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
           echo "New tag: $NEW_TAG"
 
-      # Sync src/synth_panel/__version__.py (and the rendered landing page,
+      # Sync src/althing/__version__.py (and the rendered landing page,
       # which derives from it) to the new tag BEFORE tagging. pyproject.toml
-      # uses `version = {attr = "synth_panel.__version__.__version__"}`, so
+      # uses `version = {attr = "althing.__version__.__version__"}`, so
       # the build's package version is whatever this file says at the tagged
       # SHA. Without this step, the tagged commit carries the previous
       # version string and the resulting sdist/wheel is named after the
@@ -146,7 +146,7 @@ jobs:
           NEW_TAG: ${{ steps.bump.outputs.tag }}
         run: |
           VERSION="${NEW_TAG#v}"
-          printf '__version__ = "%s"\n' "$VERSION" > src/synth_panel/__version__.py
+          printf '__version__ = "%s"\n' "$VERSION" > src/althing/__version__.py
           # Keep every committed artifact that embeds the version in
           # lockstep. The v1.5.0 manual cut needed three follow-up PRs
           # (#488 #489 #490) because only site/index.html was synced
@@ -170,7 +170,7 @@ jobs:
 
       # Mint a token for the org-owned `dataviking-release-bot` App. The App is
       # an Integration bypass actor on the main branch ruleset (see
-      # dataviking-infra synthpanel.tf), so pushing the bump commit AS the App
+      # dataviking-infra althing.tf), so pushing the bump commit AS the App
       # is allowed — whereas a github-actions[bot] / GITHUB_TOKEN push to main
       # is rejected with GH013. This removed the manual "pre-bump the version in
       # the PR" workaround (the escape-hatch branch below still works if a PR
@@ -204,7 +204,7 @@ jobs:
           # drop a refreshed file from the bump commit. Root server.json
           # is the second descriptor render_server_card.py rewrites —
           # omitting it here left it drifted on main and bit PR #583.
-          git add src/synth_panel/__version__.py site/index.html site/ \
+          git add src/althing/__version__.py site/index.html site/ \
                   site/.well-known/mcp/server-card.json server.json
           if git diff --staged --quiet; then
             echo "Version artifacts already at ${NEW_TAG} (pre-bumped in PR) — nothing to commit."

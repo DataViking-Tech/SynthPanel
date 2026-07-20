@@ -18,7 +18,7 @@ import io
 
 import pytest
 
-from synth_panel.attachments import (
+from althing.attachments import (
     DEFAULT_OPTIONS,
     PdfEncryptedError,
     PdfError,
@@ -262,7 +262,7 @@ class TestErrors:
         :class:`PdfEncryptedError`. The fixture suite (hq-3o1r) covers a
         real encrypted PDF end-to-end.
         """
-        from synth_panel.attachments.pdf import _looks_like_password_error
+        from althing.attachments.pdf import _looks_like_password_error
 
         assert _looks_like_password_error("PDFium: Incorrect password error")
         assert _looks_like_password_error("Unsupported security scheme error")
@@ -272,7 +272,7 @@ class TestErrors:
         """When pypdfium2 is unavailable the error names the install hint."""
         import builtins
 
-        from synth_panel.attachments import pdf as pdf_mod
+        from althing.attachments import pdf as pdf_mod
 
         real_import = builtins.__import__
 
@@ -282,14 +282,14 @@ class TestErrors:
             return real_import(name, *args, **kwargs)
 
         monkeypatch.setattr(builtins, "__import__", _fake_import)
-        with pytest.raises(PdfMissingDependencyError, match=r"synthpanel\[pdf\]"):
+        with pytest.raises(PdfMissingDependencyError, match=r"althing\[pdf\]"):
             pdf_mod._import_pdfium()
 
     def test_missing_pillow_message_points_to_extra(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """When Pillow is unavailable the renderer surfaces the same install hint."""
         import builtins
 
-        from synth_panel.attachments import pdf as pdf_mod
+        from althing.attachments import pdf as pdf_mod
 
         real_import = builtins.__import__
 
@@ -299,7 +299,7 @@ class TestErrors:
             return real_import(name, *args, **kwargs)
 
         monkeypatch.setattr(builtins, "__import__", _fake_import)
-        with pytest.raises(PdfMissingDependencyError, match=r"synthpanel\[pdf\]"):
+        with pytest.raises(PdfMissingDependencyError, match=r"althing\[pdf\]"):
             pdf_mod._import_pillow()
 
 

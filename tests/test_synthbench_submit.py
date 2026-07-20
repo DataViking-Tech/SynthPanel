@@ -31,7 +31,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from synth_panel.synthbench_submit import (
+from althing.synthbench_submit import (
     API_KEY_ENV_NAME,
     CONSENT_VERSION,
     build_submission_payload,
@@ -55,10 +55,10 @@ def _client(handler: Callable[[httpx.Request], httpx.Response]) -> httpx.Client:
 @pytest.fixture
 def isolated_consent(tmp_path, monkeypatch):
     """Redirect consent storage at a tmp path so tests do not touch ``$HOME``."""
-    fake_dir = tmp_path / "synthpanel"
+    fake_dir = tmp_path / "althing"
     fake_path = fake_dir / "synthbench-consent.json"
-    monkeypatch.setattr("synth_panel.synthbench_submit.CONSENT_DIR", fake_dir)
-    monkeypatch.setattr("synth_panel.synthbench_submit.CONSENT_PATH", fake_path)
+    monkeypatch.setattr("althing.synthbench_submit.CONSENT_DIR", fake_dir)
+    monkeypatch.setattr("althing.synthbench_submit.CONSENT_PATH", fake_path)
     return fake_path
 
 
@@ -166,13 +166,13 @@ def test_build_submission_payload_shape(calibrated_extra, baseline_payload, mode
     assert isinstance(payload["version"], str) and payload["version"]
     # config.dataset / config.provider are required Tier-1 config keys.
     assert payload["config"]["dataset"] == "gss"
-    assert payload["config"]["provider"] == "synthpanel/claude-sonnet-4-6"
-    assert payload["config"]["framework"] == "synthpanel"
+    assert payload["config"]["provider"] == "althing/claude-sonnet-4-6"
+    assert payload["config"]["framework"] == "althing"
     assert payload["config"]["calibration_spec"] == "gss:HAPPY"
     assert payload["config"]["panelist_model"] == "claude-sonnet-4-6"
     assert payload["config"]["instrument"] == "happiness-probe"
     assert payload["config"]["persona_pack"] == "general-public"
-    assert payload["config"]["client"] == "synthpanel"
+    assert payload["config"]["client"] == "althing"
     assert payload["config"]["n"] == 100
 
     # per_question is a LIST of rows, each carrying the required Tier-1
@@ -225,7 +225,7 @@ def test_build_submission_payload_omits_questions_with_no_distribution(calibrate
     assert "mean_jsd" not in payload["aggregate"]
 
 
-def test_build_submission_payload_provider_without_model_is_bare_synthpanel(
+def test_build_submission_payload_provider_without_model_is_bare_althing(
     calibrated_extra, baseline_payload, model_distributions
 ):
     payload = build_submission_payload(
@@ -237,7 +237,7 @@ def test_build_submission_payload_provider_without_model_is_bare_synthpanel(
         instrument_name=None,
         persona_pack_name=None,
     )
-    assert payload["config"]["provider"] == "synthpanel"
+    assert payload["config"]["provider"] == "althing"
     assert "panelist_model" not in payload["config"]
 
 
@@ -475,7 +475,7 @@ def _run_cli(args, env_extra=None):
     if env_extra:
         env.update(env_extra)
     return subprocess.run(
-        [sys.executable, "-m", "synth_panel", *args],
+        [sys.executable, "-m", "althing", *args],
         env=env,
         capture_output=True,
         text=True,

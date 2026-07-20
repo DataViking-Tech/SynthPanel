@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from synth_panel.analysis import (
+from althing.analysis import (
     InvalidResponseSchemaError,
     UnknownPersonaFieldError,
     coerce_enum_value,
@@ -20,7 +20,7 @@ from synth_panel.analysis import (
     distribution_for_question,
     subgroup_breakdown,
 )
-from synth_panel.instrument import InstrumentError, parse_instrument
+from althing.instrument import InstrumentError, parse_instrument
 
 # ---------------------------------------------------------------------------
 # response_schema validation in the instrument parser

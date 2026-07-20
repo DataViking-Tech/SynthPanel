@@ -1,4 +1,4 @@
-"""Tests for synth_panel.metadata — rich metadata for synthbench integration."""
+"""Tests for althing.metadata — rich metadata for synthbench integration."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ import time
 
 import pytest
 
-from synth_panel.cost import CostEstimate, TokenUsage, estimate_cost, lookup_pricing
-from synth_panel.metadata import (
+from althing.cost import CostEstimate, TokenUsage, estimate_cost, lookup_pricing
+from althing.metadata import (
     PanelTimer,
     build_config_hash,
     build_metadata,
@@ -170,7 +170,7 @@ class TestBuildMetadata:
     def test_cost_records_pricing_snapshot_date(self):
         # #525: saved-result provenance needs to know which price snapshot
         # the cost estimate was computed against.
-        from synth_panel.cost import PRICING_SNAPSHOT_DATE
+        from althing.cost import PRICING_SNAPSHOT_DATE
 
         usage = self._make_usage()
         cost = self._make_cost(usage)
@@ -252,7 +252,7 @@ class TestBuildMetadata:
             persona_count=1,
             question_count=1,
         )
-        assert "synthpanel" in meta["version"]
+        assert "althing" in meta["version"]
         assert "python" in meta["version"]
         assert "." in meta["version"]["python"]
 

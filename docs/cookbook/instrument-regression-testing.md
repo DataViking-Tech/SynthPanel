@@ -5,7 +5,7 @@ fixed persona pack — you usually want to *lock its behavior*. If a
 teammate edits a question, you want CI to flag it: "this question used to
 produce a 70/30 enum split; the new wording produces 40/60. Intentional?"
 
-This recipe wires that up. It runs a small synthpanel run on every PR
+This recipe wires that up. It runs a small althing run on every PR
 against a baseline panel result committed to the repo, computes a
 statistical diff, and fails CI if any answer distribution drifts past a
 threshold you choose.
@@ -117,10 +117,10 @@ Run the panel once locally with the model and temperature you want
 locked in, then commit the resulting JSON:
 
 ```bash
-export SYNTH_PANEL_DATA_DIR="$PWD/.synthpanel"
+export SYNTH_PANEL_DATA_DIR="$PWD/.althing"
 mkdir -p instrument-regression
 
-synthpanel --model haiku panel run \
+althing --model haiku panel run \
   --personas instrument-regression/personas.yaml \
   --instrument instrument-regression/survey.yaml \
   --temperature 0.3 \
@@ -129,7 +129,7 @@ synthpanel --model haiku panel run \
 # --save writes to $SYNTH_PANEL_DATA_DIR/results/result-<id>.json
 # and prints "Result saved: result-<id>" to stderr.
 result_id=$(grep -oE 'result-[0-9-]+-[a-f0-9]+' /tmp/run.log | head -1)
-cp ".synthpanel/results/${result_id}.json" instrument-regression/baseline.json
+cp ".althing/results/${result_id}.json" instrument-regression/baseline.json
 git add instrument-regression/baseline.json
 git commit -m "instrument-regression: lock baseline"
 ```
@@ -140,7 +140,7 @@ under $0.05.
 
 ## 4. The drift check
 
-This script is the glue. It runs `synthpanel runs diff` between the
+This script is the glue. It runs `althing runs diff` between the
 committed baseline and a fresh run, then enforces thresholds on the
 structured questions and reports theme drift on the free-text ones.
 
@@ -166,7 +166,7 @@ TEXT_THEME_DELTA = 2         # max new+dropped top themes per question
 def main(baseline: Path, new_result: Path) -> int:
     proc = subprocess.run(
         [
-            "synthpanel", "--output-format", "json",
+            "althing", "--output-format", "json",
             "runs", "diff",
             str(baseline), str(new_result),
         ],
@@ -203,11 +203,11 @@ def main(baseline: Path, new_result: Path) -> int:
         print("\n\n".join(violations), file=sys.stderr)
         print(
             "\nIf this change is intentional, regenerate the baseline:\n"
-            "  synthpanel --model haiku panel run \\\n"
+            "  althing --model haiku panel run \\\n"
             "      --personas .../personas.yaml \\\n"
             "      --instrument .../survey.yaml \\\n"
             "      --temperature 0.3 --save\n"
-            "  cp .synthpanel/results/<new-id>.json instrument-regression/baseline.json",
+            "  cp .althing/results/<new-id>.json instrument-regression/baseline.json",
             file=sys.stderr,
         )
         return 1
@@ -249,16 +249,16 @@ jobs:
         with:
           python-version: "3.11"
 
-      - run: pip install synthpanel
+      - run: pip install althing
 
       - name: Run panel against current instrument
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          SYNTH_PANEL_DATA_DIR: ${{ github.workspace }}/.synthpanel
+          SYNTH_PANEL_DATA_DIR: ${{ github.workspace }}/.althing
         run: |
           set -euo pipefail
           mkdir -p "$SYNTH_PANEL_DATA_DIR/results"
-          synthpanel --model haiku panel run \
+          althing --model haiku panel run \
             --personas instrument-regression/personas.yaml \
             --instrument instrument-regression/survey.yaml \
             --temperature 0.3 \
@@ -332,7 +332,7 @@ LLM panels are not deterministic, but you can dampen the variance:
   haiku:0.5,gemini-flash:0.5` and diff per-model. This catches drift
   that's specific to one provider's update cycle.
 - **Calibration as the source of truth.** If you have an external
-  human dataset, use `synthpanel pack calibrate` to lock JSD against a
+  human dataset, use `althing pack calibrate` to lock JSD against a
   real-world distribution rather than a synthetic baseline. The same
   CI pattern applies — just diff against the calibration target
   instead.

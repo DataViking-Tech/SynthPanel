@@ -1,11 +1,11 @@
 # Release Dogfood Protocol
 
 A cross-town convention for surfacing friction on each significant
-SynthPanel release before it hits external users.
+Althing release before it hits external users.
 
 ## Why this exists
 
-SynthPanel's primary surface is *other agents calling it from other
+Althing's primary surface is *other agents calling it from other
 codebases*. The single-author dogfood that backs most pre-release QA
 catches the failure classes that author already knows to test. It does
 not catch:
@@ -39,15 +39,15 @@ filed as a normal bead without the sweep tag.
 
 ## Roles
 
-- **Receiving mayor** — the town that owns SynthPanel for this release
+- **Receiving mayor** — the town that owns Althing for this release
   cycle (currently `jotunheim`). Bundles incoming wave reports into
-  beads in the SynthPanel rig DB (the canonical store). Drops
+  beads in the Althing rig DB (the canonical store). Drops
   sister-bug callouts when an incoming wave overlaps with a separately
   filed local issue (e.g. yggdrasil's v1 bank-ref silent drop being a
   sibling of jotunheim's MCP v3 multi-round termination — same
   architectural smell, different surface).
 
-- **Sweeping mayors** — every other town with a SynthPanel rig runs
+- **Sweeping mayors** — every other town with a Althing rig runs
   their own dogfood independently, against their own product surfaces
   and use cases. Independence is the point. **Do not coordinate on
   what to test before sweeping** — the divergence is the signal.
@@ -104,7 +104,7 @@ Example footer:
 ```
 ## Reporter
 
-yggdrasil mayor (synthpanel v1.0.4 dogfood, 2026-05-10)
+yggdrasil mayor (althing v1.0.4 dogfood, 2026-05-10)
 Source-wave: hq-wisp-l4a (item 3 of 4)
 ```
 

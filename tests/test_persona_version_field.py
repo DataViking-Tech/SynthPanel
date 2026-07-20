@@ -17,7 +17,7 @@ def _data_dir(tmp_path, monkeypatch):
 
 
 # Import after env is set so ``_data_dir()`` picks up the temp path.
-from synth_panel.mcp.data import (
+from althing.mcp.data import (
     PackValidationError,
     get_persona_pack,
     list_persona_packs,
@@ -76,7 +76,7 @@ class TestVersionRoundTrip:
 
     def test_save_without_version_omits_field_in_yaml(self):
         """Backwards compat: omitting version does not write a version: key."""
-        from synth_panel.mcp.data import _packs_dir
+        from althing.mcp.data import _packs_dir
 
         save_persona_pack("Legacy", [{"name": "A"}], pack_id="legacy")
         raw = (_packs_dir() / "legacy.yaml").read_text(encoding="utf-8")

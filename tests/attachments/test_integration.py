@@ -19,15 +19,15 @@ from typing import Any
 
 import pytest
 
-from synth_panel.attachments import filter_attachments, write_blob
-from synth_panel.attachments.filter import count_strata
-from synth_panel.instrument import parse_instrument
-from synth_panel.llm.models import ImageBlock, TextBlock
-from synth_panel.orchestrator import (
+from althing.attachments import filter_attachments, write_blob
+from althing.attachments.filter import count_strata
+from althing.instrument import parse_instrument
+from althing.llm.models import ImageBlock, TextBlock
+from althing.orchestrator import (
     PanelPlanningError,
     _enforce_strata_cap,
 )
-from synth_panel.prompts import build_question_blocks
+from althing.prompts import build_question_blocks
 from tests.attachments.fixtures import tiny_jpeg, tiny_png
 
 # ---------------------------------------------------------------------------
@@ -167,7 +167,7 @@ class TestCASToReadback:
     via :func:`get_panel_result` returns identical metadata."""
 
     def test_full_persistence_round_trip(self, isolated_data: Path):
-        from synth_panel.mcp.data import get_panel_result, save_panel_result
+        from althing.mcp.data import get_panel_result, save_panel_result
 
         png_bytes = tiny_png()
         jpeg_bytes = tiny_jpeg()
@@ -230,7 +230,7 @@ class TestCASToReadback:
         assert loaded["attachments"] == attachments
 
         # 6) Bytes still resolvable from CAS via the loaded refs.
-        from synth_panel.attachments.store import read_blob
+        from althing.attachments.store import read_blob
 
         for ref in loaded["attachments"].values():
             ext = "png" if ref["content_type"] == "image/png" else "jpg"

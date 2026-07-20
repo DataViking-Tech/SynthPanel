@@ -4,36 +4,36 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>
-      Recommended Models — synthpanel · SynthBench-validated model picks
+      Recommended Models — althing · SynthBench-validated model picks
     </title>
     <meta
       name="description"
       content="SynthBench-validated model recommendations for synthetic focus group research. Use --best-model-for to auto-select the top-ranked model for your use case."
     />
-    <link rel="canonical" href="https://synthpanel.dev/recommended-models" />
+    <link rel="canonical" href="https://althing.dev/recommended-models" />
 
-    <meta name="keywords" content="recommended models, SynthBench, synthetic survey models, best LLM for focus groups, synthpanel model selection, globalopinionqa" />
+    <meta name="keywords" content="recommended models, SynthBench, synthetic survey models, best LLM for focus groups, althing model selection, globalopinionqa" />
 
     <meta property="og:type" content="article" />
-    <meta property="og:site_name" content="synthpanel" />
-    <meta property="og:title" content="Recommended Models — synthpanel" />
+    <meta property="og:site_name" content="althing" />
+    <meta property="og:title" content="Recommended Models — althing" />
     <meta
       property="og:description"
       content="SynthBench-validated model picks for synthetic focus group research. Auto-select the top-ranked model with --best-model-for."
     />
-    <meta property="og:url" content="https://synthpanel.dev/recommended-models" />
-    <meta property="og:image" content="https://synthpanel.dev/og-image.png" />
+    <meta property="og:url" content="https://althing.dev/recommended-models" />
+    <meta property="og:image" content="https://althing.dev/og-image.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="synthpanel — Run synthetic focus groups with any LLM" />
+    <meta property="og:image:alt" content="althing — Run synthetic focus groups with any LLM" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Recommended Models — synthpanel" />
+    <meta name="twitter:title" content="Recommended Models — althing" />
     <meta
       name="twitter:description"
       content="SynthBench-validated model picks. Use --best-model-for for auto-selection."
     />
-    <meta name="twitter:image" content="https://synthpanel.dev/og-image.png" />
-    <meta name="twitter:image:alt" content="synthpanel — Run synthetic focus groups with any LLM" />
+    <meta name="twitter:image" content="https://althing.dev/og-image.png" />
+    <meta name="twitter:image:alt" content="althing — Run synthetic focus groups with any LLM" />
 
     <link rel="stylesheet" href="/assets/tailwind.css" />
 
@@ -107,7 +107,7 @@
             href="/"
             class="inline-flex items-center gap-1 text-slate-400 transition hover:text-emerald-300"
           >
-            <span aria-hidden="true">←</span> synthpanel.dev
+            <span aria-hidden="true">←</span> althing.dev
           </a>
         </nav>
       </header>
@@ -126,7 +126,7 @@
           Recommended models
         </h1>
         <p class="mt-4 text-lg text-slate-300">
-          SynthPanel can consult the
+          Althing can consult the
           <a
             href="https://synthbench.org"
             class="text-emerald-400 underline decoration-emerald-400/40 underline-offset-2 hover:text-emerald-300"
@@ -149,20 +149,20 @@
           class="rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-4 font-mono text-sm shadow-xl"
         >
           <pre class="text-slate-300 overflow-x-auto whitespace-pre"><span class="text-slate-400"># Use the top-ranked model for a specific topic</span>
-synthpanel panel run \
+althing panel run \
   --personas examples/personas.yaml \
   --instrument pricing-discovery \
   --best-model-for <span class="text-amber-300">"Economy &amp; Work"</span>
 
 <span class="text-slate-400"># Top-ranked model across a whole dataset (by SPS)</span>
-synthpanel panel run ... --best-model-for <span class="text-amber-300">":globalopinionqa"</span>
+althing panel run ... --best-model-for <span class="text-amber-300">":globalopinionqa"</span>
 
 <span class="text-slate-400"># Topic within a non-default dataset</span>
-synthpanel panel run ... --best-model-for <span class="text-amber-300">"Technology &amp; Digital Life:globalopinionqa"</span></pre>
+althing panel run ... --best-model-for <span class="text-amber-300">"Technology &amp; Digital Life:globalopinionqa"</span></pre>
         </div>
 
         <p class="mt-6 text-base text-slate-300">
-          Before the run, SynthPanel prints a recommendation line to stderr so
+          Before the run, Althing prints a recommendation line to stderr so
           you can cancel and override:
         </p>
         <div
@@ -182,9 +182,9 @@ synthpanel panel run ... --best-model-for <span class="text-amber-300">"Technolo
         <ol class="space-y-4 text-base text-slate-300">
           <li class="flex gap-4">
             <span class="flex-shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-400/10 text-xs font-bold text-emerald-400 border border-emerald-400/30">1</span>
-            <span>On first use, SynthPanel fetches
+            <span>On first use, Althing fetches
               <code class="text-emerald-400">https://synthbench.org/data/leaderboard.json</code>
-              and caches it at <code class="text-slate-300">~/.synthpanel/synthbench-cache.json</code>
+              and caches it at <code class="text-slate-300">~/.althing/synthbench-cache.json</code>
               for 24 hours.</span>
           </li>
           <li class="flex gap-4">
@@ -196,7 +196,7 @@ synthpanel panel run ... --best-model-for <span class="text-amber-300">"Technolo
           <li class="flex gap-4">
             <span class="flex-shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-400/10 text-xs font-bold text-emerald-400 border border-emerald-400/30">3</span>
             <span>The top entry's <code class="text-emerald-400">model</code> field is resolved
-              through SynthPanel's alias table (so <code class="text-slate-300">"haiku"</code>
+              through Althing's alias table (so <code class="text-slate-300">"haiku"</code>
               becomes <code class="text-slate-300">claude-haiku-4-5-20251001</code>) and stamped
               onto <code class="text-slate-300">--model</code> for the rest of the pipeline.</span>
           </li>
@@ -220,15 +220,15 @@ synthpanel panel run ... --best-model-for <span class="text-amber-300">"Technolo
             </thead>
             <tbody class="divide-y divide-slate-800">
               <tr>
-                <td><code>SYNTHPANEL_SYNTHBENCH_URL</code></td>
+                <td><code>ALTHING_SYNTHBENCH_URL</code></td>
                 <td class="text-slate-300">Override the fetch URL (useful for forks or air-gapped environments).</td>
               </tr>
               <tr>
-                <td><code>SYNTHPANEL_SYNTHBENCH_OFFLINE=1</code></td>
+                <td><code>ALTHING_SYNTHBENCH_OFFLINE=1</code></td>
                 <td class="text-slate-300">Never hit the network; use the cache if present, otherwise skip the recommendation.</td>
               </tr>
               <tr>
-                <td><code>SYNTHPANEL_SYNTHBENCH_REFRESH=1</code></td>
+                <td><code>ALTHING_SYNTHBENCH_REFRESH=1</code></td>
                 <td class="text-slate-300">Bypass the 24h TTL and force a fresh fetch (ignores the cached ETag).</td>
               </tr>
               <tr>
@@ -347,11 +347,11 @@ synthpanel panel run ... --best-model-for <span class="text-amber-300">"Technolo
           <li class="flex gap-3">
             <span class="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-slate-500"></span>
             <span><strong class="text-white">Display labels, ensembles &amp; product configs (gh-519).</strong>
-              Some leaderboard entries are SynthPanel product configs
+              Some leaderboard entries are Althing product configs
               (<code class="text-slate-300">framework=product</code>,
               <code class="text-slate-300">is_ensemble=true</code>) or carry a human-readable
-              display label (e.g. <code class="text-slate-300">SynthPanel (Gemini Flash Lite)</code>)
-              in their <code class="text-slate-300">model</code> field. SynthPanel never stamps such
+              display label (e.g. <code class="text-slate-300">Althing (Gemini Flash Lite)</code>)
+              in their <code class="text-slate-300">model</code> field. Althing never stamps such
               a label onto <code class="text-slate-300">--model</code>. Instead it substitutes a
               runnable id, preferring
               <strong class="text-slate-200">(1)</strong> the row's runnable
@@ -379,7 +379,7 @@ synthpanel panel run ... --best-model-for <span class="text-amber-300">"Technolo
             <span><strong class="text-white">Provider/model strings vary.</strong>
               The leaderboard publishes the raw <code class="text-slate-300">model</code> string the
               run used — sometimes a canonical id, sometimes a short alias.
-              SynthPanel passes the string through the alias resolver so either
+              Althing passes the string through the alias resolver so either
               shape works, but the raw value is preserved in the recommendation
               line as <code class="text-slate-300">raw_model</code>.</span>
           </li>
@@ -441,7 +441,7 @@ synthpanel panel run ... --best-model-for <span class="text-amber-300">"Technolo
             </p>
           </a>
           <a
-            href="https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/recommended-models.md"
+            href="https://github.com/DataViking-Tech/Althing/blob/main/docs/recommended-models.md"
             class="group rounded-lg border border-slate-800 bg-slate-900/40 p-5 transition hover:border-emerald-400/40 hover:bg-slate-900/70"
           >
             <div class="flex items-center justify-between">
@@ -458,7 +458,7 @@ synthpanel panel run ... --best-model-for <span class="text-amber-300">"Technolo
             </p>
           </a>
           <a
-            href="https://github.com/DataViking-Tech/SynthPanel"
+            href="https://github.com/DataViking-Tech/Althing"
             class="group rounded-lg border border-slate-800 bg-slate-900/40 p-5 transition hover:border-emerald-400/40 hover:bg-slate-900/70"
           >
             <div class="flex items-center justify-between">
@@ -505,8 +505,8 @@ synthpanel panel run ... --best-model-for <span class="text-amber-300">"Technolo
           </div>
 
           <!-- Synthpanel column -->
-          <nav aria-labelledby="footer-synthpanel-heading">
-            <h3 id="footer-synthpanel-heading" class="text-xs font-semibold uppercase tracking-wider text-slate-400">Synthpanel</h3>
+          <nav aria-labelledby="footer-althing-heading">
+            <h3 id="footer-althing-heading" class="text-xs font-semibold uppercase tracking-wider text-slate-400">Synthpanel</h3>
             <ul class="mt-4 space-y-2 text-sm">
               <li><a href="/" class="text-slate-300 transition-colors hover:text-emerald-300">Home</a></li>
               <li><a href="/mcp" class="text-slate-300 transition-colors hover:text-emerald-300">MCP server</a></li>
@@ -520,10 +520,10 @@ synthpanel panel run ... --best-model-for <span class="text-amber-300">"Technolo
           <nav aria-labelledby="footer-resources-heading">
             <h3 id="footer-resources-heading" class="text-xs font-semibold uppercase tracking-wider text-slate-400">Resources</h3>
             <ul class="mt-4 space-y-2 text-sm">
-              <li><a href="https://pypi.org/project/synthpanel/" rel="noopener" class="text-slate-300 transition-colors hover:text-emerald-300">PyPI package</a></li>
-              <li><a href="https://github.com/DataViking-Tech/SynthPanel" rel="noopener" class="text-slate-300 transition-colors hover:text-emerald-300">GitHub</a></li>
+              <li><a href="https://pypi.org/project/althing/" rel="noopener" class="text-slate-300 transition-colors hover:text-emerald-300">PyPI package</a></li>
+              <li><a href="https://github.com/DataViking-Tech/Althing" rel="noopener" class="text-slate-300 transition-colors hover:text-emerald-300">GitHub</a></li>
               <li><a href="https://synthbench.org" rel="noopener" class="text-slate-300 transition-colors hover:text-emerald-300">SynthBench</a></li>
-              <li><a href="/blog/synthpanel-vs-commercial-alternatives.html" class="text-slate-300 transition-colors hover:text-emerald-300">Blog</a></li>
+              <li><a href="/blog/althing-vs-commercial-alternatives.html" class="text-slate-300 transition-colors hover:text-emerald-300">Blog</a></li>
             </ul>
           </nav>
 
@@ -544,15 +544,15 @@ synthpanel panel run ... --best-model-for <span class="text-amber-300">"Technolo
           <span>
             &copy; 2026 DataViking · MIT-licensed ·
             <a
-              href="https://github.com/DataViking-Tech/SynthPanel"
+              href="https://github.com/DataViking-Tech/Althing"
               rel="noopener"
               class="hover:text-slate-300"
-              >DataViking-Tech/SynthPanel</a
+              >DataViking-Tech/Althing</a
             >
           </span>
           <span class="flex items-center gap-5">
             <a
-              href="https://github.com/DataViking-Tech/SynthPanel"
+              href="https://github.com/DataViking-Tech/Althing"
               target="_blank"
               rel="noopener noreferrer"
               aria-label="GitHub"

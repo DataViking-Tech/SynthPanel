@@ -10,7 +10,7 @@ RFC 9728:
   https://www.rfc-editor.org/rfc/rfc9728
 
 This test only validates the committed files. Live HTTP behaviour is verified
-manually via `curl -sI https://synthpanel.dev/.well-known/oauth-protected-resource`
+manually via `curl -sI https://althing.dev/.well-known/oauth-protected-resource`
 after deploy.
 """
 
@@ -63,7 +63,7 @@ def test_metadata_has_required_fields() -> None:
     resource = payload.get("resource")
     assert isinstance(resource, str) and resource, "`resource` must be a non-empty string"
     assert resource.startswith("https://"), f"`resource` must be an https URL per RFC 9728 §2, got {resource!r}"
-    assert resource == "https://synthpanel.dev", f"`resource` must identify the canonical site, got {resource!r}"
+    assert resource == "https://althing.dev", f"`resource` must identify the canonical site, got {resource!r}"
 
     authorization_servers = payload.get("authorization_servers")
     assert isinstance(authorization_servers, list), "`authorization_servers` must be an array"

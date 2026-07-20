@@ -1,10 +1,10 @@
-"""SynthPanel + CrewAI.
+"""Althing + CrewAI.
 
-Attach SynthPanel's MCP server to a CrewAI Agent via MCPServerAdapter. The
-agent gets all 12 synthpanel tools as native CrewAI tools — no wrapper code.
+Attach Althing's MCP server to a CrewAI Agent via MCPServerAdapter. The
+agent gets all 12 althing tools as native CrewAI tools — no wrapper code.
 
 Install:
-    pip install "crewai-tools[mcp]" crewai synthpanel[mcp]
+    pip install "crewai-tools[mcp]" crewai althing[mcp]
 
 Run:
     export ANTHROPIC_API_KEY=sk-...
@@ -16,14 +16,14 @@ from crewai_tools import MCPServerAdapter
 
 from mcp import StdioServerParameters
 
-server_params = StdioServerParameters(command="synthpanel", args=["mcp-serve"])
+server_params = StdioServerParameters(command="althing", args=["mcp-serve"])
 
-with MCPServerAdapter(server_params) as synthpanel_tools:
+with MCPServerAdapter(server_params) as althing_tools:
     researcher = Agent(
         role="Synthetic Research Lead",
         goal="Answer product questions via synthetic focus groups.",
-        backstory="You use the synthpanel tools to poll AI personas.",
-        tools=synthpanel_tools,
+        backstory="You use the althing tools to poll AI personas.",
+        tools=althing_tools,
     )
     task = Task(
         description=(

@@ -10,15 +10,15 @@ from __future__ import annotations
 
 import pytest
 
-from synth_panel.cost import ZERO_USAGE
-from synth_panel.orchestrator import (
+from althing.cost import ZERO_USAGE
+from althing.orchestrator import (
     Flag,
     FlagExtension,
     PanelistResult,
     PanelState,
 )
-from synth_panel.structured.validate import validate_response
-from synth_panel.structured.verdict import build_panel_verdict
+from althing.structured.validate import validate_response
+from althing.structured.verdict import build_panel_verdict
 
 _VALID_DECISION = "Should we ship the new pricing tier next quarter?"
 

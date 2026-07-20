@@ -9,7 +9,7 @@ Systematic audit of 19 pack files (9 bundled + 10 custom) totaling 172 personas 
 - Smallest: startup-founder.yaml (63 LOC, 4 personas)
 
 **Custom (n=10):** 88 personas across 1,011 LOC. Range 24–183 LOC; 1–20 personas.
-- Largest: extra_50_synthpanel.yaml (183 LOC, 20 personas)
+- Largest: extra_50_althing.yaml (183 LOC, 20 personas)
 - Smallest: contrarian_synthbench.yaml (29 LOC, 1 persona)
 
 **Combined:** 2,149 LOC, 172 personas. Median pack ~100 LOC, ~8 personas.
@@ -24,8 +24,8 @@ Systematic audit of 19 pack files (9 bundled + 10 custom) totaling 172 personas 
 | Ahmad Qureshi | ai-eval-buyers.yaml:105 | extra_50_synthbench.yaml:75 | ML research engineer |
 | Aisha Nwosu | job-seekers.yaml:22 | extra_50_traitprint.yaml:13 | apprentice, age 19 |
 | Alejandro Ruiz | ai-eval-buyers.yaml:165 | extra_50_synthbench.yaml:120 | ops engineer |
-| Andreas Weber | product-research.yaml:191 | extra_50_synthpanel.yaml:140 | growth marketer |
-| Beatrice Laurent | product-research.yaml:106 | extra_50_synthpanel.yaml:164 | VP product, healthcare SaaS |
+| Andreas Weber | product-research.yaml:191 | extra_50_althing.yaml:140 | growth marketer |
+| Beatrice Laurent | product-research.yaml:106 | extra_50_althing.yaml:164 | VP product, healthcare SaaS |
 | Carla Mendes | ai-eval-buyers.yaml:10 | extra_50_synthbench.yaml:10 | ML engineer |
 | (~40 total personas appear in 2+ packs) | | | |
 
@@ -51,8 +51,8 @@ personas:
 
 **Stylistic variance in `personality_traits`:**
 - Bundled packs: atomic 2-3 word strings. Example `["PM buyer", "discovery-constrained", "speed-seeker"]` (product-research.yaml:17-20)
-- Custom ICP packs: compound complex phrases. Example `["methodologically trained, values validity over speed"]` (icp_synthpanel.yaml:17-22)
-- Contrarian pack: longest traits, heavily qualified. Example `"thinks 'zero-config sampling mode' incentivizes bad research"` (contrarian_synthpanel.yaml:28)
+- Custom ICP packs: compound complex phrases. Example `["methodologically trained, values validity over speed"]` (icp_althing.yaml:17-22)
+- Contrarian pack: longest traits, heavily qualified. Example `"thinks 'zero-config sampling mode' incentivizes bad research"` (contrarian_althing.yaml:28)
 
 **Schema enforcement:** `mcp/data.py:204-241` — no published schema file; inline Python validation only.
 
@@ -84,7 +84,7 @@ personas:
 
 | Extra Pack | Bundled Equivalent | Overlap |
 |---|---|---|
-| extra_50_synthpanel.yaml | product-research.yaml | 20/20 byte-identical |
+| extra_50_althing.yaml | product-research.yaml | 20/20 byte-identical |
 | extra_50_synthbench.yaml | ai-eval-buyers.yaml | 20/20 byte-identical |
 | extra_50_traitprint.yaml | job-seekers.yaml | 15/15 byte-identical |
 | extra_100_topup.yaml | (none directly) | 10 mixed from ICP + contrarian archetypes |
@@ -101,7 +101,7 @@ Searches across `docs/`, READMEs, CONTRIB guides — no mention of "share a pers
 
 Existing docs (`docs/ensemble.md`, `docs/convergence.md`) show `--personas file.yaml` with implicit local authorship. `docs/agent-integration-landscape.md` references "registry presence" only in MCP/Composio context, not pack registries.
 
-**Inferred informal sharing pathway** (from code, not explicit): user authors local YAML → `pack import` → saves to `~/.synthpanel/persona_packs/` → `pack export` to stdout → email/Slack/PR to share.
+**Inferred informal sharing pathway** (from code, not explicit): user authors local YAML → `pack import` → saves to `~/.althing/persona_packs/` → `pack export` to stdout → email/Slack/PR to share.
 
 ## 7. Schema Definition
 

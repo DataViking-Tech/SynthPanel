@@ -13,7 +13,7 @@
 # concurrency group cancels one of the twin runs — park a cancelled or
 # failed run next to the successful same-named run, and those superseded
 # runs never turn green. Counting all of them blocked SynthBench v0.3.1
-# (PR #334) and SynthPanel's first v1.6.0 attempt, forcing manual tags.
+# (PR #334) and Althing's first v1.6.0 attempt, forcing manual tags.
 # Only the newest run per (app, name) reflects the commit's real status;
 # GitHub's own merge box collapses check runs the same way.
 #

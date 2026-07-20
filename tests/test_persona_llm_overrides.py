@@ -22,16 +22,16 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from synth_panel.cli.commands import assign_models_to_personas
-from synth_panel.llm.models import (
+from althing.cli.commands import assign_models_to_personas
+from althing.llm.models import (
     CompletionResponse,
     StopReason,
     TextBlock,
 )
-from synth_panel.llm.models import (
+from althing.llm.models import (
     TokenUsage as LLMTokenUsage,
 )
-from synth_panel.orchestrator import (
+from althing.orchestrator import (
     get_persona_llm_overrides,
     run_panel_parallel,
     validate_llm_overrides,

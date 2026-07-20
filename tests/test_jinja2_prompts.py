@@ -5,8 +5,8 @@ from __future__ import annotations
 import jinja2
 import pytest
 
-from synth_panel.instrument import Instrument, InstrumentError, parse_instrument
-from synth_panel.prompts import (
+from althing.instrument import Instrument, InstrumentError, parse_instrument
+from althing.prompts import (
     compile_jinja2_template,
     is_jinja2_template,
     persona_system_prompt_from_template,

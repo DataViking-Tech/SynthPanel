@@ -92,7 +92,7 @@
   "metadata": {
     "config_hash": "abc123def456",
     "version": {
-      "synthpanel": "0.5.0",
+      "althing": "0.5.0",
       "python": "3.12.1"
     },
     "cost": {

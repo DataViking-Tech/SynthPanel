@@ -1,4 +1,4 @@
-"""Cross-cutting test suite for synthpanel attachments (hq-3o1r).
+"""Cross-cutting test suite for althing attachments (hq-3o1r).
 
 Per-feature unit tests live next to the feature in ``tests/test_attachments.py``,
 ``tests/test_attachments_caching.py``, ``tests/test_attachments_filter.py``,

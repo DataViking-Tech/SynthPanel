@@ -1,7 +1,7 @@
 # Response Contract — v1.0.0
 
 The canonical reference for `panel_verdict.json`, the closed `flags[]` enum, and
-the typed error envelope. Schema source of truth: [`synthpanel/schemas/v1.0.0.json`](../src/synth_panel/schemas/v1.0.0.json),
+the typed error envelope. Schema source of truth: [`althing/schemas/v1.0.0.json`](../src/althing/schemas/v1.0.0.json),
 embedded in the package — no remote URL, no DNS dependency.
 
 > **Audience:** consuming-agent authors. If you call `run_panel`,
@@ -13,23 +13,23 @@ embedded in the package — no remote URL, no DNS dependency.
 ```mermaid
 sequenceDiagram
     participant Agent
-    participant SynthPanel as run_panel
+    participant Althing as run_panel
     participant Orchestrator
     participant Model
 
-    Agent->>SynthPanel: run_panel(decision_being_informed=...)
-    SynthPanel->>SynthPanel: grace shim (AC-4) + validate request (pre-model)
+    Agent->>Althing: run_panel(decision_being_informed=...)
+    Althing->>Althing: grace shim (AC-4) + validate request (pre-model)
     alt omitted (v1.0.x grace window)
-        SynthPanel->>SynthPanel: synthesize "unspecified-legacy-call" + W_DECISION_MISSING warning
-    else omitted (SYNTHPANEL_SCHEMA_MIN >= 1.1.0)
-        SynthPanel-->>Agent: error_envelope (MISSING_DECISION)
+        Althing->>Althing: synthesize "unspecified-legacy-call" + W_DECISION_MISSING warning
+    else omitted (ALTHING_SCHEMA_MIN >= 1.1.0)
+        Althing-->>Agent: error_envelope (MISSING_DECISION)
     else empty / <12 / >280 / newline / wrong type
-        SynthPanel-->>Agent: error_envelope (MISSING_DECISION | INVALID_TOOL_ARG | DECISION_TOO_LONG)
+        Althing-->>Agent: error_envelope (MISSING_DECISION | INVALID_TOOL_ARG | DECISION_TOO_LONG)
     else valid
-        SynthPanel->>Orchestrator: dispatch panel
+        Althing->>Orchestrator: dispatch panel
         Orchestrator->>Model: panelist turns
         Model-->>Orchestrator: structured responses
-        alt 3-strike retry exhausted (haiku) AND SYNTHPANEL_DRIFT_DEGRADE=1
+        alt 3-strike retry exhausted (haiku) AND ALTHING_DRIFT_DEGRADE=1
             Orchestrator-->>Agent: panel_verdict { flags: [{schema_drift, warn}] }
         else 3-strike exhausted (default v1.0)
             Orchestrator-->>Agent: error_envelope (SCHEMA_DRIFT, retry_safe=true)
@@ -40,7 +40,7 @@ sequenceDiagram
     end
 ```
 
-`SYNTHPANEL_DRIFT_DEGRADE` is **off by default in v1.0.0** (typed error on
+`ALTHING_DRIFT_DEGRADE` is **off by default in v1.0.0** (typed error on
 exhaustion) and **on by default in v1.1.0** (degraded artifact with
 `schema_drift` flag). See [docs/migration-v1.md](migration-v1.md) for the grace
 window.
@@ -55,7 +55,7 @@ yet. The server synthesizes the placeholder `"unspecified-legacy-call"`,
 returns a `W_DECISION_MISSING` nudge in the response `warnings[]`, and the
 placeholder flows through persistence and the verdict echo exactly like a
 real value — so audits can identify legacy traffic. Setting
-`SYNTHPANEL_SCHEMA_MIN=1.1.0` (v1.1.0 default) turns omission into a hard
+`ALTHING_SCHEMA_MIN=1.1.0` (v1.1.0 default) turns omission into a hard
 typed `MISSING_DECISION` reject. A field that is *provided* but
 empty/whitespace is a caller bug, not legacy traffic — it is rejected with
 `MISSING_DECISION` in every version.
@@ -146,7 +146,7 @@ and structured-output engine surface signals; orchestrator decides.
 | `persona_collision` | Duplicate/near-duplicate personas inflated agreement | Cosine similarity > 0.92 across ≥ 2 personas |
 | `out_of_distribution` | Stimulus outside training/persona coverage | Retrieval confidence below floor |
 | `refusal_or_degenerate` | One or more personas refused or returned empty/boilerplate | Parser-level detection |
-| `schema_drift` | Degraded artifact returned after 3-strike retry exhaustion | Only fires when `SYNTHPANEL_DRIFT_DEGRADE=1` (default v1.1.0) |
+| `schema_drift` | Degraded artifact returned after 3-strike retry exhaustion | Only fires when `ALTHING_DRIFT_DEGRADE=1` (default v1.1.0) |
 
 ### Severity
 
@@ -221,7 +221,7 @@ elif verdict["convergence"] >= 0.7:
 
 | Code | When | `retry_safe` |
 |---|---|---|
-| `MISSING_DECISION` | Required field omitted (hard-reject mode, `SYNTHPANEL_SCHEMA_MIN>=1.1.0`) or provided but empty after trim | `false` |
+| `MISSING_DECISION` | Required field omitted (hard-reject mode, `ALTHING_SCHEMA_MIN>=1.1.0`) or provided but empty after trim | `false` |
 | `DECISION_TOO_LONG` | `>280` chars after trim | `false` |
 | `INVALID_TOOL_ARG` | Other request validation failure — including `<12` chars after trim, newlines, or a non-string value | `false` |
 | `INVALID_FLAG` | Response carries a flag not in the closed enum | `false` |
@@ -264,7 +264,7 @@ Fail fast, fail closed.
 ## Schema asset
 
 Single file, embedded in the package:
-[`synthpanel/schemas/v1.0.0.json`](../src/synth_panel/schemas/v1.0.0.json).
+[`althing/schemas/v1.0.0.json`](../src/althing/schemas/v1.0.0.json).
 Append-only — new contract versions ship as parallel files
 (`v1.1.0.json`, `v2.0.0.json`), never as in-place edits. One documented
 exception: v1.0.6 appended `PANEL_TIMEOUT` to `error_codes_enum` to record a

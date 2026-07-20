@@ -10,7 +10,7 @@ A copy-pasteable starter lives at
 Run it with:
 
 ```bash
-synthpanel panel run \
+althing panel run \
   --personas examples/personas.yaml \
   --instrument examples/instruments/with-attachments.yaml
 ```
@@ -74,7 +74,7 @@ instrument:
   `claude-haiku-4.5`, `gpt-4o-mini`, or `gemini-2.0-flash`. (`markdown` /
   `html_text` modes return text and work with any model.)
 - **`fetch_mode: screenshot` needs the `visual` extra.** Install with
-  `pip install 'synthpanel[visual]'`, then fetch the browser once with
+  `pip install 'althing[visual]'`, then fetch the browser once with
   `python -m playwright install chromium`. Without it, screenshot mode
   can't render the page. Text-only modes have no extra dependency.
 - **Failed URL fetches are a hard error by default (sy-550).** If a

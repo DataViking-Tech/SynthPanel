@@ -7,14 +7,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import synth_panel.conditions as conditions_module
-from synth_panel.conditions import (
+import althing.conditions as conditions_module
+from althing.conditions import (
     ConditionError,
     evaluate_condition,
     normalize_follow_up,
     validate_condition_string,
 )
-from synth_panel.llm.models import CompletionResponse, TextBlock, TokenUsage
+from althing.llm.models import CompletionResponse, TextBlock, TokenUsage
 
 
 @pytest.fixture(autouse=True)
@@ -99,7 +99,7 @@ class TestUnknownCondition:
 
     def test_unknown_emits_warning_once(self, caplog):
         """Typos log a warning on first occurrence so instrument authors notice."""
-        with caplog.at_level("WARNING", logger="synth_panel.conditions"):
+        with caplog.at_level("WARNING", logger="althing.conditions"):
             evaluate_condition("response_contians: yes", "I said yes")
             evaluate_condition("response_contians: yes", "and again")
         warnings = [r for r in caplog.records if r.levelname == "WARNING"]
@@ -108,7 +108,7 @@ class TestUnknownCondition:
         assert "typo" in warnings[0].getMessage().lower()
 
     def test_distinct_unknowns_warn_separately(self, caplog):
-        with caplog.at_level("WARNING", logger="synth_panel.conditions"):
+        with caplog.at_level("WARNING", logger="althing.conditions"):
             evaluate_condition("typo_one", "text")
             evaluate_condition("typo_two", "text")
         warnings = [r for r in caplog.records if r.levelname == "WARNING"]
@@ -206,7 +206,7 @@ class TestResponseSentiment:
 
     def test_no_client_warns_once(self, caplog):
         """Missing client is a loud failure mode — first occurrence warns (sp-t5ok)."""
-        with caplog.at_level("WARNING", logger="synth_panel.conditions"):
+        with caplog.at_level("WARNING", logger="althing.conditions"):
             evaluate_condition("response_sentiment: positive", "a")
             evaluate_condition("response_sentiment: negative", "b")
         warnings = [r for r in caplog.records if r.levelname == "WARNING"]

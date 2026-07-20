@@ -1,4 +1,4 @@
-"""Tests for `synthpanel mcp install` (sy-skf)."""
+"""Tests for `althing mcp install` (sy-skf)."""
 
 from __future__ import annotations
 
@@ -10,9 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from synth_panel.cli import mcp_install
-from synth_panel.cli.parser import build_parser
-from synth_panel.main import main
+from althing.cli import mcp_install
+from althing.cli.parser import build_parser
+from althing.main import main
 
 # ---------------------------------------------------------------------------
 # Parser
@@ -27,7 +27,7 @@ class TestParser:
         assert args.uninstall is False
         assert args.scope == "user"
         assert args.target is None
-        assert args.name == "synth_panel"
+        assert args.name == "althing"
         assert args.mcp_command_override is None
         assert args.mcp_env is None
         assert args.force is False
@@ -45,7 +45,7 @@ class TestParser:
                 "--name",
                 "custom",
                 "--command",
-                "/usr/local/bin/synthpanel",
+                "/usr/local/bin/althing",
                 "--env",
                 "ANTHROPIC_API_KEY=sk-test",
                 "--env",
@@ -57,7 +57,7 @@ class TestParser:
         assert args.scope == "project"
         assert args.target == str(tmp_path / "cfg.json")
         assert args.name == "custom"
-        assert args.mcp_command_override == "/usr/local/bin/synthpanel"
+        assert args.mcp_command_override == "/usr/local/bin/althing"
         assert args.mcp_env == ["ANTHROPIC_API_KEY=sk-test", "OPENAI_API_KEY=sk-other"]
         assert args.force is True
         assert args.dry_run is True
@@ -90,59 +90,59 @@ class TestHelpers:
         assert target == explicit
 
     def test_resolve_command_explicit(self):
-        assert mcp_install.resolve_command("/opt/bin/synthpanel") == "/opt/bin/synthpanel"
+        assert mcp_install.resolve_command("/opt/bin/althing") == "/opt/bin/althing"
 
     def test_resolve_command_prefers_which(self, monkeypatch, tmp_path):
-        launcher = tmp_path / "synthpanel"
+        launcher = tmp_path / "althing"
         launcher.write_text("#!/bin/sh\n")
-        monkeypatch.setattr("synth_panel.cli.mcp_install.shutil.which", lambda _name: str(launcher))
+        monkeypatch.setattr("althing.cli.mcp_install.shutil.which", lambda _name: str(launcher))
         assert mcp_install.resolve_command(None) == str(launcher)
 
     def test_resolve_command_uses_venv_argv0_when_not_on_path(self, monkeypatch, tmp_path):
-        # Simulate `synthpanel mcp install` invoked from a venv whose bin is
+        # Simulate `althing mcp install` invoked from a venv whose bin is
         # NOT on PATH: shutil.which finds nothing, but argv[0] is the
         # absolute path to the venv console script (#539). The host must get
-        # that absolute path, not the unlaunchable literal "synthpanel".
+        # that absolute path, not the unlaunchable literal "althing".
         venv_bin = tmp_path / "venv" / "bin"
         venv_bin.mkdir(parents=True)
-        launcher = venv_bin / "synthpanel"
+        launcher = venv_bin / "althing"
         launcher.write_text("#!/bin/sh\n")
 
-        monkeypatch.setattr("synth_panel.cli.mcp_install.shutil.which", lambda _name: None)
-        monkeypatch.setattr("synth_panel.cli.mcp_install.sys.argv", [str(launcher)])
+        monkeypatch.setattr("althing.cli.mcp_install.shutil.which", lambda _name: None)
+        monkeypatch.setattr("althing.cli.mcp_install.sys.argv", [str(launcher)])
 
         assert mcp_install.resolve_command(None) == str(launcher)
 
-    def test_resolve_command_uses_synthpanel_next_to_interpreter(self, monkeypatch, tmp_path):
-        # No PATH hit and argv[0] is not a synthpanel launcher (e.g. invoked
-        # as `python -m synth_panel`), but a synthpanel console script lives
+    def test_resolve_command_uses_althing_next_to_interpreter(self, monkeypatch, tmp_path):
+        # No PATH hit and argv[0] is not a althing launcher (e.g. invoked
+        # as `python -m althing`), but a althing console script lives
         # next to sys.executable — the canonical venv layout.
         venv_bin = tmp_path / "venv" / "bin"
         venv_bin.mkdir(parents=True)
         py = venv_bin / "python"
         py.write_text("#!/bin/sh\n")
-        launcher = venv_bin / "synthpanel"
+        launcher = venv_bin / "althing"
         launcher.write_text("#!/bin/sh\n")
 
-        monkeypatch.setattr("synth_panel.cli.mcp_install.shutil.which", lambda _name: None)
-        monkeypatch.setattr("synth_panel.cli.mcp_install.sys.argv", ["python"])
-        monkeypatch.setattr("synth_panel.cli.mcp_install.sys.executable", str(py))
+        monkeypatch.setattr("althing.cli.mcp_install.shutil.which", lambda _name: None)
+        monkeypatch.setattr("althing.cli.mcp_install.sys.argv", ["python"])
+        monkeypatch.setattr("althing.cli.mcp_install.sys.executable", str(py))
 
         assert mcp_install.resolve_command(None) == str(launcher)
 
     def test_resolve_command_falls_back_to_literal(self, monkeypatch, tmp_path):
-        # Nothing resolvable: no PATH hit, argv[0] is not a synthpanel
-        # launcher, and no synthpanel sits beside the interpreter.
+        # Nothing resolvable: no PATH hit, argv[0] is not a althing
+        # launcher, and no althing sits beside the interpreter.
         empty_bin = tmp_path / "empty"
         empty_bin.mkdir()
         py = empty_bin / "python"
         py.write_text("#!/bin/sh\n")
 
-        monkeypatch.setattr("synth_panel.cli.mcp_install.shutil.which", lambda _name: None)
-        monkeypatch.setattr("synth_panel.cli.mcp_install.sys.argv", ["pytest"])
-        monkeypatch.setattr("synth_panel.cli.mcp_install.sys.executable", str(py))
+        monkeypatch.setattr("althing.cli.mcp_install.shutil.which", lambda _name: None)
+        monkeypatch.setattr("althing.cli.mcp_install.sys.argv", ["pytest"])
+        monkeypatch.setattr("althing.cli.mcp_install.sys.executable", str(py))
 
-        assert mcp_install.resolve_command(None) == "synthpanel"
+        assert mcp_install.resolve_command(None) == "althing"
 
     def test_parse_env_pairs(self):
         out = mcp_install.parse_env_pairs(["A=1", "B=two=words"])
@@ -168,8 +168,8 @@ class TestHelpers:
         monkeypatch.setattr(mcp_install, "mcp_extra_available", lambda: False)
         result = mcp_install.install(
             target=tmp_path / "claude.json",
-            name="synth_panel",
-            command="synthpanel",
+            name="althing",
+            command="althing",
             env={},
             force=False,
             dry_run=True,
@@ -177,13 +177,13 @@ class TestHelpers:
         assert result.warnings == [mcp_install.MCP_EXTRA_WARNING]
 
     def test_build_entry(self):
-        entry = mcp_install.build_entry("synthpanel", {})
-        assert entry == {"command": "synthpanel", "args": ["mcp-serve"]}
+        entry = mcp_install.build_entry("althing", {})
+        assert entry == {"command": "althing", "args": ["mcp-serve"]}
 
     def test_build_entry_with_env(self):
-        entry = mcp_install.build_entry("synthpanel", {"ANTHROPIC_API_KEY": "sk"})
+        entry = mcp_install.build_entry("althing", {"ANTHROPIC_API_KEY": "sk"})
         assert entry == {
-            "command": "synthpanel",
+            "command": "althing",
             "args": ["mcp-serve"],
             "env": {"ANTHROPIC_API_KEY": "sk"},
         }
@@ -199,8 +199,8 @@ class TestInstall:
         target = tmp_path / "claude.json"
         result = mcp_install.install(
             target=target,
-            name="synth_panel",
-            command="synthpanel",
+            name="althing",
+            command="althing",
             env={},
             force=False,
             dry_run=False,
@@ -208,15 +208,15 @@ class TestInstall:
         assert result.action == "installed"
         assert target.exists()
         data = json.loads(target.read_text())
-        assert data == {"mcpServers": {"synth_panel": {"command": "synthpanel", "args": ["mcp-serve"]}}}
+        assert data == {"mcpServers": {"althing": {"command": "althing", "args": ["mcp-serve"]}}}
 
     def test_preserves_other_top_level_keys(self, tmp_path):
         target = tmp_path / "claude.json"
         target.write_text(json.dumps({"theme": "dark", "telemetry": False}))
         mcp_install.install(
             target=target,
-            name="synth_panel",
-            command="synthpanel",
+            name="althing",
+            command="althing",
             env={},
             force=False,
             dry_run=False,
@@ -224,60 +224,60 @@ class TestInstall:
         data = json.loads(target.read_text())
         assert data["theme"] == "dark"
         assert data["telemetry"] is False
-        assert "synth_panel" in data["mcpServers"]
+        assert "althing" in data["mcpServers"]
 
     def test_preserves_other_servers(self, tmp_path):
         target = tmp_path / "claude.json"
         target.write_text(json.dumps({"mcpServers": {"other": {"command": "other-bin", "args": []}}}))
         mcp_install.install(
             target=target,
-            name="synth_panel",
-            command="synthpanel",
+            name="althing",
+            command="althing",
             env={},
             force=False,
             dry_run=False,
         )
         data = json.loads(target.read_text())
         assert "other" in data["mcpServers"]
-        assert "synth_panel" in data["mcpServers"]
+        assert "althing" in data["mcpServers"]
 
     def test_collision_requires_force(self, tmp_path):
         target = tmp_path / "claude.json"
-        target.write_text(json.dumps({"mcpServers": {"synth_panel": {"command": "old", "args": ["mcp-serve"]}}}))
+        target.write_text(json.dumps({"mcpServers": {"althing": {"command": "old", "args": ["mcp-serve"]}}}))
         with pytest.raises(FileExistsError):
             mcp_install.install(
                 target=target,
-                name="synth_panel",
-                command="synthpanel",
+                name="althing",
+                command="althing",
                 env={},
                 force=False,
                 dry_run=False,
             )
         # File should not have been touched.
         data = json.loads(target.read_text())
-        assert data["mcpServers"]["synth_panel"]["command"] == "old"
+        assert data["mcpServers"]["althing"]["command"] == "old"
 
     def test_force_overwrites(self, tmp_path):
         target = tmp_path / "claude.json"
-        target.write_text(json.dumps({"mcpServers": {"synth_panel": {"command": "old", "args": ["mcp-serve"]}}}))
+        target.write_text(json.dumps({"mcpServers": {"althing": {"command": "old", "args": ["mcp-serve"]}}}))
         result = mcp_install.install(
             target=target,
-            name="synth_panel",
-            command="synthpanel",
+            name="althing",
+            command="althing",
             env={},
             force=True,
             dry_run=False,
         )
         assert result.action == "updated"
         data = json.loads(target.read_text())
-        assert data["mcpServers"]["synth_panel"]["command"] == "synthpanel"
+        assert data["mcpServers"]["althing"]["command"] == "althing"
 
     def test_idempotent_noop(self, tmp_path):
         target = tmp_path / "claude.json"
         mcp_install.install(
             target=target,
-            name="synth_panel",
-            command="synthpanel",
+            name="althing",
+            command="althing",
             env={},
             force=False,
             dry_run=False,
@@ -285,8 +285,8 @@ class TestInstall:
         # Second run with identical values: no force needed because content matches.
         result = mcp_install.install(
             target=target,
-            name="synth_panel",
-            command="synthpanel",
+            name="althing",
+            command="althing",
             env={},
             force=False,
             dry_run=False,
@@ -297,8 +297,8 @@ class TestInstall:
         target = tmp_path / "claude.json"
         result = mcp_install.install(
             target=target,
-            name="synth_panel",
-            command="synthpanel",
+            name="althing",
+            command="althing",
             env={},
             force=False,
             dry_run=True,
@@ -312,8 +312,8 @@ class TestInstall:
         target = tmp_path / ".claude.json"
         mcp_install.install(
             target=target,
-            name="synth_panel",
-            command="synthpanel",
+            name="althing",
+            command="althing",
             env={"ANTHROPIC_API_KEY": "secret"},
             force=False,
             dry_run=False,
@@ -327,8 +327,8 @@ class TestInstall:
         with pytest.raises(ValueError):
             mcp_install.install(
                 target=target,
-                name="synth_panel",
-                command="synthpanel",
+                name="althing",
+                command="althing",
                 env={},
                 force=True,
                 dry_run=False,
@@ -339,8 +339,8 @@ class TestInstall:
         target.write_text("")
         result = mcp_install.install(
             target=target,
-            name="synth_panel",
-            command="synthpanel",
+            name="althing",
+            command="althing",
             env={},
             force=False,
             dry_run=False,
@@ -355,38 +355,38 @@ class TestUninstall:
             json.dumps(
                 {
                     "mcpServers": {
-                        "synth_panel": {"command": "synthpanel", "args": ["mcp-serve"]},
+                        "althing": {"command": "althing", "args": ["mcp-serve"]},
                         "other": {"command": "other", "args": []},
                     }
                 }
             )
         )
-        result = mcp_install.uninstall(target=target, name="synth_panel", dry_run=False)
+        result = mcp_install.uninstall(target=target, name="althing", dry_run=False)
         assert result.action == "removed"
         data = json.loads(target.read_text())
-        assert "synth_panel" not in data["mcpServers"]
+        assert "althing" not in data["mcpServers"]
         assert "other" in data["mcpServers"]
 
     def test_noop_when_missing_file(self, tmp_path):
         target = tmp_path / "nope.json"
-        result = mcp_install.uninstall(target=target, name="synth_panel", dry_run=False)
+        result = mcp_install.uninstall(target=target, name="althing", dry_run=False)
         assert result.action == "noop"
         assert not target.exists()
 
     def test_noop_when_entry_absent(self, tmp_path):
         target = tmp_path / "claude.json"
         target.write_text(json.dumps({"mcpServers": {"other": {}}}))
-        result = mcp_install.uninstall(target=target, name="synth_panel", dry_run=False)
+        result = mcp_install.uninstall(target=target, name="althing", dry_run=False)
         assert result.action == "noop"
 
     def test_dry_run(self, tmp_path):
         target = tmp_path / "claude.json"
-        target.write_text(json.dumps({"mcpServers": {"synth_panel": {"command": "synthpanel"}}}))
-        result = mcp_install.uninstall(target=target, name="synth_panel", dry_run=True)
+        target.write_text(json.dumps({"mcpServers": {"althing": {"command": "althing"}}}))
+        result = mcp_install.uninstall(target=target, name="althing", dry_run=True)
         assert result.action == "would-remove"
         # Untouched.
         data = json.loads(target.read_text())
-        assert "synth_panel" in data["mcpServers"]
+        assert "althing" in data["mcpServers"]
 
 
 # ---------------------------------------------------------------------------
@@ -400,7 +400,7 @@ class TestCLI:
         rc = main(["mcp", "install", "--target", str(target)])
         assert rc == 0
         data = json.loads(target.read_text())
-        assert "synth_panel" in data["mcpServers"]
+        assert "althing" in data["mcpServers"]
         out = capsys.readouterr().out
         assert "Installed MCP server" in out
 
@@ -415,19 +415,19 @@ class TestCLI:
                 "--target",
                 str(target),
                 "--command",
-                "synthpanel",
+                "althing",
             ]
         )
         assert rc == 0
         payload = json.loads(capsys.readouterr().out)
         assert payload["action"] == "installed"
-        assert payload["name"] == "synth_panel"
+        assert payload["name"] == "althing"
         assert payload["target"] == str(target)
         assert payload["entry"]["args"] == ["mcp-serve"]
 
     def test_collision_exits_nonzero_without_force(self, tmp_path, capsys):
         target = tmp_path / "claude.json"
-        target.write_text(json.dumps({"mcpServers": {"synth_panel": {"command": "old", "args": ["mcp-serve"]}}}))
+        target.write_text(json.dumps({"mcpServers": {"althing": {"command": "old", "args": ["mcp-serve"]}}}))
         rc = main(["mcp", "install", "--target", str(target)])
         assert rc == 1
         err = capsys.readouterr().err
@@ -436,11 +436,11 @@ class TestCLI:
 
     def test_uninstall_via_flag(self, tmp_path, capsys):
         target = tmp_path / "claude.json"
-        target.write_text(json.dumps({"mcpServers": {"synth_panel": {"command": "synthpanel"}}}))
+        target.write_text(json.dumps({"mcpServers": {"althing": {"command": "althing"}}}))
         rc = main(["mcp", "install", "--uninstall", "--target", str(target)])
         assert rc == 0
         data = json.loads(target.read_text())
-        assert "synth_panel" not in data.get("mcpServers", {})
+        assert "althing" not in data.get("mcpServers", {})
 
     def test_dry_run_does_not_write(self, tmp_path, capsys):
         # sy-0k2 / gh-495: dry-run human prose goes to stderr; stdout
@@ -453,8 +453,8 @@ class TestCLI:
         assert "Would install" in captured.err
         # stdout must be valid JSON so callers can `| jq` or write-it-out themselves.
         payload = json.loads(captured.out)
-        assert payload["mcpServers"]["synth_panel"]["command"]
-        assert payload["mcpServers"]["synth_panel"]["args"] == ["mcp-serve"]
+        assert payload["mcpServers"]["althing"]["command"]
+        assert payload["mcpServers"]["althing"]["args"] == ["mcp-serve"]
 
     def test_dry_run_preserves_existing_servers_in_preview(self, tmp_path, capsys):
         # sy-0k2 / gh-495: the dry-run preview must show ALL servers that
@@ -472,7 +472,7 @@ class TestCLI:
         assert rc == 0
         payload = json.loads(capsys.readouterr().out)
         assert payload["theme"] == "dark"
-        assert set(payload["mcpServers"].keys()) == {"other", "synth_panel"}
+        assert set(payload["mcpServers"].keys()) == {"other", "althing"}
 
     def test_dry_run_uninstall_preview_drops_entry(self, tmp_path, capsys):
         # sy-0k2 / gh-495: uninstall dry-run preview shows the post-removal
@@ -482,7 +482,7 @@ class TestCLI:
             json.dumps(
                 {
                     "mcpServers": {
-                        "synth_panel": {"command": "synthpanel", "args": ["mcp-serve"]},
+                        "althing": {"command": "althing", "args": ["mcp-serve"]},
                         "other": {"command": "other-bin", "args": []},
                     }
                 }
@@ -492,12 +492,12 @@ class TestCLI:
         assert rc == 0
         # Original file untouched.
         on_disk = json.loads(target.read_text())
-        assert "synth_panel" in on_disk["mcpServers"]
+        assert "althing" in on_disk["mcpServers"]
         # Preview reflects the post-removal state.
         captured = capsys.readouterr()
         assert "Would remove" in captured.err
         preview = json.loads(captured.out)
-        assert "synth_panel" not in preview["mcpServers"]
+        assert "althing" not in preview["mcpServers"]
         assert "other" in preview["mcpServers"]
 
     def test_dry_run_json_mode_includes_resulting_config(self, tmp_path, capsys):
@@ -513,7 +513,7 @@ class TestCLI:
         payload = json.loads(captured.out)
         assert payload["action"] == "would-install"
         assert payload["entry"]["args"] == ["mcp-serve"]
-        assert "synth_panel" in payload["resulting_config"]["mcpServers"]
+        assert "althing" in payload["resulting_config"]["mcpServers"]
 
     def test_bad_env_exits_nonzero(self, tmp_path, capsys):
         target = tmp_path / "claude.json"
@@ -526,7 +526,7 @@ class TestCLI:
         real_import = builtins.__import__
 
         def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
-            if name == "synth_panel.mcp.server":
+            if name == "althing.mcp.server":
                 raise ModuleNotFoundError("No module named 'mcp'", name="mcp")
             return real_import(name, globals, locals, fromlist, level)
 
@@ -534,7 +534,7 @@ class TestCLI:
         rc = main(["mcp-serve"])
         assert rc == 1
         err = capsys.readouterr().err
-        assert "synthpanel[mcp]" in err
+        assert "althing[mcp]" in err
         assert "ModuleNotFoundError" not in err
 
     def test_no_subcommand_prints_help(self, capsys):
@@ -555,7 +555,7 @@ class TestMcpExtraGuard:
     pytest env (we install with ``pip install -e .[dev,mcp]``). To
     exercise the missing-extra branch we monkeypatch the probe to return
     False — this is the same shape the CI smoke job sees on a fresh
-    ``pip install synthpanel`` (no extras).
+    ``pip install althing`` (no extras).
     """
 
     def test_install_refuses_when_extra_missing(self, tmp_path, capsys, monkeypatch):
@@ -568,7 +568,7 @@ class TestMcpExtraGuard:
         assert not target.exists(), "no file should be written when refusing"
         err = capsys.readouterr().err
         # Actionable copy is the whole point — the user needs a one-line fix.
-        assert "synthpanel[mcp]" in err
+        assert "althing[mcp]" in err
         # And the corrective opt-out for the cross-machine case must be discoverable.
         assert "--allow-missing-extra" in err
 
@@ -581,20 +581,20 @@ class TestMcpExtraGuard:
 
         assert rc == 0
         data = json.loads(target.read_text())
-        assert "synth_panel" in data["mcpServers"]
+        assert "althing" in data["mcpServers"]
 
     def test_uninstall_always_allowed(self, tmp_path, monkeypatch):
         """Uninstall must work even when the extra is gone — it's the
         canonical way to clean up after a partial install."""
         monkeypatch.setattr(mcp_install, "mcp_extra_available", lambda: False)
         target = tmp_path / "claude.json"
-        target.write_text(json.dumps({"mcpServers": {"synth_panel": {"command": "synthpanel"}}}))
+        target.write_text(json.dumps({"mcpServers": {"althing": {"command": "althing"}}}))
 
         rc = main(["mcp", "install", "--uninstall", "--target", str(target)])
 
         assert rc == 0
         data = json.loads(target.read_text())
-        assert "synth_panel" not in data.get("mcpServers", {})
+        assert "althing" not in data.get("mcpServers", {})
 
     def test_dry_run_also_blocked_without_flag(self, tmp_path, capsys, monkeypatch):
         """Dry-run with a missing extra still emits a broken config that
@@ -607,7 +607,7 @@ class TestMcpExtraGuard:
 
         assert rc == 1
         err = capsys.readouterr().err
-        assert "synthpanel[mcp]" in err
+        assert "althing[mcp]" in err
 
     def test_serve_emits_actionable_error_when_extra_missing(self, capsys, monkeypatch):
         """`mcp-serve` must NOT produce a Python traceback. Editor hosts
@@ -615,7 +615,7 @@ class TestMcpExtraGuard:
         carry the install command itself.
 
         sy-xyn origin: GH #507 user saw a raw ModuleNotFoundError after
-        their editor launched ``synthpanel mcp-serve``.
+        their editor launched ``althing mcp-serve``.
         """
         monkeypatch.setattr(mcp_install, "mcp_extra_available", lambda: False)
 
@@ -623,7 +623,7 @@ class TestMcpExtraGuard:
 
         assert rc == 1
         err = capsys.readouterr().err
-        assert "synthpanel[mcp]" in err
+        assert "althing[mcp]" in err
         # Sanity: the traceback prefix isn't in our stderr — that's the
         # observable difference from the v1.5.1 behaviour.
         assert "Traceback" not in err
@@ -638,7 +638,7 @@ class TestMcpExtraGuard:
     def test_message_is_centralised(self):
         """One copy, one source of truth — anything that surfaces the
         missing-extra hint reads from the same constant."""
-        assert "synthpanel[mcp]" in mcp_install.MISSING_MCP_EXTRA_MESSAGE
+        assert "althing[mcp]" in mcp_install.MISSING_MCP_EXTRA_MESSAGE
         assert "pip install" in mcp_install.MISSING_MCP_EXTRA_MESSAGE
 
 
@@ -697,11 +697,11 @@ class TestHostRegistry:
 class TestHostCLI:
     def test_install_host_cursor_writes_user_config(self, monkeypatch, tmp_path, capsys):
         monkeypatch.setenv("HOME", str(tmp_path))
-        rc = main(["mcp", "install", "--host", "cursor", "--command", "synthpanel"])
+        rc = main(["mcp", "install", "--host", "cursor", "--command", "althing"])
         assert rc == 0
         data = json.loads((tmp_path / ".cursor" / "mcp.json").read_text())
-        assert data["mcpServers"]["synth_panel"] == {
-            "command": "synthpanel",
+        assert data["mcpServers"]["althing"] == {
+            "command": "althing",
             "args": ["mcp-serve"],
         }
         out = capsys.readouterr().out
@@ -709,18 +709,18 @@ class TestHostCLI:
 
     def test_install_host_windsurf_writes_config(self, monkeypatch, tmp_path):
         monkeypatch.setenv("HOME", str(tmp_path))
-        rc = main(["mcp", "install", "--host", "windsurf", "--command", "synthpanel"])
+        rc = main(["mcp", "install", "--host", "windsurf", "--command", "althing"])
         assert rc == 0
         data = json.loads((tmp_path / ".codeium" / "windsurf" / "mcp_config.json").read_text())
-        assert data["mcpServers"]["synth_panel"]["args"] == ["mcp-serve"]
+        assert data["mcpServers"]["althing"]["args"] == ["mcp-serve"]
 
     def test_install_host_claude_desktop_writes_config(self, monkeypatch, tmp_path):
         monkeypatch.setenv("HOME", str(tmp_path))
-        rc = main(["mcp", "install", "--host", "claude-desktop", "--command", "synthpanel"])
+        rc = main(["mcp", "install", "--host", "claude-desktop", "--command", "althing"])
         assert rc == 0
         target = mcp_install.host_config_path(mcp_install.HOSTS["claude-desktop"])
         data = json.loads(target.read_text())
-        assert data["mcpServers"]["synth_panel"]["command"] == "synthpanel"
+        assert data["mcpServers"]["althing"]["command"] == "althing"
 
     def test_install_host_zed_writes_context_servers(self, monkeypatch, tmp_path, capsys):
         """Zed's schema differs: context_servers + source: custom."""
@@ -729,15 +729,15 @@ class TestHostCLI:
         settings.parent.mkdir(parents=True)
         settings.write_text(json.dumps({"theme": "One Dark", "context_servers": {"other": {"command": "x"}}}))
 
-        rc = main(["mcp", "install", "--host", "zed", "--command", "synthpanel"])
+        rc = main(["mcp", "install", "--host", "zed", "--command", "althing"])
         assert rc == 0
         data = json.loads(settings.read_text())
         # Non-destructive merge: unrelated settings and other servers survive.
         assert data["theme"] == "One Dark"
         assert "other" in data["context_servers"]
-        assert data["context_servers"]["synth_panel"] == {
+        assert data["context_servers"]["althing"] == {
             "source": "custom",
-            "command": "synthpanel",
+            "command": "althing",
             "args": ["mcp-serve"],
         }
         assert "mcpServers" not in data
@@ -746,7 +746,7 @@ class TestHostCLI:
     def test_install_host_project_scope_cursor(self, monkeypatch, tmp_path):
         monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.chdir(tmp_path)
-        rc = main(["mcp", "install", "--host", "cursor", "--scope", "project", "--command", "synthpanel"])
+        rc = main(["mcp", "install", "--host", "cursor", "--scope", "project", "--command", "althing"])
         assert rc == 0
         assert (tmp_path / ".cursor" / "mcp.json").is_file()
 
@@ -758,11 +758,11 @@ class TestHostCLI:
 
     def test_install_without_env_prints_key_note(self, monkeypatch, tmp_path, capsys):
         monkeypatch.setenv("HOME", str(tmp_path))
-        rc = main(["mcp", "install", "--host", "cursor", "--command", "synthpanel"])
+        rc = main(["mcp", "install", "--host", "cursor", "--command", "althing"])
         assert rc == 0
         err = capsys.readouterr().err
         assert "No API key was written" in err
-        assert "synthpanel login" in err
+        assert "althing login" in err
 
     def test_install_with_env_skips_key_note(self, monkeypatch, tmp_path, capsys):
         monkeypatch.setenv("HOME", str(tmp_path))
@@ -773,7 +773,7 @@ class TestHostCLI:
                 "--host",
                 "cursor",
                 "--command",
-                "synthpanel",
+                "althing",
                 "--env",
                 "ANTHROPIC_API_KEY=sk-test",
             ]
@@ -783,13 +783,13 @@ class TestHostCLI:
 
     def test_install_host_dry_run_writes_nothing(self, monkeypatch, tmp_path, capsys):
         monkeypatch.setenv("HOME", str(tmp_path))
-        rc = main(["mcp", "install", "--host", "zed", "--dry-run", "--command", "synthpanel"])
+        rc = main(["mcp", "install", "--host", "zed", "--dry-run", "--command", "althing"])
         assert rc == 0
         assert not (tmp_path / ".config" / "zed" / "settings.json").exists()
         captured = capsys.readouterr()
         assert "Would install" in captured.err
         payload = json.loads(captured.out)
-        assert payload["context_servers"]["synth_panel"]["source"] == "custom"
+        assert payload["context_servers"]["althing"]["source"] == "custom"
         # Dry-run never claims a restart is needed.
         assert "Restart" not in captured.out
 
@@ -800,7 +800,7 @@ class TestUninstallSubcommand:
         assert args.command == "mcp"
         assert args.mcp_command == "uninstall"
         assert args.host == "zed"
-        assert args.name == "synth_panel"
+        assert args.name == "althing"
         assert args.dry_run is False
 
     def test_uninstall_removes_only_our_entry(self, monkeypatch, tmp_path, capsys):
@@ -812,7 +812,7 @@ class TestUninstallSubcommand:
                 {
                     "mcpServers": {
                         "other": {"command": "other-server"},
-                        "synth_panel": {"command": "synthpanel", "args": ["mcp-serve"]},
+                        "althing": {"command": "althing", "args": ["mcp-serve"]},
                     },
                     "unrelated": True,
                 }
@@ -821,7 +821,7 @@ class TestUninstallSubcommand:
         rc = main(["mcp", "uninstall", "--host", "cursor"])
         assert rc == 0
         data = json.loads(cfg.read_text())
-        assert "synth_panel" not in data["mcpServers"]
+        assert "althing" not in data["mcpServers"]
         assert data["mcpServers"]["other"] == {"command": "other-server"}
         assert data["unrelated"] is True
         assert "Restart Cursor to pick up the server." in capsys.readouterr().out
@@ -834,7 +834,7 @@ class TestUninstallSubcommand:
             json.dumps(
                 {
                     "context_servers": {
-                        "synth_panel": {"source": "custom", "command": "synthpanel", "args": ["mcp-serve"]},
+                        "althing": {"source": "custom", "command": "althing", "args": ["mcp-serve"]},
                         "keep": {"source": "custom", "command": "keep"},
                     }
                 }
@@ -843,7 +843,7 @@ class TestUninstallSubcommand:
         rc = main(["mcp", "uninstall", "--host", "zed"])
         assert rc == 0
         data = json.loads(cfg.read_text())
-        assert "synth_panel" not in data["context_servers"]
+        assert "althing" not in data["context_servers"]
         assert "keep" in data["context_servers"]
 
     def test_uninstall_noop_when_absent(self, monkeypatch, tmp_path, capsys):
@@ -856,10 +856,10 @@ class TestUninstallSubcommand:
         """Cleanup must never be blocked by a missing optional dep."""
         monkeypatch.setattr(mcp_install, "mcp_extra_available", lambda: False)
         cfg = tmp_path / "cfg.json"
-        cfg.write_text(json.dumps({"mcpServers": {"synth_panel": {"command": "synthpanel"}}}))
+        cfg.write_text(json.dumps({"mcpServers": {"althing": {"command": "althing"}}}))
         rc = main(["mcp", "uninstall", "--target", str(cfg)])
         assert rc == 0
-        assert "synth_panel" not in json.loads(cfg.read_text()).get("mcpServers", {})
+        assert "althing" not in json.loads(cfg.read_text()).get("mcpServers", {})
 
 
 class TestAutoDetect:
@@ -877,10 +877,10 @@ class TestAutoDetect:
         monkeypatch.delenv("APPDATA", raising=False)
         cursor_cfg, zed_cfg = self._seed_hosts(tmp_path)
 
-        rc = main(["mcp", "install", "--host", "auto", "--yes", "--command", "synthpanel"])
+        rc = main(["mcp", "install", "--host", "auto", "--yes", "--command", "althing"])
         assert rc == 0
-        assert "synth_panel" in json.loads(cursor_cfg.read_text())["mcpServers"]
-        assert json.loads(zed_cfg.read_text())["context_servers"]["synth_panel"]["source"] == "custom"
+        assert "althing" in json.loads(cursor_cfg.read_text())["mcpServers"]
+        assert json.loads(zed_cfg.read_text())["context_servers"]["althing"]["source"] == "custom"
         captured = capsys.readouterr()
         assert "Detected MCP host configs" in captured.err
         assert "Restart Cursor to pick up the server." in captured.out
@@ -892,7 +892,7 @@ class TestAutoDetect:
         self._seed_hosts(tmp_path)
         monkeypatch.setattr("sys.stdin.isatty", lambda: False)
 
-        rc = main(["mcp", "install", "--host", "auto", "--command", "synthpanel"])
+        rc = main(["mcp", "install", "--host", "auto", "--command", "althing"])
         assert rc == 1
         assert "--yes" in capsys.readouterr().err
 
@@ -904,9 +904,9 @@ class TestAutoDetect:
         answers = iter(["y", "n"])
         monkeypatch.setattr(builtins, "input", lambda prompt="": next(answers))
 
-        rc = main(["mcp", "install", "--host", "auto", "--command", "synthpanel"])
+        rc = main(["mcp", "install", "--host", "auto", "--command", "althing"])
         assert rc == 0
-        assert "synth_panel" in json.loads(cursor_cfg.read_text())["mcpServers"]
+        assert "althing" in json.loads(cursor_cfg.read_text())["mcpServers"]
         assert "context_servers" not in json.loads(zed_cfg.read_text())
 
     def test_auto_with_no_hosts_detected_errors(self, monkeypatch, tmp_path, capsys):

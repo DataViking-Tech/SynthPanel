@@ -28,9 +28,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from synth_panel.cli.commands import _INLINE_CALIBRATION_ALLOWED
-from synth_panel.cli.parser import build_parser
-from synth_panel.main import main
+from althing.cli.commands import _INLINE_CALIBRATION_ALLOWED
+from althing.cli.parser import build_parser
+from althing.main import main
 
 # ── Fixtures ──────────────────────────────────────────────────────────
 
@@ -110,8 +110,8 @@ class TestAllowlistConstant:
 
 
 class TestFormatValidation:
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_bare_dataset_no_colon_exits_2(self, mock_client_cls, mock_runtime_cls, capsys, panel_files):
         personas, instrument = panel_files
         mock_runtime = MagicMock()
@@ -125,8 +125,8 @@ class TestFormatValidation:
         assert "colon-separated" in err
         mock_runtime.run_turn.assert_not_called()
 
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_empty_question_after_colon_exits_2(self, mock_client_cls, mock_runtime_cls, capsys, panel_files):
         personas, instrument = panel_files
         mock_runtime = MagicMock()
@@ -138,8 +138,8 @@ class TestFormatValidation:
         assert "DATASET:QUESTION" in capsys.readouterr().err
         mock_runtime.run_turn.assert_not_called()
 
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_empty_dataset_before_colon_exits_2(self, mock_client_cls, mock_runtime_cls, capsys, panel_files):
         personas, instrument = panel_files
         mock_runtime = MagicMock()
@@ -156,8 +156,8 @@ class TestFormatValidation:
 
 
 class TestRedistributionGate:
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_gated_dataset_wvs_exits_1(self, mock_client_cls, mock_runtime_cls, capsys, panel_files, monkeypatch):
         # Make sure the override env var is NOT set for this test.
         monkeypatch.delenv("SYNTHBENCH_ALLOW_GATED", raising=False)
@@ -175,9 +175,9 @@ class TestRedistributionGate:
         assert "ntia" in err
         mock_runtime.run_turn.assert_not_called()
 
-    @patch("synth_panel.cli.commands.load_synthbench_baseline")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.load_synthbench_baseline")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_gated_override_env_lets_through(
         self,
         mock_client_cls,
@@ -221,8 +221,8 @@ class TestRedistributionGate:
 
 
 class TestConvergenceBaselineConflict:
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_different_specs_exit_2(self, mock_client_cls, mock_runtime_cls, capsys, panel_files):
         personas, instrument = panel_files
         mock_runtime = MagicMock()
@@ -244,9 +244,9 @@ class TestConvergenceBaselineConflict:
         assert "same DATASET:QUESTION" in err
         mock_runtime.run_turn.assert_not_called()
 
-    @patch("synth_panel.cli.commands.load_synthbench_baseline")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.load_synthbench_baseline")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_matching_specs_pass_validation(
         self,
         mock_client_cls,
@@ -292,10 +292,10 @@ class TestConvergenceBaselineConflict:
 
 
 class TestAutoEnableConvergence:
-    @patch("synth_panel.cli.commands.identify_tracked_questions")
-    @patch("synth_panel.cli.commands.load_synthbench_baseline")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.identify_tracked_questions")
+    @patch("althing.cli.commands.load_synthbench_baseline")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_calibrate_against_alone_triggers_convergence_path(
         self,
         mock_client_cls,
@@ -338,10 +338,10 @@ class TestAutoDeriveWiring:
     provenance labels, and the two hard-fail modes from structure.md §7.
     """
 
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.load_synthbench_baseline")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.load_synthbench_baseline")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_small_enum_baseline_auto_derives_schema(
         self,
         mock_client_cls,
@@ -386,9 +386,9 @@ class TestAutoDeriveWiring:
             "Very happy",
         ]
 
-    @patch("synth_panel.cli.commands.load_synthbench_baseline")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.load_synthbench_baseline")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_likert_baseline_without_schema_hard_fails(
         self,
         mock_client_cls,
@@ -416,9 +416,9 @@ class TestAutoDeriveWiring:
         # Panelist loop never reached — R2 regression guard.
         mock_runtime.run_turn.assert_not_called()
 
-    @patch("synth_panel.cli.commands.load_synthbench_baseline")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.load_synthbench_baseline")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_wide_enum_baseline_without_schema_hard_fails(
         self,
         mock_client_cls,
@@ -453,10 +453,10 @@ class TestAutoDeriveWiring:
         assert "6 options" in err
         mock_runtime.run_turn.assert_not_called()
 
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.load_synthbench_baseline")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.load_synthbench_baseline")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_user_supplied_extract_schema_bypasses_derivation(
         self,
         mock_client_cls,
@@ -519,10 +519,10 @@ class TestAutoDeriveWiring:
         injected = mock_parallel.call_args.kwargs.get("extract_schema")
         assert injected == user_schema
 
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.load_synthbench_baseline")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.load_synthbench_baseline")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_single_baseline_fetch_when_both_flags_present(
         self,
         mock_client_cls,
@@ -587,7 +587,7 @@ def _gss_happy_baseline_or_skip() -> dict:
     try:
         import synthbench  # type: ignore[import-not-found]
     except ImportError:
-        pytest.skip("synthbench not installed; install synthpanel[convergence]")
+        pytest.skip("synthbench not installed; install althing[convergence]")
     try:
         baseline = synthbench.load_convergence_baseline(dataset="gss", question_key="HAPPY")
     except Exception as exc:  # DatasetDownloadError, BaselineUnavailable, ...
@@ -685,7 +685,7 @@ def test_general_survey_gss_happy_end_to_end(tmp_path: Path) -> None:
         [
             sys.executable,
             "-m",
-            "synth_panel",
+            "althing",
             "panel",
             "run",
             "--personas",

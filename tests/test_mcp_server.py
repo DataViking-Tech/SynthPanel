@@ -1,4 +1,4 @@
-"""Tests for synth_panel.mcp.server — tool/resource/prompt registration and data tools."""
+"""Tests for althing.mcp.server — tool/resource/prompt registration and data tools."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def _data_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-placeholder")
 
 
-from synth_panel.mcp.server import MCP_DEFAULT_MODEL, mcp
+from althing.mcp.server import MCP_DEFAULT_MODEL, mcp
 
 # ---------------------------------------------------------------------------
 # Server registration
@@ -40,7 +40,7 @@ class TestServerRegistration:
         must match that provider — otherwise we default to ``haiku``
         (Anthropic) and the LLM client rejects the run with a misleading
         missing-key error despite the user having valid credentials."""
-        from synth_panel.mcp.server import _resolve_mcp_default_model
+        from althing.mcp.server import _resolve_mcp_default_model
 
         for var in (
             "ANTHROPIC_API_KEY",
@@ -69,7 +69,7 @@ class TestServerRegistration:
                 monkeypatch.delenv(env_var, raising=False)
 
     def test_resolve_default_model_falls_back_to_haiku(self, monkeypatch):
-        from synth_panel.mcp.server import _resolve_mcp_default_model
+        from althing.mcp.server import _resolve_mcp_default_model
 
         for var in (
             "ANTHROPIC_API_KEY",
@@ -105,7 +105,7 @@ class TestLargePanelFastModelSwap:
             monkeypatch.delenv(var, raising=False)
 
     def test_openrouter_swapped_at_threshold(self, monkeypatch):
-        from synth_panel.mcp.server import (
+        from althing.mcp.server import (
             LARGE_PANEL_PERSONA_THRESHOLD,
             _resolve_mcp_default_model_for_panel,
         )
@@ -115,13 +115,13 @@ class TestLargePanelFastModelSwap:
         assert result == "openrouter/anthropic/claude-haiku-4.5"
 
     def test_openrouter_swapped_above_threshold(self, monkeypatch):
-        from synth_panel.mcp.server import _resolve_mcp_default_model_for_panel
+        from althing.mcp.server import _resolve_mcp_default_model_for_panel
 
         monkeypatch.setenv("OPENROUTER_API_KEY", "sk-x")
         assert _resolve_mcp_default_model_for_panel(20) == "openrouter/anthropic/claude-haiku-4.5"
 
     def test_openrouter_not_swapped_below_threshold(self, monkeypatch):
-        from synth_panel.mcp.server import (
+        from althing.mcp.server import (
             LARGE_PANEL_PERSONA_THRESHOLD,
             _resolve_mcp_default_model_for_panel,
         )
@@ -132,19 +132,19 @@ class TestLargePanelFastModelSwap:
 
     def test_anthropic_default_not_swapped(self, monkeypatch):
         """Haiku is already fast — no swap regardless of persona count."""
-        from synth_panel.mcp.server import _resolve_mcp_default_model_for_panel
+        from althing.mcp.server import _resolve_mcp_default_model_for_panel
 
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-x")
         assert _resolve_mcp_default_model_for_panel(50) == "haiku"
 
     def test_openai_default_not_swapped(self, monkeypatch):
-        from synth_panel.mcp.server import _resolve_mcp_default_model_for_panel
+        from althing.mcp.server import _resolve_mcp_default_model_for_panel
 
         monkeypatch.setenv("OPENAI_API_KEY", "sk-x")
         assert _resolve_mcp_default_model_for_panel(50) == "gpt-4o-mini"
 
     def test_gemini_default_not_swapped(self, monkeypatch):
-        from synth_panel.mcp.server import _resolve_mcp_default_model_for_panel
+        from althing.mcp.server import _resolve_mcp_default_model_for_panel
 
         monkeypatch.setenv("GEMINI_API_KEY", "sk-x")
         assert _resolve_mcp_default_model_for_panel(50) == "gemini-2.5-flash"
@@ -152,14 +152,14 @@ class TestLargePanelFastModelSwap:
     @pytest.mark.asyncio
     async def test_run_panel_uses_fast_default_for_large_panel(self, monkeypatch):
         """End-to-end: 10 personas + openrouter env → fast model passed downstream."""
-        from synth_panel.mcp.server import mcp
+        from althing.mcp.server import mcp
 
         monkeypatch.setenv("OPENROUTER_API_KEY", "sk-x")
         # The outer fixture sets ANTHROPIC_API_KEY — clear so OPENROUTER wins.
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
         personas = [{"name": f"P{i}"} for i in range(10)]
-        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+        with patch("althing.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = {"results": []}
             await mcp.call_tool(
                 "run_panel",
@@ -176,13 +176,13 @@ class TestLargePanelFastModelSwap:
     @pytest.mark.asyncio
     async def test_run_panel_honors_explicit_openrouter_auto(self, monkeypatch):
         """An explicit ``openrouter/auto`` is honored — only defaults swap."""
-        from synth_panel.mcp.server import mcp
+        from althing.mcp.server import mcp
 
         monkeypatch.setenv("OPENROUTER_API_KEY", "sk-x")
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
         personas = [{"name": f"P{i}"} for i in range(15)]
-        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+        with patch("althing.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = {"results": []}
             await mcp.call_tool(
                 "run_panel",
@@ -199,13 +199,13 @@ class TestLargePanelFastModelSwap:
     @pytest.mark.asyncio
     async def test_run_panel_no_swap_below_threshold(self, monkeypatch):
         """A 9-persona panel keeps the openrouter/auto default."""
-        from synth_panel.mcp.server import mcp
+        from althing.mcp.server import mcp
 
         monkeypatch.setenv("OPENROUTER_API_KEY", "sk-x")
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
         personas = [{"name": f"P{i}"} for i in range(9)]
-        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+        with patch("althing.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = {"results": []}
             await mcp.call_tool(
                 "run_panel",
@@ -263,7 +263,7 @@ class TestRunPrompt:
 
     @pytest.mark.asyncio
     async def test_run_prompt_returns_response_and_cost(self):
-        from synth_panel.llm.models import CompletionResponse, TextBlock, TokenUsage
+        from althing.llm.models import CompletionResponse, TextBlock, TokenUsage
 
         mock_response = CompletionResponse(
             id="resp-1",
@@ -272,8 +272,8 @@ class TestRunPrompt:
             usage=TokenUsage(input_tokens=10, output_tokens=5),
         )
         with (
-            patch("synth_panel.mcp.server._shared_client", None),
-            patch("synth_panel.mcp.server.LLMClient") as MockClient,
+            patch("althing.mcp.server._shared_client", None),
+            patch("althing.mcp.server.LLMClient") as MockClient,
         ):
             MockClient.return_value.send.return_value = mock_response
             result = await mcp.call_tool("run_prompt", {"prompt": "Say hello"})
@@ -287,7 +287,7 @@ class TestRunPrompt:
 
     @pytest.mark.asyncio
     async def test_run_prompt_uses_default_model(self):
-        from synth_panel.llm.models import CompletionResponse, TextBlock, TokenUsage
+        from althing.llm.models import CompletionResponse, TextBlock, TokenUsage
 
         mock_response = CompletionResponse(
             id="resp-2",
@@ -296,8 +296,8 @@ class TestRunPrompt:
             usage=TokenUsage(input_tokens=5, output_tokens=2),
         )
         with (
-            patch("synth_panel.mcp.server._shared_client", None),
-            patch("synth_panel.mcp.server.LLMClient") as MockClient,
+            patch("althing.mcp.server._shared_client", None),
+            patch("althing.mcp.server.LLMClient") as MockClient,
         ):
             MockClient.return_value.send.return_value = mock_response
             await mcp.call_tool("run_prompt", {"prompt": "Hi"})
@@ -307,7 +307,7 @@ class TestRunPrompt:
 
     @pytest.mark.asyncio
     async def test_run_prompt_custom_model(self):
-        from synth_panel.llm.models import CompletionResponse, TextBlock, TokenUsage
+        from althing.llm.models import CompletionResponse, TextBlock, TokenUsage
 
         mock_response = CompletionResponse(
             id="resp-3",
@@ -316,8 +316,8 @@ class TestRunPrompt:
             usage=TokenUsage(input_tokens=5, output_tokens=2),
         )
         with (
-            patch("synth_panel.mcp.server._shared_client", None),
-            patch("synth_panel.mcp.server.LLMClient") as MockClient,
+            patch("althing.mcp.server._shared_client", None),
+            patch("althing.mcp.server.LLMClient") as MockClient,
         ):
             MockClient.return_value.send.return_value = mock_response
             await mcp.call_tool(
@@ -387,7 +387,7 @@ class TestRunPanelPackId:
 
     def _save_pack(self, pack_id: str, personas: list[dict]) -> None:
         """Helper to save a persona pack directly."""
-        from synth_panel.mcp.data import save_persona_pack as _save
+        from althing.mcp.data import save_persona_pack as _save
 
         _save("Test Pack", personas, pack_id)
 
@@ -395,7 +395,7 @@ class TestRunPanelPackId:
     async def test_pack_id_only(self):
         """pack_id alone should resolve personas from storage."""
         self._save_pack("demo-pack", [{"name": "Alice"}, {"name": "Bob"}])
-        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+        with patch("althing.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = {"results": []}
             await mcp.call_tool(
                 "run_panel",
@@ -413,7 +413,7 @@ class TestRunPanelPackId:
     async def test_pack_id_merges_with_inline(self):
         """Inline personas come first, pack personas appended."""
         self._save_pack("merge-pack", [{"name": "Charlie"}])
-        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+        with patch("althing.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = {"results": []}
             await mcp.call_tool(
                 "run_panel",
@@ -461,7 +461,7 @@ class TestRunPanelPackId:
     @pytest.mark.asyncio
     async def test_inline_personas_without_pack_id(self):
         """Traditional usage: inline personas only, no pack_id."""
-        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+        with patch("althing.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = {"results": []}
             await mcp.call_tool(
                 "run_panel",
@@ -497,7 +497,7 @@ class TestRunPanelExtractSchema:
             "properties": {"mood": {"type": "string"}},
             "required": ["mood"],
         }
-        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+        with patch("althing.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = {"results": []}
             await mcp.call_tool(
                 "run_panel",
@@ -513,9 +513,9 @@ class TestRunPanelExtractSchema:
     @pytest.mark.asyncio
     async def test_string_name_resolves_to_registry_schema(self):
         """A string extract_schema resolves to the built-in registry entry."""
-        from synth_panel.mcp.server import EXTRACT_SCHEMA_REGISTRY
+        from althing.mcp.server import EXTRACT_SCHEMA_REGISTRY
 
-        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+        with patch("althing.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = {"results": []}
             await mcp.call_tool(
                 "run_panel",
@@ -551,7 +551,7 @@ class TestRunPanelExtractSchema:
     @pytest.mark.asyncio
     async def test_none_schema_passes_none(self):
         """Omitting extract_schema passes None to the async runner."""
-        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+        with patch("althing.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = {"results": []}
             await mcp.call_tool(
                 "run_panel",
@@ -575,7 +575,7 @@ class TestRunPanelModels:
     @pytest.mark.asyncio
     async def test_models_triggers_ensemble(self):
         """Providing models list triggers ensemble path via _run_ensemble_sync."""
-        with patch("synth_panel.mcp.server._run_ensemble_sync") as mock_ens:
+        with patch("althing.mcp.server._run_ensemble_sync") as mock_ens:
             mock_ens.return_value = {
                 "per_model_results": {},
                 "cost_breakdown": {},
@@ -602,7 +602,7 @@ class TestRunPanelModels:
         Without promotion the caller's model is silently dropped and the
         request runs against the MCP default — billing the wrong provider.
         """
-        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+        with patch("althing.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = {"results": []}
             await mcp.call_tool(
                 "run_panel",
@@ -620,7 +620,7 @@ class TestRunPanelModels:
     @pytest.mark.asyncio
     async def test_empty_models_list_returns_typed_error(self):
         """hq-6j40: ``models=[]`` is a caller bug — surface it explicitly."""
-        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+        with patch("althing.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
             result = await mcp.call_tool(
                 "run_panel",
                 {
@@ -639,8 +639,8 @@ class TestRunPanelModels:
     async def test_model_and_models_mutually_exclusive(self):
         """hq-6j40: setting both ``model`` and ``models`` is ambiguous."""
         with (
-            patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run,
-            patch("synth_panel.mcp.server._run_ensemble_sync") as mock_ens,
+            patch("althing.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run,
+            patch("althing.mcp.server._run_ensemble_sync") as mock_ens,
         ):
             result = await mcp.call_tool(
                 "run_panel",
@@ -670,7 +670,7 @@ class TestRunPanelModels:
         async def _boom(*_a, **_kw):
             raise asyncio.TimeoutError
 
-        with patch("synth_panel.mcp.server._run_panel_async", side_effect=_boom):
+        with patch("althing.mcp.server._run_panel_async", side_effect=_boom):
             result = await mcp.call_tool(
                 "run_panel",
                 {
@@ -800,7 +800,7 @@ class TestRunPanelInstrument:
     @pytest.mark.asyncio
     async def test_inline_instrument_routes_to_multi_round(self):
         with patch(
-            "synth_panel.mcp.server._run_panel_async_instrument",
+            "althing.mcp.server._run_panel_async_instrument",
             new_callable=AsyncMock,
         ) as mock_run:
             mock_run.return_value = {"rounds": [], "path": [], "warnings": []}
@@ -813,7 +813,7 @@ class TestRunPanelInstrument:
             )
             assert mock_run.called
             instrument_arg = mock_run.call_args[0][1]
-            from synth_panel.instrument import Instrument
+            from althing.instrument import Instrument
 
             assert isinstance(instrument_arg, Instrument)
             assert len(instrument_arg.rounds) == 1
@@ -821,7 +821,7 @@ class TestRunPanelInstrument:
     @pytest.mark.asyncio
     async def test_instrument_pack_loads_then_routes(self):
         # Save a pack first via the data layer.
-        from synth_panel.mcp.data import save_instrument_pack as _save
+        from althing.mcp.data import save_instrument_pack as _save
 
         _save(
             "p1",
@@ -831,7 +831,7 @@ class TestRunPanelInstrument:
             },
         )
         with patch(
-            "synth_panel.mcp.server._run_panel_async_instrument",
+            "althing.mcp.server._run_panel_async_instrument",
             new_callable=AsyncMock,
         ) as mock_run:
             mock_run.return_value = {"rounds": [], "path": [], "warnings": []}
@@ -903,7 +903,7 @@ class TestExtendPanelContract:
     """extend_panel must document the 'ad-hoc round, not DAG re-entry' rule."""
 
     def test_docstring_spells_out_contract(self):
-        from synth_panel.mcp import server
+        from althing.mcp import server
 
         doc = server.extend_panel.__doc__ or ""
         # Both halves of the contract must be present.
@@ -922,7 +922,7 @@ class TestRunPanelVariants:
     @pytest.mark.asyncio
     async def test_variants_param_accepted(self):
         """run_panel should accept variants param and forward to _run_panel_async."""
-        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+        with patch("althing.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = {"results": []}
             await mcp.call_tool(
                 "run_panel",
@@ -939,7 +939,7 @@ class TestRunPanelVariants:
     @pytest.mark.asyncio
     async def test_variants_zero_no_robustness(self):
         """variants=0 (default) should not include robustness data."""
-        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+        with patch("althing.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = {"results": [], "rounds": []}
             await mcp.call_tool(
                 "run_panel",
@@ -992,7 +992,7 @@ class TestListPanelResultsVariantCount:
     @pytest.mark.asyncio
     async def test_variant_count_in_listing(self):
         """Results saved with variant_count should include it in listing."""
-        from synth_panel.mcp.data import save_panel_result
+        from althing.mcp.data import save_panel_result
 
         save_panel_result(
             results=[{"persona": "A", "responses": [], "usage": {}, "cost": "$0", "error": None}],
@@ -1011,7 +1011,7 @@ class TestListPanelResultsVariantCount:
     @pytest.mark.asyncio
     async def test_no_variant_count_when_zero(self):
         """Results without variants should not include variant_count."""
-        from synth_panel.mcp.data import save_panel_result
+        from althing.mcp.data import save_panel_result
 
         save_panel_result(
             results=[{"persona": "A", "responses": [], "usage": {}, "cost": "$0", "error": None}],
@@ -1036,7 +1036,7 @@ class TestComputeVariantData:
     """Test the robustness computation from variant results."""
 
     def test_compute_variant_data_basic(self):
-        from synth_panel.mcp.server import _compute_variant_data
+        from althing.mcp.server import _compute_variant_data
 
         result_dicts = [
             # Base persona
@@ -1078,7 +1078,7 @@ class TestComputeVariantData:
         assert data["per_persona_robustness"][0]["robustness"] == 0.5
 
     def test_compute_variant_data_no_variants(self):
-        from synth_panel.mcp.server import _compute_variant_data
+        from althing.mcp.server import _compute_variant_data
 
         result_dicts = [
             {
@@ -1112,14 +1112,14 @@ class TestWeightedModelSpecRejection:
     """
 
     def test_looks_like_weighted_model_spec_detects_weights(self):
-        from synth_panel.mcp.server import _looks_like_weighted_model_spec
+        from althing.mcp.server import _looks_like_weighted_model_spec
 
         assert _looks_like_weighted_model_spec("haiku:0.25") is True
         assert _looks_like_weighted_model_spec("gpt-4o-mini:0.5") is True
         assert _looks_like_weighted_model_spec("claude-sonnet-4-6:1") is True
 
     def test_looks_like_weighted_model_spec_allows_real_identifiers(self):
-        from synth_panel.mcp.server import _looks_like_weighted_model_spec
+        from althing.mcp.server import _looks_like_weighted_model_spec
 
         # Local model prefixes are preserved.
         assert _looks_like_weighted_model_spec("ollama:llama3") is False
@@ -1136,7 +1136,7 @@ class TestWeightedModelSpecRejection:
     @pytest.mark.asyncio
     async def test_run_panel_rejects_weighted_models_list(self):
         """The exact sp-2rj8 repro: weighted ``models`` list must error out."""
-        with patch("synth_panel.mcp.server._run_ensemble_sync") as mock_ens:
+        with patch("althing.mcp.server._run_ensemble_sync") as mock_ens:
             result = await mcp.call_tool(
                 "run_panel",
                 {
@@ -1161,7 +1161,7 @@ class TestWeightedModelSpecRejection:
     @pytest.mark.asyncio
     async def test_run_panel_accepts_plain_alias_ensemble(self):
         """Plain alias lists still reach the ensemble runner unchanged."""
-        with patch("synth_panel.mcp.server._run_ensemble_sync") as mock_ens:
+        with patch("althing.mcp.server._run_ensemble_sync") as mock_ens:
             mock_ens.return_value = {
                 "per_model_results": {},
                 "cost_breakdown": {},
@@ -1225,7 +1225,7 @@ class TestWeightedModelSpecRejection:
     @pytest.mark.asyncio
     async def test_run_panel_accepts_ollama_prefix_model(self):
         """``ollama:llama3`` is a legitimate model id and must not be rejected."""
-        with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+        with patch("althing.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = {"results": []}
             result = await mcp.call_tool(
                 "run_panel",
@@ -1287,9 +1287,9 @@ class TestExtendPanelSynthesisLoudness:
 
     @pytest.mark.asyncio
     async def test_synthesis_exception_populates_synthesis_error(self, monkeypatch):
-        from synth_panel.cost import TokenUsage
-        from synth_panel.mcp import server as _server
-        from synth_panel.orchestrator import PanelistResult
+        from althing.cost import TokenUsage
+        from althing.mcp import server as _server
+        from althing.orchestrator import PanelistResult
 
         fake_existing = {"rounds": [], "path": [], "question_count": 0}
         fake_sessions = {"Alice": object()}
@@ -1311,15 +1311,15 @@ class TestExtendPanelSynthesisLoudness:
             raise BoomSynth("upstream 500")
 
         with (
-            patch("synth_panel.mcp.server._data_get_panel_result", return_value=fake_existing),
-            patch("synth_panel.mcp.server.load_panel_sessions", return_value=fake_sessions),
+            patch("althing.mcp.server._data_get_panel_result", return_value=fake_existing),
+            patch("althing.mcp.server.load_panel_sessions", return_value=fake_sessions),
             patch(
-                "synth_panel.mcp.server.run_panel_parallel",
+                "althing.mcp.server.run_panel_parallel",
                 return_value=([fake_panelist], {}, fake_sessions),
             ),
-            patch("synth_panel.mcp.server.synthesize_panel", side_effect=_raise),
-            patch("synth_panel.mcp.server.update_panel_result"),
-            patch("synth_panel.mcp.server._get_shared_client", return_value=object()),
+            patch("althing.mcp.server.synthesize_panel", side_effect=_raise),
+            patch("althing.mcp.server.update_panel_result"),
+            patch("althing.mcp.server._get_shared_client", return_value=object()),
         ):
             # Call the tool function directly (ctx=None). mcp.call_tool
             # injects a request-scoped Context that fails outside a request.
@@ -1362,14 +1362,14 @@ class TestExtendPanelSynthesisLoudness:
 
 
 def _stub_panelist_results_factory(default_themes: list[str] | None = None):
-    """Return a stub for ``synth_panel.orchestrator.run_panel_parallel``.
+    """Return a stub for ``althing.orchestrator.run_panel_parallel``.
 
     Each call produces one ``PanelistResult`` per persona with one
     response per question and a small non-zero usage so the cost rollup
     has something to aggregate across rounds.
     """
-    from synth_panel.cost import TokenUsage
-    from synth_panel.orchestrator import PanelistResult
+    from althing.cost import TokenUsage
+    from althing.orchestrator import PanelistResult
 
     def _fake_run_panel_parallel(
         client,
@@ -1411,8 +1411,8 @@ def _stub_synthesize_factory(themes: list[str] | None = None):
     The orchestrator's router consumes ``themes`` from the synthesis
     output, so each test customizes the themes to drive a specific path.
     """
-    from synth_panel.cost import TokenUsage as CostTokenUsage
-    from synth_panel.synthesis import SynthesisResult
+    from althing.cost import TokenUsage as CostTokenUsage
+    from althing.synthesis import SynthesisResult
 
     themes = list(themes or ["pricing pain"])
 
@@ -1513,16 +1513,16 @@ class TestRunPanelMultiRoundV3:
         """
         with (
             patch(
-                "synth_panel.orchestrator.run_panel_parallel",
+                "althing.orchestrator.run_panel_parallel",
                 side_effect=_stub_panelist_results_factory(),
             ),
             patch(
-                "synth_panel._runners.synthesize_panel",
+                "althing._runners.synthesize_panel",
                 side_effect=_stub_synthesize_factory(themes=["pricing pain"]),
             ),
-            patch("synth_panel.mcp.server._shared_client", None),
+            patch("althing.mcp.server._shared_client", None),
         ):
-            from synth_panel.mcp import server as _server
+            from althing.mcp import server as _server
 
             raw = await _server.run_panel(
                 personas=self.PERSONAS,
@@ -1571,16 +1571,16 @@ class TestRunPanelMultiRoundV3:
         """
         with (
             patch(
-                "synth_panel.orchestrator.run_panel_parallel",
+                "althing.orchestrator.run_panel_parallel",
                 side_effect=_stub_panelist_results_factory(),
             ),
             patch(
-                "synth_panel._runners.synthesize_panel",
+                "althing._runners.synthesize_panel",
                 side_effect=_stub_synthesize_factory(),
             ),
-            patch("synth_panel.mcp.server._shared_client", None),
+            patch("althing.mcp.server._shared_client", None),
         ):
-            from synth_panel.mcp import server as _server
+            from althing.mcp import server as _server
 
             raw = await _server.run_panel(
                 personas=self.PERSONAS,
@@ -1617,7 +1617,7 @@ class TestRunPanelMultiRoundV3:
         drops ``rounds[].results`` (retrievable via ``get_panel_result``).
         This test pins the per-round transcript shape, so it opts into full.
         """
-        from synth_panel.cost import TokenUsage
+        from althing.cost import TokenUsage
 
         def _empty_then_normal(
             client,
@@ -1636,7 +1636,7 @@ class TestRunPanelMultiRoundV3:
             persona_models=None,
             panel_shared_attachments=None,
         ):
-            from synth_panel.orchestrator import PanelistResult
+            from althing.orchestrator import PanelistResult
 
             # First round: zero panelist responses (the failure surface).
             # Subsequent rounds: normal stub results so the test pins
@@ -1657,16 +1657,16 @@ class TestRunPanelMultiRoundV3:
 
         with (
             patch(
-                "synth_panel.orchestrator.run_panel_parallel",
+                "althing.orchestrator.run_panel_parallel",
                 side_effect=_empty_then_normal,
             ),
             patch(
-                "synth_panel._runners.synthesize_panel",
+                "althing._runners.synthesize_panel",
                 side_effect=_stub_synthesize_factory(),
             ),
-            patch("synth_panel.mcp.server._shared_client", None),
+            patch("althing.mcp.server._shared_client", None),
         ):
-            from synth_panel.mcp import server as _server
+            from althing.mcp import server as _server
 
             raw = await _server.run_panel(
                 personas=self.PERSONAS,

@@ -10,7 +10,7 @@ Run explicitly with::
     pytest tests/acceptance/test_registry_live.py -m acceptance
 
 The test uses a throwaway cache dir via ``SYNTH_PANEL_DATA_DIR`` so it
-never pollutes the user's real ``~/.synthpanel`` cache, and forces a
+never pollutes the user's real ``~/.althing`` cache, and forces a
 fresh network fetch so the assertions always reflect live state.
 """
 
@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import pytest
 
-from synth_panel.registry import (
+from althing.registry import (
     DATA_DIR_ENV,
     DEFAULT_REGISTRY_URL,
     RegistryEntry,
@@ -98,8 +98,8 @@ def test_resolve_pack_hydrates_seed_entry(tmp_path, monkeypatch: pytest.MonkeyPa
     pre-existing cache state on the runner.
     """
     monkeypatch.setenv(DATA_DIR_ENV, str(tmp_path))
-    monkeypatch.delenv("SYNTHPANEL_REGISTRY_OFFLINE", raising=False)
-    monkeypatch.delenv("SYNTHPANEL_REGISTRY_URL", raising=False)
+    monkeypatch.delenv("ALTHING_REGISTRY_OFFLINE", raising=False)
+    monkeypatch.delenv("ALTHING_REGISTRY_URL", raising=False)
 
     entry = resolve_pack(SEED_PACK_ID, refresh=True)
 

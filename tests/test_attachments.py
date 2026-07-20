@@ -19,9 +19,9 @@ def _data_dir(tmp_path, monkeypatch):
     monkeypatch.delenv("SYNTH_PANEL_ATTACHMENT_DIR", raising=False)
 
 
-from synth_panel.attachments import AttachmentRef, attachments_dir, read_blob, refs_path, write_blob
-from synth_panel.mcp.data import get_panel_result, save_panel_result
-from synth_panel.structured.schemas import (
+from althing.attachments import AttachmentRef, attachments_dir, read_blob, refs_path, write_blob
+from althing.mcp.data import get_panel_result, save_panel_result
+from althing.structured.schemas import (
     ANNOTATED_CHOICE_SCHEMA,
     PICK_ONE_SCHEMA,
     get_schema,
@@ -276,7 +276,7 @@ class TestAnnotatedChoiceSchema:
 
 class TestListPanelResultsSkipsAttachmentsDir:
     def test_attachments_sidecar_not_listed(self, tmp_path):
-        from synth_panel.mcp.data import list_panel_results
+        from althing.mcp.data import list_panel_results
 
         rid = save_panel_result(
             results=[],
@@ -303,7 +303,7 @@ class TestListPanelResultsSkipsAttachmentsDir:
 
 
 def _results_dir_for_test() -> Path:
-    from synth_panel.mcp.data import _results_dir
+    from althing.mcp.data import _results_dir
 
     return _results_dir()
 
@@ -327,7 +327,7 @@ class TestAttachmentRefBaseModel:
         """Existing v1.0.3-shaped refs.json (dict-of-dicts) loads cleanly."""
         import json
 
-        from synth_panel.mcp.data import _results_dir
+        from althing.mcp.data import _results_dir
 
         # Simulate a result and refs.json written by a v1.0.3 install:
         # plain dicts, no Pydantic involved on the writer side.
@@ -421,7 +421,7 @@ class TestAttachmentRefBaseModel:
 
         import pydantic
 
-        from synth_panel.mcp.data import _results_dir
+        from althing.mcp.data import _results_dir
 
         rid = save_panel_result(
             results=[],

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from synth_panel.cli.output import OutputFormat
-from synth_panel.cli.repl import SessionState, _extract_response_text, run_repl
-from synth_panel.cli.slash import _cmd_compact, dispatch_slash
-from synth_panel.cost import TokenUsage
-from synth_panel.persistence import ConversationMessage, Session
-from synth_panel.runtime import AgentRuntime, TurnSummary
+from althing.cli.output import OutputFormat
+from althing.cli.repl import SessionState, _extract_response_text, run_repl
+from althing.cli.slash import _cmd_compact, dispatch_slash
+from althing.cost import TokenUsage
+from althing.persistence import ConversationMessage, Session
+from althing.runtime import AgentRuntime, TurnSummary
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -106,9 +106,9 @@ class TestExtractResponseText:
 
 
 class TestReplWiring:
-    @patch("synth_panel.cli.repl.AgentRuntime")
-    @patch("synth_panel.cli.repl.LLMClient")
-    @patch("synth_panel.cli.repl.input", side_effect=["hello", EOFError])
+    @patch("althing.cli.repl.AgentRuntime")
+    @patch("althing.cli.repl.LLMClient")
+    @patch("althing.cli.repl.input", side_effect=["hello", EOFError])
     def test_user_input_calls_run_turn(self, mock_input, mock_client_cls, mock_runtime_cls, capsys):
         mock_runtime = MagicMock()
         mock_runtime.run_turn.return_value = _make_turn_summary("World!")
@@ -124,9 +124,9 @@ class TestReplWiring:
         out = capsys.readouterr().out
         assert "World!" in out
 
-    @patch("synth_panel.cli.repl.AgentRuntime")
-    @patch("synth_panel.cli.repl.LLMClient")
-    @patch("synth_panel.cli.repl.input", side_effect=["test", EOFError])
+    @patch("althing.cli.repl.AgentRuntime")
+    @patch("althing.cli.repl.LLMClient")
+    @patch("althing.cli.repl.input", side_effect=["test", EOFError])
     def test_usage_is_displayed(self, mock_input, mock_client_cls, mock_runtime_cls, capsys):
         mock_runtime = MagicMock()
         mock_runtime.run_turn.return_value = _make_turn_summary("Reply")
@@ -141,9 +141,9 @@ class TestReplWiring:
         assert "input=10" in out
         assert "output=20" in out
 
-    @patch("synth_panel.cli.repl.AgentRuntime")
-    @patch("synth_panel.cli.repl.LLMClient")
-    @patch("synth_panel.cli.repl.input", side_effect=["test", EOFError])
+    @patch("althing.cli.repl.AgentRuntime")
+    @patch("althing.cli.repl.LLMClient")
+    @patch("althing.cli.repl.input", side_effect=["test", EOFError])
     def test_error_is_caught(self, mock_input, mock_client_cls, mock_runtime_cls, capsys):
         mock_runtime = MagicMock()
         mock_runtime.run_turn.side_effect = RuntimeError("API broke")
@@ -158,9 +158,9 @@ class TestReplWiring:
         out = capsys.readouterr().out
         assert "Error: API broke" in out
 
-    @patch("synth_panel.cli.repl.AgentRuntime")
-    @patch("synth_panel.cli.repl.LLMClient")
-    @patch("synth_panel.cli.repl.input", side_effect=["a", "b", EOFError])
+    @patch("althing.cli.repl.AgentRuntime")
+    @patch("althing.cli.repl.LLMClient")
+    @patch("althing.cli.repl.input", side_effect=["a", "b", EOFError])
     def test_turn_count_increments(self, mock_input, mock_client_cls, mock_runtime_cls):
         mock_runtime = MagicMock()
         mock_runtime.run_turn.return_value = _make_turn_summary("ok")
@@ -173,9 +173,9 @@ class TestReplWiring:
         run_repl(args, OutputFormat.TEXT)
         assert mock_runtime.run_turn.call_count == 2
 
-    @patch("synth_panel.cli.repl.AgentRuntime")
-    @patch("synth_panel.cli.repl.LLMClient")
-    @patch("synth_panel.cli.repl.input", side_effect=["test", EOFError])
+    @patch("althing.cli.repl.AgentRuntime")
+    @patch("althing.cli.repl.LLMClient")
+    @patch("althing.cli.repl.input", side_effect=["test", EOFError])
     def test_compaction_flag_updates_state(self, mock_input, mock_client_cls, mock_runtime_cls):
         mock_runtime = MagicMock()
         mock_runtime.run_turn.return_value = _make_turn_summary("ok", compacted=True)
@@ -189,9 +189,9 @@ class TestReplWiring:
         # Verify the runtime was called (compacted_count is internal to state)
         mock_runtime.run_turn.assert_called_once()
 
-    @patch("synth_panel.cli.repl.AgentRuntime")
-    @patch("synth_panel.cli.repl.LLMClient")
-    @patch("synth_panel.cli.repl.input", side_effect=[KeyboardInterrupt, "after", EOFError])
+    @patch("althing.cli.repl.AgentRuntime")
+    @patch("althing.cli.repl.LLMClient")
+    @patch("althing.cli.repl.input", side_effect=[KeyboardInterrupt, "after", EOFError])
     def test_ctrl_c_at_prompt_continues_loop(self, mock_input, mock_client_cls, mock_runtime_cls, capsys):
         """Ctrl+C at the prompt should redraw, not exit the REPL."""
         mock_runtime = MagicMock()
@@ -207,9 +207,9 @@ class TestReplWiring:
         # The "after" input must have been processed despite the earlier Ctrl+C
         mock_runtime.run_turn.assert_called_once_with("after")
 
-    @patch("synth_panel.cli.repl.AgentRuntime")
-    @patch("synth_panel.cli.repl.LLMClient")
-    @patch("synth_panel.cli.repl.input", side_effect=["test", "after", EOFError])
+    @patch("althing.cli.repl.AgentRuntime")
+    @patch("althing.cli.repl.LLMClient")
+    @patch("althing.cli.repl.input", side_effect=["test", "after", EOFError])
     def test_ctrl_c_during_llm_call_continues_loop(self, mock_input, mock_client_cls, mock_runtime_cls, capsys):
         """Ctrl+C during run_turn should be caught and the REPL should keep going."""
         mock_runtime = MagicMock()
@@ -226,10 +226,10 @@ class TestReplWiring:
         out = capsys.readouterr().out
         assert "^C interrupted" in out
 
-    @patch("synth_panel.cli.repl.AgentRuntime")
-    @patch("synth_panel.cli.repl.LLMClient")
-    @patch("synth_panel.cli.repl.dispatch_slash", side_effect=KeyboardInterrupt)
-    @patch("synth_panel.cli.repl.input", side_effect=["/status", EOFError])
+    @patch("althing.cli.repl.AgentRuntime")
+    @patch("althing.cli.repl.LLMClient")
+    @patch("althing.cli.repl.dispatch_slash", side_effect=KeyboardInterrupt)
+    @patch("althing.cli.repl.input", side_effect=["/status", EOFError])
     def test_ctrl_c_during_slash_command_continues_loop(
         self, mock_input, mock_dispatch, mock_client_cls, mock_runtime_cls, capsys
     ):

@@ -107,7 +107,7 @@ jobs:
           IS_STABLE: ${{ steps.ref.outputs.is_stable }}
         run: |
           set -euo pipefail
-          IMAGES=("ghcr.io/dataviking-tech/synthpanel")
+          IMAGES=("ghcr.io/dataviking-tech/althing")
           MAJOR="${VERSION%%.*}"
           REST="${VERSION#*.}"
           MINOR="${REST%%.*}"
@@ -148,7 +148,7 @@ jobs:
           push: true
           tags: ${{ steps.tags.outputs.tags }}
           build-args: |
-            SYNTHPANEL_VERSION=${{ steps.ref.outputs.version }}
+            ALTHING_VERSION=${{ steps.ref.outputs.version }}
             VCS_REF=${{ github.sha }}
             BUILD_DATE=${{ steps.ref.outputs.build_date }}
           provenance: true
@@ -163,7 +163,7 @@ jobs:
           TAGS: ${{ steps.tags.outputs.tags }}
         run: |
           {
-            echo "## Pushed synthpanel ${VERSION}"
+            echo "## Pushed althing ${VERSION}"
             echo ""
             echo "**Digest:** \`${DIGEST}\`"
             echo ""
@@ -175,7 +175,7 @@ jobs:
             echo ""
             echo "**Try it:**"
             echo '```bash'
-            echo "docker pull ghcr.io/dataviking-tech/synthpanel:${VERSION}"
-            echo "docker run --rm -e ANTHROPIC_API_KEY=\$KEY ghcr.io/dataviking-tech/synthpanel:${VERSION} prompt 'hello'"
+            echo "docker pull ghcr.io/dataviking-tech/althing:${VERSION}"
+            echo "docker run --rm -e ANTHROPIC_API_KEY=\$KEY ghcr.io/dataviking-tech/althing:${VERSION} prompt 'hello'"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

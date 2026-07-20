@@ -16,19 +16,19 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from synth_panel.cost import (
+from althing.cost import (
     CostEstimate,
     TokenUsage,
     actual_cost_usd,
     local_estimate_usd,
 )
-from synth_panel.ensemble import (
+from althing.ensemble import (
     EnsembleResult,
     ModelRunResult,
     build_ensemble_output,
     ensemble_run,
 )
-from synth_panel.orchestrator import PanelistResult
+from althing.orchestrator import PanelistResult
 
 # ---------------------------------------------------------------------------
 # cost.py helpers
@@ -133,7 +133,7 @@ class TestEnsembleResultProperties:
             return results, MagicMock(), {p["name"]: MagicMock() for p in personas}
 
         personas = [{"name": "Alice"}, {"name": "Bob"}]
-        with patch("synth_panel.ensemble.run_panel_parallel") as mock_rpp:
+        with patch("althing.ensemble.run_panel_parallel") as mock_rpp:
             mock_rpp.side_effect = mock_run_panel
             ens = ensemble_run(personas, [{"text": "Q1"}], ["haiku"], MagicMock())
 
@@ -171,7 +171,7 @@ class TestEnsembleResultProperties:
             ]
             return results, MagicMock(), {p["name"]: MagicMock() for p in personas}
 
-        with patch("synth_panel.ensemble.run_panel_parallel") as mock_rpp:
+        with patch("althing.ensemble.run_panel_parallel") as mock_rpp:
             mock_rpp.side_effect = mock_run_panel
             ens = ensemble_run([{"name": "Alice"}], [{"text": "Q1"}], ["haiku"], MagicMock())
 
@@ -238,7 +238,7 @@ class TestBuildEnsembleOutputSurfaces:
 
 class TestSynthesisResultCostActuals:
     def test_synthesis_actual_populated_when_judge_reports_cost(self):
-        from synth_panel.synthesis import SynthesisResult
+        from althing.synthesis import SynthesisResult
 
         sr = SynthesisResult(
             summary="x",
@@ -265,7 +265,7 @@ class TestSynthesisResultCostActuals:
         assert "cost" in d
 
     def test_synthesis_actual_none_when_judge_silent(self):
-        from synth_panel.synthesis import SynthesisResult
+        from althing.synthesis import SynthesisResult
 
         sr = SynthesisResult(
             summary="x",
@@ -297,7 +297,7 @@ class TestOpenRouterCostParse:
         into ``TokenUsage.provider_reported_cost``. This is the inbound
         plumbing the rest of sy-ye1 depends on, so guard it explicitly.
         """
-        from synth_panel.llm.providers._openai_format import parse_openai_response
+        from althing.llm.providers._openai_format import parse_openai_response
 
         data: dict[str, Any] = {
             "id": "gen-1",

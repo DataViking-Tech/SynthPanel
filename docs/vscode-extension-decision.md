@@ -20,14 +20,14 @@ than Q3 2026, and only if the revisit triggers below fire.
 
 VS Code AI Toolkit shipped first-class MCP support in March 2026. Any
 VS Code user running Claude Code, Cursor, Copilot, or the AI Toolkit can
-point their editor at `synthpanel mcp-serve` and get all 12 SynthPanel
+point their editor at `althing mcp-serve` and get all 12 Althing
 tools natively. A custom extension cannot improve on that for tool
 invocation — it can only add GUI surface.
 
 ### 2. The GUI surface is nice-to-have, not adoption-blocking
 
 A dedicated extension would offer: persona-card editing, instrument flow
-preview (Mermaid already works in the terminal via `synthpanel instruments
+preview (Mermaid already works in the terminal via `althing instruments
 graph`), and result visualization panels. These are quality-of-life
 improvements for power users, not the thing gating agent-framework adoption.
 The top 3 unfiled gaps (Python SDK, framework examples, Composio) each

@@ -1,16 +1,16 @@
-"""Tests for synth_panel.aggregation -- sp-5on.16."""
+"""Tests for althing.aggregation -- sp-5on.16."""
 
 from __future__ import annotations
 
 import pytest
 
-from synth_panel.aggregation import (
+from althing.aggregation import (
     VariantGroup,
     aggregate_variants,
     robustness_report,
 )
-from synth_panel.cost import ZERO_USAGE
-from synth_panel.orchestrator import PanelistResult
+from althing.cost import ZERO_USAGE
+from althing.orchestrator import PanelistResult
 
 # ---------------------------------------------------------------------------
 # Helpers

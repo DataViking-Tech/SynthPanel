@@ -32,8 +32,8 @@ state.json
 gastown-*.json
 CLAUDE.local.md
 
-# synthpanel data
-.synthpanel/
+# althing data
+.althing/
 sessions/
 
 # Testing

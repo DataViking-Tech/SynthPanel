@@ -6,9 +6,9 @@ import io
 import json
 from unittest.mock import patch
 
-from synth_panel.cli.parser import build_parser
-from synth_panel.credentials import load_credentials, save_credential
-from synth_panel.main import main
+from althing.cli.parser import build_parser
+from althing.credentials import load_credentials, save_credential
+from althing.main import main
 
 
 class TestParser:
@@ -168,7 +168,7 @@ class TestLogout:
 
 
 class TestDoctor:
-    """synthpanel doctor preflight — must never leak credentials (GH #310)."""
+    """althing doctor preflight — must never leak credentials (GH #310)."""
 
     def test_doctor_is_registered(self):
         parser = build_parser()
@@ -185,7 +185,7 @@ class TestDoctor:
             "OPENROUTER_API_KEY",
         ):
             monkeypatch.delenv(env, raising=False)
-        monkeypatch.delenv("SYNTHPANEL_CREDENTIALS_PATH", raising=False)
+        monkeypatch.delenv("ALTHING_CREDENTIALS_PATH", raising=False)
         rc = main(["doctor"])
         assert rc == 1
         err = capsys.readouterr().err
@@ -201,7 +201,7 @@ class TestDoctor:
             "OPENROUTER_API_KEY",
         ):
             monkeypatch.delenv(env, raising=False)
-        monkeypatch.delenv("SYNTHPANEL_CREDENTIALS_PATH", raising=False)
+        monkeypatch.delenv("ALTHING_CREDENTIALS_PATH", raising=False)
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-do-not-leak-this-value")
         rc = main(["doctor"])
         assert rc == 0
@@ -262,7 +262,7 @@ class TestDoctor:
         ):
             monkeypatch.delenv(env, raising=False)
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-runtime-key")
-        monkeypatch.setenv("SYNTHPANEL_CHECKPOINT_ROOT", str(tmp_path / "ckpts"))
+        monkeypatch.setenv("ALTHING_CHECKPOINT_ROOT", str(tmp_path / "ckpts"))
         rc = main(["--output-format", "json", "doctor"])
         assert rc == 0
         payload = json.loads(capsys.readouterr().out)
@@ -292,7 +292,7 @@ class TestDoctor:
             monkeypatch.delenv(env, raising=False)
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
         ckpt = tmp_path / "should-not-exist" / "checkpoints"
-        monkeypatch.setenv("SYNTHPANEL_CHECKPOINT_ROOT", str(ckpt))
+        monkeypatch.setenv("ALTHING_CHECKPOINT_ROOT", str(ckpt))
         rc = main(["--output-format", "json", "doctor"])
         assert rc == 0
         # The doctor must not have created the missing checkpoint directory.
@@ -311,7 +311,7 @@ class TestDoctor:
         ):
             monkeypatch.delenv(env, raising=False)
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-marker-test")
-        monkeypatch.setenv("SYNTHPANEL_CHECKPOINT_ROOT", str(tmp_path))
+        monkeypatch.setenv("ALTHING_CHECKPOINT_ROOT", str(tmp_path))
         rc = main(["doctor"])
         assert rc == 0
         out = capsys.readouterr().out
@@ -331,8 +331,8 @@ class TestDoctor:
             "OPENROUTER_API_KEY",
         ):
             monkeypatch.delenv(env, raising=False)
-        monkeypatch.delenv("SYNTHPANEL_CREDENTIALS_PATH", raising=False)
-        monkeypatch.setenv("SYNTHPANEL_CHECKPOINT_ROOT", str(tmp_path))
+        monkeypatch.delenv("ALTHING_CREDENTIALS_PATH", raising=False)
+        monkeypatch.setenv("ALTHING_CHECKPOINT_ROOT", str(tmp_path))
         rc = main(["doctor", "--install-only"])
         assert rc == 0
         captured = capsys.readouterr()
@@ -353,8 +353,8 @@ class TestDoctor:
             "OPENROUTER_API_KEY",
         ):
             monkeypatch.delenv(env, raising=False)
-        monkeypatch.delenv("SYNTHPANEL_CREDENTIALS_PATH", raising=False)
-        monkeypatch.setenv("SYNTHPANEL_CHECKPOINT_ROOT", str(tmp_path))
+        monkeypatch.delenv("ALTHING_CREDENTIALS_PATH", raising=False)
+        monkeypatch.setenv("ALTHING_CHECKPOINT_ROOT", str(tmp_path))
         rc = main(["--output-format", "json", "doctor", "--install-only"])
         assert rc == 0
         payload = json.loads(capsys.readouterr().out)
@@ -381,7 +381,7 @@ class TestDoctor:
         ):
             monkeypatch.delenv(env, raising=False)
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-default-mode")
-        monkeypatch.setenv("SYNTHPANEL_CHECKPOINT_ROOT", str(tmp_path))
+        monkeypatch.setenv("ALTHING_CHECKPOINT_ROOT", str(tmp_path))
         rc = main(["--output-format", "json", "doctor"])
         assert rc == 0
         payload = json.loads(capsys.readouterr().out)
@@ -402,11 +402,11 @@ class TestDoctor:
             "OPENROUTER_API_KEY",
         ):
             monkeypatch.delenv(env, raising=False)
-        monkeypatch.delenv("SYNTHPANEL_CREDENTIALS_PATH", raising=False)
-        monkeypatch.setenv("SYNTHPANEL_CHECKPOINT_ROOT", str(tmp_path))
+        monkeypatch.delenv("ALTHING_CREDENTIALS_PATH", raising=False)
+        monkeypatch.setenv("ALTHING_CHECKPOINT_ROOT", str(tmp_path))
         # Force the bundled-pack loaders to return empty so doctor reports a
         # pack registry failure — install_ok must follow.
-        from synth_panel.mcp import data as mcp_data
+        from althing.mcp import data as mcp_data
 
         monkeypatch.setattr(mcp_data, "_bundled_packs", lambda: [])
         monkeypatch.setattr(mcp_data, "_bundled_instrument_packs", lambda: [])
@@ -429,7 +429,7 @@ class TestDoctor:
         ):
             monkeypatch.delenv(env, raising=False)
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-verbose-test")
-        monkeypatch.setenv("SYNTHPANEL_CHECKPOINT_ROOT", str(tmp_path))
+        monkeypatch.setenv("ALTHING_CHECKPOINT_ROOT", str(tmp_path))
         rc = main(["--verbose", "doctor"])
         assert rc == 0
         out = capsys.readouterr().out

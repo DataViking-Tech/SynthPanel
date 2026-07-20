@@ -8,7 +8,7 @@
 * AC-8: structured-output 3-strike exhaustion routes through
   ``exhausted_retry_outcome`` — typed ``SCHEMA_DRIFT`` error by default,
   degraded verdict with a ``schema_drift`` warn flag under
-  ``SYNTHPANEL_DRIFT_DEGRADE=1`` (docs/structured-polling.md).
+  ``ALTHING_DRIFT_DEGRADE=1`` (docs/structured-polling.md).
 """
 
 from __future__ import annotations
@@ -25,12 +25,12 @@ pytest.importorskip("mcp")
 def _data_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("SYNTH_PANEL_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-placeholder")
-    monkeypatch.delenv("SYNTHPANEL_SCHEMA_MIN", raising=False)
-    monkeypatch.delenv("SYNTHPANEL_DRIFT_DEGRADE", raising=False)
+    monkeypatch.delenv("ALTHING_SCHEMA_MIN", raising=False)
+    monkeypatch.delenv("ALTHING_DRIFT_DEGRADE", raising=False)
 
 
-from synth_panel.mcp.server import mcp
-from synth_panel.structured.validate import apply_response_gate, validate_response
+from althing.mcp.server import mcp
+from althing.structured.validate import apply_response_gate, validate_response
 
 from .test_decision_wiring import (
     _stub_run_panel_parallel_with_sessions,
@@ -58,19 +58,19 @@ def _verdict(**overrides):
 
 
 async def _run_panel_tool(**response_overrides):
-    from synth_panel.mcp import server as _server
+    from althing.mcp import server as _server
 
     with (
         patch(
-            "synth_panel.orchestrator.run_panel_parallel",
+            "althing.orchestrator.run_panel_parallel",
             side_effect=_stub_run_panel_parallel_with_sessions(**response_overrides),
         ),
         patch(
-            "synth_panel._runners.run_panel_parallel",
+            "althing._runners.run_panel_parallel",
             side_effect=_stub_run_panel_parallel_with_sessions(**response_overrides),
         ),
-        patch("synth_panel._runners.synthesize_panel", side_effect=_stub_synthesize_panel),
-        patch("synth_panel.mcp.server._shared_client", None),
+        patch("althing._runners.synthesize_panel", side_effect=_stub_synthesize_panel),
+        patch("althing.mcp.server._shared_client", None),
     ):
         raw = await _server.run_panel(
             personas=[{"name": "Alice"}, {"name": "Bob"}],
@@ -109,7 +109,7 @@ async def test_success_envelope_carries_schema_valid_verdict():
 
 @pytest.mark.asyncio
 async def test_v3_instrument_success_envelope_carries_verdict():
-    from synth_panel.mcp import server as _server
+    from althing.mcp import server as _server
 
     instrument = {
         "version": 3,
@@ -120,15 +120,15 @@ async def test_v3_instrument_success_envelope_carries_verdict():
     }
     with (
         patch(
-            "synth_panel.orchestrator.run_panel_parallel",
+            "althing.orchestrator.run_panel_parallel",
             side_effect=_stub_run_panel_parallel_with_sessions(),
         ),
         patch(
-            "synth_panel._runners.run_panel_parallel",
+            "althing._runners.run_panel_parallel",
             side_effect=_stub_run_panel_parallel_with_sessions(),
         ),
-        patch("synth_panel._runners.synthesize_panel", side_effect=_stub_synthesize_panel),
-        patch("synth_panel.mcp.server._shared_client", None),
+        patch("althing._runners.synthesize_panel", side_effect=_stub_synthesize_panel),
+        patch("althing.mcp.server._shared_client", None),
     ):
         raw = await _server.run_panel(
             personas=[{"name": "Alice"}, {"name": "Bob"}],
@@ -193,7 +193,7 @@ async def test_malformed_envelope_verdict_blocked_at_egress():
         "panel_verdict": _verdict(flags=[{"code": "totally_made_up", "severity": "warn"}]),
         "schema_version": "1.0.0",
     }
-    with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+    with patch("althing.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
         mock_run.return_value = bad_envelope
         result = await mcp.call_tool(
             "run_panel",
@@ -227,13 +227,13 @@ async def test_structured_exhaustion_returns_schema_drift_error_by_default():
     assert data["schema_version"] == "1.0.0"
     # Pre-exhaustion drift is retryable with different stimulus.
     assert data["retry_safe"] is True
-    assert "SYNTHPANEL_DRIFT_DEGRADE" in data["message"]
+    assert "ALTHING_DRIFT_DEGRADE" in data["message"]
     assert "panel_verdict" not in data
 
 
 @pytest.mark.asyncio
 async def test_structured_exhaustion_degrades_with_flag_when_enabled(monkeypatch):
-    monkeypatch.setenv("SYNTHPANEL_DRIFT_DEGRADE", "1")
+    monkeypatch.setenv("ALTHING_DRIFT_DEGRADE", "1")
     data = await _run_panel_tool(**_FALLBACK_RESPONSE)
 
     assert "error_code" not in data

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from synth_panel.routing import (
+from althing.routing import (
     END_SENTINEL,
     RoutingError,
     evaluate_predicate,

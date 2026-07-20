@@ -5,7 +5,7 @@ a liability: every `result["rounds"][0]["results"][i]["response"]`
 needs prose parsing, every prose parser is a regex you'll regret, and
 every regex breaks the moment a model rephrases.
 
-**SynthPanel has had schema-enforced polling since 0.9.8.** This page
+**Althing has had schema-enforced polling since 0.9.8.** This page
 documents the path so agents stop asking panelists for "JSON in prose"
 and start getting parsed, typed answers back directly. No prose
 parsing. No regex. No post-hoc extraction step unless you want one.
@@ -31,9 +31,9 @@ so downstream consumers can branch on it.
 
 The bundled JSON Schemas and matching Pydantic models live at:
 
-- `src/synth_panel/structured/schemas.py` — wire-format JSON Schemas
+- `src/althing/structured/schemas.py` — wire-format JSON Schemas
   (`ranking`, `likert`, `yes_no`, `pick_one`, `annotated_choice`).
-- `src/synth_panel/structured/models.py` — Pydantic mirrors with
+- `src/althing/structured/models.py` — Pydantic mirrors with
   tighter constraints (e.g. `Likert.rating` is constrained to 1..5).
 
 Pass either a bundled name or an inline JSON Schema dict to
@@ -77,8 +77,8 @@ instrument:
 
 ```bash
 # Export the bundled pack to a file, then run.
-synthpanel pack export product-research > /tmp/product-research.yaml
-synthpanel panel run \
+althing pack export product-research > /tmp/product-research.yaml
+althing panel run \
   --personas /tmp/product-research.yaml \
   --instrument positioning.yaml \
   --output-format json --save
@@ -106,7 +106,7 @@ synthpanel panel run \
 **Python SDK:**
 
 ```python
-from synth_panel import run_panel
+from althing import run_panel
 
 result = run_panel(
     pack_id="product-research",
@@ -123,7 +123,7 @@ result = run_panel(
 **What the agent reads.** Each panelist's response is a dict with
 `"structured": true`. The dict's payload key varies per model (the
 JSON Schema generator names it via the schema's intent) — use the
-helper below or `synth_panel.analysis.subgroup_cli._flatten_structured_value`
+helper below or `althing.analysis.subgroup_cli._flatten_structured_value`
 to unwrap to the scalar:
 
 ```python
@@ -162,15 +162,15 @@ instrument:
 ```
 
 ```bash
-synthpanel pack export ai-eval-buyers > /tmp/ai-eval-buyers.yaml
-synthpanel panel run --personas /tmp/ai-eval-buyers.yaml --instrument nps.yaml \
+althing pack export ai-eval-buyers > /tmp/ai-eval-buyers.yaml
+althing panel run --personas /tmp/ai-eval-buyers.yaml --instrument nps.yaml \
   --output-format json --save
 ```
 
 The agent unwraps each `response` dict (`score`/`rating`/`value` key)
 and computes the mean in one line. Or — for the canonical aggregate —
-run `synthpanel analyze <result-id> --output json`, which calls
-`synth_panel.analysis.distribution.distribution_for_question()` and
+run `althing analyze <result-id> --output json`, which calls
+`althing.analysis.distribution.distribution_for_question()` and
 returns:
 
 ```jsonc
@@ -226,7 +226,7 @@ instrument:
 ```
 
 Each panelist returns a list (`["hallucination", "cost-unpredictable"]`).
-`synthpanel analyze` aggregates per tag, zero-filling unmentioned
+`althing analyze` aggregates per tag, zero-filling unmentioned
 taxonomy entries plus a bucket for off-taxonomy `other` themes so the
 agent can rank risks by mentions without parsing prose.
 
@@ -277,7 +277,7 @@ instrument:
 ```
 
 ```bash
-synthpanel panel run \
+althing panel run \
   --personas /tmp/product-research.yaml \
   --instrument ranking.yaml \
   --extract-schema ranking \
@@ -312,10 +312,10 @@ The bundled persona packs ship 15–20 personas each. For 35 personas,
 merge `product-research` (20) with `ai-eval-buyers` (15) at the CLI:
 
 ```bash
-synthpanel pack export product-research > /tmp/product-research.yaml
-synthpanel pack export ai-eval-buyers   > /tmp/ai-eval-buyers.yaml
+althing pack export product-research > /tmp/product-research.yaml
+althing pack export ai-eval-buyers   > /tmp/ai-eval-buyers.yaml
 
-synthpanel panel run \
+althing panel run \
   --personas       /tmp/product-research.yaml \
   --personas-merge /tmp/ai-eval-buyers.yaml \
   --instrument     prioritize.yaml \
@@ -374,10 +374,10 @@ not a *last* step.
 
 Two equivalent paths. Pick whichever fits your agent runtime.
 
-**(a) `synthpanel analyze` — let the package do it for you.**
+**(a) `althing analyze` — let the package do it for you.**
 
 ```bash
-synthpanel analyze <result-id> --output json > analysis.json
+althing analyze <result-id> --output json > analysis.json
 ```
 
 `analysis.json` contains a `distribution_by_question` block with per-
@@ -390,7 +390,7 @@ has the panel result in memory (e.g. from an MCP `run_panel` call),
 import the same routines the CLI uses:
 
 ```python
-from synth_panel.analysis import distribution_for_question
+from althing.analysis import distribution_for_question
 
 # Q0 (enum) — pick-one
 q0_responses = [
@@ -410,11 +410,11 @@ winner = max(q0_dist["frequencies"], key=q0_dist["frequencies"].get)
 `_unwrap_structured(response_dict, question_id, schema_type)` peels
 the per-panelist record down to the scalar/list the distribution
 function expects — see the helper in
-`src/synth_panel/analysis/subgroup_cli.py`.
+`src/althing/analysis/subgroup_cli.py`.
 
 ### Stable JSON output for agents
 
-The `distribution_by_question` block (from `synthpanel analyze`) and
+The `distribution_by_question` block (from `althing analyze`) and
 the per-panelist `response` field (when `response_schema` is set) are
 the schema-stable parts of the payload. They are:
 
@@ -448,7 +448,7 @@ def tag_ranking(dist: dict) -> list[tuple[str, int]]:
 
 ## CLI shortcut — there isn't one (yet)
 
-There is no `synthpanel poll run --choices A,B,C` wrapper command
+There is no `althing poll run --choices A,B,C` wrapper command
 today. The equivalent is a tiny instrument YAML — usually one block —
 plus the standard `panel run`:
 
@@ -463,7 +463,7 @@ instrument:
         type: enum
         options: ["A", "B", "C", "D"]
 YAML
-synthpanel panel run \
+althing panel run \
   --personas /tmp/product-research.yaml \
   --instrument /tmp/positioning.yaml \
   --output-format json --save
@@ -477,7 +477,7 @@ instrument:
       response_schema:
         type: text
 YAML
-synthpanel panel run \
+althing panel run \
   --personas /tmp/product-research.yaml \
   --instrument /tmp/positioning-text.yaml \
   --extract-schema pick_one \
@@ -508,7 +508,7 @@ the SDK, use `run_panel` with a one-question `instrument` dict.
 - **Use `extract_schema=<name>`** to opt into one of the five bundled
   Pydantic-backed schemas (`ranking`, `likert`, `yes_no`, `pick_one`,
   `annotated_choice`) without authoring a JSON Schema yourself.
-- **`SYNTHPANEL_DRIFT_DEGRADE=1`** in the MCP `env` block returns a
+- **`ALTHING_DRIFT_DEGRADE=1`** in the MCP `env` block returns a
   degraded `panel_verdict` with `flags: [{"code": "schema_drift", ...}]`
   instead of a hard error when the 3-strike retry budget is exhausted.
   Recommended for agent workflows where partial signal beats no
@@ -544,8 +544,8 @@ and you find yourself reaching for a regex over
 - [docs/convergence.md](convergence.md) — auto-stop based on
   bounded-question Jensen-Shannon divergence (only works with
   `enum`/`scale`/`yes_no`).
-- `src/synth_panel/structured/schemas.py` — bundled JSON Schemas.
-- `src/synth_panel/structured/models.py` — Pydantic mirrors.
-- `src/synth_panel/instrument.py` — `response_schema` validator.
-- `src/synth_panel/analysis/distribution.py` — deterministic per-
-  question distributions used by `synthpanel analyze`.
+- `src/althing/structured/schemas.py` — bundled JSON Schemas.
+- `src/althing/structured/models.py` — Pydantic mirrors.
+- `src/althing/instrument.py` — `response_schema` validator.
+- `src/althing/analysis/distribution.py` — deterministic per-
+  question distributions used by `althing analyze`.

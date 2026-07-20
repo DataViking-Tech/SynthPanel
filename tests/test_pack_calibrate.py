@@ -1,10 +1,10 @@
-"""Tests for ``synthpanel pack calibrate`` (sp-sghl).
+"""Tests for ``althing pack calibrate`` (sp-sghl).
 
 Two surfaces under test:
 
-1. ``synth_panel.calibration`` — pure pack-YAML round-trip helpers
+1. ``althing.calibration`` — pure pack-YAML round-trip helpers
    (load, merge by ``(dataset, question)``, splice block back in).
-2. ``synth_panel.cli.commands.handle_pack_calibrate`` — CLI wiring,
+2. ``althing.cli.commands.handle_pack_calibrate`` — CLI wiring,
    dry-run, allowlist gating, in-place rewrite. The actual panel run
    is mocked via ``_run_calibration_panel`` so tests stay hermetic.
 """
@@ -17,14 +17,14 @@ from unittest.mock import patch
 import pytest
 import yaml
 
-from synth_panel import calibration as calib_mod
-from synth_panel.calibration import (
+from althing import calibration as calib_mod
+from althing.calibration import (
     CalibrationEntry,
     merge_calibration,
     update_pack_calibration_text,
     write_pack_calibration,
 )
-from synth_panel.main import main
+from althing.main import main
 
 # ── calibration.py: data + merge logic ────────────────────────────────
 
@@ -40,14 +40,14 @@ def test_calibration_entry_to_yaml_dict_drops_none_alignment_error():
         extractor="pick_one:auto-derived",
         panelist_cost_usd=0.6451,
         calibrated_at="2026-04-26T14:23:00Z",
-        synthpanel_version="0.11.1",
+        althing_version="0.11.1",
     )
     d = entry.to_yaml_dict()
     assert "alignment_error" not in d
     assert d["dataset"] == "gss"
     assert d["jsd"] == 0.18
     assert d["models"] == ["haiku:0.5", "gemini-flash-lite:0.5"]
-    assert d["methodology_url"].startswith("https://synthpanel.dev")
+    assert d["methodology_url"].startswith("https://althing.dev")
 
 
 def test_calibration_entry_keeps_alignment_error_when_set():
@@ -61,7 +61,7 @@ def test_calibration_entry_keeps_alignment_error_when_set():
         extractor="pick_one:auto-derived",
         panelist_cost_usd=0.0,
         calibrated_at="2026-04-26T14:23:00Z",
-        synthpanel_version="0.11.1",
+        althing_version="0.11.1",
         alignment_error="['x'] vs ['y']",
     )
     d = entry.to_yaml_dict()
@@ -80,7 +80,7 @@ def test_calibration_entry_drops_none_cramers_v():
         extractor="pick_one:auto-derived",
         panelist_cost_usd=0.5,
         calibrated_at="2026-04-26T14:23:00Z",
-        synthpanel_version="0.11.1",
+        althing_version="0.11.1",
     )
     d = entry.to_yaml_dict()
     assert "cramers_v" not in d
@@ -98,7 +98,7 @@ def test_calibration_entry_emits_cramers_v_when_set():
         extractor="pick_one:auto-derived",
         panelist_cost_usd=0.5,
         calibrated_at="2026-04-26T14:23:00Z",
-        synthpanel_version="0.11.1",
+        althing_version="0.11.1",
         cramers_v=0.123,
     )
     d = entry.to_yaml_dict()
@@ -262,7 +262,7 @@ def test_cli_pack_calibrate_dry_run_does_not_write(tmp_path, capsys):
     pack = _write_pack(tmp_path)
     original = pack.read_text(encoding="utf-8")
     with patch(
-        "synth_panel.cli.commands._run_calibration_panel",
+        "althing.cli.commands._run_calibration_panel",
         return_value=_mock_panel_run_result(),
     ):
         rc = main(
@@ -293,7 +293,7 @@ def test_cli_pack_calibrate_persists_cramers_v(tmp_path, capsys):
     line leads with effect size (large/medium/small/negligible) before JSD."""
     pack = _write_pack(tmp_path)
     with patch(
-        "synth_panel.cli.commands._run_calibration_panel",
+        "althing.cli.commands._run_calibration_panel",
         return_value=_mock_panel_run_result(),
     ):
         rc = main(
@@ -325,7 +325,7 @@ def test_cli_pack_calibrate_persists_cramers_v(tmp_path, capsys):
 def test_cli_pack_calibrate_writes_in_place(tmp_path):
     pack = _write_pack(tmp_path)
     with patch(
-        "synth_panel.cli.commands._run_calibration_panel",
+        "althing.cli.commands._run_calibration_panel",
         return_value=_mock_panel_run_result(),
     ):
         rc = main(
@@ -355,14 +355,14 @@ def test_cli_pack_calibrate_writes_in_place(tmp_path):
     assert cal[0]["extractor"] == "pick_one:auto-derived"
     assert isinstance(cal[0]["jsd"], float)
     assert "calibrated_at" in cal[0]
-    assert "synthpanel_version" in cal[0]
+    assert "althing_version" in cal[0]
 
 
 def test_cli_pack_calibrate_replaces_prior_entry(tmp_path):
     pack = tmp_path / "pack.yaml"
     pack.write_text(PACK_YAML_WITH_CALIBRATION, encoding="utf-8")
     with patch(
-        "synth_panel.cli.commands._run_calibration_panel",
+        "althing.cli.commands._run_calibration_panel",
         return_value=_mock_panel_run_result(),
     ):
         rc = main(
@@ -392,7 +392,7 @@ def test_cli_pack_calibrate_writes_to_output_path(tmp_path):
     pack = _write_pack(tmp_path)
     out = tmp_path / "out.yaml"
     with patch(
-        "synth_panel.cli.commands._run_calibration_panel",
+        "althing.cli.commands._run_calibration_panel",
         return_value=_mock_panel_run_result(),
     ):
         rc = main(
@@ -546,7 +546,7 @@ def test_cli_pack_calibrate_rejects_malformed_yaml(tmp_path, capsys):
 def test_cli_pack_calibrate_unexpected_error_clean_message(tmp_path, capsys):
     pack = _write_pack(tmp_path)
     with patch(
-        "synth_panel.cli.commands._run_calibration_panel",
+        "althing.cli.commands._run_calibration_panel",
         side_effect=KeyError("missing-field"),
     ):
         rc = main(
@@ -573,7 +573,7 @@ def test_cli_pack_calibrate_debug_reraises_unexpected(tmp_path):
     pack = _write_pack(tmp_path)
     with (
         patch(
-            "synth_panel.cli.commands._run_calibration_panel",
+            "althing.cli.commands._run_calibration_panel",
             side_effect=KeyError("missing-field"),
         ),
         pytest.raises(KeyError),
@@ -598,7 +598,7 @@ def test_cli_pack_calibrate_debug_reraises_unexpected(tmp_path):
 def test_cli_pack_calibrate_propagates_panel_failure(tmp_path, capsys):
     pack = _write_pack(tmp_path)
     with patch(
-        "synth_panel.cli.commands._run_calibration_panel",
+        "althing.cli.commands._run_calibration_panel",
         side_effect=RuntimeError("panel run for calibration failed (exit 2): boom"),
     ):
         rc = main(
@@ -628,8 +628,8 @@ def test_calibration_instrument_uses_real_question_text_and_options():
     Regression for cross-repo P0-3: the panel must see the actual survey item,
     not a fabricated placeholder that gets scored against real ground truth.
     """
-    from synth_panel.cli.commands import _build_calibration_instrument
-    from synth_panel.convergence import identify_tracked_questions
+    from althing.cli.commands import _build_calibration_instrument
+    from althing.convergence import identify_tracked_questions
 
     baseline = {
         "dataset": "gss",
@@ -660,7 +660,7 @@ def test_calibration_instrument_uses_real_question_text_and_options():
 def test_calibration_instrument_options_align_with_human_distribution_keys():
     """Schema labels are the baseline's option set, matching the distribution
     keys so the panel distribution and human distribution share categories."""
-    from synth_panel.cli.commands import _build_calibration_instrument
+    from althing.cli.commands import _build_calibration_instrument
 
     baseline = {
         "question_text": "Do you use the internet?",
@@ -683,7 +683,7 @@ def test_calibration_instrument_options_align_with_human_distribution_keys():
 )
 def test_calibration_instrument_refuses_without_question_text(baseline):
     """Missing/blank question text => refuse (raise), never fabricate."""
-    from synth_panel.cli.commands import _build_calibration_instrument
+    from althing.cli.commands import _build_calibration_instrument
 
     with pytest.raises(RuntimeError) as exc:
         _build_calibration_instrument(baseline, "gss:HAPPY")
@@ -697,7 +697,7 @@ def test_calibration_instrument_refuses_without_question_text(baseline):
 def test_calibration_instrument_honors_legacy_prompt_key():
     """A baseline exposing ``prompt`` (rather than ``question_text``) still
     works — no fabrication path is taken."""
-    from synth_panel.cli.commands import _build_calibration_instrument
+    from althing.cli.commands import _build_calibration_instrument
 
     inst = _build_calibration_instrument({"prompt": "Legacy prompt wording?", "options": ["A", "B"]}, "gss:HAPPY")
     assert inst["instrument"]["questions"][0]["text"].startswith("Legacy prompt wording?")
@@ -708,7 +708,7 @@ def test_calibration_instrument_text_only_when_options_absent():
 
     (SynthBench ships options alongside text for full-tier datasets, so this
     is a defensive path — but we still never fabricate.)"""
-    from synth_panel.cli.commands import _build_calibration_instrument
+    from althing.cli.commands import _build_calibration_instrument
 
     inst = _build_calibration_instrument({"question_text": "A free-form question?"}, "gss:HAPPY")
     question = inst["instrument"]["questions"][0]

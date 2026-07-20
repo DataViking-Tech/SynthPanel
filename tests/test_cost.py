@@ -1,10 +1,10 @@
-"""Tests for synth_panel.cost — SPEC.md Section 7."""
+"""Tests for althing.cost — SPEC.md Section 7."""
 
 from __future__ import annotations
 
 import pytest
 
-from synth_panel.cost import (
+from althing.cost import (
     DEEPSEEK_CHAT_PRICING,
     DEEPSEEK_V3_2_EXP_PRICING,
     DEEPSEEK_V3_2_PRICING,
@@ -323,9 +323,9 @@ class TestProviderLookup:
         "provider, expected",
         [
             # 7 positive cases — valid bucket + recognised inner.
-            ("synthpanel/claude-sonnet-4", SONNET_PRICING),
-            ("synthpanel/claude-sonnet-4 t=0.85 tpl=current", SONNET_PRICING),
-            ("synthpanel/claude-haiku-4-5 t=0.85 profile=foo tpl=minimal", HAIKU_PRICING),
+            ("althing/claude-sonnet-4", SONNET_PRICING),
+            ("althing/claude-sonnet-4 t=0.85 tpl=current", SONNET_PRICING),
+            ("althing/claude-haiku-4-5 t=0.85 profile=foo tpl=minimal", HAIKU_PRICING),
             ("openrouter/anthropic/claude-haiku-4-5", HAIKU_PRICING),
             ("openrouter/google/gemini-2.5-flash", GEMINI_FLASH_PRICING),
             ("raw-anthropic/claude-opus-4-6", OPUS_PRICING),
@@ -449,7 +449,7 @@ class TestResolveCost:
     """sp-j3vk: provider-reported cost must override local pricing table."""
 
     def test_falls_back_to_local_when_provider_absent(self):
-        from synth_panel.cost import resolve_cost
+        from althing.cost import resolve_cost
 
         usage = TokenUsage(input_tokens=1_000_000, output_tokens=0)
         cost = resolve_cost(usage, "claude-haiku-3.5")
@@ -457,7 +457,7 @@ class TestResolveCost:
 
     def test_provider_reported_overrides_local(self):
         """Stale local table must not corrupt the actual billed cost."""
-        from synth_panel.cost import resolve_cost
+        from althing.cost import resolve_cost
 
         # Local table would compute this at haiku rates ($1/M input). The
         # provider says we were billed $0.42 (BYOK discount, promo, etc.).
@@ -472,7 +472,7 @@ class TestResolveCost:
 
     def test_provider_reported_preserved_when_local_would_be_zero(self):
         """ollama/self-hosted case — provider reports cost with zero tokens."""
-        from synth_panel.cost import resolve_cost
+        from althing.cost import resolve_cost
 
         usage = TokenUsage(provider_reported_cost=0.05)
         cost = resolve_cost(usage, "ollama/llama3")
@@ -480,7 +480,7 @@ class TestResolveCost:
 
     def test_divergence_warning_fires_above_20_percent(self, caplog):
         """sp-j3vk: when local estimate wildly disagrees with provider, warn."""
-        from synth_panel.cost import resolve_cost
+        from althing.cost import resolve_cost
 
         # Local: 1M input × $1/M = $1.00. Provider: $0.10 (90% divergence).
         usage = TokenUsage(
@@ -489,13 +489,13 @@ class TestResolveCost:
         )
         import logging
 
-        with caplog.at_level(logging.WARNING, logger="synth_panel.cost"):
+        with caplog.at_level(logging.WARNING, logger="althing.cost"):
             cost = resolve_cost(usage, "claude-haiku-3.5")
         assert cost.total_cost == pytest.approx(0.10)
         assert any("diverges" in rec.message for rec in caplog.records)
 
     def test_divergence_silent_within_20_percent(self, caplog):
-        from synth_panel.cost import resolve_cost
+        from althing.cost import resolve_cost
 
         # Local: $1.00. Provider: $1.05 → 4.7% divergence, no warning.
         usage = TokenUsage(
@@ -504,7 +504,7 @@ class TestResolveCost:
         )
         import logging
 
-        with caplog.at_level(logging.WARNING, logger="synth_panel.cost"):
+        with caplog.at_level(logging.WARNING, logger="althing.cost"):
             resolve_cost(usage, "claude-haiku-3.5")
         assert not any("diverges" in rec.message for rec in caplog.records)
 

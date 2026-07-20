@@ -3,13 +3,13 @@ the sampling fallback round-trips when the server has no BYOK creds.
 
 Fills a gap left by :mod:`tests.test_mcp_sampling`, which only exercises
 the tool handlers directly against a mocked Context. Here we run the
-real :func:`synth_panel.mcp.server.serve` subprocess, connect a
+real :func:`althing.mcp.server.serve` subprocess, connect a
 :class:`mcp.ClientSession` that advertises the ``sampling`` capability
 (via a ``sampling_callback``), and assert the server emits
 ``sampling/createMessage`` and gets a usable response back.
 
 The subprocess runs with every provider key unset so the decision in
-:func:`synth_panel.mcp.sampling.decide_mode` must pick ``sampling`` —
+:func:`althing.mcp.sampling.decide_mode` must pick ``sampling`` —
 this is the exact scenario that previously crashed ``run_quick_poll``
 with a KeyError stack trace (sp-5no).
 """
@@ -54,13 +54,13 @@ def _server_env() -> dict[str, str]:
 
 def _locate_server_entry() -> StdioServerParameters:
     """Resolve how to spawn the server — prefer the installed console
-    script, fall back to ``python -m synth_panel.mcp.server``."""
-    entry = shutil.which("synthpanel")
+    script, fall back to ``python -m althing.mcp.server``."""
+    entry = shutil.which("althing")
     if entry:
         return StdioServerParameters(command=entry, args=["mcp-serve"], env=_server_env())
     return StdioServerParameters(
         command=sys.executable,
-        args=["-m", "synth_panel", "mcp-serve"],
+        args=["-m", "althing", "mcp-serve"],
         env=_server_env(),
     )
 
@@ -144,9 +144,9 @@ async def test_stdio_initialize_advertises_sampling_and_version():
     declare that it uses MCP sampling — both at the top level of
     ``capabilities`` (so inspectors enumerating top-level keys see it)
     and under ``experimental`` (back-compat nesting) — and must report
-    the synthpanel package version in serverInfo rather than leaking
+    the althing package version in serverInfo rather than leaking
     the MCP SDK version through FastMCP's default behaviour."""
-    import synth_panel
+    import althing
 
     params = _locate_server_entry()
 
@@ -160,10 +160,10 @@ async def test_stdio_initialize_advertises_sampling_and_version():
     ):
         init_result = await session.initialize()
 
-        assert init_result.serverInfo.name == "synthpanel"
-        assert init_result.serverInfo.version == synth_panel.__version__, (
-            f"serverInfo.version should be the synthpanel package version "
-            f"({synth_panel.__version__}); got {init_result.serverInfo.version}. "
+        assert init_result.serverInfo.name == "althing"
+        assert init_result.serverInfo.version == althing.__version__, (
+            f"serverInfo.version should be the althing package version "
+            f"({althing.__version__}); got {init_result.serverInfo.version}. "
             f"FastMCP defaults to importlib.metadata.version('mcp') when the "
             f"underlying Server.version is unset, which leaks the SDK version."
         )

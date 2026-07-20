@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from synth_panel.llm.models import (
+from althing.llm.models import (
     CompletionResponse,
     InputMessage,
     TextBlock,
     TokenUsage,
     ToolInvocationBlock,
 )
-from synth_panel.structured.output import (
+from althing.structured.output import (
     StructuredOutputConfig,
     StructuredOutputEngine,
     _is_cheap_model,

@@ -1,4 +1,4 @@
-"""Render the Agent Skills Discovery index for synthpanel.dev.
+"""Render the Agent Skills Discovery index for althing.dev.
 
 Publishes ``/.well-known/agent-skills/index.json`` per the Agent Skills
 Discovery RFC v0.2.0 (https://agentskills.io/), plus a mirror of each
@@ -28,7 +28,7 @@ SCHEMA_URL = "https://schemas.agentskills.io/discovery/0.2.0/schema.json"
 # Stable publication order — independent of filesystem traversal so the
 # committed index.json is deterministic across platforms.
 SKILL_ORDER = (
-    "synthpanel",
+    "althing",
     "focus-group",
     "name-test",
     "concept-test",

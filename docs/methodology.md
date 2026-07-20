@@ -1,7 +1,7 @@
 # Methodology
 
 > **Audience:** ML and data-engineering evaluators — the inspectability buyers.
-> If you're deciding whether SynthPanel's panels are credible enough to put in
+> If you're deciding whether Althing's panels are credible enough to put in
 > front of a real research decision, this page is the proof artifact.
 
 > **Cover image (placeholder):** `convergence-decay-vs-cohort-size.png` — to
@@ -18,7 +18,7 @@ breaks — observability beats reliability in stated preference."*
 
 So this page documents what's actually happening behind a panel call. No
 marketing language, no "AI-powered representativeness." If you find a hole in
-the methodology, [open an issue](https://github.com/DataViking-Tech/SynthPanel/issues) —
+the methodology, [open an issue](https://github.com/DataViking-Tech/Althing/issues) —
 that's the loop we want.
 
 ## Cohort construction
@@ -27,7 +27,7 @@ A panel run resolves three layers:
 
 1. **Persona pack** — a YAML file or installed pack name. Each persona is a
    `{name, age, occupation, background, personality_traits, ...}` record;
-   bundled packs are versioned and visible in `synthpanel pack list`.
+   bundled packs are versioned and visible in `althing pack list`.
 2. **Prompt template** — `templates/current.txt` by default; alternates exist
    for ablation (`templates/minimal.txt`, `templates/demo.txt`,
    `templates/values.txt`). The template determines which persona fields land
@@ -43,13 +43,13 @@ rules or surfaces the gap as `demographic_skew` post-run.
 
 ## Sampling
 
-For panels above 500, SynthPanel tracks **response-distribution
+For panels above 500, Althing tracks **response-distribution
 convergence** live via Jensen-Shannon divergence per question and can
 auto-stop once every bounded question (Likert / yes-no / pick-one / enum) has
 stabilized.
 
 ```bash
-synthpanel panel run \
+althing panel run \
   --personas large-panel.yaml \
   --instrument pricing-discovery \
   --var problem="choosing a project management tool" \
@@ -117,7 +117,7 @@ exposes:
   resolvable via the `panel-result://` MCP resource. Nothing is summarized
   away.
 
-The `synthpanel report` post-hoc renderer opens with a mandatory
+The `althing report` post-hoc renderer opens with a mandatory
 synthetic-panel banner (and closes with a matching footer) so the output
 can't be mistaken for real-user research. **Synthetic panels are for
 exploration, hypothesis generation, and rapid iteration. They do not replace

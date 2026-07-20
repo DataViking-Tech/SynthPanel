@@ -1,5 +1,5 @@
 {
-  "name": "synthpanel-site-tailwind",
+  "name": "althing-site-tailwind",
   "private": true,
   "description": "Precompiles site/assets/tailwind.css from the Tailwind classes used in site/**/*.html (+ index.html.j2). Regenerate with: npm ci && npm run build (from this directory). CI fails if the committed CSS drifts from the class usage.",
   "scripts": {

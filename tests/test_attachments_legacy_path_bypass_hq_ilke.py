@@ -24,17 +24,17 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from synth_panel.llm.models import (
+from althing.llm.models import (
     CompletionResponse,
     ImageBlock,
     InputMessage,
     StopReason,
     TextBlock,
 )
-from synth_panel.llm.models import (
+from althing.llm.models import (
     TokenUsage as LLMTokenUsage,
 )
-from synth_panel.orchestrator import run_panel_parallel
+from althing.orchestrator import run_panel_parallel
 
 
 def _ack_response() -> CompletionResponse:

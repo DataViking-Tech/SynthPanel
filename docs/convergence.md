@@ -1,6 +1,6 @@
 # Convergence telemetry
 
-At competitive-parity scales (n=500..10k), synthpanel panels spend most of
+At competitive-parity scales (n=500..10k), althing panels spend most of
 their token budget producing diminishing returns. Once a response
 distribution has stabilized for a given question, running more panelists
 adds <2% signal for 10-20× the cost. The convergence feature exposes that
@@ -11,7 +11,7 @@ smaller representative n next time.
 ## TL;DR
 
 ```bash
-synthpanel panel run \
+althing panel run \
   --personas my-panel.yaml \
   --instrument pricing-discovery \
   --var problem="choosing a project management tool" \
@@ -25,7 +25,7 @@ jq '.convergence.overall_converged_at, .convergence.auto_stopped' result.json
 
 ## How it works
 
-1. At startup synthpanel inspects the instrument and flags every question
+1. At startup althing inspects the instrument and flags every question
    with a bounded response space — Likert (`rating`), yes/no (`answer`),
    pick-one (`choice`), or any JSON Schema with an `enum` field. Free-text
    questions are ignored; JSD on paraphrase noise is ill-defined.
@@ -50,7 +50,7 @@ jq '.convergence.overall_converged_at, .convergence.auto_stopped' result.json
 | `--convergence-eps` | 0.02 | JSD threshold below which a question is treated as converged. |
 | `--convergence-min-n` | 50 | Minimum panelists before `--auto-stop` is allowed to fire. |
 | `--convergence-m` | 3 | Consecutive checks below epsilon required to declare convergence. |
-| `--convergence-baseline DATASET:Q` | off | Load a human baseline curve from synthbench and include in the report. Requires `pip install 'synthpanel[convergence]'`. |
+| `--convergence-baseline DATASET:Q` | off | Load a human baseline curve from synthbench and include in the report. Requires `pip install 'althing[convergence]'`. |
 | `--calibrate-against DATASET:Q` | off | Attach a `calibration` sub-object to each tracked question with Jensen-Shannon divergence vs the published human distribution. v1 supports GSS only. **Pair explicitly with `--convergence-check-every`** — cadence is never implicit. See [Inline calibration vs a human baseline](#inline-calibration-vs-a-human-baseline). |
 
 ## Interpreting the report
@@ -131,7 +131,7 @@ panel result.
 - **Bounded support required.** The target question must produce a
   bounded distribution (enum / pick-one / likert). Free-text responses
   cannot be calibrated because JSD on paraphrase noise is ill-defined.
-- **Inline only.** There is no `synthpanel calibrate RESULT.json`
+- **Inline only.** There is no `althing calibrate RESULT.json`
   subcommand; calibration runs during the panel, not against a saved
   result.
 
@@ -145,7 +145,7 @@ surprise you with cost on small-n runs.
 
 ```bash
 # Correct: explicit cadence
-synthpanel panel run \
+althing panel run \
   --personas my-panel.yaml \
   --instrument general-survey \
   --calibrate-against gss:HAPPY \
@@ -155,11 +155,11 @@ synthpanel panel run \
 ### The three extractor paths
 
 Calibration needs a bounded distribution over the *same option strings*
-as the baseline. There are three ways synthpanel gets one:
+as the baseline. There are three ways althing gets one:
 
 1. **Auto-derive (default for small-enum baselines).** If the baseline
    has ≤5 enum options and you don't pass `--extract-schema`,
-   synthpanel derives a `pick_one` extractor schema from the baseline's
+   althing derives a `pick_one` extractor schema from the baseline's
    option strings and logs the derivation to stderr in sp-yaru style:
 
    ```
@@ -193,7 +193,7 @@ too happy") with decades of trend data — tight support, easy to
 explain, ideal first wedge.
 
 ```bash
-synthpanel panel run \
+althing panel run \
   --personas examples/personas.yaml \
   --instrument general-survey \
   --calibrate-against gss:HAPPY \
@@ -295,7 +295,7 @@ conditional):
 | `jsd` | float in [0, 1] | Jensen-Shannon divergence (base-2) between the panel distribution and the baseline's `human_distribution`. `0.0` = identical; `1.0` = maximum divergence *or* broken alignment (check `alignment_error`). |
 | `baseline_spec` | string | The `DATASET:QUESTION` spec passed to `--calibrate-against` (e.g. `"gss:HAPPY"`). |
 | `extractor` | string | Which extractor path produced the bounded distribution: `"pick_one:auto-derived"`, `"pick_one:manual"`, or `"likert:manual"`. |
-| `auto_derived` | bool | `true` when synthpanel derived the extractor schema from the baseline automatically (≤5-option enum, no `--extract-schema` supplied); `false` when you supplied the schema or authored a bounded instrument. |
+| `auto_derived` | bool | `true` when althing derived the extractor schema from the baseline automatically (≤5-option enum, no `--extract-schema` supplied); `false` when you supplied the schema or authored a bounded instrument. |
 | `alignment_error` | string (conditional) | Present **only** when extractor keys and baseline keys are disjoint. Value is `"<sorted-model-keys> vs <sorted-baseline-keys>"`. **If this field is present, do not interpret `jsd` as a divergence signal.** |
 
 The `calibration` sub-object is the committed wire format. Downstream

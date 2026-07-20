@@ -1,18 +1,18 @@
 # syntax=docker/dockerfile:1.23
 #
-# Production runtime image for synthpanel.
+# Production runtime image for althing.
 #
 # This image is sized for ephemeral / serverless invocation (Lambda, Cloud Run,
 # GitHub Actions, n8n, etc.) — small footprint, no editor tooling.
 #
-# Default CMD launches the MCP server on stdio. Override with any synthpanel
+# Default CMD launches the MCP server on stdio. Override with any althing
 # subcommand:
 #
-#   docker run --rm -e ANTHROPIC_API_KEY=$KEY synthpanel/synthpanel \
+#   docker run --rm -e ANTHROPIC_API_KEY=$KEY althing/althing \
 #     prompt "Say hello"
 #
 # Build:
-#   docker build -t synthpanel:local .
+#   docker build -t althing:local .
 #
 # Multi-arch builds happen in CI via .github/workflows/docker.yml.
 
@@ -42,18 +42,18 @@ RUN python -m build --wheel --outdir /build/dist
 # ---------- runtime ----------
 FROM python:${PYTHON_VERSION}-slim AS runtime
 
-ARG SYNTHPANEL_VERSION=unknown
+ARG ALTHING_VERSION=unknown
 ARG VCS_REF=unknown
 ARG BUILD_DATE=unknown
 
-LABEL org.opencontainers.image.title="synthpanel" \
+LABEL org.opencontainers.image.title="althing" \
       org.opencontainers.image.description="Run synthetic focus groups using AI personas. CLI, Python library, and MCP server." \
-      org.opencontainers.image.url="https://synthpanel.dev" \
-      org.opencontainers.image.documentation="https://github.com/DataViking-Tech/SynthPanel#readme" \
-      org.opencontainers.image.source="https://github.com/DataViking-Tech/SynthPanel" \
+      org.opencontainers.image.url="https://althing.dev" \
+      org.opencontainers.image.documentation="https://github.com/DataViking-Tech/Althing#readme" \
+      org.opencontainers.image.source="https://github.com/DataViking-Tech/Althing" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.vendor="DataViking-Tech" \
-      org.opencontainers.image.version="${SYNTHPANEL_VERSION}" \
+      org.opencontainers.image.version="${ALTHING_VERSION}" \
       org.opencontainers.image.revision="${VCS_REF}" \
       org.opencontainers.image.created="${BUILD_DATE}"
 
@@ -65,8 +65,8 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 # Non-root user — Lambda and Cloud Run both honor USER, and avoiding root
 # is good practice for any ephemeral container. UID 1000 (not --system) so
 # bind mounts from host UID 1000 are writable in dev workflows.
-RUN groupadd --gid 1000 synthpanel \
- && useradd --uid 1000 --gid synthpanel --create-home --home-dir /home/synthpanel synthpanel
+RUN groupadd --gid 1000 althing \
+ && useradd --uid 1000 --gid althing --create-home --home-dir /home/althing althing
 
 # Install runtime dependencies BEFORE copying the wheel so this expensive
 # layer caches across source-only changes. The wheel content changes on
@@ -83,14 +83,14 @@ RUN pip install --no-cache-dir $(python -c "import tomllib; d = tomllib.load(ope
 # trip on the wheel filename's metadata.
 COPY --from=builder /build/dist/*.whl /tmp/
 RUN set -eux \
- && wheel="$(ls /tmp/synthpanel-*.whl | head -n1)" \
+ && wheel="$(ls /tmp/althing-*.whl | head -n1)" \
  && pip install --no-deps "${wheel}" \
- && rm -f /tmp/synthpanel-*.whl
+ && rm -f /tmp/althing-*.whl
 
-USER synthpanel
-WORKDIR /home/synthpanel
+USER althing
+WORKDIR /home/althing
 
 # stdin must stay open for the MCP stdio transport. Callers running
 # non-MCP subcommands can ignore this — it's only meaningful for mcp-serve.
-ENTRYPOINT ["synthpanel"]
+ENTRYPOINT ["althing"]
 CMD ["mcp-serve"]

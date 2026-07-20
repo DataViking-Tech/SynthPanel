@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Regenerate brand social cards from the synthpanel brand palette.
+"""Regenerate brand social cards from the althing brand palette.
 
 Run from repo root: ``python3 site/generate-og-image.py``.
 
 Produces two dark-slate PNGs with an emerald radial glow and the wordmark +
-tagline, matching the synthpanel.dev visual identity:
+tagline, matching the althing.dev visual identity:
 
 * ``site/og-image.png`` (1200x630) — embedded in landing/mcp/blog pages via
   ``og:image`` / ``twitter:image`` meta tags.
@@ -25,15 +25,15 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _read_version() -> str:
-    # Single source of truth: src/synth_panel/__version__.py. Read it without
+    # Single source of truth: src/althing/__version__.py. Read it without
     # importing the package so the card stays in lockstep with the published
     # version even before an editable install. Matches scripts/render_site.py.
     # Hardcoding the version here (it used to read "v0.9.1") is how the social
     # card silently drifted off the real release — see sy-3aj / issue #524.
-    src = (REPO_ROOT / "src" / "synth_panel" / "__version__.py").read_text()
+    src = (REPO_ROOT / "src" / "althing" / "__version__.py").read_text()
     match = re.search(r'^__version__\s*=\s*"([^"]+)"', src, re.MULTILINE)
     if not match:
-        raise RuntimeError(f"Could not parse __version__ from {REPO_ROOT}/src/synth_panel/__version__.py")
+        raise RuntimeError(f"Could not parse __version__ from {REPO_ROOT}/src/althing/__version__.py")
     return match.group(1)
 
 
@@ -126,7 +126,7 @@ def render(width: int, height: int, out: Path) -> None:
     y = 92
     draw_pill(draw, (margin_x, y), f"v{_read_version()}  public beta", font_badge, EMERALD)
 
-    title = "synthpanel"
+    title = "althing"
     title_y = 176
     tb = draw.textbbox((0, 0), title, font=font_title)
     draw.text((margin_x - tb[0], title_y - tb[1]), title, font=font_title, fill=FG_HI)
@@ -140,7 +140,7 @@ def render(width: int, height: int, out: Path) -> None:
     meta_y = tag_y + 72
     draw.text((margin_x, meta_y), meta, font=font_meta, fill=(100, 116, 139))
 
-    foot = "$ pip install synthpanel"
+    foot = "$ pip install althing"
     foot_bbox = draw.textbbox((0, 0), foot, font=font_foot)
     foot_w = foot_bbox[2] - foot_bbox[0]
     foot_h = foot_bbox[3] - foot_bbox[1]
@@ -159,12 +159,12 @@ def render(width: int, height: int, out: Path) -> None:
     prefix_w = prefix_bbox[2] - prefix_bbox[0]
     draw.text(
         (fx + foot_pad_x + prefix_w, fy + foot_pad_y - foot_bbox[1]),
-        "pip install synthpanel",
+        "pip install althing",
         font=font_foot,
         fill=EMERALD,
     )
 
-    brand = "synthpanel.dev"
+    brand = "althing.dev"
     brand_bbox = draw.textbbox((0, 0), brand, font=font_meta)
     brand_w = brand_bbox[2] - brand_bbox[0]
     draw.text(

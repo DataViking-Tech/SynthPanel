@@ -5,14 +5,14 @@ from __future__ import annotations
 import threading
 from unittest.mock import MagicMock
 
-from synth_panel.cost import ZERO_USAGE
-from synth_panel.llm.models import (
+from althing.cost import ZERO_USAGE
+from althing.llm.models import (
     CompletionResponse,
     TokenUsage,
     ToolInvocationBlock,
 )
-from synth_panel.orchestrator import PanelistResult
-from synth_panel.synthesis import (
+from althing.orchestrator import PanelistResult
+from althing.synthesis import (
     STRATEGY_MAP_REDUCE,
     STRATEGY_SINGLE,
     SynthesisResult,

@@ -1,4 +1,4 @@
-"""Tests for MCP sampling bridge (``synth_panel.mcp.sampling``).
+"""Tests for MCP sampling bridge (``althing.mcp.sampling``).
 
 Covers the four routing branches required by sp-6at:
 
@@ -41,18 +41,18 @@ def _clean_env(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Unit tests for the pure helpers in synth_panel.mcp.sampling
+# Unit tests for the pure helpers in althing.mcp.sampling
 # ---------------------------------------------------------------------------
 
 
 class TestHasByokCredentials:
     def test_no_creds_returns_false(self):
-        from synth_panel.mcp.sampling import has_byok_credentials
+        from althing.mcp.sampling import has_byok_credentials
 
         assert has_byok_credentials({}) is False
 
     def test_any_known_var_returns_true(self, monkeypatch):
-        from synth_panel.mcp.sampling import has_byok_credentials
+        from althing.mcp.sampling import has_byok_credentials
 
         # Must cover every provider the CLI auto-detects, otherwise a user
         # whose only key is (e.g.) OPENROUTER_API_KEY gets misrouted into
@@ -69,7 +69,7 @@ class TestHasByokCredentials:
             assert has_byok_credentials({var: "x"}) is True, var
 
     def test_openrouter_key_is_recognised_in_decide_mode(self):
-        from synth_panel.mcp.sampling import decide_mode
+        from althing.mcp.sampling import decide_mode
 
         # sp-t6r regression: OPENROUTER_API_KEY must route to BYOK, not
         # sampling, even when the client supports sampling — otherwise we
@@ -80,23 +80,23 @@ class TestHasByokCredentials:
         assert d.mode == "byok"
 
     def test_empty_string_is_not_creds(self):
-        from synth_panel.mcp.sampling import has_byok_credentials
+        from althing.mcp.sampling import has_byok_credentials
 
         assert has_byok_credentials({"ANTHROPIC_API_KEY": "   "}) is False
 
     def test_stored_credential_counts_as_byok(self, tmp_path, monkeypatch):
-        """sp-mkpo: ``synthpanel login`` keys must satisfy MCP BYOK.
+        """sp-mkpo: ``althing login`` keys must satisfy MCP BYOK.
 
-        A user who persists OPENROUTER_API_KEY via ``synthpanel login``
+        A user who persists OPENROUTER_API_KEY via ``althing login``
         and launches mcp-serve from a client that doesn't inherit the
         shell env (Claude Desktop bundles, Docker, systemd units) would
         otherwise see a bogus 'No provider credentials' error even
         though the CLI finds the same key.
         """
-        from synth_panel.credentials import save_credential
-        from synth_panel.mcp.sampling import decide_mode, has_byok_credentials
+        from althing.credentials import save_credential
+        from althing.mcp.sampling import decide_mode, has_byok_credentials
 
-        monkeypatch.setenv("SYNTHPANEL_CREDENTIALS_PATH", str(tmp_path / "creds.json"))
+        monkeypatch.setenv("ALTHING_CREDENTIALS_PATH", str(tmp_path / "creds.json"))
         save_credential("OPENROUTER_API_KEY", "sk-or-stored")
 
         # Default path (env=None) must consult both sources.
@@ -109,10 +109,10 @@ class TestHasByokCredentials:
         assert decide_mode(ctx).mode == "byok"
 
     def test_stored_gemini_credential_counts_as_byok(self, tmp_path, monkeypatch):
-        from synth_panel.credentials import save_credential
-        from synth_panel.mcp.sampling import has_byok_credentials
+        from althing.credentials import save_credential
+        from althing.mcp.sampling import has_byok_credentials
 
-        monkeypatch.setenv("SYNTHPANEL_CREDENTIALS_PATH", str(tmp_path / "creds.json"))
+        monkeypatch.setenv("ALTHING_CREDENTIALS_PATH", str(tmp_path / "creds.json"))
         save_credential("GEMINI_API_KEY", "g-stored")
 
         assert has_byok_credentials() is True
@@ -124,10 +124,10 @@ class TestHasByokCredentials:
         for an OpenRouter-only user, so the LLM client raises a
         misleading ANTHROPIC_API_KEY error.
         """
-        from synth_panel.credentials import save_credential
-        from synth_panel.mcp.server import _resolve_mcp_default_model
+        from althing.credentials import save_credential
+        from althing.mcp.server import _resolve_mcp_default_model
 
-        monkeypatch.setenv("SYNTHPANEL_CREDENTIALS_PATH", str(tmp_path / "creds.json"))
+        monkeypatch.setenv("ALTHING_CREDENTIALS_PATH", str(tmp_path / "creds.json"))
         save_credential("OPENROUTER_API_KEY", "sk-or-stored")
 
         assert _resolve_mcp_default_model() == "openrouter/auto"
@@ -135,13 +135,13 @@ class TestHasByokCredentials:
 
 class TestClientSupportsSampling:
     def test_none_ctx_returns_false(self):
-        from synth_panel.mcp.sampling import client_supports_sampling
+        from althing.mcp.sampling import client_supports_sampling
 
         assert client_supports_sampling(None) is False
 
     def test_session_raising_property_returns_false(self):
         """``ctx.session`` outside a request raises — must not propagate."""
-        from synth_panel.mcp.sampling import client_supports_sampling
+        from althing.mcp.sampling import client_supports_sampling
 
         ctx = MagicMock()
         # Simulate FastMCP Context.session property raising ValueError
@@ -149,14 +149,14 @@ class TestClientSupportsSampling:
         assert client_supports_sampling(ctx) is False
 
     def test_session_check_returns_true(self):
-        from synth_panel.mcp.sampling import client_supports_sampling
+        from althing.mcp.sampling import client_supports_sampling
 
         ctx = MagicMock()
         ctx.session.check_client_capability.return_value = True
         assert client_supports_sampling(ctx) is True
 
     def test_session_check_returns_false(self):
-        from synth_panel.mcp.sampling import client_supports_sampling
+        from althing.mcp.sampling import client_supports_sampling
 
         ctx = MagicMock()
         ctx.session.check_client_capability.return_value = False
@@ -172,14 +172,14 @@ class TestDecideMode:
         return ctx
 
     def test_auto_sampling_supported_no_creds_picks_sampling(self):
-        from synth_panel.mcp.sampling import decide_mode
+        from althing.mcp.sampling import decide_mode
 
         d = decide_mode(self._ctx(supports=True), env={})
         assert d.mode == "sampling"
         assert d.hint is not None  # first-run hint
 
     def test_auto_sampling_supported_with_creds_picks_byok(self):
-        from synth_panel.mcp.sampling import decide_mode
+        from althing.mcp.sampling import decide_mode
 
         d = decide_mode(
             self._ctx(supports=True),
@@ -189,7 +189,7 @@ class TestDecideMode:
         assert d.hint is None
 
     def test_auto_no_sampling_no_creds_returns_friendly_error(self):
-        from synth_panel.mcp.sampling import decide_mode
+        from althing.mcp.sampling import decide_mode
 
         d = decide_mode(self._ctx(supports=False), env={})
         assert d.mode == "error"
@@ -198,7 +198,7 @@ class TestDecideMode:
         assert "sampling-capable" in d.error
 
     def test_explicit_use_sampling_true_with_creds_picks_sampling(self):
-        from synth_panel.mcp.sampling import decide_mode
+        from althing.mcp.sampling import decide_mode
 
         d = decide_mode(
             self._ctx(supports=True),
@@ -208,14 +208,14 @@ class TestDecideMode:
         assert d.mode == "sampling"
 
     def test_explicit_use_sampling_true_but_unsupported_errors(self):
-        from synth_panel.mcp.sampling import decide_mode
+        from althing.mcp.sampling import decide_mode
 
         d = decide_mode(self._ctx(supports=False), use_sampling=True, env={})
         assert d.mode == "error"
         assert "use_sampling=True" in d.error
 
     def test_explicit_use_sampling_false_forces_byok(self):
-        from synth_panel.mcp.sampling import decide_mode
+        from althing.mcp.sampling import decide_mode
 
         d = decide_mode(self._ctx(supports=True), use_sampling=False, env={})
         assert d.mode == "byok"
@@ -257,7 +257,7 @@ def _make_sampling_ctx(
 class TestRunPromptSamplingBranches:
     @pytest.mark.asyncio
     async def test_sampling_supported_no_creds_uses_sampling(self):
-        from synth_panel.mcp.server import run_prompt
+        from althing.mcp.server import run_prompt
 
         ctx = _make_sampling_ctx(supports=True, sample_text="hi from host")
         raw = await run_prompt(prompt="Say hi", ctx=ctx)
@@ -271,8 +271,8 @@ class TestRunPromptSamplingBranches:
 
     @pytest.mark.asyncio
     async def test_sampling_supported_with_creds_uses_byok(self, monkeypatch):
-        from synth_panel.llm.models import CompletionResponse, TextBlock, TokenUsage
-        from synth_panel.mcp.server import run_prompt
+        from althing.llm.models import CompletionResponse, TextBlock, TokenUsage
+        from althing.mcp.server import run_prompt
 
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
         ctx = _make_sampling_ctx(supports=True)
@@ -284,8 +284,8 @@ class TestRunPromptSamplingBranches:
             usage=TokenUsage(input_tokens=3, output_tokens=2),
         )
         with (
-            patch("synth_panel.mcp.server._shared_client", None),
-            patch("synth_panel.mcp.server.LLMClient") as MockClient,
+            patch("althing.mcp.server._shared_client", None),
+            patch("althing.mcp.server.LLMClient") as MockClient,
         ):
             MockClient.return_value.send.return_value = mock_response
             raw = await run_prompt(prompt="Hi", ctx=ctx)
@@ -297,7 +297,7 @@ class TestRunPromptSamplingBranches:
 
     @pytest.mark.asyncio
     async def test_explicit_use_sampling_overrides_creds(self, monkeypatch):
-        from synth_panel.mcp.server import run_prompt
+        from althing.mcp.server import run_prompt
 
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
         ctx = _make_sampling_ctx(supports=True, sample_text="sampled-anyway")
@@ -310,7 +310,7 @@ class TestRunPromptSamplingBranches:
 
     @pytest.mark.asyncio
     async def test_no_sampling_no_creds_returns_friendly_error(self):
-        from synth_panel.mcp.server import run_prompt
+        from althing.mcp.server import run_prompt
 
         ctx = _make_sampling_ctx(supports=False)
         raw = await run_prompt(prompt="Hi", ctx=ctx)
@@ -322,7 +322,7 @@ class TestRunPromptSamplingBranches:
 
     @pytest.mark.asyncio
     async def test_use_sampling_true_but_unsupported_errors(self):
-        from synth_panel.mcp.server import run_prompt
+        from althing.mcp.server import run_prompt
 
         ctx = _make_sampling_ctx(supports=False)
         raw = await run_prompt(prompt="Hi", use_sampling=True, ctx=ctx)
@@ -343,7 +343,7 @@ class TestAcceptMultimodalSamplingFlag:
 
     @pytest.mark.asyncio
     async def test_default_off_does_not_emit_content_blocks(self):
-        from synth_panel.mcp.server import run_prompt
+        from althing.mcp.server import run_prompt
 
         ctx = _make_sampling_ctx(supports=True, sample_text="just text")
         raw = await run_prompt(prompt="Hi", ctx=ctx)
@@ -354,7 +354,7 @@ class TestAcceptMultimodalSamplingFlag:
 
     @pytest.mark.asyncio
     async def test_flag_on_surfaces_text_blocks(self):
-        from synth_panel.mcp.server import run_prompt
+        from althing.mcp.server import run_prompt
 
         ctx = _make_sampling_ctx(supports=True, sample_text="hi from host")
         raw = await run_prompt(prompt="Hi", accept_multimodal_sampling=True, ctx=ctx)
@@ -368,7 +368,7 @@ class TestAcceptMultimodalSamplingFlag:
         # Build a context whose MCP create_message returns a multimodal
         # response (text + image). The flag should surface BOTH; the
         # legacy `response` field still carries text only.
-        from synth_panel.mcp.server import run_prompt
+        from althing.mcp.server import run_prompt
 
         ctx = MagicMock()
         ctx.session.check_client_capability.return_value = True
@@ -412,7 +412,7 @@ class TestAcceptMultimodalSamplingFlag:
 class TestRunQuickPollSampling:
     @pytest.mark.asyncio
     async def test_sampling_runs_per_persona_and_synthesis(self):
-        from synth_panel.mcp.server import run_quick_poll
+        from althing.mcp.server import run_quick_poll
 
         ctx = _make_sampling_ctx(supports=True, sample_text="persona response")
         personas = [{"name": "Alice"}, {"name": "Bob"}]
@@ -433,7 +433,7 @@ class TestRunQuickPollSampling:
 
     @pytest.mark.asyncio
     async def test_sampling_persona_cap_enforced(self):
-        from synth_panel.mcp.server import SAMPLING_MAX_PERSONAS, run_quick_poll
+        from althing.mcp.server import SAMPLING_MAX_PERSONAS, run_quick_poll
 
         ctx = _make_sampling_ctx(supports=True)
         personas = [{"name": f"P{i}"} for i in range(SAMPLING_MAX_PERSONAS + 1)]
@@ -449,13 +449,13 @@ class TestRunQuickPollSampling:
 
     @pytest.mark.asyncio
     async def test_byok_path_unchanged_with_creds(self, monkeypatch):
-        from synth_panel.mcp.server import run_quick_poll
+        from althing.mcp.server import run_quick_poll
 
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
         ctx = _make_sampling_ctx(supports=True)
 
         mock_run = AsyncMock(return_value={"results": [], "model": "haiku"})
-        with patch("synth_panel.mcp.server._run_panel_async", mock_run):
+        with patch("althing.mcp.server._run_panel_async", mock_run):
             raw = await run_quick_poll(
                 question="q?",
                 personas=[{"name": "Alice"}],
@@ -468,7 +468,7 @@ class TestRunQuickPollSampling:
 
     @pytest.mark.asyncio
     async def test_no_sampling_no_creds_returns_error(self):
-        from synth_panel.mcp.server import run_quick_poll
+        from althing.mcp.server import run_quick_poll
 
         ctx = _make_sampling_ctx(supports=False)
         raw = await run_quick_poll(
@@ -489,7 +489,7 @@ class TestRunQuickPollSampling:
 class TestRunPanelSampling:
     @pytest.mark.asyncio
     async def test_sampling_supported_no_creds_runs_panel(self):
-        from synth_panel.mcp.server import run_panel
+        from althing.mcp.server import run_panel
 
         ctx = _make_sampling_ctx(supports=True, sample_text="panel-answer")
         raw = await run_panel(
@@ -510,7 +510,7 @@ class TestRunPanelSampling:
 
     @pytest.mark.asyncio
     async def test_sampling_persona_cap_enforced(self):
-        from synth_panel.mcp.server import SAMPLING_MAX_PERSONAS, run_panel
+        from althing.mcp.server import SAMPLING_MAX_PERSONAS, run_panel
 
         ctx = _make_sampling_ctx(supports=True)
         personas = [{"name": f"P{i}"} for i in range(SAMPLING_MAX_PERSONAS + 1)]
@@ -526,7 +526,7 @@ class TestRunPanelSampling:
 
     @pytest.mark.asyncio
     async def test_sampling_question_cap_enforced(self):
-        from synth_panel.mcp.server import SAMPLING_MAX_QUESTIONS, run_panel
+        from althing.mcp.server import SAMPLING_MAX_QUESTIONS, run_panel
 
         ctx = _make_sampling_ctx(supports=True)
         questions = [{"text": f"Q{i}"} for i in range(SAMPLING_MAX_QUESTIONS + 1)]
@@ -542,7 +542,7 @@ class TestRunPanelSampling:
 
     @pytest.mark.asyncio
     async def test_sampling_rejects_variants(self):
-        from synth_panel.mcp.server import run_panel
+        from althing.mcp.server import run_panel
 
         ctx = _make_sampling_ctx(supports=True)
         raw = await run_panel(
@@ -557,7 +557,7 @@ class TestRunPanelSampling:
 
     @pytest.mark.asyncio
     async def test_sampling_rejects_v3_branching_instrument(self):
-        from synth_panel.mcp.server import run_panel
+        from althing.mcp.server import run_panel
 
         ctx = _make_sampling_ctx(supports=True)
         instrument = {
@@ -588,7 +588,7 @@ class TestRunPanelSampling:
 
     @pytest.mark.asyncio
     async def test_no_sampling_no_creds_returns_friendly_error(self):
-        from synth_panel.mcp.server import run_panel
+        from althing.mcp.server import run_panel
 
         ctx = _make_sampling_ctx(supports=False)
         raw = await run_panel(
@@ -614,7 +614,7 @@ class TestSampleTextTruncationDetection:
 
     @pytest.mark.asyncio
     async def test_max_tokens_stop_reason_flags_truncation(self):
-        from synth_panel.mcp.sampling import sample_text
+        from althing.mcp.sampling import sample_text
 
         ctx = _make_sampling_ctx(
             supports=True,
@@ -632,7 +632,7 @@ class TestSampleTextTruncationDetection:
 
     @pytest.mark.asyncio
     async def test_end_turn_stop_reason_does_not_flag_truncation(self):
-        from synth_panel.mcp.sampling import sample_text
+        from althing.mcp.sampling import sample_text
 
         ctx = _make_sampling_ctx(supports=True, sample_text="full reply", stop_reason="endTurn")
         result = await sample_text(ctx, prompt="hi", max_tokens=4096)
@@ -645,7 +645,7 @@ class TestSampleTextTruncationDetection:
     async def test_other_stop_reasons_do_not_flag_truncation(self):
         # ``stopSequence`` and ``toolUse`` are well-formed terminations —
         # only ``maxTokens`` indicates host-side cap truncation.
-        from synth_panel.mcp.sampling import sample_text
+        from althing.mcp.sampling import sample_text
 
         for reason in ("stopSequence", "toolUse"):
             ctx = _make_sampling_ctx(supports=True, stop_reason=reason)
@@ -657,14 +657,14 @@ class TestSampleTextTruncationDetection:
     async def test_truncation_logs_warning(self, caplog):
         import logging
 
-        from synth_panel.mcp.sampling import sample_text
+        from althing.mcp.sampling import sample_text
 
         ctx = _make_sampling_ctx(
             supports=True,
             sample_text="cut off",
             stop_reason="maxTokens",
         )
-        with caplog.at_level(logging.WARNING, logger="synth_panel.mcp.sampling"):
+        with caplog.at_level(logging.WARNING, logger="althing.mcp.sampling"):
             await sample_text(ctx, prompt="hi", max_tokens=512)
 
         assert any(
@@ -677,7 +677,7 @@ class TestRunPromptTruncationWarnings:
 
     @pytest.mark.asyncio
     async def test_truncation_in_sampling_branch_surfaces_warning(self):
-        from synth_panel.mcp.server import run_prompt
+        from althing.mcp.server import run_prompt
 
         ctx = _make_sampling_ctx(
             supports=True,
@@ -693,7 +693,7 @@ class TestRunPromptTruncationWarnings:
 
     @pytest.mark.asyncio
     async def test_no_truncation_yields_empty_warnings_list(self):
-        from synth_panel.mcp.server import run_prompt
+        from althing.mcp.server import run_prompt
 
         ctx = _make_sampling_ctx(supports=True, sample_text="ok", stop_reason="endTurn")
         raw = await run_prompt(prompt="anything", ctx=ctx)
@@ -708,7 +708,7 @@ class TestRunPanelSamplingTruncationWarnings:
 
     @pytest.mark.asyncio
     async def test_panelist_truncation_appears_in_warnings(self):
-        from synth_panel.mcp.server import run_panel
+        from althing.mcp.server import run_panel
 
         ctx = _make_sampling_ctx(
             supports=True,
@@ -733,7 +733,7 @@ class TestRunPanelSamplingTruncationWarnings:
 
     @pytest.mark.asyncio
     async def test_synthesis_truncation_labelled_separately(self):
-        from synth_panel.mcp.server import run_panel
+        from althing.mcp.server import run_panel
 
         ctx = _make_sampling_ctx(
             supports=True,
@@ -756,7 +756,7 @@ class TestRunPanelSamplingTruncationWarnings:
 
     @pytest.mark.asyncio
     async def test_clean_run_yields_empty_warnings(self):
-        from synth_panel.mcp.server import run_panel
+        from althing.mcp.server import run_panel
 
         ctx = _make_sampling_ctx(supports=True, sample_text="full reply", stop_reason="endTurn")
         raw = await run_panel(
@@ -773,7 +773,7 @@ class TestRunPanelSamplingTruncationWarnings:
 class TestRunQuickPollSamplingTruncationWarnings:
     @pytest.mark.asyncio
     async def test_quick_poll_truncation_surfaces_warnings(self):
-        from synth_panel.mcp.server import run_quick_poll
+        from althing.mcp.server import run_quick_poll
 
         ctx = _make_sampling_ctx(
             supports=True,
@@ -796,7 +796,7 @@ class TestRunQuickPollSamplingTruncationWarnings:
 
 class TestBuildTruncationWarning:
     def test_includes_max_tokens_and_model(self):
-        from synth_panel.mcp.sampling import build_truncation_warning
+        from althing.mcp.sampling import build_truncation_warning
 
         msg = build_truncation_warning(max_tokens=512, model="claude-opus-4-6")
         assert "512" in msg
@@ -805,7 +805,7 @@ class TestBuildTruncationWarning:
         assert "ANTHROPIC_API_KEY" in msg
 
     def test_no_model_omits_model_part(self):
-        from synth_panel.mcp.sampling import build_truncation_warning
+        from althing.mcp.sampling import build_truncation_warning
 
         msg = build_truncation_warning(max_tokens=2048, model=None)
         assert "2048" in msg

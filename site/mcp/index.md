@@ -1,18 +1,18 @@
-# MCP Server — synthpanel · Run synthetic focus groups from your AI editor
+# MCP Server — althing · Run synthetic focus groups from your AI editor
 
 [DataViking](https://dataviking.tech)
 
 MCP Server · stdio
 
-# synthpanel MCP server
+# althing MCP server
 
 Give your AI coding assistant tool-call access to synthetic focus groups. Run panels, manage persona packs, and query saved results — straight from chat.
 
 Uses the [Model Context Protocol](https://modelcontextprotocol.io/) over stdio transport. Defaults to the `haiku` model for cheap, fast iterative use.
 
-Running this unattended? The full operational contract — typed errors and retry semantics, cost gates, checkpoint/resume, determinism per provider, credential handling, logs — is one page with code citations: [docs/production-operations.md](https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/production-operations.md). Condensed on this page: [agent patterns](#agent-patterns), [ops runbook](#production), [determinism](#determinism), [observability](#observability).
+Running this unattended? The full operational contract — typed errors and retry semantics, cost gates, checkpoint/resume, determinism per provider, credential handling, logs — is one page with code citations: [docs/production-operations.md](https://github.com/DataViking-Tech/Althing/blob/main/docs/production-operations.md). Condensed on this page: [agent patterns](#agent-patterns), [ops runbook](#production), [determinism](#determinism), [observability](#observability).
 
-$ pip install "synthpanel[mcp]"
+$ pip install "althing[mcp]"
 
 The `[mcp]` extra pulls in the MCP Python SDK required to launch the server.
 
@@ -20,7 +20,7 @@ The `[mcp]` extra pulls in the MCP Python SDK required to launch the server.
 
 The server communicates over stdin/stdout using JSON-RPC. It is launched by your editor, not by you — but you can sanity-check the binary:
 
-$ synthpanel mcp-serve
+$ althing mcp-serve
 
 ## Editor configuration
 
@@ -28,31 +28,31 @@ Every editor uses the same underlying config shape — command, args, and enviro
 
 Claude Code recommended
 
-Easiest: let synthpanel write the entry for you. Works at user scope (all projects) or project scope (this repo only) and is idempotent — safe to re-run after upgrades.
+Easiest: let althing write the entry for you. Works at user scope (all projects) or project scope (this repo only) and is idempotent — safe to re-run after upgrades.
 
 ```
 # user scope — writes ~/.claude.json (mode 0600)
-synthpanel mcp install
+althing mcp install
 
 # project scope — writes ./.mcp.json (checked into the repo)
-synthpanel mcp install --scope project
+althing mcp install --scope project
 
 # bake credentials into the entry instead of relying on the host env
-synthpanel mcp install --env ANTHROPIC_API_KEY=sk-...
+althing mcp install --env ANTHROPIC_API_KEY=sk-...
 
 # preview without writing, or remove the entry later
-synthpanel mcp install --dry-run
-synthpanel mcp install --uninstall
+althing mcp install --dry-run
+althing mcp install --uninstall
 ```
 
 Or use Claude Code's native CLI, which writes to the same `~/.claude.json` file:
 
 ```
 # user scope — available everywhere
-claude mcp add --scope user synth_panel -- synthpanel mcp-serve
+claude mcp add --scope user althing -- althing mcp-serve
 
 # or project scope — checked-in .mcp.json for this repo
-claude mcp add --scope project synth_panel -- synthpanel mcp-serve
+claude mcp add --scope project althing -- althing mcp-serve
 ```
 
 Or edit `.mcp.json` in your project root directly:
@@ -60,8 +60,8 @@ Or edit `.mcp.json` in your project root directly:
 ```
 {
   "mcpServers": {
-    "synth_panel": {
-      "command": "synthpanel",
+    "althing": {
+      "command": "althing",
       "args": ["mcp-serve"],
       "env": { "ANTHROPIC_API_KEY": "sk-..." }
     }
@@ -69,14 +69,14 @@ Or edit `.mcp.json` in your project root directly:
 }
 ```
 
-Plugin alternative: `/plugin install synthpanel` adds the `/focus-group` skill alongside the MCP server.
+Plugin alternative: `/plugin install althing` adds the `/focus-group` skill alongside the MCP server.
 
 Cursor
 
-Project scope: `.cursor/mcp.json`. User scope: `~/.cursor/mcp.json`. The `synthpanel mcp install` CLI works here too — pass `--target` to point at the right file:
+Project scope: `.cursor/mcp.json`. User scope: `~/.cursor/mcp.json`. The `althing mcp install` CLI works here too — pass `--target` to point at the right file:
 
 ```
-synthpanel mcp install --target ~/.cursor/mcp.json
+althing mcp install --target ~/.cursor/mcp.json
 ```
 
 Or hand-edit the JSON directly:
@@ -84,8 +84,8 @@ Or hand-edit the JSON directly:
 ```
 {
   "mcpServers": {
-    "synth_panel": {
-      "command": "synthpanel",
+    "althing": {
+      "command": "althing",
       "args": ["mcp-serve"],
       "env": { "ANTHROPIC_API_KEY": "sk-..." }
     }
@@ -100,8 +100,8 @@ Edit `~/.codeium/windsurf/mcp_config.json` (or use the Cascade → MCP settings 
 ```
 {
   "mcpServers": {
-    "synth_panel": {
-      "command": "synthpanel",
+    "althing": {
+      "command": "althing",
       "args": ["mcp-serve"],
       "env": { "ANTHROPIC_API_KEY": "sk-..." }
     }
@@ -116,9 +116,9 @@ Zed calls them *context servers*. Open `settings.json` (cmd-,) and merge this bl
 ```
 {
   "context_servers": {
-    "synth_panel": {
+    "althing": {
       "command": {
-        "path": "synthpanel",
+        "path": "althing",
         "args": ["mcp-serve"],
         "env": { "ANTHROPIC_API_KEY": "sk-..." }
       }
@@ -133,8 +133,8 @@ Hermes uses a YAML config with an `mcp_servers` map and explicit timeout fields.
 
 ```
 mcp_servers:
-  synthpanel:
-    command: "synthpanel"
+  althing:
+    command: "althing"
     args: ["mcp-serve"]
     timeout: 180
     connect_timeout: 60
@@ -146,9 +146,9 @@ Or run it on demand via `uvx` without a global install:
 
 ```
 mcp_servers:
-  synthpanel:
+  althing:
     command: "uvx"
-    args: ["--from", "synthpanel[mcp]", "synthpanel", "mcp-serve"]
+    args: ["--from", "althing[mcp]", "althing", "mcp-serve"]
     timeout: 180
     connect_timeout: 60
     env:
@@ -164,8 +164,8 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS,
 ```
 {
   "mcpServers": {
-    "synth_panel": {
-      "command": "synthpanel",
+    "althing": {
+      "command": "althing",
       "args": ["mcp-serve"],
       "env": { "ANTHROPIC_API_KEY": "sk-..." }
     }
@@ -173,7 +173,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS,
 }
 ```
 
-If `synthpanel` is not on the desktop app's PATH, replace the `command` value with an absolute path (e.g. `/Users/you/.venv/bin/synthpanel`).
+If `althing` is not on the desktop app's PATH, replace the `command` value with an absolute path (e.g. `/Users/you/.venv/bin/althing`).
 
 Set whichever provider env var you want to use — `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `XAI_API_KEY`, or `GOOGLE_API_KEY`. Multiple keys can be set simultaneously; the model string picks the provider.
 
@@ -287,11 +287,11 @@ Three patterns that hold up when an agent — not a human — is driving the too
 
 Summary first, transcripts on demand `run_panel` and `run_quick_poll` default to `detail: "summary"`: synthesis, verdict, costs and warnings come back, but per-panelist transcripts are dropped (a full 100-persona panel can serialize to megabytes — that would flood the agent's context window). The envelope marks the omission (`results_omitted: true`) and points at the full copy via `transcript_uri`. When the agent actually needs quotes, it calls `get_panel_result` (defaults to `detail: "full"`) or reads the `panel-result://{result_id}` resource.
 
-Structured polling — no prose parsing  Both run tools accept a `response_schema` argument (JSON Schema) that forces structured output at generation time — forced-choice, Likert, tagged themes, ranking — so downstream code branches on fields, not on regexes over prose. Pattern catalogue: [docs/structured-polling.md](https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/structured-polling.md).
+Structured polling — no prose parsing  Both run tools accept a `response_schema` argument (JSON Schema) that forces structured output at generation time — forced-choice, Likert, tagged themes, ranking — so downstream code branches on fields, not on regexes over prose. Pattern catalogue: [docs/structured-polling.md](https://github.com/DataViking-Tech/Althing/blob/main/docs/structured-polling.md).
 
 Budget-gated iteration  MCP mode defaults to `haiku` and caps panels at 100 personas × 50 questions. Every response carries in-band `total_cost` and per-panelist `usage` / `cost`, so the loop is: pilot with `run_quick_poll`, gate on the returned cost, then scale to a full `run_panel`. For unattended hard ceilings, pass `max_cost` (USD) to `run_panel` / `run_quick_poll` / `extend_panel` — the MCP analog of the CLI's `--max-cost`, wired into the same mid-run cost gate. On a trip the response is a valid partial envelope with `cost_exceeded: true`, `abort_reason: "cost_exceeded"`, a `cost_gate` snapshot (spend so far, cap, projection), and a `resume` block naming the persisted partial and the remaining personas.
 
-Full tool semantics: [docs/mcp.md](https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/mcp.md) · operational contract: [docs/production-operations.md](https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/production-operations.md).
+Full tool semantics: [docs/mcp.md](https://github.com/DataViking-Tech/Althing/blob/main/docs/mcp.md) · operational contract: [docs/production-operations.md](https://github.com/DataViking-Tech/Althing/blob/main/docs/production-operations.md).
 
 ## Ops runbook
 
@@ -300,7 +300,7 @@ What actually happens when a panel run goes sideways. Failures return typed enve
 | Failure | What happens |
 |---|---|
 | K of N panelists fail | Errors are recorded per persona and per question (`error` field per row), the panel continues, and `failure_stats` reports the rate. The run is invalid only past `--failure-threshold` (default 0.5) — then synthesis is auto-disabled and the CLI exits `2`. `--strict` = zero tolerance. |
-| Synthesis fails | Never shaped like success: the envelope carries `synthesis_error` and the run is marked invalid — but panelist data is saved. Recover post-hoc without re-running the panel: `synthpanel panel synthesize <result-id> --synthesis-model sonnet`. A synthesis-model outage costs one cheap retry, not the panel spend. |
+| Synthesis fails | Never shaped like success: the envelope carries `synthesis_error` and the run is marked invalid — but panelist data is saved. Recover post-hoc without re-running the panel: `althing panel synthesize <result-id> --synthesis-model sonnet`. A synthesis-model outage costs one cheap retry, not the panel spend. |
 | Rate limits | `--max-concurrent` caps in-flight requests; `--rate-limit-rps` adds a token-bucket cap (fractional values accepted). Rate-limit exhaustion is classified distinctly in `abort_reason` — the signal is "raise the throttle," not "chase a model bug." |
 | Cost ceiling hit | `--max-cost` (CLI) or the `max_cost` tool argument (MCP) halts gracefully mid-run: pending panelists cancelled, synthesis skipped, valid partial JSON with `run_invalid: true`, `cost_exceeded: true`, `halted_at_panelist`, and (MCP) a `resume` block. CLI exit `2`. |
 | SIGINT / SIGTERM | With checkpointing active, a final checkpoint is flushed and the run marked aborted; stdout still emits a complete, parseable envelope with `abort_reason: "sigint"`. Resume picks up where it stopped. |
@@ -319,15 +319,15 @@ What actually happens when a panel run goes sideways. Failures return typed enve
 
 ```
 # snapshot every 25 panelists (atomic, per-run lock)
-synthpanel panel run ... --checkpoint-dir .synthpanel-ckpt
+althing panel run ... --checkpoint-dir .althing-ckpt
 
 # interrupted? resume skips completed panelists, merges into one result
-synthpanel panel run --resume <run-id> --checkpoint-dir .synthpanel-ckpt
+althing panel run --resume <run-id> --checkpoint-dir .althing-ckpt
 ```
 
-Resume refuses to continue if the config hash drifted from the checkpointed one (`--allow-drift` downgrades to a warning). Credentials stay out of configs: `synthpanel mcp install` writes no API key unless you pass `--env`; keys come from env vars or the `synthpanel login` store (mode `0600`).
+Resume refuses to continue if the config hash drifted from the checkpointed one (`--allow-drift` downgrades to a warning). Credentials stay out of configs: `althing mcp install` writes no API key unless you pass `--env`; keys come from env vars or the `althing login` store (mode `0600`).
 
-Full contract with code citations: [docs/production-operations.md](https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/production-operations.md) — error and retry semantics, partial-failure behavior, cost gates, timeout budgets, convergence auto-stop, and credential handling.
+Full contract with code citations: [docs/production-operations.md](https://github.com/DataViking-Tech/Althing/blob/main/docs/production-operations.md) — error and retry semantics, partial-failure behavior, cost gates, timeout budgets, convergence auto-stop, and credential handling.
 
 ## Determinism contract
 
@@ -339,13 +339,13 @@ What is and isn’t guaranteed when you re-run a panel:
 
 -  Otherwise, same-config reruns are **equivalent, not identical**: treat seeds as best-effort bias reduction, not a bit-exactness guarantee. There is no cross-provider bit-exact replay.
 
--  Every saved result stamps provenance in metadata: resolved models, generation params, synthpanel + Python versions, and a SHA-256 `config_hash` — template `--var` values are folded in as one-way hashes, so substitution-only differences don’t collide and raw values are never persisted.
+-  Every saved result stamps provenance in metadata: resolved models, generation params, althing + Python versions, and a SHA-256 `config_hash` — template `--var` values are folded in as one-way hashes, so substitution-only differences don’t collide and raw values are never persisted.
 
-Full contract: [production-operations.md#determinism](https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/production-operations.md#determinism-and-reproducibility) · [docs/reproducibility.md](https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/reproducibility.md).
+Full contract: [production-operations.md#determinism](https://github.com/DataViking-Tech/Althing/blob/main/docs/production-operations.md#determinism-and-reproducibility) · [docs/reproducibility.md](https://github.com/DataViking-Tech/Althing/blob/main/docs/reproducibility.md).
 
 ## Observability contract
 
-- **stderr** — structured logs (`%(asctime)s %(name)s %(levelname)s %(message)s`) on the `synth_panel` logger namespace; level via `--verbose`, `SYNTHPANEL_LOG_LEVEL`, or `--debug-all`.
+- **stderr** — structured logs (`%(asctime)s %(name)s %(levelname)s %(message)s`) on the `althing` logger namespace; level via `--verbose`, `ALTHING_LOG_LEVEL`, or `--debug-all`.
 
 - **stdout stays JSON-pure** — with `--output-format json`, stdout carries exactly one JSON document; progress, hints, and warnings go to stderr. Pipe to `jq` without filtering.
 
@@ -353,46 +353,46 @@ Full contract: [production-operations.md#determinism](https://github.com/DataVik
 
 - **Telemetry in-band** — `failure_stats`, `run_invalid`, `abort_reason`, `cost_gate`, `convergence`, and `warnings[]` live in the result envelope; token usage is tracked per turn in four buckets (input / output / cache-write / cache-read) with cost on every panelist row and the envelope total.
 
-- **Post-hoc spend** — `synthpanel cost summary` reports spend across saved runs, grouped by model or run, filterable by date.
+- **Post-hoc spend** — `althing cost summary` reports spend across saved runs, grouped by model or run, filterable by date.
 
-Full contract: [production-operations.md#observability](https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/production-operations.md#observability).
+Full contract: [production-operations.md#observability](https://github.com/DataViking-Tech/Althing/blob/main/docs/production-operations.md#observability).
 
 ## Data storage
 
-Panel results, persona packs, and instrument packs are stored under `~/.synthpanel/` (configurable via `SYNTH_PANEL_DATA_DIR`):
+Panel results, persona packs, and instrument packs are stored under `~/.althing/` (configurable via `SYNTH_PANEL_DATA_DIR`):
 
 ```
-~/.synthpanel/
+~/.althing/
 ├── persona_packs/          # Saved persona packs (YAML)
 ├── packs/instruments/      # Installed instrument packs (YAML)
 └── results/                # Panel results (JSON) + session data
 ```
 
-Note the two distinct locations: API keys saved by `synthpanel login` live in the credential store at `~/.config/synthpanel/credentials.json` (mode `0600`), while run data and packs live under `~/.synthpanel/` as shown above.
+Note the two distinct locations: API keys saved by `althing login` live in the credential store at `~/.config/althing/credentials.json` (mode `0600`), while run data and packs live under `~/.althing/` as shown above.
 
 ## Troubleshooting
 
-`command not found: synthpanel`  The MCP host can't find the binary on its `PATH`. MCP subprocesses inherit the host's environment, not your shell's. Fix by installing globally (`pip install "synthpanel[mcp]"`), pointing `command` at an absolute path (e.g. `/Users/you/.venv/bin/synthpanel`), or running through `uvx` (`"command": "uvx", "args": ["--from", "synthpanel[mcp]", "synthpanel", "mcp-serve"]`). Claude Desktop on macOS is especially strict — use an absolute path or `uvx`.
+`command not found: althing`  The MCP host can't find the binary on its `PATH`. MCP subprocesses inherit the host's environment, not your shell's. Fix by installing globally (`pip install "althing[mcp]"`), pointing `command` at an absolute path (e.g. `/Users/you/.venv/bin/althing`), or running through `uvx` (`"command": "uvx", "args": ["--from", "althing[mcp]", "althing", "mcp-serve"]`). Claude Desktop on macOS is especially strict — use an absolute path or `uvx`.
 
-Server starts but no tools appear  The MCP server needs the `[mcp]` extra: `pip install "synthpanel[mcp]"`. After config edits or upgrades, fully quit and relaunch the host — tool lists are cached per server entry. Sanity-check by running `synthpanel mcp-serve` in a terminal; it should boot silently.
+Server starts but no tools appear  The MCP server needs the `[mcp]` extra: `pip install "althing[mcp]"`. After config edits or upgrades, fully quit and relaunch the host — tool lists are cached per server entry. Sanity-check by running `althing mcp-serve` in a terminal; it should boot silently.
 
-Missing API key  The subprocess only sees env vars from the MCP `env` block. A shell-profile export does not propagate. Set the key in the `env` block, run `synthpanel login` to seed the on-disk credential store, or omit the key and let MCP *sampling* borrow the host's LLM access (Claude Desktop, Claude Code, Cursor, Windsurf).
+Missing API key  The subprocess only sees env vars from the MCP `env` block. A shell-profile export does not propagate. Set the key in the `env` block, run `althing login` to seed the on-disk credential store, or omit the key and let MCP *sampling* borrow the host's LLM access (Claude Desktop, Claude Code, Cursor, Windsurf).
 
 Timeouts on long panels  A 5-persona × 3-question BYOK panel takes 30–90 seconds; cross-provider ensembles can take 2–5 minutes. Raise the host's per-tool timeout (Hermes: `timeout: 300`). For exploratory work, prefer `run_quick_poll` over `run_panel`.
 
 `MISSING_DECISION` errors `run_panel`, `run_quick_poll`, and `extend_panel` require a `decision_being_informed` string (12–280 chars). This is a frozen v1.0.0 contract. `run_prompt` does not require it.
 
-Full troubleshooting reference and links into the response contract: [docs/mcp.md](https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/mcp.md#troubleshooting).
+Full troubleshooting reference and links into the response contract: [docs/mcp.md](https://github.com/DataViking-Tech/Althing/blob/main/docs/mcp.md#troubleshooting).
 
 ## Next steps
 
-### [Source docs](https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/mcp.md)
+### [Source docs](https://github.com/DataViking-Tech/Althing/blob/main/docs/mcp.md)
 
 →
 
 The canonical `docs/mcp.md` in the GitHub repo.
 
-### [Report an issue](https://github.com/DataViking-Tech/SynthPanel)
+### [Report an issue](https://github.com/DataViking-Tech/Althing)
 
 →
 

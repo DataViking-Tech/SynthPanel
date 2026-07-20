@@ -4,7 +4,7 @@ Sibling to ``test_skill_tool_conformance.py`` (which checks tool *names*).
 This guard checks tool-call *parameters*: every ``arguments`` key in an MCP
 tool-call example embedded in ``README.md`` or ``docs/*.md`` must be a real
 parameter of that tool per the ``@mcp.tool()`` function signature in
-``src/synth_panel/mcp/server.py``.
+``src/althing/mcp/server.py``.
 
 Motivation: shipped examples drifted to invented parameters (``personas_pack``
 instead of ``pack_id``; a ``stimulus`` field no tool accepts). A naive user who
@@ -38,7 +38,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SERVER_PY = REPO_ROOT / "src" / "synth_panel" / "mcp" / "server.py"
+SERVER_PY = REPO_ROOT / "src" / "althing" / "mcp" / "server.py"
 
 # Scope mirrors the task and the sibling guard: the README plus the top-level
 # docs pages (non-recursive, matching test_skill_tool_conformance.py's glob).

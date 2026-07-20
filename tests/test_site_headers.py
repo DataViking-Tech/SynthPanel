@@ -1,13 +1,13 @@
 """Verify site/_headers ships RFC 8288 Link headers for agent discovery.
 
 The committed `_headers` file is consumed by Cloudflare Pages and applied to
-the live response on `https://synthpanel.dev/`. This test guards against
+the live response on `https://althing.dev/`. This test guards against
 silent removal of the `Link` headers (sy-7r1, AR-1) so agents can keep
 discovering the api-catalog and service-doc endpoints declared by the SKILL
 spec at <https://isitagentready.com/.well-known/agent-skills/link-headers/SKILL.md>.
 
 This test only validates the file's contents — actual header propagation is
-verified manually via `curl -sI https://synthpanel.dev/` after deploy.
+verified manually via `curl -sI https://althing.dev/` after deploy.
 """
 
 from __future__ import annotations

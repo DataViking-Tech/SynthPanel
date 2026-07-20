@@ -1,7 +1,7 @@
 """Verify site/.well-known/api-catalog conforms to RFC 9727 + the agent-skills SKILL.
 
 The committed file is served verbatim by Cloudflare Pages at
-<https://synthpanel.dev/.well-known/api-catalog>. The agent-skills validator
+<https://althing.dev/.well-known/api-catalog>. The agent-skills validator
 (POST https://isitagentready.com/api/scan) requires:
   - JSON parses,
   - top-level `linkset` is a non-empty array,
@@ -13,7 +13,7 @@ This test only validates the file's contents and the matching `_headers`
 override. End-to-end media-type propagation must be smoke-checked manually
 against the deployed site after merge:
 
-    curl -sI https://synthpanel.dev/.well-known/api-catalog | grep -i content-type
+    curl -sI https://althing.dev/.well-known/api-catalog | grep -i content-type
     # -> content-type: application/linkset+json
 """
 

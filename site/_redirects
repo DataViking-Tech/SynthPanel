@@ -1,0 +1,4 @@
+# Rename: synthpanel → althing (blog slug carried the old name)
+/blog/synthpanel-vs-commercial-alternatives /blog/althing-vs-commercial-alternatives 301
+/blog/synthpanel-vs-commercial-alternatives.html /blog/althing-vs-commercial-alternatives.html 301
+/.well-known/agent-skills/synthpanel/* /.well-known/agent-skills/althing/:splat 301

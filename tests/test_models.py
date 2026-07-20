@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from synth_panel.llm.models import (
+from althing.llm.models import (
     CompletionResponse,
     ContentBlock,
     DocumentBlock,

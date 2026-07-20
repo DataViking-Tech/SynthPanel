@@ -11,7 +11,7 @@ engine — pick the one that matches your runtime:
 - **[CLI path](#cli-path)** — shell agents, CI, terminals.
 - **[MCP path](#mcp-path)** — editor and framework agents that call tools.
 
-Every command and number below was captured on a recent `synthpanel` release
+Every command and number below was captured on a recent `althing` release
 (the exact version and Python patch your machine prints will differ). Costs are the
 CLI's own pre-flight estimates (Haiku pricing) — your run will print the actual
 spend.
@@ -31,14 +31,14 @@ spend.
 Pick the install that matches how you use Python tools:
 
 ```bash
-pip install synthpanel              # in your project venv (library + CLI)
-pip install 'synthpanel[mcp]'       # also want the MCP server
-pipx install synthpanel             # global, isolated, on your PATH
-uvx --from synthpanel synthpanel --help   # zero-install, run once
+pip install althing              # in your project venv (library + CLI)
+pip install 'althing[mcp]'       # also want the MCP server
+pipx install althing             # global, isolated, on your PATH
+uvx --from althing althing --help   # zero-install, run once
 ```
 
-The PyPI distribution and CLI are spelled **`synthpanel`** (one word); the
-importable module is **`synth_panel`** (snake_case). Both resolve to the same
+The PyPI distribution and CLI are spelled **`althing`** (one word); the
+importable module is **`althing`** (snake_case). Both resolve to the same
 code.
 
 ### 2. Verify the install (no key needed)
@@ -48,17 +48,17 @@ when the package, deps, and bundled packs are healthy — even with no credentia
 — so it's the canonical post-install smoke test:
 
 ```bash
-synthpanel --version              # entry point dispatches
-synthpanel doctor --install-only  # install health only — no key required
+althing --version              # entry point dispatches
+althing doctor --install-only  # install health only — no key required
 ```
 
 ```text
-synthpanel 1.5.7
+althing 1.5.7
   ✓ python: 3.12.7 (>= 3.10)
   ✓ required deps: httpx, pyyaml
   ✓ optional: mcp installed
-  ! credentials: none configured (install-only mode — run `synthpanel login` before running a panel).
-  ✓ checkpoint root: ~/.synthpanel/checkpoints (writable, 0 existing runs)
+  ! credentials: none configured (install-only mode — run `althing login` before running a panel).
+  ✓ checkpoint root: ~/.althing/checkpoints (writable, 0 existing runs)
   ✓ packs: 14 persona, 8 instrument (bundled)
 1 warning, 0 errors.
 ```
@@ -68,7 +68,7 @@ For machine consumption, the JSON form separates `install_ok`,
 each surface independently:
 
 ```bash
-synthpanel --output-format json doctor --install-only
+althing --output-format json doctor --install-only
 ```
 
 ### 3. Configure a provider
@@ -78,11 +78,11 @@ provider. Export it, or persist it once:
 
 ```bash
 export ANTHROPIC_API_KEY="sk-..."
-# or store it (written to ~/.config/synthpanel/credentials.json, mode 0600):
-synthpanel login --provider anthropic --api-key sk-...
+# or store it (written to ~/.config/althing/credentials.json, mode 0600):
+althing login --provider anthropic --api-key sk-...
 
-synthpanel whoami          # which providers now resolve
-synthpanel doctor          # full preflight: install + credentials (exits 1 if none)
+althing whoami          # which providers now resolve
+althing doctor          # full preflight: install + credentials (exits 1 if none)
 ```
 
 ### 4. Dry-run first
@@ -92,7 +92,7 @@ count, and a cost estimate — **without making any LLM calls**. Always dry-run
 before spending tokens, especially in autonomous loops:
 
 ```bash
-synthpanel panel run \
+althing panel run \
   --personas examples/personas.yaml \
   --instrument examples/survey.yaml \
   --model haiku \
@@ -115,7 +115,7 @@ Drop `--dry-run` to execute. The chosen model is printed to stderr before the
 run so you can cancel and override:
 
 ```bash
-synthpanel panel run \
+althing panel run \
   --personas examples/personas.yaml \
   --instrument examples/survey.yaml \
   --model haiku
@@ -132,11 +132,11 @@ them with `--personas-merge` (duplicate names are de-duped, later file wins, and
 a warning names every drop):
 
 ```bash
-synthpanel pack list                                   # 14 bundled packs, with counts
-synthpanel pack export product-research -o pr.yaml     # 20 personas
-synthpanel pack export broad-professionals -o bp.yaml  # 20 personas
+althing pack list                                   # 14 bundled packs, with counts
+althing pack export product-research -o pr.yaml     # 20 personas
+althing pack export broad-professionals -o bp.yaml  # 20 personas
 
-synthpanel panel run \
+althing panel run \
   --personas pr.yaml \
   --personas-merge bp.yaml \
   --instrument examples/survey.yaml \
@@ -157,20 +157,20 @@ Drop `--dry-run` to run it. Use `--max-cost 0.50` to hard-cap spend and
 
 ### 7. Save and emit JSON
 
-`--save` writes the full result to `~/.synthpanel/results`; the global
+`--save` writes the full result to `~/.althing/results`; the global
 `--output-format json` flag emits the same machine-readable envelope you'd get
 from the MCP `run_panel` tool:
 
 ```bash
-synthpanel --output-format json panel run \
+althing --output-format json panel run \
   --personas pr.yaml \
   --personas-merge bp.yaml \
   --instrument examples/survey.yaml \
   --model haiku \
   --save > result.json
 
-synthpanel results list                 # what's saved on disk
-synthpanel report <result-id>            # render a shareable Markdown report
+althing results list                 # what's saved on disk
+althing report <result-id>            # render a shareable Markdown report
 ```
 
 The JSON envelope (abridged):
@@ -202,7 +202,7 @@ envelope is documented in
 
 ## MCP path
 
-Editor and framework agents call SynthPanel as MCP tools instead of shelling
+Editor and framework agents call Althing as MCP tools instead of shelling
 out. The server launches on demand over stdio — no long-running process.
 
 ### 1. Register the server
@@ -211,10 +211,10 @@ The `mcp install` helper writes the config entry for you (Claude Code user scope
 by default; `--target` for other hosts):
 
 ```bash
-synthpanel mcp install                                   # ~/.claude.json (all projects)
-synthpanel mcp install --scope project                   # ./.mcp.json (checked in, shared)
-synthpanel mcp install --target ~/.cursor/mcp.json       # Cursor
-synthpanel mcp install --dry-run                         # print JSON, change nothing
+althing mcp install                                   # ~/.claude.json (all projects)
+althing mcp install --scope project                   # ./.mcp.json (checked in, shared)
+althing mcp install --target ~/.cursor/mcp.json       # Cursor
+althing mcp install --dry-run                         # print JSON, change nothing
 ```
 
 Or write the config by hand. The generic stdio entry every MCP host
@@ -223,8 +223,8 @@ understands:
 ```json
 {
   "mcpServers": {
-    "synth_panel": {
-      "command": "synthpanel",
+    "althing": {
+      "command": "althing",
       "args": ["mcp-serve"],
       "env": { "ANTHROPIC_API_KEY": "sk-..." }
     }
@@ -236,8 +236,8 @@ Host-specific snippets — Claude Code, Cursor, Windsurf, Zed (uses
 `context_servers`), Hermes (YAML with explicit timeouts), and Claude Desktop —
 are in the README's [Use with Claude Code / Cursor / Windsurf /
 Zed](../README.md#use-with-claude-code--cursor--windsurf--zed) section. If
-`synthpanel` lives in a virtualenv, point `command` at its absolute path
-(e.g. `/path/to/.venv/bin/synthpanel`).
+`althing` lives in a virtualenv, point `command` at its absolute path
+(e.g. `/path/to/.venv/bin/althing`).
 
 ### 2. Call the research tools
 
@@ -301,7 +301,7 @@ instrument:
 ```
 
 ```bash
-synthpanel --output-format json panel run \
+althing --output-format json panel run \
   --personas pr.yaml \
   --instrument pricing-poll.yaml \
   --model haiku \
@@ -314,8 +314,8 @@ For a deterministic vote/score rollup — no LLM, no parsing — run `poll-summa
 on the saved result:
 
 ```bash
-synthpanel poll-summary <result-id> --format json
-synthpanel poll-summary <result-id> --segment-by occupation   # split the vote by attribute
+althing poll-summary <result-id> --format json
+althing poll-summary <result-id> --segment-by occupation   # split the vote by attribute
 ```
 
 `response_schema` types are `enum` (pick-one), `scale` (Likert/rating), `text`

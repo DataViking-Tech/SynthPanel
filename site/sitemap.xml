@@ -1,37 +1,37 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://synthpanel.dev/</loc>
+    <loc>https://althing.dev/</loc>
     <changefreq>monthly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://synthpanel.dev/mcp</loc>
+    <loc>https://althing.dev/mcp</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://synthpanel.dev/docs</loc>
+    <loc>https://althing.dev/docs</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://synthpanel.dev/docs/panel-run</loc>
+    <loc>https://althing.dev/docs/panel-run</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://synthpanel.dev/docs/calibration</loc>
+    <loc>https://althing.dev/docs/calibration</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://synthpanel.dev/recommended-models</loc>
+    <loc>https://althing.dev/recommended-models</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://synthpanel.dev/blog/synthpanel-vs-commercial-alternatives.html</loc>
+    <loc>https://althing.dev/blog/althing-vs-commercial-alternatives.html</loc>
     <lastmod>2026-07-16</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>

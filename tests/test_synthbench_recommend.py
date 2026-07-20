@@ -15,8 +15,8 @@ from typing import Any
 import httpx
 import pytest
 
-from synth_panel import synthbench
-from synth_panel.synthbench import (
+from althing import synthbench
+from althing.synthbench import (
     CACHE_TTL,
     SYNTHBENCH_OFFLINE_ENV,
     SYNTHBENCH_REFRESH_ENV,
@@ -41,7 +41,7 @@ def _entry(
     topic_scores: dict[str, float] | None = None,
     dataset: str = "globalopinionqa",
     provider: str = "anthropic",
-    framework: str = "synthpanel",
+    framework: str = "althing",
     is_ensemble: bool = False,
     n: int = 100,
     jsd: float = 0.1,
@@ -213,11 +213,11 @@ def test_recommend_returns_none_for_empty_leaderboard() -> None:
 
 
 def test_recommend_resolves_short_alias(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Force the default alias table (avoid user's ~/.synthpanel/aliases.yaml).
-    from synth_panel.llm import aliases
+    # Force the default alias table (avoid user's ~/.althing/aliases.yaml).
+    from althing.llm import aliases
 
     monkeypatch.setattr(aliases, "_ALIASES_FILE", Path("/nonexistent/aliases.yaml"))
-    monkeypatch.delenv("SYNTHPANEL_MODEL_ALIASES", raising=False)
+    monkeypatch.delenv("ALTHING_MODEL_ALIASES", raising=False)
     aliases._reset_cache()
     board = {"entries": [_entry(model="haiku", sps=0.9)]}
     rec = recommend(":globalopinionqa", leaderboard=board)
@@ -228,10 +228,10 @@ def test_recommend_resolves_short_alias(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_recommend_ensemble_falls_back_to_config_base(monkeypatch: pytest.MonkeyPatch) -> None:
-    from synth_panel.llm import aliases
+    from althing.llm import aliases
 
     monkeypatch.setattr(aliases, "_ALIASES_FILE", Path("/nonexistent/aliases.yaml"))
-    monkeypatch.delenv("SYNTHPANEL_MODEL_ALIASES", raising=False)
+    monkeypatch.delenv("ALTHING_MODEL_ALIASES", raising=False)
     aliases._reset_cache()
     board = {
         "entries": [
@@ -240,7 +240,7 @@ def test_recommend_ensemble_falls_back_to_config_base(monkeypatch: pytest.Monkey
                 sps=0.95,
                 framework="product",
                 is_ensemble=True,
-                config_id="synthpanel:haiku",
+                config_id="althing:haiku",
             )
         ]
     }
@@ -264,7 +264,7 @@ def test_recommend_ensemble_falls_back_to_config_base(monkeypatch: pytest.Monkey
         ("llama-3.3-70b-instruct", True),
         ("", False),
         ("   ", False),
-        ("SynthPanel (Gemini Flash Lite)", False),
+        ("Althing (Gemini Flash Lite)", False),
         ("Gemini Flash Lite", False),
         ("claude (sonnet)", False),
     ],
@@ -280,12 +280,12 @@ def test_recommend_display_label_marked_not_runnable() -> None:
     board = {
         "entries": [
             _entry(
-                model="SynthPanel (Gemini Flash Lite)",
+                model="Althing (Gemini Flash Lite)",
                 sps=0.95,
                 framework="product",
                 is_ensemble=True,
                 # config_id tail is a hash fragment, not a resolvable base
-                config_id="synthpanel-gemini-flash-lite-tdefault-ba37570c",
+                config_id="althing-gemini-flash-lite-tdefault-ba37570c",
             )
         ]
     }
@@ -294,7 +294,7 @@ def test_recommend_display_label_marked_not_runnable() -> None:
     assert rec.is_ensemble is True
     assert rec.runnable is False
     # The original label is preserved verbatim so the caller can report it.
-    assert rec.model == "SynthPanel (Gemini Flash Lite)"
+    assert rec.model == "Althing (Gemini Flash Lite)"
 
 
 def test_recommend_display_label_resolves_runnable_base_from_config_id(
@@ -302,19 +302,19 @@ def test_recommend_display_label_resolves_runnable_base_from_config_id(
 ) -> None:
     """When a product/ensemble row carries a display label but the config_id
     encodes a resolvable base model, the recommendation becomes runnable."""
-    from synth_panel.llm import aliases
+    from althing.llm import aliases
 
     monkeypatch.setattr(aliases, "_ALIASES_FILE", Path("/nonexistent/aliases.yaml"))
-    monkeypatch.delenv("SYNTHPANEL_MODEL_ALIASES", raising=False)
+    monkeypatch.delenv("ALTHING_MODEL_ALIASES", raising=False)
     aliases._reset_cache()
     board = {
         "entries": [
             _entry(
-                model="SynthPanel (Haiku)",
+                model="Althing (Haiku)",
                 sps=0.95,
                 framework="product",
                 is_ensemble=True,
-                config_id="synthpanel:haiku",
+                config_id="althing:haiku",
             )
         ]
     }
@@ -331,8 +331,8 @@ def test_recommend_prefers_runnable_model_id_over_display_label() -> None:
     board = {
         "entries": [
             _entry(
-                model="SynthPanel (Gemini Flash Lite)",
-                provider="SynthPanel (Gemini Flash Lite)",
+                model="Althing (Gemini Flash Lite)",
+                provider="Althing (Gemini Flash Lite)",
                 model_id="google/gemini-2.5-flash-lite",
                 sps=0.95,
                 is_ensemble=False,
@@ -344,7 +344,7 @@ def test_recommend_prefers_runnable_model_id_over_display_label() -> None:
     assert rec.model == "google/gemini-2.5-flash-lite"
     assert rec.runnable is True
     # The original display label is preserved as raw_model for provenance.
-    assert rec.raw_model == "SynthPanel (Gemini Flash Lite)"
+    assert rec.raw_model == "Althing (Gemini Flash Lite)"
 
 
 def test_recommend_model_id_wins_over_config_id_inference() -> None:
@@ -353,9 +353,9 @@ def test_recommend_model_id_wins_over_config_id_inference() -> None:
     board = {
         "entries": [
             _entry(
-                model="SynthPanel (Gemini Flash Lite)",
+                model="Althing (Gemini Flash Lite)",
                 model_id="google/gemini-2.5-flash-lite",
-                config_id="synthpanel:haiku",
+                config_id="althing:haiku",
                 sps=0.95,
                 framework="product",
                 is_ensemble=True,
@@ -374,7 +374,7 @@ def test_recommend_joins_provider_id_with_bare_model_id() -> None:
     board = {
         "entries": [
             _entry(
-                model="SynthPanel (Gemini Flash Lite)",
+                model="Althing (Gemini Flash Lite)",
                 model_id="gemini-2.5-flash-lite",
                 provider_id="google",
                 sps=0.95,
@@ -393,9 +393,9 @@ def test_recommend_ignores_non_runnable_model_id() -> None:
     board = {
         "entries": [
             _entry(
-                model="SynthPanel (Gemini Flash Lite)",
+                model="Althing (Gemini Flash Lite)",
                 model_id="Gemini Flash Lite (preview)",
-                config_id="synthpanel-gemini-flash-lite-ba37570c",
+                config_id="althing-gemini-flash-lite-ba37570c",
                 sps=0.95,
                 framework="product",
                 is_ensemble=True,
@@ -405,7 +405,7 @@ def test_recommend_ignores_non_runnable_model_id() -> None:
     rec = recommend(":globalopinionqa", leaderboard=board)
     assert rec is not None
     assert rec.runnable is False
-    assert rec.model == "SynthPanel (Gemini Flash Lite)"
+    assert rec.model == "Althing (Gemini Flash Lite)"
 
 
 def test_recommend_runnable_model_field_ignores_model_id() -> None:
@@ -453,7 +453,7 @@ def test_recommend_format_line_has_expected_pieces() -> None:
 
 def test_recommend_format_line_source_reflects_recommendation_source() -> None:
     """Wire format: format_line() must surface the source the agent reads."""
-    from synth_panel.synthbench import Recommendation
+    from althing.synthbench import Recommendation
 
     base = recommend("Economy & Work", leaderboard=SAMPLE)
     assert base is not None
@@ -542,8 +542,8 @@ def test_no_cache_and_fetch_fail_returns_none(no_bundled_snapshot: None) -> None
     assert loaded is None
     assert any("synthbench unavailable" in w for w in warnings)
     # sy-nkh: actionable corrective hint must surface so the user knows
-    # they can point at a mirror via SYNTHPANEL_SYNTHBENCH_URL.
-    assert any("SYNTHPANEL_SYNTHBENCH_URL" in w for w in warnings)
+    # they can point at a mirror via ALTHING_SYNTHBENCH_URL.
+    assert any("ALTHING_SYNTHBENCH_URL" in w for w in warnings)
 
 
 def test_no_cache_and_http_404_returns_none(no_bundled_snapshot: None) -> None:
@@ -662,7 +662,7 @@ class TestBundledSnapshotFallback:
         assert any("source=bundled-snapshot" in w for w in warnings), warnings
         # The actionable override hint travels alongside the fallback so
         # users with a working mirror know how to switch to it.
-        assert any("SYNTHPANEL_SYNTHBENCH_URL" in w for w in warnings), warnings
+        assert any("ALTHING_SYNTHBENCH_URL" in w for w in warnings), warnings
 
     def test_no_cache_plus_404_uses_bundled_snapshot(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
@@ -762,7 +762,7 @@ class TestBundledSnapshotFallback:
         assert synthbench._BUNDLED_SNAPSHOT_PATH.exists(), (
             f"bundled snapshot missing at {synthbench._BUNDLED_SNAPSHOT_PATH}. "
             "Check pyproject.toml's [tool.setuptools.package-data] glob "
-            'for `synth_panel.data = ["*.json"]`.'
+            'for `althing.data = ["*.json"]`.'
         )
 
 

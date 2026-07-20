@@ -52,7 +52,7 @@ jobs:
         run: pip install -e ".[dev,mcp]"
 
       - name: Mypy
-        run: mypy src/synth_panel/
+        run: mypy src/althing/
 
   security:
     runs-on: ubuntu-latest
@@ -76,7 +76,7 @@ jobs:
         # Tracking: https://nvd.nist.gov/vuln/detail/CVE-2026-3219
         # Tracking: https://nvd.nist.gov/vuln/detail/CVE-2026-6357
         #
-        # `--skip-editable` excludes the `synthpanel` package itself (installed
+        # `--skip-editable` excludes the `althing` package itself (installed
         # via `pip install -e .`). The audit is meant to catch dependency
         # vulnerabilities, not vulnerabilities in the package being audited —
         # and the latter would also fail "not found on PyPI" on release commits
@@ -108,7 +108,7 @@ jobs:
         run: pip install -e ".[dev,mcp]"
 
       - name: Run tests with coverage
-        run: pytest tests/ -x --ignore=tests/test_acceptance.py --cov=synth_panel --cov-report=term --cov-fail-under=80
+        run: pytest tests/ -x --ignore=tests/test_acceptance.py --cov=althing --cov-report=term --cov-fail-under=80
 
   coverage:
     runs-on: ubuntu-latest
@@ -128,7 +128,7 @@ jobs:
       - name: Run tests with coverage
         run: |
           pytest tests/ --ignore=tests/test_acceptance.py \
-            --cov=synth_panel --cov-report=term-missing --cov-report=html \
+            --cov=althing --cov-report=term-missing --cov-report=html \
             | tee coverage-output.txt
 
       - name: Coverage summary
@@ -220,9 +220,9 @@ jobs:
         run: pip install -e ".[dev,mcp]"
 
       - name: Install the real SynthBench harness (GitHub-only)
-        # Installed after synthpanel so its `synthpanel>=0.2.0` dependency
+        # Installed after althing so its `althing>=0.2.0` dependency
         # is already satisfied by the editable install and pip does not
-        # pull a published synthpanel wheel over the checkout.
+        # pull a published althing wheel over the checkout.
         run: pip install "synthbench @ git+https://github.com/DataViking-Tech/SynthBench.git"
 
       - name: Run the submission contract tests against synthbench validate()
@@ -276,7 +276,7 @@ jobs:
           done
 
   clean-install-smoke:
-    # sy-6kr: prove `pip install synthpanel` (no source checkout) yields
+    # sy-6kr: prove `pip install althing` (no source checkout) yields
     # a working CLI from a fresh environment. The matrix exercises the
     # two wheel-from-PyPI agent-onboarding paths (bare wheel, `[mcp]`
     # extra); pipx gets its own job below. Failures here surface as
@@ -321,27 +321,27 @@ jobs:
           set -euo pipefail
           python -m venv /tmp/smoke
           /tmp/smoke/bin/python -m pip install --upgrade pip
-          WHEEL=$(ls dist/synthpanel-*.whl)
+          WHEEL=$(ls dist/althing-*.whl)
           /tmp/smoke/bin/python -m pip install "${WHEEL}${{ matrix.install.extras }}"
 
-          # No source directory is on the path — `synthpanel` resolves
+          # No source directory is on the path — `althing` resolves
           # only via the wheel. If any of these fail, the install path
           # is broken for new users.
-          /tmp/smoke/bin/synthpanel --version
-          /tmp/smoke/bin/synthpanel --help > /dev/null
-          /tmp/smoke/bin/synthpanel whoami
+          /tmp/smoke/bin/althing --version
+          /tmp/smoke/bin/althing --help > /dev/null
+          /tmp/smoke/bin/althing whoami
 
           # sy-e28: prove the no-credentials install-only mode works in a
           # clean wheel install. Unset the fake key for this step so it
           # actually exercises the "credentials missing" path; exit code
           # must still be 0 because install_ok dominates.
-          env -u ANTHROPIC_API_KEY /tmp/smoke/bin/synthpanel doctor --install-only
+          env -u ANTHROPIC_API_KEY /tmp/smoke/bin/althing doctor --install-only
 
-          /tmp/smoke/bin/synthpanel doctor
+          /tmp/smoke/bin/althing doctor
 
           # `[mcp]` matrix entry must additionally import the MCP server.
           if [ -n "${{ matrix.install.extras }}" ]; then
-            /tmp/smoke/bin/python -c "from synth_panel.mcp.server import mcp; print('mcp server import OK')"
+            /tmp/smoke/bin/python -c "from althing.mcp.server import mcp; print('mcp server import OK')"
           fi
 
   clean-install-pipx:
@@ -373,13 +373,13 @@ jobs:
           set -euo pipefail
           pip install --upgrade pipx
           python -m pipx ensurepath
-          WHEEL=$(ls dist/synthpanel-*.whl)
+          WHEEL=$(ls dist/althing-*.whl)
           # `--python` keeps pipx pinned to the runner's 3.14; the default
           # would otherwise reach for the system python.
           python -m pipx install --python "$(which python)" "${WHEEL}"
           # pipx installs to ~/.local/bin by default.
           export PATH="$HOME/.local/bin:$PATH"
-          synthpanel --version
-          synthpanel --help > /dev/null
-          synthpanel whoami
-          synthpanel doctor
+          althing --version
+          althing --help > /dev/null
+          althing whoami
+          althing doctor

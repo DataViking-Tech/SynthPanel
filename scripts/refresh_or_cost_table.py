@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Compare ``synth_panel.cost`` pricing against OpenRouter's live feed.
+"""Compare ``althing.cost`` pricing against OpenRouter's live feed.
 
 Pulls https://openrouter.ai/api/v1/models (no auth required) and
 diffs the input/output/cache rates for every entry in
-``EXPECTED_OR_MAPPING`` against what synthpanel's local table would
+``EXPECTED_OR_MAPPING`` against what althing's local table would
 charge for the same model. Used by hq-xq36 to keep the cost-table
 fresh when OR's blended rates shift.
 
@@ -30,7 +30,7 @@ import sys
 import urllib.request
 from dataclasses import dataclass
 
-from synth_panel.cost import ModelPricing, lookup_pricing
+from althing.cost import ModelPricing, lookup_pricing
 
 OR_MODELS_URL = "https://openrouter.ai/api/v1/models"
 
@@ -82,7 +82,7 @@ class Drift:
 
 
 def _fetch_models(url: str = OR_MODELS_URL) -> list[dict]:
-    req = urllib.request.Request(url, headers={"User-Agent": "synthpanel/refresh_or_cost_table"})
+    req = urllib.request.Request(url, headers={"User-Agent": "althing/refresh_or_cost_table"})
     with urllib.request.urlopen(req, timeout=30) as resp:
         payload = json.load(resp)
     data = payload.get("data") or []

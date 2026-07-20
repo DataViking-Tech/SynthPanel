@@ -6,7 +6,7 @@ The card is served as a static asset by Cloudflare Pages from
 
   * file exists and is valid JSON
   * required fields are present (serverInfo, capabilities, transport)
-  * version everywhere matches ``synth_panel.__version__`` so a release
+  * version everywhere matches ``althing.__version__`` so a release
     bump cannot leave the card pointing at a stale version
   * the Cloudflare ``site/_headers`` block grants the cross-origin
     access agents need to fetch the card from a different host
@@ -61,7 +61,7 @@ def test_server_info_shape() -> None:
 def test_capabilities_declare_mcp_surface() -> None:
     card = _load_card()
     caps = card["capabilities"]
-    # synthpanel's MCP server exposes tools, resources, and prompts —
+    # althing's MCP server exposes tools, resources, and prompts —
     # advertise all three so discovery scanners know the surface.
     for cap in ("tools", "resources", "prompts"):
         assert cap in caps, f"capabilities.{cap} not declared"
@@ -71,7 +71,7 @@ def test_capabilities_declare_mcp_surface() -> None:
 def test_transport_endpoint_documented() -> None:
     """SEP-2127 requires the card to describe how to reach the server.
 
-    synthpanel ships a stdio MCP server, so the transport is documented
+    althing ships a stdio MCP server, so the transport is documented
     via ``packages[].transport`` (mirroring server.json) rather than via
     ``remotes`` (HTTP/SSE). Either path satisfies the contract — what
     must NOT happen is publishing a card with no transport at all.
@@ -94,7 +94,7 @@ def test_versions_match_package_version() -> None:
     landing page. Update both atomically at release time (or wire into
     a render script later).
     """
-    from synth_panel import __version__
+    from althing import __version__
 
     card = _load_card()
     assert card["version"] == __version__, (
@@ -104,7 +104,7 @@ def test_versions_match_package_version() -> None:
         f"serverInfo.version {card['serverInfo']['version']!r} != package __version__ {__version__!r}"
     )
     for pkg in card.get("packages", []):
-        if pkg.get("identifier") == "synthpanel" and "version" in pkg:
+        if pkg.get("identifier") == "althing" and "version" in pkg:
             assert pkg["version"] == __version__, (
                 f"packages[].version {pkg['version']!r} != package __version__ {__version__!r}"
             )

@@ -1,13 +1,13 @@
 # Panel-Result JSON Schema — Research Summary
 
-**Scope:** `src/synth_panel/` + tests + docs, cross-validated against real artifacts in `/Users/openclaw/gastown-dev/mayor/results/synthpanel-self-audit/`.
+**Scope:** `src/althing/` + tests + docs, cross-validated against real artifacts in `/Users/openclaw/gastown-dev/mayor/results/althing-self-audit/`.
 
 ## 1. Schema Definition: Locus and Versioning
 
 **Where defined:** Inferred from code, not a formal schema artifact. Three loci:
-- `src/synth_panel/sdk.py:224–286` — `PanelResult`, `PollResult`, `PromptResult` dataclasses. `to_dict()` at 163–165 serializes to plain dict.
-- `src/synth_panel/synthesis.py:64–97` — `_SYNTHESIS_SCHEMA` JSON Schema for the synthesis object.
-- `src/synth_panel/mcp/data.py:482–530` — `save_panel_result()` documents which top-level fields are saved; optional fields are conditionally included (521–530).
+- `src/althing/sdk.py:224–286` — `PanelResult`, `PollResult`, `PromptResult` dataclasses. `to_dict()` at 163–165 serializes to plain dict.
+- `src/althing/synthesis.py:64–97` — `_SYNTHESIS_SCHEMA` JSON Schema for the synthesis object.
+- `src/althing/mcp/data.py:482–530` — `save_panel_result()` documents which top-level fields are saved; optional fields are conditionally included (521–530).
 
 **Versioning:** No explicit `schema_version` field. CHANGELOG references output-shape changes via ticket IDs (sp-avmm, sp-g270, sp-kkzz) but does not bump any schema version.
 
@@ -72,7 +72,7 @@ Empty list for v1/v2 single-round. `orchestrator.py:815` renders branch descript
 
 ```python
 metadata: dict | None = {
-    "version": {"synthpanel": str, "python": str},
+    "version": {"althing": str, "python": str},
     "models": {"panelist": str, "synthesis": str | None},
     "generation_params": {"temperature": float|None, "top_p": float|None, "max_tokens": int},
     "config_hash": str,  # sp-ui40
@@ -127,11 +127,11 @@ No deprecations documented. No removals announced. Consumers use presence checks
 
 | Source | n | Size |
 |---|---|---|
-| round3/synthpanel__landing-page-comprehension | 6 | 51 KB |
-| ensemble_30/synthpanel__product-feedback | 30 | 1.2 MB |
-| ensemble_50/synthpanel__product-feedback | 50 | 2.0 MB |
-| ensemble_100/synthpanel__product-feedback | 100 | 3.9 MB |
-| ensemble_100_v099_ctx2/synthpanel__product-feedback | 100 | 6.7 MB |
+| round3/althing__landing-page-comprehension | 6 | 51 KB |
+| ensemble_30/althing__product-feedback | 30 | 1.2 MB |
+| ensemble_50/althing__product-feedback | 50 | 2.0 MB |
+| ensemble_100/althing__product-feedback | 100 | 3.9 MB |
+| ensemble_100_v099_ctx2/althing__product-feedback | 100 | 6.7 MB |
 
 Linear: ~40 KB/persona baseline. Crosses 1 MB at n≈25. 10 MB extrapolates to n≈250. Largest observed: 6.7 MB.
 

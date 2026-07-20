@@ -1,11 +1,11 @@
-"""SynthPanel + Composio + LangChain.
+"""Althing + Composio + LangChain.
 
-Register SynthPanel as a Composio toolkit, then hand the resulting tools
+Register Althing as a Composio toolkit, then hand the resulting tools
 to a LangChain agent. No MCP bridge, no subprocess — Composio calls the
-SynthPanel SDK in-process.
+Althing SDK in-process.
 
 Install:
-    pip install composio composio_langchain langchain langchain-anthropic synthpanel
+    pip install composio composio_langchain langchain langchain-anthropic althing
 
 Run:
     export ANTHROPIC_API_KEY=sk-...
@@ -19,12 +19,12 @@ from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain_anthropic import ChatAnthropic
 from langchain_core.prompts import ChatPromptTemplate
 
-from synth_panel.integrations.composio import synthpanel_toolkit
+from althing.integrations.composio import althing_toolkit
 
 
 def main() -> None:
     composio = Composio(provider=LangchainProvider())
-    toolkit = synthpanel_toolkit(composio)
+    toolkit = althing_toolkit(composio)
 
     session = composio.create(
         user_id="researcher_1",
@@ -34,7 +34,7 @@ def main() -> None:
 
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", "You are a market research assistant. Use SynthPanel tools to poll personas."),
+            ("system", "You are a market research assistant. Use Althing tools to poll personas."),
             ("user", "{input}"),
             ("placeholder", "{agent_scratchpad}"),
         ]

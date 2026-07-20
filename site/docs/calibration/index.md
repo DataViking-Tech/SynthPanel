@@ -1,4 +1,4 @@
-# Pack Calibration — synthpanel · Run synthetic focus groups with any LLM
+# Pack Calibration — althing · Run synthetic focus groups with any LLM
 
 [DataViking](https://dataviking.tech)
 
@@ -6,12 +6,12 @@ Docs · Pack Calibration
 
 # Pack calibration
 
-Calibration is how a persona pack proves its fit to a known human baseline. Run `synthpanel pack calibrate` and the result is written back into the pack YAML so the manifest is self-describing.
+Calibration is how a persona pack proves its fit to a known human baseline. Run `althing pack calibrate` and the result is written back into the pack YAML so the manifest is self-describing.
 
 ## CLI reference
 
 ```
-synthpanel pack calibrate <PACK_YAML>
+althing pack calibrate <PACK_YAML>
   --against DATASET:QUESTION   # e.g. gss:HAPPY (v1 allowlist: gss, ntia)
   [--n 50]                     # panel size
   [--models MODELS]            # default: panel run default
@@ -34,11 +34,11 @@ calibration:
     extractor: pick_one:auto-derived
     panelist_cost_usd: 0.6451
     calibrated_at: 2026-07-16T14:23:00Z
-    synthpanel_version: 1.5.7
-    methodology_url: https://synthpanel.dev/docs/calibration
+    althing_version: 1.5.7
+    methodology_url: https://althing.dev/docs/calibration
 ```
 
-The 4-model `models:` mix above is an example blend, *not* the SynthBench leaderboard ensemble — the leaderboard’s “SynthPanel Ensemble (3-model)” entry is an equal-weight blend of Claude Haiku 4.5, Gemini 2.5 Flash Lite, and GPT-4o-mini.
+The 4-model `models:` mix above is an example blend, *not* the SynthBench leaderboard ensemble — the leaderboard’s “Althing Ensemble (3-model)” entry is an equal-weight blend of Claude Haiku 4.5, Gemini 2.5 Flash Lite, and GPT-4o-mini.
 
 ## What JSD means
 
@@ -52,7 +52,7 @@ Calibration reports **Jensen-Shannon divergence** between the pack's extracted a
 | `0.30–0.50` | Weak — major disagreement on at least one mode. |
 | `> 0.50` | Effectively uncalibrated. |
 
-JSD is computed locally via the same metric the convergence tracker uses (see `src/synth_panel/convergence.py`); the pack YAML is the **only** durable artifact — calibration does not phone home and is distinct from `--submit-to-synthbench`.
+JSD is computed locally via the same metric the convergence tracker uses (see `src/althing/convergence.py`); the pack YAML is the **only** durable artifact — calibration does not phone home and is distinct from `--submit-to-synthbench`.
 
 ## When to calibrate
 
@@ -79,7 +79,7 @@ Other datasets (OpinionsQA, PewTech, GlobalOpinionQA, WVS, …) are **gated** fo
 
 To override the allowlist for internal use:
 
-$  SYNTHBENCH_ALLOW_GATED=1  synthpanel pack calibrate ... --against wvs:Q1
+$  SYNTHBENCH_ALLOW_GATED=1  althing pack calibrate ... --against wvs:Q1
 
 ## Methodology
 
@@ -93,7 +93,7 @@ For each calibration run:
 
 - 4 The model distribution is compared against the baseline's `human_distribution` via Jensen-Shannon divergence.
 
-- 5 The resulting JSD, plus provenance (extractor, models, cost, timestamp, synthpanel version), is merged into the pack YAML's `calibration:` list. Re-running against the same `(dataset, question)` pair **replaces** the prior entry rather than appending, so the list is always a clean record of one-result-per-baseline.
+- 5 The resulting JSD, plus provenance (extractor, models, cost, timestamp, althing version), is merged into the pack YAML's `calibration:` list. Re-running against the same `(dataset, question)` pair **replaces** the prior entry rather than appending, so the list is always a clean record of one-result-per-baseline.
 
 ## Idempotence and re-runs
 
@@ -109,7 +109,7 @@ For each calibration run:
 
 -  Calibration measures distributional fit on **one** answer distribution. A low JSD on `gss:HAPPY` does not imply low JSD on a different question — calibrate against multiple baselines if you need broad coverage.
 
--  The command requires the `synthpanel[convergence]` extra (for the `synthbench` baseline loader). Install with `pip install 'synthpanel[convergence]'` if not already present.
+-  The command requires the `althing[convergence]` extra (for the `synthbench` baseline loader). Install with `pip install 'althing[convergence]'` if not already present.
 
 ## See also
 
@@ -119,13 +119,13 @@ For each calibration run:
 
 Run calibrated panel runs via the MCP tools from your AI editor.
 
-### [Source docs](https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/calibration.md)
+### [Source docs](https://github.com/DataViking-Tech/Althing/blob/main/docs/calibration.md)
 
 →
 
 The canonical `docs/calibration.md` in the GitHub repo.
 
-### [Report an issue](https://github.com/DataViking-Tech/SynthPanel)
+### [Report an issue](https://github.com/DataViking-Tech/Althing)
 
 →
 

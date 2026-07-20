@@ -3,16 +3,16 @@
 **Parent bead:** sp-2cw.3 · **Status:** Connector code committed; human-only submit steps below
 **Last updated:** 2026-04-16
 
-This is a checklist for listing SynthPanel in the Composio public tool
+This is a checklist for listing Althing in the Composio public tool
 catalog. The connector code itself is already committed — see
-[`src/synth_panel/integrations/composio.py`](../src/synth_panel/integrations/composio.py)
+[`src/althing/integrations/composio.py`](../src/althing/integrations/composio.py)
 and [`examples/integrations/composio_langchain.py`](../examples/integrations/composio_langchain.py).
 The remaining steps require GitHub PR authorship, Discord outreach, and
 Composio-side review, so they must be completed by a maintainer.
 
 ## Why this connector exists
 
-A single Composio listing puts SynthPanel in the native tool catalogs of
+A single Composio listing puts Althing in the native tool catalogs of
 every major Composio-supported framework — LangChain, CrewAI, Semantic
 Kernel, AutoGen, OpenAI Agents, and Google ADK — simultaneously. That's
 roughly the same reach as shipping six framework-specific wrapper
@@ -25,23 +25,23 @@ section C.3 for the full strategic rationale.
 
 | Artifact | Path | Purpose |
 |----------|------|---------|
-| Toolkit factory | [`src/synth_panel/integrations/composio.py`](../src/synth_panel/integrations/composio.py) | Builds a Composio experimental `Toolkit` exposing 5 SynthPanel actions |
-| LangChain example | [`examples/integrations/composio_langchain.py`](../examples/integrations/composio_langchain.py) | End-to-end LangChain agent using SynthPanel via Composio |
-| CrewAI example | [`examples/integrations/composio_crewai.py`](../examples/integrations/composio_crewai.py) | End-to-end CrewAI agent using SynthPanel via Composio |
+| Toolkit factory | [`src/althing/integrations/composio.py`](../src/althing/integrations/composio.py) | Builds a Composio experimental `Toolkit` exposing 5 Althing actions |
+| LangChain example | [`examples/integrations/composio_langchain.py`](../examples/integrations/composio_langchain.py) | End-to-end LangChain agent using Althing via Composio |
+| CrewAI example | [`examples/integrations/composio_crewai.py`](../examples/integrations/composio_crewai.py) | End-to-end CrewAI agent using Althing via Composio |
 | Unit tests | [`tests/test_integrations_composio.py`](../tests/test_integrations_composio.py) | 11 tests — shape, delegation, import-guards |
 
 The five registered actions are:
 
 | Action slug | Wraps | Purpose |
 |-------------|-------|---------|
-| `SYNTHPANEL_QUICK_POLL` | `synth_panel.quick_poll` | One question → synthesized panel findings |
-| `SYNTHPANEL_RUN_PANEL` | `synth_panel.run_panel` | Full panel run against instrument packs |
-| `SYNTHPANEL_LIST_PERSONAS` | `synth_panel.list_personas` | Discover installed persona packs |
-| `SYNTHPANEL_LIST_INSTRUMENTS` | `synth_panel.list_instruments` | Discover installed instrument packs |
-| `SYNTHPANEL_GET_PANEL_RESULT` | `synth_panel.get_panel_result` | Load a saved panel result by id |
+| `ALTHING_QUICK_POLL` | `althing.quick_poll` | One question → synthesized panel findings |
+| `ALTHING_RUN_PANEL` | `althing.run_panel` | Full panel run against instrument packs |
+| `ALTHING_LIST_PERSONAS` | `althing.list_personas` | Discover installed persona packs |
+| `ALTHING_LIST_INSTRUMENTS` | `althing.list_instruments` | Discover installed instrument packs |
+| `ALTHING_GET_PANEL_RESULT` | `althing.get_panel_result` | Load a saved panel result by id |
 
 > Composio namespaces local toolkit actions as `LOCAL_<toolkit>_<action>`,
-> so the agent-visible slugs are e.g. `LOCAL_SYNTHPANEL_QUICK_POLL`.
+> so the agent-visible slugs are e.g. `LOCAL_ALTHING_QUICK_POLL`.
 
 ## Canonical pitch (use verbatim in forms)
 
@@ -51,10 +51,10 @@ The five registered actions are:
 
 **Standard description (≤300 chars):**
 
-> SynthPanel exposes five research actions to your agent: quick_poll
+> Althing exposes five research actions to your agent: quick_poll
 > (one question → synthesized panel findings), run_panel (multi-round
 > instruments with v3 branching), and persona/instrument/result
-> discovery. Runs locally via the SynthPanel SDK. Any LLM.
+> discovery. Runs locally via the Althing SDK. Any LLM.
 
 **Category / tags:**
 
@@ -62,16 +62,16 @@ The five registered actions are:
 - Python · Local · Agent · LLM
 
 **Auth model:** No Composio-hosted auth. The connector runs in-process;
-SynthPanel reads the caller's `ANTHROPIC_API_KEY` (or OpenAI, Gemini,
+Althing reads the caller's `ANTHROPIC_API_KEY` (or OpenAI, Gemini,
 xAI) from the environment. Document this in the Composio listing's
 "auth" section.
 
 **Links:**
 
-- Site: <https://synthpanel.dev>
-- Repo: <https://github.com/DataViking-Tech/SynthPanel>
-- PyPI: <https://pypi.org/project/synthpanel/>
-- Docs: <https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/mcp.md>
+- Site: <https://althing.dev>
+- Repo: <https://github.com/DataViking-Tech/Althing>
+- PyPI: <https://pypi.org/project/althing/>
+- Docs: <https://github.com/DataViking-Tech/Althing/blob/main/docs/mcp.md>
 
 ## Submission paths (two possible; try in order)
 
@@ -85,12 +85,12 @@ path B if asked.
 1. Fork <https://github.com/ComposioHQ/composio>.
 2. Read [`CONTRIBUTING.md`](https://github.com/ComposioHQ/composio/blob/next/CONTRIBUTING.md)
    end to end. Note the directory conventions — for *providers* they use
-   `packages/providers/`, but SynthPanel is a **tool**, not a provider,
+   `packages/providers/`, but Althing is a **tool**, not a provider,
    so the target directory may differ. Open the PR as a draft and ask
    Composio maintainers where it belongs.
 3. Add a connector manifest pointing at the published PyPI package
-   (`synthpanel`) and the toolkit factory
-   (`synth_panel.integrations.composio:synthpanel_toolkit`). Exact
+   (`althing`) and the toolkit factory
+   (`althing.integrations.composio:althing_toolkit`). Exact
    manifest shape is Composio-defined; copy the nearest existing
    example in their repo for a locally-executing Python tool.
 4. Include a changeset via `pnpm changeset`.
@@ -117,18 +117,18 @@ toolkits through Discord first:
 4. Record the resulting listing URL below.
 
 **Recorded listing URL:** `__ TBD — fill after approval __`
-**Composio toolkit slug:** `SYNTHPANEL`
+**Composio toolkit slug:** `ALTHING`
 
 ## Verification (do once the listing is live)
 
 1. Fresh venv, install only `composio composio_langchain langchain
-   langchain-anthropic synthpanel`.
+   langchain-anthropic althing`.
 2. Export `ANTHROPIC_API_KEY` and `COMPOSIO_API_KEY`.
 3. Run [`composio_langchain.py`](../examples/integrations/composio_langchain.py);
    confirm the agent successfully calls `quick_poll` and returns a
    synthesis recommendation.
 4. Repeat with [`composio_crewai.py`](../examples/integrations/composio_crewai.py).
-5. In the Composio web UI, confirm `SYNTHPANEL` appears in the catalog
+5. In the Composio web UI, confirm `ALTHING` appears in the catalog
    and the action descriptions are legible.
 
 ## Post-launch
@@ -136,7 +136,7 @@ toolkits through Discord first:
 - Add a link to the live Composio listing from
   [`docs/agent-integration-landscape.md`](agent-integration-landscape.md)
   (section C.3) and the repo `README.md` integrations table.
-- Cross-post in the SynthPanel announcements (blog + social).
+- Cross-post in the Althing announcements (blog + social).
 - Close bead `sp-2cw.3` with the recorded URLs in the close reason.
 
 ## Troubleshooting upstream Composio drift
@@ -149,7 +149,7 @@ decorator). That surface is still labelled experimental upstream. The
 became unsatisfiable when upstream yanked the entire 0.5.x line —
 published composio versions now jump from 0.1.x straight to 0.8.x. The
 adapter's runtime check (`experimental.Toolkit` lookup in
-[`composio.py`](../src/synth_panel/integrations/composio.py)) catches
+[`composio.py`](../src/althing/integrations/composio.py)) catches
 any upstream shape drift at construction time, so the loose pin trades
 a brittle resolver contract for a clear runtime error message. When
 Composio cuts a new major or minor release, the contract this
@@ -164,7 +164,7 @@ Use this checklist when triaging a suspected upstream-shape drift:
 | `RuntimeError: experimental.Toolkit` at startup | Composio renamed or moved the experimental Toolkit factory | [Composio changelog](https://github.com/ComposioHQ/composio/releases) — search for "experimental" |
 | `TypeError` from `experimental.Toolkit(...)` | Constructor signature changed (new required kwarg, removed kwarg) | Composio release notes for the version installed in your venv |
 | Tool schemas missing or malformed in the agent catalog | `@toolkit.tool()` decorator semantics changed | Composio docs for "custom toolkits" |
-| `tests/test_integrations_composio.py::TestUpstreamShapeCanary` fails after a Composio bump | The end-to-end translation contract has drifted | Re-read the failing assertion; update the stub in the test file to mirror the new shape, then update [`composio.py`](../src/synth_panel/integrations/composio.py) |
+| `tests/test_integrations_composio.py::TestUpstreamShapeCanary` fails after a Composio bump | The end-to-end translation contract has drifted | Re-read the failing assertion; update the stub in the test file to mirror the new shape, then update [`composio.py`](../src/althing/integrations/composio.py) |
 | Pydantic input validation errors at agent call time | Composio is passing a different argument shape to tool functions | Composio's tool-router source for the version installed |
 
 If you confirm an upstream change is intentional and behaves correctly:
@@ -191,9 +191,9 @@ have installed, ask your user which version they have
 installed (`pip show composio`) — they may be on an older release than
 the floor in `pyproject.toml`.
 
-## Why the connector code lives inside SynthPanel
+## Why the connector code lives inside Althing
 
-The alternative would be a standalone `composio-synthpanel` package.
+The alternative would be a standalone `composio-althing` package.
 We chose inline for three reasons:
 
 1. The factory is ~300 lines — the version-skew risk of a separate
@@ -206,5 +206,5 @@ We chose inline for three reasons:
 
 If Composio prefers third-party toolkits live in Composio-managed
 repositories, we can lift the module verbatim into a
-`composio-synthpanel` package at that time; nothing in the current
+`composio-althing` package at that time; nothing in the current
 design prevents the move.

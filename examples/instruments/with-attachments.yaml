@@ -3,7 +3,7 @@
 # (literal block scalar inline).
 #
 # Usage:
-#   synthpanel panel run --personas examples/personas.yaml --instrument examples/instruments/with-attachments.yaml
+#   althing panel run --personas examples/personas.yaml --instrument examples/instruments/with-attachments.yaml
 #
 # The attachment bank lives at the top level of the instrument and is
 # referenced from individual questions by id. Each question receives the

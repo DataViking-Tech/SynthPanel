@@ -1,4 +1,4 @@
-"""Tests for `synthpanel analyze --by` subgroup analysis (GH-341)."""
+"""Tests for `althing analyze --by` subgroup analysis (GH-341)."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ import sys
 
 import yaml
 
-from synth_panel.cli.parser import build_parser
-from synth_panel.main import main
+from althing.cli.parser import build_parser
+from althing.main import main
 
 # ---------------------------------------------------------------------------
 # Helpers

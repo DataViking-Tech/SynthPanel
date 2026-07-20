@@ -1,6 +1,6 @@
 """Render site/index.html.j2 -> site/index.html with the canonical version.
 
-Single source of truth is ``src/synth_panel/__version__.py``. The template
+Single source of truth is ``src/althing/__version__.py``. The template
 uses ``{{ version }}`` and ``{{ release_date }}`` placeholders; release date
 is parsed from CHANGELOG.md (line matching ``## [X.Y.Z] - YYYY-MM-DD``) and
 falls back to an empty string when the version has no dated CHANGELOG entry
@@ -26,10 +26,10 @@ CHANGELOG_PATH = REPO_ROOT / "CHANGELOG.md"
 def _read_version() -> str:
     # Read from source without importing the package, so this script works
     # before an editable install and in clean build environments.
-    src = (REPO_ROOT / "src" / "synth_panel" / "__version__.py").read_text()
+    src = (REPO_ROOT / "src" / "althing" / "__version__.py").read_text()
     match = re.search(r'^__version__\s*=\s*"([^"]+)"', src, re.MULTILINE)
     if not match:
-        raise RuntimeError(f"Could not parse __version__ from {REPO_ROOT}/src/synth_panel/__version__.py")
+        raise RuntimeError(f"Could not parse __version__ from {REPO_ROOT}/src/althing/__version__.py")
     return match.group(1)
 
 

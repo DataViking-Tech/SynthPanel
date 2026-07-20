@@ -1,4 +1,4 @@
-"""Guard the precompiled Tailwind stylesheet for synthpanel.dev (gh-563).
+"""Guard the precompiled Tailwind stylesheet for althing.dev (gh-563).
 
 The site used to load the Tailwind *Play* CDN (``cdn.tailwindcss.com``) on
 every page — a render-blocking ~300KB third-party script that Tailwind

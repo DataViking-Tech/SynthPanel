@@ -1,0 +1,357 @@
+"""OpenRouter provider.
+
+Routes requests to any model via OpenRouter's unified API. Most upstream
+providers are reached via OR's OpenAI-compatible chat-completions endpoint.
+
+For ``openrouter/anthropic/*`` traffic, the chat-completions path is
+**unsafe** for multimodal: OR's downstream conversion from OpenAI
+``image_url`` blocks to Anthropic image blocks silently drops the image
+during normalization (hq-m333). To keep multimodal blocks intact, we
+route Anthropic-bound traffic through OR's Anthropic-native
+``/v1/messages`` passthrough with an Anthropic-shape body.
+
+Requires OPENROUTER_API_KEY.
+"""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Iterator
+from typing import Any
+
+import httpx
+
+from althing.llm.errors import LLMError, LLMErrorCategory, llm_error_from_response
+from althing.llm.models import (
+    CompletionRequest,
+    CompletionResponse,
+    StreamEvent,
+)
+from althing.llm.providers._anthropic_format import (
+    ANTHROPIC_API_VERSION,
+    build_anthropic_body,
+    parse_anthropic_response,
+)
+from althing.llm.providers._anthropic_format import (
+    parse_sse_stream as parse_anthropic_sse_stream,
+)
+from althing.llm.providers._openai_format import (
+    build_openai_body,
+    parse_openai_response,
+    parse_openai_sse_stream,
+)
+from althing.llm.providers.base import LLMProvider, ProviderConfig
+
+OPENROUTER_CONFIG = ProviderConfig(
+    api_key_env="OPENROUTER_API_KEY",
+    base_url_env="OPENROUTER_BASE_URL",
+    default_base_url="https://openrouter.ai/api",
+    model_prefixes=("openrouter/",),
+    name="OpenRouter",
+    supports_seed=True,
+)
+
+
+def _openrouter_error_from_response(resp: httpx.Response) -> LLMError:
+    """Build an LLMError from an OpenRouter non-2xx response, surfacing
+    upstream provider details when present.
+
+    OpenRouter forwards typed errors from the downstream provider in the
+    body:
+
+        {"error": {"code": 429, "message": "Rate limit exceeded ...",
+                   "type": "rate_limit_error",
+                   "metadata": {"provider_name": "anthropic", ...}}}
+
+    When ``error.type`` and/or ``error.metadata.provider_name`` are
+    present, include them in the message so callers can tell which
+    downstream provider rejected the request and pick a recovery
+    strategy (wait vs. switch model). Falls back to the generic
+    ``llm_error_from_response`` message when the body is missing or
+    unparseable.
+    """
+    base = llm_error_from_response(resp, "OpenRouter")
+
+    try:
+        body = resp.json()
+    except (json.JSONDecodeError, ValueError):
+        return base
+    if not isinstance(body, dict):
+        return base
+
+    err = body.get("error")
+    if not isinstance(err, dict):
+        return base
+
+    upstream: str | None = None
+    metadata = err.get("metadata")
+    if isinstance(metadata, dict):
+        provider_name = metadata.get("provider_name")
+        if isinstance(provider_name, str) and provider_name:
+            upstream = provider_name
+
+    error_type = err.get("type") if isinstance(err.get("type"), str) else None
+    upstream_msg = err.get("message") if isinstance(err.get("message"), str) else None
+
+    if upstream is None and error_type is None and upstream_msg is None:
+        return base
+
+    label = f"OpenRouter (downstream: {upstream})" if upstream else "OpenRouter"
+    head = f"{label} API error {resp.status_code}"
+    if error_type:
+        head += f" [{error_type}]"
+    message = f"{head}: {upstream_msg}" if upstream_msg else head
+
+    return LLMError(
+        message,
+        base.category,
+        status_code=base.status_code,
+        retry_after=base.retry_after,
+        downstream_provider=upstream,
+    )
+
+
+def _strip_or_prefix(model: str) -> str:
+    """Strip the ``openrouter/`` routing prefix so the API sees the
+    upstream model ID (e.g. ``anthropic/claude-sonnet-4.5``)."""
+    for prefix in OPENROUTER_CONFIG.model_prefixes:
+        if model.startswith(prefix):
+            return model[len(prefix) :]
+    return model
+
+
+def _is_anthropic_routed(stripped_model: str) -> bool:
+    """Whether this model routes through Anthropic upstream on OpenRouter.
+
+    The ``openrouter/anthropic/*`` namespace is OR's convention for
+    Anthropic-upstream models. We branch off this prefix to use OR's
+    Anthropic Messages passthrough rather than the OpenAI-shape
+    chat-completions endpoint (hq-olrk).
+    """
+    return stripped_model.startswith("anthropic/")
+
+
+def _rebind_model(request: CompletionRequest, new_model: str) -> CompletionRequest:
+    """Return a copy of ``request`` with ``model`` replaced.
+
+    Other call sites already do this inline; centralised here so both
+    transport paths (chat-completions and messages-passthrough) remain
+    consistent in which fields they preserve.
+    """
+    return CompletionRequest(
+        model=new_model,
+        max_tokens=request.max_tokens,
+        messages=request.messages,
+        system=request.system,
+        tools=request.tools,
+        tool_choice=request.tool_choice,
+        stream=request.stream,
+        temperature=request.temperature,
+        top_p=request.top_p,
+        seed=request.seed,
+        cache_enabled=request.cache_enabled,
+        provider_routing=request.provider_routing,
+    )
+
+
+def _apply_provider_routing(body: dict[str, Any], request: CompletionRequest) -> None:
+    """Attach OpenRouter provider-routing preferences to the request body.
+
+    OpenRouter accepts a ``provider`` object (``ignore`` / ``order`` /
+    ``only`` / ...) on its endpoints. Used by the synthesis recovery
+    ladder to exclude a downstream provider that just rejected the call
+    (e.g. ``{"ignore": ["azure"]}``). No-op when unset.
+    """
+    if request.provider_routing:
+        body["provider"] = request.provider_routing
+
+
+class OpenRouterProvider(LLMProvider):
+    """OpenRouter provider with dual transport.
+
+    * ``openrouter/anthropic/*`` → OR's Anthropic Messages passthrough
+      (``/v1/messages``) with Anthropic-shape body. Preserves multimodal
+      image / document blocks that the OpenAI-shape conversion drops.
+    * Everything else → OR's OpenAI-compatible chat-completions endpoint
+      (``/v1/chat/completions``).
+    """
+
+    config = OPENROUTER_CONFIG
+
+    def __init__(self) -> None:
+        self._api_key = self.config.get_api_key()
+        self._base_url = self.config.get_base_url()
+
+    def _headers(self, *, anthropic_passthrough: bool = False) -> dict[str, str]:
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+        }
+        if anthropic_passthrough:
+            # OR's /v1/messages passthrough emits Anthropic-native shape;
+            # send the same anthropic-version the direct provider sends so
+            # downstream features (cache_control, tool_use) line up.
+            headers["anthropic-version"] = ANTHROPIC_API_VERSION
+        return headers
+
+    @staticmethod
+    def _strip_prefix(model: str) -> str:
+        return _strip_or_prefix(model)
+
+    # ------------------------------------------------------------------
+    # send()
+    # ------------------------------------------------------------------
+
+    def send(self, request: CompletionRequest) -> CompletionResponse:
+        stripped = self._strip_prefix(request.model)
+        if request.model != stripped:
+            request = _rebind_model(request, stripped)
+
+        if _is_anthropic_routed(stripped):
+            return self._send_anthropic(request)
+        return self._send_openai(request)
+
+    def _send_anthropic(self, request: CompletionRequest) -> CompletionResponse:
+        url = f"{self._base_url}/v1/messages"
+        body = build_anthropic_body(request)
+        _apply_provider_routing(body, request)
+        try:
+            resp = httpx.post(
+                url,
+                headers=self._headers(anthropic_passthrough=True),
+                json=body,
+                timeout=120.0,
+            )
+        except httpx.HTTPError as exc:
+            raise LLMError(
+                f"Transport error: {exc}",
+                LLMErrorCategory.TRANSPORT,
+                cause=exc,
+            ) from exc
+
+        if resp.status_code != 200:
+            raise _openrouter_error_from_response(resp)
+
+        try:
+            data = resp.json()
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise LLMError(
+                "Failed to parse OpenRouter Anthropic-passthrough response",
+                LLMErrorCategory.DESERIALIZATION,
+                cause=exc,
+            ) from exc
+
+        # Mirror _send_openai: pass the stripped upstream id as the
+        # fallback model. OR's response echoes the same form, so both
+        # transports produce a consistent ``response.model`` shape.
+        return parse_anthropic_response(data, request.model)
+
+    def _send_openai(self, request: CompletionRequest) -> CompletionResponse:
+        url = f"{self._base_url}/v1/chat/completions"
+        body = build_openai_body(request)
+        # Ask OpenRouter to always return the detailed usage block (including
+        # token counts and native cost). Without this flag, some upstream
+        # providers omit ``usage`` entirely, causing althing to compute
+        # $0 for the whole panel. See sp-2xy.
+        body["usage"] = {"include": True}
+        _apply_provider_routing(body, request)
+        try:
+            resp = httpx.post(url, headers=self._headers(), json=body, timeout=120.0)
+        except httpx.HTTPError as exc:
+            raise LLMError(
+                f"Transport error: {exc}",
+                LLMErrorCategory.TRANSPORT,
+                cause=exc,
+            ) from exc
+
+        if resp.status_code != 200:
+            raise _openrouter_error_from_response(resp)
+
+        try:
+            data = resp.json()
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise LLMError(
+                "Failed to parse OpenRouter response",
+                LLMErrorCategory.DESERIALIZATION,
+                cause=exc,
+            ) from exc
+
+        return parse_openai_response(data, request.model)
+
+    # ------------------------------------------------------------------
+    # stream()
+    # ------------------------------------------------------------------
+
+    def stream(self, request: CompletionRequest) -> Iterator[StreamEvent]:
+        stripped = self._strip_prefix(request.model)
+        if request.model != stripped:
+            request = _rebind_model(request, stripped)
+
+        if _is_anthropic_routed(stripped):
+            yield from self._stream_anthropic(request)
+        else:
+            yield from self._stream_openai(request)
+
+    def _stream_anthropic(self, request: CompletionRequest) -> Iterator[StreamEvent]:
+        # Force stream=True; drop seed (Anthropic Messages API has no seed,
+        # mirroring the direct provider's behaviour in anthropic.py).
+        request = CompletionRequest(
+            model=request.model,
+            max_tokens=request.max_tokens,
+            messages=request.messages,
+            system=request.system,
+            tools=request.tools,
+            tool_choice=request.tool_choice,
+            stream=True,
+            temperature=request.temperature,
+            top_p=request.top_p,
+            cache_enabled=request.cache_enabled,
+            provider_routing=request.provider_routing,
+        )
+        url = f"{self._base_url}/v1/messages"
+        body = build_anthropic_body(request)
+        _apply_provider_routing(body, request)
+        try:
+            with httpx.stream(
+                "POST",
+                url,
+                headers=self._headers(anthropic_passthrough=True),
+                json=body,
+                timeout=120.0,
+            ) as resp:
+                if resp.status_code != 200:
+                    resp.read()
+                    raise _openrouter_error_from_response(resp)
+                yield from parse_anthropic_sse_stream(resp.iter_lines())
+        except httpx.HTTPError as exc:
+            raise LLMError(
+                f"Transport error during stream: {exc}",
+                LLMErrorCategory.TRANSPORT,
+                cause=exc,
+            ) from exc
+
+    def _stream_openai(self, request: CompletionRequest) -> Iterator[StreamEvent]:
+        url = f"{self._base_url}/v1/chat/completions"
+        body = build_openai_body(request, stream=True)
+        # Mirror send(): ensure OpenRouter emits usage details in the final
+        # stream chunk so althing can track cost accurately.
+        body["usage"] = {"include": True}
+        _apply_provider_routing(body, request)
+        try:
+            with httpx.stream(
+                "POST",
+                url,
+                headers=self._headers(),
+                json=body,
+                timeout=120.0,
+            ) as resp:
+                if resp.status_code != 200:
+                    resp.read()
+                    raise _openrouter_error_from_response(resp)
+                yield from parse_openai_sse_stream(resp.iter_lines())
+        except httpx.HTTPError as exc:
+            raise LLMError(
+                f"Transport error during stream: {exc}",
+                LLMErrorCategory.TRANSPORT,
+                cause=exc,
+            ) from exc

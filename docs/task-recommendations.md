@@ -19,7 +19,7 @@
 | **AI / eval tooling discovery** | `ai-eval-buyers` (20) | `--best-model-for "Technology & Digital Life"` (SynthBench-driven) for single-model runs; `balanced-research-ensemble` for high-stakes | This audience reads benchmark numbers — match the model choice to leaderboard evidence |
 | **Dev-tool feedback / technical positioning** | `developer` (15) or `startup-founder` (15) | `technical-founder-research` (`sonnet:0.4,gpt-4o:0.4,gemini-2.5-pro:0.2`) | Technical buyers detect glibness; weight toward the higher-quality families |
 | **Hiring / talent / job-search messaging** | `recruiters-talent` (15) for employer-side, `job-seekers` (15) for candidate-side | `fast-cheap-preflight` for shape → `balanced-research-ensemble` for finals | Two distinct audiences — don't pool them; run separate panels |
-| **Healthcare messaging / patient comms** | `healthcare-patient` (15) | `balanced-research-ensemble` by default; **never single-model for clinical/compliance** copy | Stakes are high; ensemble + `synthpanel report` + human SME review is the floor |
+| **Healthcare messaging / patient comms** | `healthcare-patient` (15) | `balanced-research-ensemble` by default; **never single-model for clinical/compliance** copy | Stakes are high; ensemble + `althing report` + human SME review is the floor |
 | **Education / student outreach** | `students` (15) | `fast-cheap-preflight` for early loops; `consumer-mass-appeal` weighted split for finals | Age-skewed audience; the weighted split keeps cost down |
 | **Founder / early-stage hypothesis testing** | `startup-founder` (15) | `fast-cheap-preflight` is enough until you're charging money | Founders forgive directional answers; save the ensemble budget for paying-customer questions |
 | **Pre-launch / board-deck / go-no-go** | Audience-appropriate pack (above) | `high-stakes-validation` 4-way ensemble + `--blend` | The one place you *should* spend on the full ensemble + blend |
@@ -88,8 +88,8 @@ pack name); the MCP / SDK surfaces accept the pack name directly.
 ### Product positioning — fast iteration
 
 ```bash
-synthpanel pack export product-research > /tmp/product-research.yaml
-synthpanel panel run \
+althing pack export product-research > /tmp/product-research.yaml
+althing panel run \
   --personas /tmp/product-research.yaml \
   --instrument /tmp/positioning.yaml \
   --model haiku \
@@ -112,7 +112,7 @@ synthpanel panel run \
 ### Product positioning — pre-publication ensemble
 
 ```bash
-synthpanel panel run \
+althing panel run \
   --personas /tmp/product-research.yaml \
   --instrument /tmp/positioning.yaml \
   --models 'haiku,sonnet,gemini-2.5-flash' \
@@ -135,8 +135,8 @@ synthpanel panel run \
 ### Enterprise GTM — skeptical ensemble
 
 ```bash
-synthpanel pack export skeptical-executives > /tmp/skeptical-executives.yaml
-synthpanel panel run \
+althing pack export skeptical-executives > /tmp/skeptical-executives.yaml
+althing panel run \
   --personas /tmp/skeptical-executives.yaml \
   --instrument /tmp/gtm-pitch.yaml \
   --models 'sonnet,gpt-4o,gemini-2.5-pro' \
@@ -160,8 +160,8 @@ synthpanel panel run \
 ### Trust / credibility audit — hostile audience
 
 ```bash
-synthpanel pack export market-research-critics > /tmp/market-research-critics.yaml
-synthpanel panel run \
+althing pack export market-research-critics > /tmp/market-research-critics.yaml
+althing panel run \
   --personas /tmp/market-research-critics.yaml \
   --instrument /tmp/methodology-claim.yaml \
   --models 'sonnet,gpt-4o,gemini-2.5-pro' \
@@ -172,8 +172,8 @@ synthpanel panel run \
 ### AI / eval discovery — SynthBench-guided single model
 
 ```bash
-synthpanel pack export ai-eval-buyers > /tmp/ai-eval-buyers.yaml
-synthpanel panel run \
+althing pack export ai-eval-buyers > /tmp/ai-eval-buyers.yaml
+althing panel run \
   --personas /tmp/ai-eval-buyers.yaml \
   --instrument /tmp/eval-tool-positioning.yaml \
   --best-model-for "Technology & Digital Life" \
@@ -188,15 +188,15 @@ topic and prints its choice to stderr before the run (see
 ### Healthcare patient messaging — ensemble + report
 
 ```bash
-synthpanel pack export healthcare-patient > /tmp/healthcare-patient.yaml
-synthpanel panel run \
+althing pack export healthcare-patient > /tmp/healthcare-patient.yaml
+althing panel run \
   --personas /tmp/healthcare-patient.yaml \
   --instrument /tmp/patient-comms.yaml \
   --models 'sonnet,gpt-4o,gemini-2.5-pro' \
   --blend \
   --save --output-format json \
 | jq -r '.result_id' \
-| xargs synthpanel report --output patient-comms-panel.md
+| xargs althing report --output patient-comms-panel.md
 ```
 
 > **Never run healthcare comms on a single cheap model.** Use the
@@ -210,13 +210,13 @@ panels; pooling them dilutes the signal.
 
 ```bash
 # Employer side
-synthpanel pack export recruiters-talent > /tmp/recruiters-talent.yaml
-synthpanel panel run --personas /tmp/recruiters-talent.yaml \
+althing pack export recruiters-talent > /tmp/recruiters-talent.yaml
+althing panel run --personas /tmp/recruiters-talent.yaml \
   --instrument /tmp/hiring-pitch.yaml --model haiku --save --output-format json
 
 # Candidate side
-synthpanel pack export job-seekers > /tmp/job-seekers.yaml
-synthpanel panel run --personas /tmp/job-seekers.yaml \
+althing pack export job-seekers > /tmp/job-seekers.yaml
+althing panel run --personas /tmp/job-seekers.yaml \
   --instrument /tmp/hiring-pitch.yaml --model haiku --save --output-format json
 ```
 
@@ -255,9 +255,9 @@ calibration step that closes the loop.
 The convenience flags the upstream issue floats —
 
 ```bash
-synthpanel pack list --recommend
-synthpanel models recommend --task positioning
-synthpanel recommend --task enterprise-gtm
+althing pack list --recommend
+althing models recommend --task positioning
+althing recommend --task enterprise-gtm
 ```
 
 — **do not exist yet.** This page is the agent-facing surface for

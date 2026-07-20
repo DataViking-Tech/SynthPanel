@@ -4,7 +4,7 @@
 These tests pin the on-disk contract so a future refactor can't silently
 break readback or shift the format version. Every test isolates state via
 ``SYNTH_PANEL_ATTACHMENT_DIR`` / ``SYNTH_PANEL_DATA_DIR`` overrides — no
-real ``~/.synthpanel`` is touched.
+real ``~/.althing`` is touched.
 """
 
 from __future__ import annotations
@@ -15,13 +15,13 @@ from pathlib import Path
 
 import pytest
 
-from synth_panel.attachments.store import (
+from althing.attachments.store import (
     attachments_dir,
     read_blob,
     refs_path,
     write_blob,
 )
-from synth_panel.structured.schemas import ANNOTATED_CHOICE_SCHEMA, get_schema, is_known_schema
+from althing.structured.schemas import ANNOTATED_CHOICE_SCHEMA, get_schema, is_known_schema
 from tests.attachments.fixtures import tiny_jpeg, tiny_pdf_text, tiny_png
 
 # ---------------------------------------------------------------------------
@@ -104,7 +104,7 @@ class TestCASRoundTrip:
 
     def test_invalid_short_digest_rejected(self, isolated_cas: Path):
         # _shard_path requires sha256[:2]; a 1-char digest cannot be sharded.
-        from synth_panel.attachments.store import _shard_path
+        from althing.attachments.store import _shard_path
 
         with pytest.raises(ValueError, match="too short"):
             _shard_path(isolated_cas, "a", "")
@@ -121,7 +121,7 @@ class TestCASRoundTrip:
 
 class TestRefsJsonAndFormatVersion:
     def test_save_without_attachments_keeps_version_1_0(self, isolated_data: Path):
-        from synth_panel.mcp.data import get_panel_result, save_panel_result
+        from althing.mcp.data import get_panel_result, save_panel_result
 
         rid = save_panel_result(
             results=[{"persona": "P", "responses": [{"text": "ok"}]}],
@@ -139,7 +139,7 @@ class TestRefsJsonAndFormatVersion:
         assert not sidecar.exists()
 
     def test_save_with_attachments_bumps_to_1_1_and_writes_refs(self, isolated_data: Path):
-        from synth_panel.mcp.data import get_panel_result, save_panel_result
+        from althing.mcp.data import get_panel_result, save_panel_result
 
         digest = hashlib.sha256(b"img").hexdigest()
         atts = {
@@ -181,7 +181,7 @@ class TestRefsJsonAndFormatVersion:
         assert result_loaded["attachments"] == atts
 
     def test_get_with_load_attachments_handles_missing_sidecar(self, isolated_data: Path):
-        from synth_panel.mcp.data import get_panel_result, save_panel_result
+        from althing.mcp.data import get_panel_result, save_panel_result
 
         rid = save_panel_result(
             results=[{"persona": "P", "responses": []}],
@@ -201,7 +201,7 @@ class TestRefsJsonAndFormatVersion:
         assert rp == tmp_path / "result-20260509-001.attachments" / "refs.json"
 
     def test_list_panel_results_skips_attachments_sidecar(self, isolated_data: Path):
-        from synth_panel.mcp.data import list_panel_results, save_panel_result
+        from althing.mcp.data import list_panel_results, save_panel_result
 
         rid = save_panel_result(
             results=[{"persona": "P", "responses": []}],

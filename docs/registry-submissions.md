@@ -4,7 +4,7 @@
 **Status:** Prep artifacts committed; human-only submit steps below
 **Last updated:** 2026-04-19
 
-This is a checklist for submitting SynthPanel to major MCP registries. The
+This is a checklist for submitting Althing to major MCP registries. The
 code-doable prep work is already done (`glama.json`, `server.json`); the
 remaining steps require interactive auth or web forms and must be completed
 by a maintainer.
@@ -23,12 +23,12 @@ by a maintainer.
 
 **Long description (for forms with room):**
 
-> SynthPanel is a lightweight, LLM-agnostic research harness for running
+> Althing is a lightweight, LLM-agnostic research harness for running
 > synthetic focus groups using AI personas. Define personas in YAML, define
 > your research instrument in YAML, and run against any LLM — from your
 > terminal, from a pipeline, or from an AI agent's MCP tool call. Includes
 > a 12-tool MCP server for Claude Code / Cursor / Windsurf. MIT licensed.
-> Benchmark score: SPS 0.90 on SynthBench. pip install synthpanel[mcp].
+> Benchmark score: SPS 0.90 on SynthBench. pip install althing[mcp].
 
 **Category / tags (where supported):**
 
@@ -38,10 +38,10 @@ by a maintainer.
 
 **Links:**
 
-- Site: <https://synthpanel.dev>
-- Repo: <https://github.com/DataViking-Tech/SynthPanel>
-- PyPI: <https://pypi.org/project/synthpanel/>
-- MCP docs: <https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/mcp.md>
+- Site: <https://althing.dev>
+- Repo: <https://github.com/DataViking-Tech/Althing>
+- PyPI: <https://pypi.org/project/althing/>
+- MCP docs: <https://github.com/DataViking-Tech/Althing/blob/main/docs/mcp.md>
 - Benchmark: <https://synthbench.org>
 
 ---
@@ -50,7 +50,7 @@ by a maintainer.
 
 **Status:** Prep committed · Claim flow required
 
-Glama auto-indexes GitHub repos with the `mcp` topic; SynthPanel's repo
+Glama auto-indexes GitHub repos with the `mcp` topic; Althing's repo
 already has the topic set, so the listing should appear on its own. To
 claim ownership (required to edit the listing, configure a Docker image,
 see usage reports), we've committed `glama.json` to the repo root with
@@ -60,14 +60,14 @@ both org admins listed as maintainers.
 
 1. Sign in at <https://glama.ai> with GitHub (as `the-data-viking` or
    `openclaw-dv`). Either admin works since both are in `glama.json`.
-2. Search for `synthpanel` in the registry. If the server appears:
+2. Search for `althing` in the registry. If the server appears:
    visit its page → **Claim server** → follow the GitHub OAuth flow.
 3. If the server does **not** appear yet, use the **Add Server** button
    at <https://glama.ai/mcp/servers> and paste
-   `https://github.com/DataViking-Tech/SynthPanel`. Glama will index
+   `https://github.com/DataViking-Tech/Althing`. Glama will index
    within minutes and the claim flow becomes available.
 4. Once claimed, update the server metadata:
-   - **Title:** SynthPanel
+   - **Title:** Althing
    - **Tagline:** (use the one-liner above)
    - **Description:** (use the standard description above)
 5. Record the live URL below.
@@ -89,7 +89,7 @@ either through the `smithery` CLI (authenticated via Smithery API key) or
 through Smithery's web UI.
 
 A `smithery.yaml` manifest is useful only for Smithery's hosted/bundled
-deployment modes (JS module upload, MCPB bundle, container build). SynthPanel
+deployment modes (JS module upload, MCPB bundle, container build). Althing
 ships as a PyPI package invoked via `uvx`, so the appropriate submission path
 is **URL-based** — point Smithery at the GitHub repo; it will scan and index
 the server metadata (tools, README, install instructions).
@@ -105,14 +105,14 @@ the server metadata (tools, README, install instructions).
 3. Install and run the Smithery CLI to publish the repo URL:
    ```bash
    npx @smithery/cli mcp publish \
-     https://github.com/DataViking-Tech/SynthPanel \
-     -n synthpanel
+     https://github.com/DataViking-Tech/Althing \
+     -n althing
    ```
-   The CLI registers SynthPanel under the qualified name `synthpanel` and
+   The CLI registers Althing under the qualified name `althing` and
    scans the linked repo for metadata. If the CLI path fails, fall back
    to the web submission form at <https://smithery.ai/new>.
 4. Edit the listing via the Smithery dashboard to set:
-   - **Title:** SynthPanel
+   - **Title:** Althing
    - **Tagline:** (use the one-liner above)
    - **Description:** (use the standard description above)
    - **Tags:** research, survey, personas, llm, mcp, python
@@ -122,7 +122,7 @@ the server metadata (tools, README, install instructions).
 
 **If Smithery requires a deployable bundle (MCPB / container) rather than a
 URL-only listing:** this escalates from a ~10 min submission into a packaging
-project. File a separate bead (`Package SynthPanel as MCPB bundle for
+project. File a separate bead (`Package Althing as MCPB bundle for
 Smithery hosted deploy`) before attempting — do not improvise the packaging
 inside this submission sweep.
 
@@ -139,8 +139,8 @@ auto-ingests from it daily, so a single publish here yields both
 listings. The `server.json` manifest is already committed at the repo
 root and describes:
 
-- PyPI package `synthpanel`, version 0.9.1
-- `runtimeHint: uvx` → clients run `uvx synthpanel[mcp] synthpanel mcp-serve`
+- PyPI package `althing`, version 0.9.1
+- `runtimeHint: uvx` → clients run `uvx althing[mcp] althing mcp-serve`
 - stdio transport
 - All four optional API-key env vars
 
@@ -162,7 +162,7 @@ root and describes:
    mcp-publisher publish
    ```
    The CLI reads `./server.json` automatically.
-4. Verify at <https://registry.modelcontextprotocol.io/v0/servers?search=synthpanel>.
+4. Verify at <https://registry.modelcontextprotocol.io/v0/servers?search=althing>.
 5. Record the listing URL below.
 
 **Recorded URL:** `__ TBD — fill after publish __`
@@ -186,10 +186,10 @@ should appear within 7 days with no additional action.
 **Human steps (only if the auto-ingest doesn't pick it up):**
 
 1. Wait 7–10 days after the Official MCP Registry publish.
-2. Search <https://www.pulsemcp.com/servers> for `synthpanel`.
+2. Search <https://www.pulsemcp.com/servers> for `althing`.
 3. If missing, submit manually at <https://www.pulsemcp.com/submit>:
    - **Type:** Server
-   - **URL:** `https://github.com/DataViking-Tech/SynthPanel`
+   - **URL:** `https://github.com/DataViking-Tech/Althing`
 4. For metadata adjustments, email `[email protected]`.
 5. Record the URL below.
 
@@ -248,7 +248,7 @@ remains out of scope.)
 
 **Recommendation:** skip for this submission sweep. If Klavis listing
 becomes strategically important, file a separate bead scoped as
-"Evaluate + implement Klavis integration for SynthPanel" (estimated:
+"Evaluate + implement Klavis integration for Althing" (estimated:
 days, not hours).
 
 ---
@@ -264,7 +264,7 @@ submissions go live, to allow indexing + propagation. Test queries:
 - `"python mcp server for user research"`
 
 Run these on ChatGPT, Claude, Perplexity, and Gemini. Score
-SynthPanel's surface: cited / mentioned / missing. File as a separate
+Althing's surface: cited / mentioned / missing. File as a separate
 bead (the test itself is deliverable-producing work).
 
 ---

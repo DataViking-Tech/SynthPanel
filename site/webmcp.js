@@ -1,19 +1,19 @@
-// WebMCP browser registration for synthpanel.dev.
+// WebMCP browser registration for althing.dev.
 //
 // Implements the WebMCP browser API surface
 // (https://webmachinelearning.github.io/webmcp/): when the page is
 // loaded inside a browser/agent that exposes
 // ``navigator.modelContext.provideContext``, this module advertises
-// the four primary synthpanel tools so the host agent can discover
+// the four primary althing tools so the host agent can discover
 // them without an MCP stdio connection.
 //
 // Tool surface mirrors ``site/.well-known/mcp/server-card.json`` and
-// the canonical Python MCP server in ``src/synth_panel/mcp/server.py``.
+// the canonical Python MCP server in ``src/althing/mcp/server.py``.
 // Names, descriptions, and input schemas track the four headline
 // tools: ``run_panel``, ``run_quick_poll``, ``run_prompt``, and
 // ``extend_panel``.
 //
-// There is no public synthpanel HTTP API at synthpanel.dev — the site
+// There is no public althing HTTP API at althing.dev — the site
 // is a static Cloudflare Pages deployment. Each tool's ``execute``
 // callback therefore returns a typed error envelope
 // (``{ ok: false, error: 'browser-bridge-not-available' }``) so host
@@ -219,8 +219,8 @@ const BRIDGE_UNAVAILABLE = Object.freeze({
   ok: false,
   error: "browser-bridge-not-available",
   message:
-    "synthpanel.dev does not yet expose a public HTTP bridge for these tools. Run the synthpanel MCP server locally (`pip install synthpanel[mcp]` then add the stdio config to your MCP host) for live tool execution.",
-  docs: "https://synthpanel.dev/mcp",
+    "althing.dev does not yet expose a public HTTP bridge for these tools. Run the althing MCP server locally (`pip install althing[mcp]` then add the stdio config to your MCP host) for live tool execution.",
+  docs: "https://althing.dev/mcp",
 });
 
 function makeExecute(name) {

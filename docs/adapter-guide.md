@@ -1,6 +1,6 @@
-# Writing a synthpanel LLM Adapter
+# Writing a althing LLM Adapter
 
-This guide walks through adding support for a new LLM provider to synthpanel by writing an **adapter** — a thin translator between synthpanel's internal request/response model and a provider's HTTP API. It is the highest-leverage way to contribute: one adapter makes every synthpanel feature (panels, MCP tools, ensemble blending, budgeting, branching) instantly available against a new backend.
+This guide walks through adding support for a new LLM provider to althing by writing an **adapter** — a thin translator between althing's internal request/response model and a provider's HTTP API. It is the highest-leverage way to contribute: one adapter makes every althing feature (panels, MCP tools, ensemble blending, budgeting, branching) instantly available against a new backend.
 
 The canonical behavioral contract is [SPEC.md §2 — LLM Client Abstraction](../SPEC.md). This guide is the hands-on companion: what files to touch, what `LLMProvider` looks like in code, and a complete worked example (a hypothetical Mistral adapter).
 
@@ -10,20 +10,20 @@ The canonical behavioral contract is [SPEC.md §2 — LLM Client Abstraction](..
 
 ### What is an adapter?
 
-An adapter is a Python module in `src/synth_panel/llm/providers/` that:
+An adapter is a Python module in `src/althing/llm/providers/` that:
 
 - Subclasses `LLMProvider` (from `base.py`)
 - Implements two methods: `send()` (blocking) and `stream()` (iterator of SSE events)
 - Declares a `ProviderConfig` describing its env vars, base URL, and model prefixes
 - Gets registered in the provider resolver (`client.py`) so model strings like `"mistral-large-latest"` route to it automatically
 
-The rest of synthpanel — orchestrator, cost tracker, MCP server, CLI — never talks to the provider directly. It only holds an `LLMClient`, which picks the right adapter by inspecting the model identifier and the environment.
+The rest of althing — orchestrator, cost tracker, MCP server, CLI — never talks to the provider directly. It only holds an `LLMClient`, which picks the right adapter by inspecting the model identifier and the environment.
 
 ### When would you write one?
 
 Write a new adapter when:
 
-- The provider exposes its own API shape (Anthropic-style, Gemini-style) that isn't OpenAI-compatible. Adapters like `anthropic.py` and `gemini.py` translate native formats into synthpanel's internal model.
+- The provider exposes its own API shape (Anthropic-style, Gemini-style) that isn't OpenAI-compatible. Adapters like `anthropic.py` and `gemini.py` translate native formats into althing's internal model.
 - The provider is OpenAI-compatible but warrants a first-class entry — a dedicated env var, prefix-based routing, a specific default base URL. OpenRouter and xAI both follow this pattern: they reuse `_openai_format.py` helpers but live as their own module for discoverability and config isolation.
 - The provider needs adapter-specific behavior (auth refresh, response translation quirks, custom streaming framing) that shouldn't pollute the generic `openai_compat` provider.
 
@@ -31,18 +31,18 @@ If the provider is plain-vanilla OpenAI-compatible and doesn't need a dedicated 
 
 ## 2. The LLMProvider base class
 
-Source: [`src/synth_panel/llm/providers/base.py`](../src/synth_panel/llm/providers/base.py)
+Source: [`src/althing/llm/providers/base.py`](../src/althing/llm/providers/base.py)
 
 Every adapter implements this interface:
 
 ```python
 from collections.abc import Iterator
-from synth_panel.llm.models import (
+from althing.llm.models import (
     CompletionRequest,
     CompletionResponse,
     StreamEvent,
 )
-from synth_panel.llm.providers.base import LLMProvider, ProviderConfig
+from althing.llm.providers.base import LLMProvider, ProviderConfig
 
 
 class MyProvider(LLMProvider):
@@ -77,7 +77,7 @@ Three helpers come for free:
 
 ### Data models
 
-`CompletionRequest`, `CompletionResponse`, `StreamEvent`, `TokenUsage`, and content block types live in [`src/synth_panel/llm/models.py`](../src/synth_panel/llm/models.py). They are provider-agnostic — your job is to translate to and from the provider's wire format.
+`CompletionRequest`, `CompletionResponse`, `StreamEvent`, `TokenUsage`, and content block types live in [`src/althing/llm/models.py`](../src/althing/llm/models.py). They are provider-agnostic — your job is to translate to and from the provider's wire format.
 
 The four token buckets (`input_tokens`, `output_tokens`, `cache_write_tokens`, `cache_read_tokens`) feed the cost tracker. If the provider doesn't expose cache counters, leave them at `0`.
 
@@ -87,7 +87,7 @@ A hypothetical worked example. Mistral exposes an OpenAI-compatible chat complet
 
 ### Step 1 — Create the module
 
-`src/synth_panel/llm/providers/mistral.py`:
+`src/althing/llm/providers/mistral.py`:
 
 ```python
 """Mistral provider (OpenAI-compatible chat completions).
@@ -102,14 +102,14 @@ from collections.abc import Iterator
 
 import httpx
 
-from synth_panel.llm.errors import LLMError, LLMErrorCategory, classify_http_status
-from synth_panel.llm.models import CompletionRequest, CompletionResponse, StreamEvent
-from synth_panel.llm.providers._openai_format import (
+from althing.llm.errors import LLMError, LLMErrorCategory, classify_http_status
+from althing.llm.models import CompletionRequest, CompletionResponse, StreamEvent
+from althing.llm.providers._openai_format import (
     build_openai_body,
     parse_openai_response,
     parse_openai_sse_stream,
 )
-from synth_panel.llm.providers.base import LLMProvider, ProviderConfig
+from althing.llm.providers.base import LLMProvider, ProviderConfig
 
 MISTRAL_CONFIG = ProviderConfig(
     api_key_env="MISTRAL_API_KEY",
@@ -215,10 +215,10 @@ If the provider uses Anthropic-style events instead of OpenAI SSE, you'll need a
 
 ### Step 4 — Register in the provider resolver
 
-`src/synth_panel/llm/client.py`:
+`src/althing/llm/client.py`:
 
 ```python
-from synth_panel.llm.providers.mistral import MISTRAL_CONFIG, MistralProvider
+from althing.llm.providers.mistral import MISTRAL_CONFIG, MistralProvider
 
 _PROVIDER_REGISTRY: list[tuple[ProviderConfig, type[LLMProvider]]] = [
     (ANTHROPIC_CONFIG, AnthropicProvider),
@@ -236,7 +236,7 @@ Also update the "no credentials" error message at the bottom of `_resolve_provid
 
 ### Step 5 — Env var convention
 
-synthpanel follows a two-variable convention per provider:
+althing follows a two-variable convention per provider:
 
 | Variable | Purpose |
 |----------|---------|
@@ -245,7 +245,7 @@ synthpanel follows a two-variable convention per provider:
 
 For Mistral: `MISTRAL_API_KEY` and `MISTRAL_BASE_URL`. Keep the naming consistent — users, CI configs, and the MCP server env block all rely on the `<NAME>_API_KEY` pattern.
 
-If your provider supports an alias (e.g. `SYNTHPANEL_MODEL_ALIASES='{"mistral-small": "mistral-small-latest"}'`), document it but do not hardcode new aliases in `aliases.py` unless the short name is already well-known across the ecosystem (as `haiku`, `sonnet`, `gemini` are).
+If your provider supports an alias (e.g. `ALTHING_MODEL_ALIASES='{"mistral-small": "mistral-small-latest"}'`), document it but do not hardcode new aliases in `aliases.py` unless the short name is already well-known across the ecosystem (as `haiku`, `sonnet`, `gemini` are).
 
 ### Step 6 — Unit tests
 
@@ -266,8 +266,8 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from synth_panel.llm.errors import LLMError, LLMErrorCategory
-from synth_panel.llm.models import CompletionRequest, InputMessage, TextBlock
+from althing.llm.errors import LLMError, LLMErrorCategory
+from althing.llm.models import CompletionRequest, InputMessage, TextBlock
 
 
 def _request(model: str = "mistral-large-latest") -> CompletionRequest:
@@ -303,7 +303,7 @@ def _mock_http(data: dict, status_code: int = 200) -> MagicMock:
 class TestMistralProviderSend:
     def test_happy_path(self, monkeypatch):
         monkeypatch.setenv("MISTRAL_API_KEY", "test-key")
-        from synth_panel.llm.providers.mistral import MistralProvider
+        from althing.llm.providers.mistral import MistralProvider
 
         provider = MistralProvider()
         with patch("httpx.post", return_value=_mock_http(_ok_response())):
@@ -315,7 +315,7 @@ class TestMistralProviderSend:
 
     def test_missing_api_key(self, monkeypatch):
         monkeypatch.delenv("MISTRAL_API_KEY", raising=False)
-        from synth_panel.llm.providers.mistral import MistralProvider
+        from althing.llm.providers.mistral import MistralProvider
 
         with pytest.raises(LLMError) as exc_info:
             MistralProvider()
@@ -323,7 +323,7 @@ class TestMistralProviderSend:
 
     def test_rate_limit_is_retryable(self, monkeypatch):
         monkeypatch.setenv("MISTRAL_API_KEY", "test-key")
-        from synth_panel.llm.providers.mistral import MistralProvider
+        from althing.llm.providers.mistral import MistralProvider
 
         provider = MistralProvider()
         with patch("httpx.post", return_value=_mock_http({}, status_code=429)):
@@ -333,7 +333,7 @@ class TestMistralProviderSend:
 
     def test_bad_request_is_not_retryable(self, monkeypatch):
         monkeypatch.setenv("MISTRAL_API_KEY", "test-key")
-        from synth_panel.llm.providers.mistral import MistralProvider
+        from althing.llm.providers.mistral import MistralProvider
 
         provider = MistralProvider()
         with patch("httpx.post", return_value=_mock_http({}, status_code=400)):
@@ -343,7 +343,7 @@ class TestMistralProviderSend:
 
     def test_transport_error_raises_transport_category(self, monkeypatch):
         monkeypatch.setenv("MISTRAL_API_KEY", "test-key")
-        from synth_panel.llm.providers.mistral import MistralProvider
+        from althing.llm.providers.mistral import MistralProvider
 
         provider = MistralProvider()
         with patch("httpx.post", side_effect=httpx.ConnectError("boom")):
@@ -354,7 +354,7 @@ class TestMistralProviderSend:
     def test_base_url_override(self, monkeypatch):
         monkeypatch.setenv("MISTRAL_API_KEY", "test-key")
         monkeypatch.setenv("MISTRAL_BASE_URL", "https://proxy.example.com")
-        from synth_panel.llm.providers.mistral import MistralProvider
+        from althing.llm.providers.mistral import MistralProvider
 
         provider = MistralProvider()
         assert provider._base_url == "https://proxy.example.com"
@@ -388,7 +388,7 @@ The acceptance marker is load-bearing: [`tests/conftest.py`](../tests/conftest.p
 
 ## 4. Provider resolution
 
-Source: `LLMClient._resolve_provider()` in [`src/synth_panel/llm/client.py`](../src/synth_panel/llm/client.py).
+Source: `LLMClient._resolve_provider()` in [`src/althing/llm/client.py`](../src/althing/llm/client.py).
 
 The flow on `client.send(request)`:
 
@@ -405,7 +405,7 @@ Providers are cached per-canonical-model-string inside the client, so `_resolve_
 |---------|---------|-------|
 | `<NAME>_API_KEY` | `MISTRAL_API_KEY` | Required. Missing → `LLMError(MISSING_CREDENTIALS)`. |
 | `<NAME>_BASE_URL` | `MISTRAL_BASE_URL` | Optional. Overrides `default_base_url`. Users set this for proxies, VPC endpoints, or local mocks. |
-| `SYNTHPANEL_MODEL_ALIASES` | `'{"m-sm":"mistral-small-latest"}'` | Global. Users add their own aliases without touching code. |
+| `ALTHING_MODEL_ALIASES` | `'{"m-sm":"mistral-small-latest"}'` | Global. Users add their own aliases without touching code. |
 
 If your provider needs additional config (a region, a project ID, an organization header), use the same `<NAME>_*` prefix. Do not introduce unrelated variables — the MCP `env` block in editor configs is a flat dict, and convention is the only thing keeping it legible.
 
@@ -450,7 +450,7 @@ Work through this checklist before opening a PR:
 - [ ] Unit tests cover: happy path, missing key, 429, 400, transport error, base URL override, streaming, deserialization failure
 - [ ] Acceptance test present (skipped when API key is missing)
 - [ ] `ruff check src/ tests/` clean
-- [ ] `mypy src/synth_panel/` clean
+- [ ] `mypy src/althing/` clean
 - [ ] `CHANGELOG.md` `[Unreleased] → Added` entry
 - [ ] `README.md` provider table row added (alphabetized inside the family, or placed beside the closest cousin)
 - [ ] **SynthBench submission** (strongly recommended for adapter PRs) — run your adapter against SynthBench benchmarks and link the results in the PR description. See <https://dataviking-tech.github.io/synthbench/submit/>.

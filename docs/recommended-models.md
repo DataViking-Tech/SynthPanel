@@ -1,6 +1,6 @@
 # Recommended Models (SynthBench-driven)
 
-SynthPanel can consult the [SynthBench](https://synthbench.org) public
+Althing can consult the [SynthBench](https://synthbench.org) public
 leaderboard to pick the best-ranked model for the kind of research you're
 running. This closes the credibility loop: scores measured on the bench
 drive defaults in the harness.
@@ -9,20 +9,20 @@ drive defaults in the harness.
 
 ```bash
 # Use the top-ranked model for a specific topic
-synthpanel panel run \
+althing panel run \
   --personas examples/personas.yaml \
   --instrument pricing-discovery \
   --var problem="choosing a project management tool" \
   --best-model-for "Economy & Work"
 
 # Top-ranked model across a whole dataset (by SPS)
-synthpanel panel run ... --best-model-for ":globalopinionqa"
+althing panel run ... --best-model-for ":globalopinionqa"
 
 # Topic within a non-default dataset
-synthpanel panel run ... --best-model-for "Technology & Digital Life:globalopinionqa"
+althing panel run ... --best-model-for "Technology & Digital Life:globalopinionqa"
 ```
 
-Before the run, SynthPanel prints a recommendation line to stderr so you
+Before the run, Althing prints a recommendation line to stderr so you
 can cancel and override:
 
 ```
@@ -48,33 +48,33 @@ recommendation will drift from leaderboard reality after the snapshot.
 
 ## How it works
 
-1. On first use, SynthPanel fetches
+1. On first use, Althing fetches
    `https://synthbench.org/data/leaderboard.json` and caches it at
-   `~/.synthpanel/synthbench-cache.json` for 24 hours.
+   `~/.althing/synthbench-cache.json` for 24 hours.
 2. Entries are filtered to the requested `dataset` (default
    `globalopinionqa`), then ranked — by the named topic's score when a
    topic is given, otherwise by overall SPS.
-3. The top entry's `model` field is resolved through SynthPanel's alias
+3. The top entry's `model` field is resolved through Althing's alias
    table (so `"haiku"` becomes `claude-haiku-4-5-20251001`) and stamped
    onto `--model` for the rest of the pipeline.
 
 > **Note (GH #494, v1.5.1+):** The canonical leaderboard URL is currently
-> 404'ing upstream. SynthPanel ships a **bundled snapshot** (taken
-> 2026-04-24) at `synth_panel/data/synthbench-snapshot.json` and falls
+> 404'ing upstream. Althing ships a **bundled snapshot** (taken
+> 2026-04-24) at `althing/data/synthbench-snapshot.json` and falls
 > back to it when the live URL is unreachable AND no user cache exists.
 > The fallback produces a real recommendation on stderr and tags the
 > entry as `source=bundled-snapshot`. To override with your own mirror,
-> set `SYNTHPANEL_SYNTHBENCH_URL=...`.
+> set `ALTHING_SYNTHBENCH_URL=...`.
 
 ### Environment knobs
 
-- `SYNTHPANEL_SYNTHBENCH_URL` — override the fetch URL (useful for
+- `ALTHING_SYNTHBENCH_URL` — override the fetch URL (useful for
   internal mirrors, forks, or air-gapped environments — and the
   documented workaround for the GH #494 outage).
-- `SYNTHPANEL_SYNTHBENCH_OFFLINE=1` — never hit the network; use the
+- `ALTHING_SYNTHBENCH_OFFLINE=1` — never hit the network; use the
   cache if present, otherwise the bundled snapshot, otherwise skip the
   recommendation.
-- `SYNTHPANEL_SYNTHBENCH_REFRESH=1` — bypass the 24h TTL and force a
+- `ALTHING_SYNTHBENCH_REFRESH=1` — bypass the 24h TTL and force a
   fresh fetch (ignores the cached ETag).
 - `SYNTH_PANEL_DATA_DIR` — override the data dir where the cache lives.
 
@@ -89,13 +89,13 @@ on stderr so agents and humans can both see how degraded the answer is.
 - **Stale cache + 304** → conditional GET confirms cache is current.
   Recommendation tagged `source=live` and the cache timestamp is
   refreshed. No stderr noise.
-- **Stale cache + network error** → stderr `synthpanel: synthbench
+- **Stale cache + network error** → stderr `althing: synthbench
   fetch failed (…); using stale cache from <ISO> (source=stale-cache)`.
   Recommendation tagged `source=stale-cache`.
 - **No cache + network error** → bundled snapshot fallback (sy-nkh):
-  stderr `synthpanel: synthbench unavailable (…); using bundled
+  stderr `althing: synthbench unavailable (…); using bundled
   snapshot from YYYY-MM-DD (source=bundled-snapshot) — override the URL
-  via $SYNTHPANEL_SYNTHBENCH_URL if you have a mirror …`. Recommendation
+  via $ALTHING_SYNTHBENCH_URL if you have a mirror …`. Recommendation
   tagged `source=bundled-snapshot` and the CLI also emits a follow-up
   note explaining the implication and the override path.
 - **Offline mode + fresh cache** → recommendation tagged
@@ -117,13 +117,13 @@ explicit instead of pretending the data is current.
 
 ### Reading the source field from code
 
-The wire field is part of the public `synth_panel.synthbench`
+The wire field is part of the public `althing.synthbench`
 surface — `Recommendation.source` and `LoadedLeaderboard.source` both
 expose the same closed enum. Allowed values are exported as
-`synth_panel.synthbench.RECOMMENDATION_SOURCES`:
+`althing.synthbench.RECOMMENDATION_SOURCES`:
 
 ```python
-from synth_panel import synthbench
+from althing import synthbench
 
 rec = synthbench.recommend("Economy & Work")
 if rec is None:
@@ -163,8 +163,8 @@ CLI flag or [synthbench.org](https://synthbench.org) for current picks.
 ## Caveats
 
 - **Display labels & runnable ids (gh-519).** Some leaderboard rows carry a
-  human-readable display label (e.g. `SynthPanel (Gemini Flash Lite)`) in
-  their `model` field rather than a runnable provider model id. SynthPanel
+  human-readable display label (e.g. `Althing (Gemini Flash Lite)`) in
+  their `model` field rather than a runnable provider model id. Althing
   never stamps such a label onto `--model`. Instead it substitutes a runnable
   id in this order:
   1. The row's runnable `model_id` (e.g. `google/gemini-2.5-flash-lite`)
@@ -174,14 +174,14 @@ CLI flag or [synthbench.org](https://synthbench.org) for current picks.
      without a `model_id`, a base model inferred from the entry's `config_id`,
      adopted only when it resolves to a recognized provider id or alias.
   3. If neither yields a runnable id, the recommendation is **refused** with
-     an actionable stderr message and SynthPanel keeps your existing
+     an actionable stderr message and Althing keeps your existing
      `--model`/default. A stderr note records any substitution.
 - **Sparse topics.** When the top entry's `run_count < 3`, a
   low-confidence warning is emitted. Treat those recommendations as
   suggestive rather than authoritative.
 - **Provider/model strings vary.** The leaderboard publishes the raw
   `model` string the run used — sometimes a canonical id, sometimes a
-  short alias. SynthPanel passes the string through the alias resolver
+  short alias. Althing passes the string through the alias resolver
   so either shape works, but the raw value is preserved in the
   recommendation line as `raw_model`.
 

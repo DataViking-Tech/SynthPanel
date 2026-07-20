@@ -1,12 +1,12 @@
-"""Tests for `synthpanel install-skills` (sy-65k74)."""
+"""Tests for `althing install-skills` (sy-65k74)."""
 
 from __future__ import annotations
 
 import json
 
-from synth_panel.cli.commands import _INSTALL_SKILLS_COMMANDS, _INSTALL_SKILLS_SKILLS
-from synth_panel.cli.parser import build_parser
-from synth_panel.main import main
+from althing.cli.commands import _INSTALL_SKILLS_COMMANDS, _INSTALL_SKILLS_SKILLS
+from althing.cli.parser import build_parser
+from althing.main import main
 
 
 class TestParser:
@@ -26,7 +26,7 @@ class TestInstallSkillsFiles:
     def test_package_data_commands_exist(self):
         from importlib.resources import files as _resource_files
 
-        pkg = _resource_files("synth_panel.agent_assets")
+        pkg = _resource_files("althing.agent_assets")
         for name in _INSTALL_SKILLS_COMMANDS:
             src = pkg / "commands" / name
             assert src.read_bytes(), f"commands/{name} is empty or missing in package data"
@@ -34,7 +34,7 @@ class TestInstallSkillsFiles:
     def test_package_data_skills_exist(self):
         from importlib.resources import files as _resource_files
 
-        pkg = _resource_files("synth_panel.agent_assets")
+        pkg = _resource_files("althing.agent_assets")
         for skill in _INSTALL_SKILLS_SKILLS:
             src = pkg / "skills" / skill / "SKILL.md"
             assert src.read_bytes(), f"skills/{skill}/SKILL.md is empty or missing in package data"
@@ -70,7 +70,7 @@ class TestInstallSkillsCommand:
 
     def test_installed_files_have_content(self, tmp_path):
         main(["install-skills", "--target", str(tmp_path)])
-        poll_md = (tmp_path / "commands" / "synthpanel-poll.md").read_text()
+        poll_md = (tmp_path / "commands" / "althing-poll.md").read_text()
         assert "run_quick_poll" in poll_md
         for skill in _INSTALL_SKILLS_SKILLS:
             skill_md = (tmp_path / "skills" / skill / "SKILL.md").read_text()
