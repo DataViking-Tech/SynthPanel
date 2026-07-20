@@ -1421,17 +1421,15 @@ def synthesize_panel_mapreduce(
                 is_fallback=True,
             )
         try:
-            typed_partials.append(
-                PartialSummary.model_validate(
-                    {
-                        "summary": res.summary,
-                        "themes": res.themes,
-                        "agreements": res.agreements,
-                        "disagreements": res.disagreements,
-                        "surprises": res.surprises,
-                        "recommendation": res.recommendation,
-                    }
-                )
+            partial = PartialSummary.model_validate(
+                {
+                    "summary": res.summary,
+                    "themes": res.themes,
+                    "agreements": res.agreements,
+                    "disagreements": res.disagreements,
+                    "surprises": res.surprises,
+                    "recommendation": res.recommendation,
+                }
             )
         except _PydanticValidationError as ve:
             raise MapPhaseFailure(
@@ -1439,6 +1437,14 @@ def synthesize_panel_mapreduce(
                 question_index=i,
                 validation_error=ve,
             ) from ve
+        typed_partials.append(partial)
+        # Write the coerced list fields back so the reduce stage and the
+        # per_question rollup see lists even when the map model emitted
+        # newline-bulleted strings (the drift PartialSummary tolerates).
+        res.themes = partial.themes
+        res.agreements = partial.agreements
+        res.disagreements = partial.disagreements
+        res.surprises = partial.surprises
 
     # Reduce phase
     synthetic_panelists = _build_synthetic_reduce_panelists(completed_maps, questions)

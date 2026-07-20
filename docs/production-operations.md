@@ -82,8 +82,17 @@ per-persona error strings, so the banner names the actual upstream failure
 |---|---|
 | `0` | Run completed and is valid. |
 | `1` | Startup/config error (bad flags, missing files, refused flag combos). |
-| `2` | Run completed but **invalid** (`run_invalid: true`): failure rate over threshold, total failure, cost gate tripped, SIGINT, missing-input refusals, or synthesis failure. |
+| `2` | Run completed but **invalid** (`run_invalid: true`): failure rate over threshold, total failure, cost gate tripped, SIGINT, or missing-input refusals. |
 | `3` | `--strict` violation: any panelist-question error at all. |
+
+A **synthesis-stage failure does not invalidate the run**: when every
+panelist response completed, the envelope keeps them, sets
+`synthesis: null` (or the fallback synthesis payload), carries a
+structured top-level `synthesis_error` plus a `synthesis_failed: ...`
+warning, and exits `0`. Recover the missing synthesis cheaply with
+`synthpanel panel synthesize <result-id>` instead of re-running the
+panel. (`panel synthesize` itself still exits `2` on failure — synthesis
+is that command's sole deliverable.)
 
 **Every abort path still emits valid partial JSON.** With
 `--output-format json`, a cost-gate halt, SIGINT, or total failure does not

@@ -343,3 +343,117 @@ class TestPartialSummaryModelDirect:
                     "recommendation": "r",
                 }
             )
+
+
+class TestPartialSummaryStringCoercion:
+    """Regression (2026-07-19 live repro): map models sometimes emit the
+    list fields as ONE newline-bulleted string ("\\n- A\\n- B") instead of
+    a JSON array. The single-pass path tolerates that drift, so the map
+    boundary must coerce it rather than fail typed validation."""
+
+    def test_newline_bulleted_string_coerces_to_list(self):
+        p = PartialSummary.model_validate(
+            {
+                "summary": "s",
+                "themes": "\n- Distinctiveness and identity\n- Pricing anxiety",
+                "agreements": "- All want speed\n- All dislike ads",
+                "disagreements": "* One split\n* Another split",
+                "surprises": "1. First surprise\n2) Second surprise",
+                "recommendation": "r",
+            }
+        )
+        assert p.themes == ["Distinctiveness and identity", "Pricing anxiety"]
+        assert p.agreements == ["All want speed", "All dislike ads"]
+        assert p.disagreements == ["One split", "Another split"]
+        assert p.surprises == ["First surprise", "Second surprise"]
+
+    def test_plain_single_line_string_becomes_one_item(self):
+        p = PartialSummary.model_validate(
+            {
+                "summary": "s",
+                "themes": "just one theme",
+                "agreements": [],
+                "disagreements": [],
+                "surprises": [],
+                "recommendation": "r",
+            }
+        )
+        assert p.themes == ["just one theme"]
+
+    def test_empty_string_becomes_empty_list(self):
+        p = PartialSummary.model_validate(
+            {
+                "summary": "s",
+                "themes": "",
+                "agreements": "  \n  ",
+                "disagreements": [],
+                "surprises": [],
+                "recommendation": "r",
+            }
+        )
+        assert p.themes == []
+        assert p.agreements == []
+
+    def test_real_lists_pass_through_unchanged(self):
+        p = PartialSummary.model_validate(
+            {
+                "summary": "s",
+                "themes": ["- keeps literal dash items intact"],
+                "agreements": ["a"],
+                "disagreements": ["d"],
+                "surprises": ["sp"],
+                "recommendation": "r",
+            }
+        )
+        assert p.themes == ["- keeps literal dash items intact"]
+
+
+class TestMapReduceToleratesStringListFields:
+    """End-to-end regression through synthesize_panel_mapreduce: a map
+    call whose SynthesisResult carries newline-bulleted strings for the
+    list fields must NOT raise MapPhaseFailure; the coerced lists are
+    written back onto the map result before reduce."""
+
+    def test_string_valued_map_partial_parses_and_reduce_runs(self):
+        from synth_panel import synthesis
+
+        map_results: list[SynthesisResult] = []
+
+        def _fake_synth(client, panelists, questions, **kwargs):
+            q_text = questions[0].get("text") if isinstance(questions[0], dict) else str(questions[0])
+            if kwargs.get("custom_prompt") == synthesis._REDUCE_PROMPT_TEMPLATE:
+                return SynthesisResult(
+                    summary="reduced",
+                    themes=["cross-question theme"],
+                    agreements=["a"],
+                    disagreements=["d"],
+                    surprises=["s"],
+                    recommendation="r",
+                )
+            res = SynthesisResult(
+                summary=f"summary-for-{q_text}",
+                themes="\n- Distinctiveness and identity\n- Pricing anxiety",  # type: ignore[arg-type]
+                agreements="- broad agreement",  # type: ignore[arg-type]
+                disagreements="",  # type: ignore[arg-type]
+                surprises="\n- One surprise",  # type: ignore[arg-type]
+                recommendation="rec",
+            )
+            map_results.append(res)
+            return res
+
+        with patch.object(synthesis, "synthesize_panel", side_effect=_fake_synth):
+            result = synthesize_panel_mapreduce(
+                object(),
+                _PANELISTS,
+                _QUESTIONS,
+                model="sonnet",
+                max_workers=1,
+            )
+        assert isinstance(result, SynthesisResult)
+        assert result.summary == "reduced"
+        # Coerced lists were written back onto each map partial.
+        for res in map_results:
+            assert res.themes == ["Distinctiveness and identity", "Pricing anxiety"]
+            assert res.agreements == ["broad agreement"]
+            assert res.disagreements == []
+            assert res.surprises == ["One surprise"]

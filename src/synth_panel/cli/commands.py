@@ -2715,7 +2715,6 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 ),
                 diagnostic=overflow,
             )
-            run_invalid = True
         else:
             try:
                 if resolved_strategy == STRATEGY_MAP_REDUCE:
@@ -2767,7 +2766,6 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                     ),
                     diagnostic=exc.diagnostic,
                 )
-                run_invalid = True
             except Exception as exc:
                 # sp-rcvr: synthesis recovery ladder — classify the failure,
                 # retry transients once, fall back to map-reduce on (suspected)
@@ -2828,14 +2826,12 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                         suggested_fix=suggested,
                         diagnostic=diagnostic,
                     )
-                    run_invalid = True
 
     # sy-549: a synthesis that returned a *fallback* result (judge exhausted
     # its schema-adherence retries, or returned a partial schema) is NOT a
     # healthy synthesis. Previously such a result was persisted as if it
     # succeeded, hiding the failure behind mostly-empty fields. Surface a
-    # loud warning + a machine-detectable error payload and mark the run
-    # invalid, mirroring the sp-avmm hard-fail on synthesis API errors.
+    # loud warning + a machine-detectable error payload.
     if synthesis_result is not None and getattr(synthesis_result, "is_fallback", False):
         synth_err = synthesis_result.error or "synthesis judge did not return a valid structured result"
         logger.warning("synthesis produced a fallback result: %s", synth_err)
@@ -2850,7 +2846,6 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
                 "result with `synthpanel panel synthesize <id> --synthesis-model ...`."
             ),
         )
-        run_invalid = True
 
     if synthesis_result:
         total_usage = panelist_usage + synthesis_result.usage
@@ -3313,7 +3308,19 @@ def handle_panel_run(args: argparse.Namespace, fmt: OutputFormat) -> int:
         if synthesis_error_payload is not None:
             # sp-avmm: top-level synthesis_error so JSON/NDJSON consumers
             # see the failure without walking into the synthesis dict.
+            # A synthesis-stage failure does NOT invalidate the run — the
+            # panelist responses above are complete and usable. Degrade to
+            # synthesis: null/fallback + a warning; recovery is a cheap
+            # re-synthesize of the saved result, not a full re-run.
             extra["synthesis_error"] = synthesis_error_payload
+            warnings_list = extra.setdefault("warnings", [])
+            if isinstance(warnings_list, list):
+                warnings_list.append(
+                    "synthesis_failed: "
+                    f"{synthesis_error_payload.get('message', 'synthesis failed')}"
+                    " — panelist responses are complete; recover with"
+                    " `synthpanel panel synthesize <result-id>`"
+                )
         if missing_input_invalid:
             # sp-bjt4: surface as a top-level warning so MCP / CI consumers
             # see the condition even if they don't special-case
@@ -3702,7 +3709,6 @@ def _handle_panel_run_multi_round(
                 "Rerun with a higher-quality --synthesis-model."
             ),
         )
-        run_invalid = True
 
     # ── Cost / usage aggregation ────────────────────────────────────────
     panelist_usage = ZERO_USAGE
@@ -3940,7 +3946,17 @@ def _handle_panel_run_multi_round(
             extra["total_failure"] = total_failure
             extra["abort_reason"] = _classify_total_failure_abort_reason(total_failure)
         if synthesis_error_payload is not None:
+            # Synthesis-stage failure degrades gracefully: the per-round
+            # panelist responses are complete, so surface the payload plus
+            # a warning instead of invalidating the run.
             extra["synthesis_error"] = synthesis_error_payload
+            warnings_list = extra.setdefault("warnings", [])
+            if isinstance(warnings_list, list):
+                warnings_list.append(
+                    "synthesis_failed: "
+                    f"{synthesis_error_payload.get('message', 'synthesis failed')}"
+                    " — panelist responses are complete"
+                )
         if missing_input_invalid:
             warnings_list = extra.setdefault("warnings", [])
             if isinstance(warnings_list, list):
