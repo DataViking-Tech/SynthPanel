@@ -1,4 +1,4 @@
-# SynthPanel Agent Discovery & Install Ergonomics Audit
+# Althing Agent Discovery & Install Ergonomics Audit
 
 **Author:** crew/advo (Developer Advocate specialization)
 **Date:** 2026-04-15
@@ -11,16 +11,16 @@ proposed.
 
 ## Executive Summary
 
-SynthPanel ships a capable product (v0.9.0, MIT-licensed, 12-tool MCP server,
+Althing ships a capable product (v0.9.0, MIT-licensed, 12-tool MCP server,
 SPS 0.90 SynthBench score) but **its agent-facing surface is under-marketed on
 every channel that matters for AI-era discovery**. The MCP server — the most
-differentiating agent-era feature — is a one-line footnote on synthpanel.dev, a
+differentiating agent-era feature — is a one-line footnote on althing.dev, a
 section buried at line 335 of a 470-line README, and absent from every major
 MCP registry.
 
 LLM-based search ("does a tool for synthetic focus groups exist?") currently
 returns Synthetic Users, FocusPanel.ai, Delve.ai, and POPJAM — **not
-SynthPanel**. The `"synthpanel" MCP` query surfaces zero indexed pages that
+Althing**. The `"althing" MCP` query surfaces zero indexed pages that
 mention the project by name. The project is effectively invisible to the
 agent-era discovery pipeline it is architecturally best positioned to serve.
 
@@ -31,7 +31,7 @@ content.
 
 ### Top 3 Quick Wins (hours)
 
-1. **Lift the MCP story to hero level on synthpanel.dev + README.** Today both
+1. **Lift the MCP story to hero level on althing.dev + README.** Today both
    assets open with "terminal" framing; the `[mcp]` extra is a footnote. Add a
    copy-paste-able Claude Code / Cursor / Windsurf JSON config block as
    section 2, immediately after the install command.
@@ -48,7 +48,7 @@ content.
 
 ### Top 3 Bigger Plays (days)
 
-1. **AEO positioning content: "SynthPanel vs. Synthetic Users / FocusPanel.ai
+1. **AEO positioning content: "Althing vs. Synthetic Users / FocusPanel.ai
    / POPJAM — when open-source MCP beats the SaaS."** One 1500-word article
    that LLMs can cite when asked about synthetic-respondent tools.
    Independently valuable for GEO (generative engine optimization).
@@ -56,7 +56,7 @@ content.
    Klavis.** Glama alone indexes 21,545 servers — we are not one of them.
    Each is a separate free submission and each improves LLM retrieval.
 3. **MCP-native README restructure + dedicated `/mcp` site route.** Today
-   synthpanel.dev is a single page. A `/mcp` deep page that mirrors the
+   althing.dev is a single page. A `/mcp` deep page that mirrors the
    reference-server pattern (tools list first, config-by-editor in `<details>`
    blocks, one-click VS Code install badges) gives both humans and crawlers a
    canonical landing spot for agent-era discovery.
@@ -65,21 +65,21 @@ content.
 
 ## A. Audit of Current State
 
-### A.1 synthpanel.dev (live fetch, 2026-04-15)
+### A.1 althing.dev (live fetch, 2026-04-15)
 
 | Signal | State | Gap |
 |---|---|---|
-| `<title>` | "synthpanel — Run synthetic focus groups with any LLM" | No "MCP", "agent", or "Claude Code" in the page title |
+| `<title>` | "althing — Run synthetic focus groups with any LLM" | No "MCP", "agent", or "Claude Code" in the page title |
 | Hero tagline | "Run synthetic focus groups with any LLM." | Frames the product as a CLI-first research tool, not agent-native |
 | MCP mention | Single 9-word footnote under install command | Not positioned as a feature; no JSON snippet; no "Use with X" block |
 | Cards | PyPI · GitHub · SynthBench | No MCP card; no Claude Code / Cursor / Windsurf card |
 | Routes | `/` only (single-page site) | No `/mcp`, no `/docs`, no `/tools` — nothing for a crawler to index beyond the homepage |
-| `sitemap.xml` | Lists only `https://synthpanel.dev/` | Matches the single-page reality but caps the discoverable surface |
+| `sitemap.xml` | Lists only `https://althing.dev/` | Matches the single-page reality but caps the discoverable surface |
 | OG / Twitter cards | Present, brief | Do not mention MCP or agent integration |
-| Canonical | `https://synthpanel.dev/` | Correct |
+| Canonical | `https://althing.dev/` | Correct |
 
 **Verdict:** The site describes a CLI research tool. It does not advertise
-that SynthPanel is one of a small number of MCP-capable synthetic-research
+that Althing is one of a small number of MCP-capable synthetic-research
 servers.
 
 ### A.2 README (`README.md`, 470 lines)
@@ -116,18 +116,18 @@ before bouncing. Reference Python MCP servers (e.g., `mcp-server-fetch`,
 `mcp-server-git`) open with Tools + Install + Config in the top third; we do
 the opposite.
 
-### A.3 PyPI metadata (verified via `https://pypi.org/pypi/synthpanel/json`)
+### A.3 PyPI metadata (verified via `https://pypi.org/pypi/althing/json`)
 
 | Field | Value | Issue |
 |---|---|---|
 | `version` | `0.9.0` | Current |
 | `summary` | "Run synthetic focus groups and user research panels using AI personas. CLI tool,…" | Truncated; omits "MCP / agent integration" |
 | `home_page` | `null` | Legacy field unset — fine, `project_urls.Homepage` covers it |
-| `project_urls.Homepage` | `github.com/DataViking-Tech/synth-panel` | **Wrong repo name.** Canonical is `SynthPanel` (no hyphen). GitHub 301-redirects the old name via rename-redirect, but the URL shown to pip users is stale |
+| `project_urls.Homepage` | `github.com/DataViking-Tech/synth-panel` | **Wrong repo name.** Canonical is `Althing` (no hyphen). GitHub 301-redirects the old name via rename-redirect, but the URL shown to pip users is stale |
 | `project_urls.Repository` | Same as above | Same issue |
 | `project_urls.Changelog` | Same base URL | Same issue |
 | `project_urls.Issues` | Same base URL | Same issue |
-| `project_urls` missing | No `Homepage = https://synthpanel.dev`, no `Documentation = https://synthpanel.dev/…`, no `Funding`, no "Use with Claude Code" link | Misses primary marketing channel |
+| `project_urls` missing | No `Homepage = https://althing.dev`, no `Documentation = https://althing.dev/…`, no `Funding`, no "Use with Claude Code" link | Misses primary marketing channel |
 | `keywords` | `llm, research, focus-group, synthetic, personas, user-research, ai` | Missing: `mcp`, `model-context-protocol`, `agent`, `claude`, `claude-code`, `cursor`, `windsurf`, `survey-research`, `synthetic-respondents` |
 | `classifiers` | 8 classifiers, only one agent-relevant: `Topic :: Scientific/Engineering :: Artificial Intelligence` | Missing: `Topic :: Software Development :: Libraries :: Python Modules`, `Topic :: Scientific/Engineering :: Information Analysis`, `Intended Audience :: Information Technology`, `Operating System :: OS Independent`, `Environment :: Console` |
 
@@ -135,7 +135,7 @@ the opposite.
 algorithms on PyPI (and any downstream scraper — Glama, PulseMCP, etc.)
 almost nothing to match an agent-era query against.
 
-### A.4 GitHub repo (`DataViking-Tech/SynthPanel`)
+### A.4 GitHub repo (`DataViking-Tech/Althing`)
 
 | Signal | State | Gap |
 |---|---|---|
@@ -152,7 +152,7 @@ almost nothing to match an agent-era query against.
 `docs/mcp.md` is well-written: the 12 tools, 4 resources, 3 prompt templates,
 response shape, data storage paths. It is the single best piece of agent-facing
 documentation in the repo. **But it is not linked from the homepage, and
-synthpanel.dev does not render it.**
+althing.dev does not render it.**
 
 ---
 
@@ -160,7 +160,7 @@ synthpanel.dev does not render it.**
 
 ### B.1 MCP registry landscape (2026-04-15)
 
-| Registry | URL | Scale | SynthPanel listed? | Submission |
+| Registry | URL | Scale | Althing listed? | Submission |
 |---|---|---|---|---|
 | `punkpeye/awesome-mcp-servers` | github.com/punkpeye/awesome-mcp-servers | 84.8k ⭐, curated categories incl. **Research 🔬** | **No** | PR |
 | `modelcontextprotocol/servers` (Resources section) | github.com/modelcontextprotocol/servers | Official; links out to community registries | **No** | PR |
@@ -176,7 +176,7 @@ analysis and Focus Group Interview (FGI) system that creates dynamic personas
 from survey responses, generates contextual follow-up questions"). This is
 significant: it means the category has traction in the registry, a search for
 "persona" or "focus group" on glama.ai today surfaces a competitor, and a
-SynthPanel listing would compete directly.
+Althing listing would compete directly.
 
 ### B.2 Reference Python MCP server README pattern
 
@@ -195,7 +195,7 @@ Common structure:
    Each shows a minimal JSON snippet.
 5. **Debugging / Development / License.**
 
-**SynthPanel's README inverts this:** we lead with CLI usage, persona YAML,
+**Althing's README inverts this:** we lead with CLI usage, persona YAML,
 instrument YAML, v3 branching (100+ lines), architecture — all before we get
 to MCP. A reader looking for "can this be called by an agent?" has to scroll
 through everything else first.
@@ -219,15 +219,15 @@ discussing `Framework :: MCP` on the Python Packaging Authority tracker but
 nothing is accepted. Until it is, the right play is to **overload keywords**
 (which PyPI search indexes) rather than wait for a classifier.
 
-### B.4 AEO / GEO audit — do LLMs know SynthPanel exists?
+### B.4 AEO / GEO audit — do LLMs know Althing exists?
 
 Tested via WebSearch (simulating what modern LLMs retrieve):
 
-| Query | SynthPanel in top 10? | What shows up instead |
+| Query | Althing in top 10? | What shows up instead |
 |---|---|---|
 | `synthetic focus group AI personas tool open source MCP 2026` | **No** | Synthetic Users, FocusPanel.ai, Delve.ai, POPJAM, Maven course, lunar.dev |
-| `"synthpanel" MCP model context protocol` | **No** (zero matches for the quoted name) | Only generic MCP explainers |
-| `synthpanel Python AI personas focus group pip install` | **No** | Personaut, JasperHG90/persona, DSPy, AI-Persona-Lab, Sybil-Swarm |
+| `"althing" MCP model context protocol` | **No** (zero matches for the quoted name) | Only generic MCP explainers |
+| `althing Python AI personas focus group pip install` | **No** | Personaut, JasperHG90/persona, DSPy, AI-Persona-Lab, Sybil-Swarm |
 
 **This is the clearest signal in the audit.** A user asking an LLM "is there
 an open-source MCP server for synthetic focus groups?" today gets back a
@@ -248,7 +248,7 @@ are recorded after filing in the companion section of this document.
 
 ### C.1 Quick Wins (hours each)
 
-**Q1. Lift the MCP story above the fold on synthpanel.dev.**
+**Q1. Lift the MCP story above the fold on althing.dev.**
 Add a prominent section between the install command and the Quick Start. Use
 the reference-server pattern: one-line pitch + JSON config snippet + "Works
 with Claude Code · Cursor · Windsurf · Zed" editor badge row. Include a
@@ -263,8 +263,8 @@ content but move it forward.
 
 **Q3. Fix PyPI metadata.**
 Edit `pyproject.toml`:
-- Change all 4 `project.urls` to canonical casing (`SynthPanel`, no hyphen)
-  *and* add `Homepage = "https://synthpanel.dev"`, `Documentation = "https://synthpanel.dev"`, `"MCP Reference" = "https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/mcp.md"`.
+- Change all 4 `project.urls` to canonical casing (`Althing`, no hyphen)
+  *and* add `Homepage = "https://althing.dev"`, `Documentation = "https://althing.dev"`, `"MCP Reference" = "https://github.com/DataViking-Tech/Althing/blob/main/docs/mcp.md"`.
 - Expand `keywords` to include: `mcp`, `model-context-protocol`, `agent`,
   `claude`, `claude-code`, `cursor`, `windsurf`, `survey-research`,
   `synthetic-respondents`, `market-research`.
@@ -290,7 +290,7 @@ Current: 6 topics. Add: `model-context-protocol`, `claude-code`, `ai-agents`,
 Single PR. Pattern for the entry (verbatim from list format):
 
 ```
-- [DataViking-Tech/SynthPanel](https://github.com/DataViking-Tech/SynthPanel)
+- [DataViking-Tech/Althing](https://github.com/DataViking-Tech/Althing)
   📇 🐍 - Run synthetic focus groups with any LLM. 12 MCP tools: run_panel,
   run_quick_poll, persona/instrument pack management. YAML-defined personas
   and branching research instruments.
@@ -307,7 +307,7 @@ several LLMs cite those registries directly when asked "what MCP servers
 exist for X."
 
 **B3. Write an AEO positioning article.**
-Title candidate: *"SynthPanel vs. Synthetic Users vs. FocusPanel.ai — when
+Title candidate: *"Althing vs. Synthetic Users vs. FocusPanel.ai — when
 open-source MCP beats the SaaS."* Publish on dataviking.tech /blog and
 cross-post to Medium. Covers: (a) why LLM-agnostic matters (lock-in,
 bring-your-own-key, cost control), (b) why YAML-defined instruments matter
@@ -317,14 +317,14 @@ clustering around means — we already document these in the README, lift
 them into the article). Target: 1500 words, cite SynthBench SPS 0.90 as the
 quantitative proof point.
 
-**B4. Add a dedicated `/mcp` deep page on synthpanel.dev.**
-Mirror `docs/mcp.md` as a static HTML page at `synthpanel.dev/mcp` — same
+**B4. Add a dedicated `/mcp` deep page on althing.dev.**
+Mirror `docs/mcp.md` as a static HTML page at `althing.dev/mcp` — same
 content, indexable, with copy-buttons on every config block. Add a sitemap
 entry. Link from the hero card row. This gives LLMs and search engines a
 canonical agent-integration landing page that they can cite.
 
 **B5. Add a custom social preview card to the GitHub repo.**
-1280×640 PNG showing "SynthPanel · MCP server for synthetic focus groups ·
+1280×640 PNG showing "Althing · MCP server for synthetic focus groups ·
 12 tools · any LLM." Uploaded via repo Settings. Shows up every time the
 repo is linked in Slack, Discord, or HN. One afternoon of design work.
 
@@ -340,19 +340,19 @@ it exists.
 
 For the record, I considered and rejected:
 
-1. **Renaming the PyPI package to `mcp-server-synthpanel`** — follows the
+1. **Renaming the PyPI package to `mcp-server-althing`** — follows the
    reference-server convention but breaks every existing installation,
    documentation link, and the brand. The convention is for servers that
-   are *only* MCP. SynthPanel is also a CLI + Python library. Keep the
+   are *only* MCP. Althing is also a CLI + Python library. Keep the
    current name; surface MCP-ness through the metadata and content layers.
 2. **Splitting the MCP server into its own package** — same argument.
-   Current packaging (`pip install synthpanel[mcp]`) is the right call.
+   Current packaging (`pip install althing[mcp]`) is the right call.
 3. **Chasing a `Framework :: MCP` PyPI classifier** — no upstream consensus
    yet. Revisit in 6 months.
 4. **Paying for hosted MCP registry placement (Smithery)** — not needed
    when free registries (Glama, PulseMCP, awesome-list) cover the same
    retrieval surface. Reconsider if traction warrants.
-5. **Changing the `synthpanel mcp-serve` CLI entrypoint name** — it's
+5. **Changing the `althing mcp-serve` CLI entrypoint name** — it's
    non-canonical (`mcp-server-*` is the convention) but changing it is a
    breaking change for any existing user's config. Document, don't rename.
 
@@ -361,14 +361,14 @@ For the record, I considered and rejected:
 ## E. Methodology and Verification
 
 - All live-page findings verified via `curl`/WebFetch on 2026-04-15.
-- PyPI metadata verified via the JSON API (`/pypi/synthpanel/json`).
+- PyPI metadata verified via the JSON API (`/pypi/althing/json`).
 - Classifier recommendations cross-checked against currently-accepted values
   at <https://pypi.org/classifiers/>.
 - Awesome-list category structure verified by fetching raw `README.md` from
   `punkpeye/awesome-mcp-servers` (84.8k ⭐ as of fetch).
 - AEO queries run via web search in April 2026; results are retrieval-layer
   snapshots, not a permanent claim about what every LLM knows.
-- The `synth-panel` → `SynthPanel` URL redirect was verified with `curl -I` —
+- The `synth-panel` → `Althing` URL redirect was verified with `curl -I` —
   the hyphenated URL returns `HTTP 301` to the canonical; no broken links,
   but the metadata is stale.
 
@@ -380,15 +380,15 @@ Filed 2026-04-15 as hierarchical children of `sp-ege`, all priority P3 (backlog)
 
 | Bead | Title | Category |
 |---|---|---|
-| `sp-ege.1` | Lift MCP story above the fold on synthpanel.dev | Quick win (site) |
+| `sp-ege.1` | Lift MCP story above the fold on althing.dev | Quick win (site) |
 | `sp-ege.2` | Lift MCP section to README position 2 (after Quick Start) | Quick win (README) |
 | `sp-ege.3` | Fix PyPI metadata: URLs, keywords, classifiers (v0.9.1 patch) | Quick win (PyPI) |
 | `sp-ege.4` | Add "Use with Claude Code / Cursor / Windsurf / Zed" section to README | Quick win (README) |
 | `sp-ege.5` | GitHub repo hygiene: topics + social preview + About description | Quick win (GitHub) |
-| `sp-ege.6` | Submit SynthPanel to `punkpeye/awesome-mcp-servers` (Research category) | Bigger play (ecosystem) |
+| `sp-ege.6` | Submit Althing to `punkpeye/awesome-mcp-servers` (Research category) | Bigger play (ecosystem) |
 | `sp-ege.7` | Multi-registry submission sweep: Glama, PulseMCP, MCPHub, Klavis | Bigger play (ecosystem) |
-| `sp-ege.8` | Write AEO positioning article: SynthPanel vs commercial alternatives | Bigger play (content) |
-| `sp-ege.9` | Add `/mcp` deep page to synthpanel.dev | Bigger play (site) |
+| `sp-ege.8` | Write AEO positioning article: Althing vs commercial alternatives | Bigger play (content) |
+| `sp-ege.9` | Add `/mcp` deep page to althing.dev | Bigger play (site) |
 
 Each bead carries its own acceptance criteria, labels (`discovery`, plus
 one of `site`/`readme`/`pypi`/`github`/`registry`/`content`), and may be

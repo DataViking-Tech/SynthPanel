@@ -1,6 +1,6 @@
-# Cloudflare Pages — synthpanel.dev
+# Cloudflare Pages — althing.dev
 
-Operational runbook for the static landing site served at <https://synthpanel.dev>.
+Operational runbook for the static landing site served at <https://althing.dev>.
 
 ## Source
 
@@ -30,7 +30,7 @@ Operational runbook for the static landing site served at <https://synthpanel.de
   `scripts/render_site_markdown.py` and committed alongside the source.
 - `site/.well-known/mcp/server-card.json` is the MCP Server Card
   (SEP-2127). The version inside the card is drift-guarded against
-  `synth_panel.__version__` by `tests/test_well_known_server_card.py` —
+  `althing.__version__` by `tests/test_well_known_server_card.py` —
   bump both together at release time.
 
 ## Cloudflare Pages project (one-time setup)
@@ -40,9 +40,9 @@ workflow cannot perform these steps because they require interactive auth /
 domain ownership confirmation.
 
 1. **Create the project** (Pages → Create → Connect to Git)
-   - Project name: `synthpanel`
+   - Project name: `althing`
    - Production branch: `main`
-   - Repository: `DataViking-Tech/SynthPanel`
+   - Repository: `DataViking-Tech/Althing`
 2. **Build configuration**
    - Framework preset: `None`
    - Build command: *(leave empty — pure static)*
@@ -50,12 +50,12 @@ domain ownership confirmation.
    - Root directory: *(leave empty)*
 3. **Environment variables**: none required.
 4. **Custom domain**
-   - Pages project → Custom domains → `synthpanel.dev`
-   - Cloudflare auto-creates the proxied CNAME on the synthpanel.dev zone.
+   - Pages project → Custom domains → `althing.dev`
+   - Cloudflare auto-creates the proxied CNAME on the althing.dev zone.
    - Confirm orange-cloud (proxied) and SSL/TLS mode = Full (strict).
 5. **Verification**
    ```bash
-   curl -sI https://synthpanel.dev/ | head -5
+   curl -sI https://althing.dev/ | head -5
    #   HTTP/2 200
    #   content-type: text/html; charset=utf-8
    #   content-security-policy: default-src 'self'; ...
@@ -91,7 +91,7 @@ Content-Type would be `application/octet-stream`. The override lives in
 with the JSON file. After deploy, smoke-check with:
 
 ```bash
-curl -sI https://synthpanel.dev/.well-known/api-catalog | grep -i content-type
+curl -sI https://althing.dev/.well-known/api-catalog | grep -i content-type
 #   content-type: application/linkset+json
 ```
 
@@ -103,7 +103,7 @@ propagation.
 
 When you change `site/index.html`:
 
-- Keep the install command (`pip install synthpanel`) discoverable above the
+- Keep the install command (`pip install althing`) discoverable above the
   fold. Discoverability of the install command is the page's main job.
 - Keep the SynthBench cross-link present. The bead authoring this site
   (sp-p3g) made the cross-link an explicit acceptance criterion.
@@ -134,18 +134,18 @@ HTML untouched.
 
 ```bash
 # HTML by default
-curl -sI https://synthpanel.dev/ | grep -i content-type
+curl -sI https://althing.dev/ | grep -i content-type
 #   content-type: text/html; charset=utf-8
 
 # Markdown when explicitly requested
-curl -sI -H 'Accept: text/markdown' https://synthpanel.dev/
+curl -sI -H 'Accept: text/markdown' https://althing.dev/
 #   HTTP/2 200
 #   content-type: text/markdown; charset=utf-8
 #   vary: Accept
 #   x-markdown-tokens: 1827
 
 # 406 when no rendition exists for the path
-curl -sI -H 'Accept: text/markdown' https://synthpanel.dev/og-image.png
+curl -sI -H 'Accept: text/markdown' https://althing.dev/og-image.png
 #   HTTP/2 406
 ```
 
@@ -179,7 +179,7 @@ new file is enough to publish it — no Workers or routing rules needed.
 
 After deploy, verify with:
 ```bash
-curl -sI https://synthpanel.dev/.well-known/oauth-protected-resource | grep -i content-type
+curl -sI https://althing.dev/.well-known/oauth-protected-resource | grep -i content-type
 #   content-type: application/json
 ```
 
@@ -187,6 +187,6 @@ curl -sI https://synthpanel.dev/.well-known/oauth-protected-resource | grep -i c
 ## Why a separate site (vs. README only)
 
 GitHub renders the README well for developers but isn't a domain users can
-land on after seeing the project mentioned. `synthpanel.dev` exists so
-that "synthpanel" the brand has a stable address that long-outlives any
+land on after seeing the project mentioned. `althing.dev` exists so
+that "althing" the brand has a stable address that long-outlives any
 single repo host.

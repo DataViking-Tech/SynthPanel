@@ -3,18 +3,18 @@
 This is the durable guard behind the gap-analysis MCP findings (#4/#5):
 a SKILL.md whose ``allowed-tools`` frontmatter or body names a tool that
 does not exist in the MCP server leaves the agent unable to auto-approve
-any real SynthPanel tool, and the three shipped copies of each SKILL.md
+any real Althing tool, and the three shipped copies of each SKILL.md
 silently drift apart. Both are exactly the kind of defect a human review
 misses and a machine catches every time.
 
 It asserts three things:
 
-(a) every ``mcp__synth_panel__<name>`` token referenced in any skill
+(a) every ``mcp__althing__<name>`` token referenced in any skill
     SKILL.md (all three copies), doc, or command resolves to a tool
-    actually registered in ``src/synth_panel/mcp/server.py``;
+    actually registered in ``src/althing/mcp/server.py``;
 (b) each skill's ``allowed-tools`` frontmatter lists only real tools;
 (c) the three SKILL.md copies (``skills/``, the packaged
-    ``src/synth_panel/agent_assets/skills/`` installer source, and the
+    ``src/althing/agent_assets/skills/`` installer source, and the
     published ``site/.well-known/agent-skills/`` mirror) are byte-identical
     per skill, and the ``index.json`` digests match the served bodies.
 
@@ -35,12 +35,12 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-SERVER_PY = REPO_ROOT / "src" / "synth_panel" / "mcp" / "server.py"
+SERVER_PY = REPO_ROOT / "src" / "althing" / "mcp" / "server.py"
 PLUGIN_MANIFEST = REPO_ROOT / ".claude-plugin" / "plugin.json"
 
 # The three shipped copies of every SKILL.md that must stay in lockstep.
 SKILLS_DIR = REPO_ROOT / "skills"
-AGENT_ASSETS_SKILLS_DIR = REPO_ROOT / "src" / "synth_panel" / "agent_assets" / "skills"
+AGENT_ASSETS_SKILLS_DIR = REPO_ROOT / "src" / "althing" / "agent_assets" / "skills"
 SITE_SKILLS_DIR = REPO_ROOT / "site" / ".well-known" / "agent-skills"
 SITE_INDEX = SITE_SKILLS_DIR / "index.json"
 
@@ -48,7 +48,7 @@ SITE_INDEX = SITE_SKILLS_DIR / "index.json"
 _EXTRA_REFERENCE_GLOBS = (
     (REPO_ROOT / "docs", "*.md"),
     (REPO_ROOT / "commands", "*.md"),
-    (REPO_ROOT / "src" / "synth_panel" / "agent_assets" / "commands", "*.md"),
+    (REPO_ROOT / "src" / "althing" / "agent_assets" / "commands", "*.md"),
 )
 _EXTRA_REFERENCE_FILES = (REPO_ROOT / "README.md",)
 
@@ -66,7 +66,7 @@ _TOOL_TOKEN_RE = re.compile(r"mcp__[a-z0-9_]+__[a-zA-Z_]\w*")
 
 
 def _server_config_name() -> str:
-    """The MCP server key agents address tools through (``synth_panel``).
+    """The MCP server key agents address tools through (``althing``).
 
     Parsed from the plugin manifest's ``mcp_servers`` map rather than
     hardcoded, so a server rename can't leave this guard checking a stale
@@ -167,7 +167,7 @@ def test_three_skill_copies_are_in_sync() -> None:
     site_names = sorted(p.parent.name for p in SITE_SKILLS_DIR.glob("*/SKILL.md"))
     assert agent_names == SKILL_NAMES, (
         f"agent_assets skills {agent_names} != canonical skills {SKILL_NAMES}. "
-        "Copy every skills/<name>/SKILL.md into src/synth_panel/agent_assets/skills/<name>/."
+        "Copy every skills/<name>/SKILL.md into src/althing/agent_assets/skills/<name>/."
     )
     assert site_names == SKILL_NAMES, (
         f"site mirror skills {site_names} != canonical skills {SKILL_NAMES}. Run: python scripts/render_agent_skills.py"
@@ -177,7 +177,7 @@ def test_three_skill_copies_are_in_sync() -> None:
         agent = (AGENT_ASSETS_SKILLS_DIR / name / "SKILL.md").read_bytes()
         site = (SITE_SKILLS_DIR / name / "SKILL.md").read_bytes()
         assert agent == canonical, (
-            f"src/synth_panel/agent_assets/skills/{name}/SKILL.md drifted from skills/{name}/SKILL.md — re-copy it."
+            f"src/althing/agent_assets/skills/{name}/SKILL.md drifted from skills/{name}/SKILL.md — re-copy it."
         )
         assert site == canonical, (
             f"site/.well-known/agent-skills/{name}/SKILL.md drifted from "

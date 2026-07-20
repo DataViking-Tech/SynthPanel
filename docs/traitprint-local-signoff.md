@@ -1,6 +1,6 @@
 # Traitprint Local — CPO Sign-off
 
-**Author:** cpo (synthpanel)
+**Author:** cpo (althing)
 **Date:** 2026-04-19
 **Requested by:** mayor/
 **Subject:** Sign-off on Traitprint Local — open-source local-first vault with optional cloud sync
@@ -81,7 +81,7 @@ pip install traitprint           # Everything. Vault + CLI + MCP + sync client.
 The cloud sync commands (`traitprint push`, `traitprint pull`, `traitprint
 auth login`) **ship in the base package but truly no-op without an API
 key set**. If you want an extras-gated variant later for heavy optional
-deps, use the `synthpanel[mcp]` pattern — but only when there's an
+deps, use the `althing[mcp]` pattern — but only when there's an
 actual dependency weight argument. Today there isn't one; `httpx` is
 already in the tree.
 
@@ -123,7 +123,7 @@ formalizes what is already derivable.
 ### D. Support burden
 
 Real. Budget **~1 engineer-day per week** for GitHub issues + PR
-review once any community forms. Copy the synthpanel `CONTRIBUTING.md`
+review once any community forms. Copy the althing `CONTRIBUTING.md`
 / `CODE_OF_CONDUCT.md` / issue templates verbatim.
 
 ### What we must NOT open-source
@@ -151,7 +151,7 @@ These stay server-side, period:
 
 ## 4. Does the demo flow work for Miami?
 
-**Yes, it works — and it works *because* SynthPanel already
+**Yes, it works — and it works *because* Althing already
 established the `pip install → mcp-serve → Claude connects` rhythm
 for this audience tonight.**
 
@@ -170,7 +170,7 @@ the current cloud-only Traitprint.
 
 ### Why this lands for Miami specifically
 
-1. **Echoes the SynthPanel demo beat-for-beat.** Same host, same
+1. **Echoes the Althing demo beat-for-beat.** Same host, same
    command shape, same time budget. The audience sees a pattern and
    concludes DataViking is a *platform*, not three products.
 2. **Pre-empts the "needs a cloud?" objection** before it's asked.
@@ -182,7 +182,7 @@ the current cloud-only Traitprint.
 
 - `traitprint init` must complete in **<5 seconds** cold.
 - Local mode must work with **zero API keys set** (including no LLM
-  key — use MCP sampling in the host, same pattern as SynthPanel's
+  key — use MCP sampling in the host, same pattern as Althing's
   `sp-6at`).
 - MCP tool names must read well in a Claude tool-call log (short,
   descriptive, no `cloud_*` prefix on local tools).
@@ -217,7 +217,7 @@ lead-gen mechanism, not a risk.
    one.** Signal evolvability.
 5. **Demo flow tested end-to-end on a clean laptop before any
    public-facing use.** No cold-start at the booth.
-6. **Copy the SynthPanel `LICENSE` / `CONTRIBUTING.md` /
+6. **Copy the Althing `LICENSE` / `CONTRIBUTING.md` /
    `CODE_OF_CONDUCT.md` / issue templates.** We already wrote them;
    reuse.
 7. **README makes the cloud upgrade path visible, not hidden.** Lead
@@ -232,9 +232,9 @@ lead-gen mechanism, not a risk.
 - **Announce Traitprint Local as part of the Miami booth handout**,
   not the stage demo. "Scan this QR, get early access." Captures emails
   without demo risk.
-- **Wire Traitprint's local MCP tools to interop with SynthPanel's
+- **Wire Traitprint's local MCP tools to interop with Althing's
   persona format** as a downstream stretch goal. A Traitprint vault
-  can become a SynthPanel persona definition. That's the DataViking
+  can become a Althing persona definition. That's the DataViking
   platform story made literal.
 - **Instrument the local → cloud conversion funnel** before first
   release. Without telemetry, you cannot answer the dilution question

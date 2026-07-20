@@ -1,9 +1,9 @@
-"""Tests for synth_panel.templates — template engine for dynamic questions."""
+"""Tests for althing.templates — template engine for dynamic questions."""
 
 from __future__ import annotations
 
-from synth_panel.synthesis import SynthesisResult
-from synth_panel.templates import (
+from althing.synthesis import SynthesisResult
+from althing.templates import (
     build_template_context,
     find_unresolved_in_questions,
     render_questions,

@@ -1,11 +1,11 @@
 # Pack calibration
 
 Calibration is how a persona pack proves its fit to a known human
-baseline. Run `synthpanel pack calibrate` and the result is written
+baseline. Run `althing pack calibrate` and the result is written
 back into the pack YAML so the manifest is self-describing.
 
 ```
-synthpanel pack calibrate <PACK_YAML>
+althing pack calibrate <PACK_YAML>
   --against DATASET:QUESTION   # e.g. gss:HAPPY (v1 allowlist: gss, ntia)
   [--n 50]                     # panel size
   [--models MODELS]            # default: panel run default
@@ -29,8 +29,8 @@ calibration:
     extractor: pick_one:auto-derived
     panelist_cost_usd: 0.6451
     calibrated_at: 2026-04-26T14:23:00Z
-    synthpanel_version: 0.11.1
-    methodology_url: https://synthpanel.dev/docs/calibration
+    althing_version: 0.11.1
+    methodology_url: https://althing.dev/docs/calibration
 ```
 
 ## What JSD means
@@ -48,7 +48,7 @@ distribution. JSD is bounded in `[0, 1]` (using `log2`):
 | > 0.50    | Effectively uncalibrated.                               |
 
 JSD is computed locally via the same metric the convergence tracker
-uses (see `src/synth_panel/convergence.py`); the pack YAML is the
+uses (see `src/althing/convergence.py`); the pack YAML is the
 **only** durable artifact — calibration does not phone home and is
 distinct from `--submit-to-synthbench`.
 
@@ -87,7 +87,7 @@ relicensing concerns.
 To override the allowlist for internal use:
 
 ```
-SYNTHBENCH_ALLOW_GATED=1 synthpanel pack calibrate ... --against wvs:Q1
+SYNTHBENCH_ALLOW_GATED=1 althing pack calibrate ... --against wvs:Q1
 ```
 
 ## Methodology
@@ -115,7 +115,7 @@ For each calibration run:
 4. The model distribution is compared against the baseline's
    `human_distribution` via Jensen-Shannon divergence.
 5. The resulting JSD, plus provenance (extractor, models, cost,
-   timestamp, synthpanel version), is merged into the pack YAML's
+   timestamp, althing version), is merged into the pack YAML's
    `calibration:` list. Re-running against the same `(dataset,
    question)` pair **replaces** the prior entry rather than appending,
    so the list is always a clean record of one-result-per-baseline.
@@ -138,6 +138,6 @@ For each calibration run:
   distribution. A low JSD on `gss:HAPPY` does not imply low JSD on a
   different question — calibrate against multiple baselines if you
   need broad coverage.
-- The command requires the `synthpanel[convergence]` extra (for the
+- The command requires the `althing[convergence]` extra (for the
   `synthbench` baseline loader). Install with
-  `pip install 'synthpanel[convergence]'` if not already present.
+  `pip install 'althing[convergence]'` if not already present.

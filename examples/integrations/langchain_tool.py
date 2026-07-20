@@ -1,10 +1,10 @@
-"""SynthPanel + LangChain / LangGraph.
+"""Althing + LangChain / LangGraph.
 
-Bridge SynthPanel's MCP tools into LangChain via langchain-mcp-adapters, then
+Bridge Althing's MCP tools into LangChain via langchain-mcp-adapters, then
 hand them to a LangGraph ReAct agent. No custom tool wrappers required.
 
 Install:
-    pip install langchain-mcp-adapters langgraph langchain-anthropic synthpanel[mcp]
+    pip install langchain-mcp-adapters langgraph langchain-anthropic althing[mcp]
 
 Run:
     export ANTHROPIC_API_KEY=sk-...
@@ -21,8 +21,8 @@ from langgraph.prebuilt import create_react_agent
 async def main() -> None:
     client = MultiServerMCPClient(
         {
-            "synthpanel": {
-                "command": "synthpanel",
+            "althing": {
+                "command": "althing",
                 "args": ["mcp-serve"],
                 "transport": "stdio",
             }

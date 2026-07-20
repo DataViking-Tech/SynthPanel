@@ -1,7 +1,7 @@
 """CI gate against Pydantic minor-version drift in `model_json_schema()`.
 
 Synthpanel's wire format is the JSON Schema dict at
-``synth_panel.structured.schemas`` — Pydantic adoption (v1.0.3 P1) must
+``althing.structured.schemas`` — Pydantic adoption (v1.0.3 P1) must
 not change what we emit on the wire. ``model_json_schema()`` output has
 been observed to drift across Pydantic minors (e.g.
 ``additionalProperties`` defaults shifted 2.5→2.6), so we lock the
@@ -18,11 +18,11 @@ import pytest
 
 pytest.importorskip("pydantic", reason="pydantic>=2.7 is a v1.0.3 base dep (P1)")
 models = pytest.importorskip(
-    "synth_panel.structured.models",
+    "althing.structured.models",
     reason="structured.models lands with v1.0.3 P1 (hq-e25n)",
 )
 
-from synth_panel.structured.schemas import (
+from althing.structured.schemas import (
     ANNOTATED_CHOICE_SCHEMA,
     LIKERT_SCHEMA,
     PICK_ONE_SCHEMA,
@@ -75,7 +75,7 @@ def test_model_schema_matches_static_wire(model, schema, name):
 
 
 def test_pydantic_version_pinned():
-    """Sanity: synthpanel requires pydantic>=2.7 in the resolved env."""
+    """Sanity: althing requires pydantic>=2.7 in the resolved env."""
     import pydantic
 
     parts = pydantic.VERSION.split(".", 2)

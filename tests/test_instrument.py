@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from synth_panel.instrument import Instrument, InstrumentError, Round, parse_instrument
+from althing.instrument import Instrument, InstrumentError, Round, parse_instrument
 
 # ---------------------------------------------------------------------------
 # v1 (flat questions) → single "default" round

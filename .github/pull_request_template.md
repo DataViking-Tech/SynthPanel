@@ -33,7 +33,7 @@ Choose one (matches the auto-tag labels):
 
 - [ ] Tests added or updated
 - [ ] `ruff check src/ tests/` passes
-- [ ] `mypy src/synth_panel/` passes
+- [ ] `mypy src/althing/` passes
 - [ ] CHANGELOG.md updated (if user-visible change)
 - [ ] Commits signed off with `git commit -s` (see CONTRIBUTING.md)
 

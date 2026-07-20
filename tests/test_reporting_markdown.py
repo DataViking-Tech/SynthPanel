@@ -1,4 +1,4 @@
-"""Tests for ``synth_panel.reporting.markdown.render_markdown``.
+"""Tests for ``althing.reporting.markdown.render_markdown``.
 
 Covers the 7 tests enumerated in
 ``specs/sp-viz-layer/structure.md`` §6:
@@ -19,8 +19,8 @@ from pathlib import Path
 
 import pytest
 
-from synth_panel.analysis.inspect import build_inspect_report
-from synth_panel.reporting.markdown import BANNER, FOOTER, render_markdown
+from althing.analysis.inspect import build_inspect_report
+from althing.reporting.markdown import BANNER, FOOTER, render_markdown
 
 FIXTURES = Path(__file__).parent / "fixtures" / "reporting"
 
@@ -399,7 +399,7 @@ def test_render_flat_no_synthesis_points_at_synthesize_command() -> None:
     assert "_Not run._" in block
     # ...but no longer leaves the user stranded: the report names the command
     # that generates synthesis for an already-saved result.
-    assert "synthpanel panel synthesize" in block
+    assert "althing panel synthesize" in block
     # flat_shape.json carries no `id`, so the placeholder is used.
     assert "<result-id>" in block
 
@@ -420,7 +420,7 @@ def test_render_flat_no_synthesis_uses_result_id_when_present() -> None:
     }
     report = build_inspect_report(raw)
     md = render_markdown(report, raw)
-    assert "synthpanel panel synthesize result-20260603-abc123" in md
+    assert "althing panel synthesize result-20260603-abc123" in md
 
 
 def test_render_rounds_shape_no_synthesis_omits_flat_hint() -> None:
@@ -452,7 +452,7 @@ def test_render_rounds_shape_no_synthesis_omits_flat_hint() -> None:
     synth_idx = md.index("## Synthesis")
     block = md[synth_idx:]
     assert "_Not run._" in block
-    assert "synthpanel panel synthesize" not in block
+    assert "althing panel synthesize" not in block
 
 
 if __name__ == "__main__":  # pragma: no cover - convenience

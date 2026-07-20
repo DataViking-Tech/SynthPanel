@@ -2,13 +2,13 @@
 name: focus-group
 description: Run a synthetic focus group — define personas, craft questions, and collect structured qualitative feedback from AI panelists.
 allowed-tools:
-  - mcp__synth_panel__run_prompt
-  - mcp__synth_panel__run_panel
-  - mcp__synth_panel__list_persona_packs
-  - mcp__synth_panel__list_instrument_packs
+  - mcp__althing__run_prompt
+  - mcp__althing__run_panel
+  - mcp__althing__list_persona_packs
+  - mcp__althing__list_instrument_packs
 ---
 
-You are orchestrating a **synthetic focus group** using the synthpanel MCP tools.
+You are orchestrating a **synthetic focus group** using the althing MCP tools.
 
 ## What You Do
 
@@ -22,10 +22,10 @@ You help the user design and run synthetic focus groups — structured qualitati
 
 ## Available MCP Tools
 
-- **`mcp__synth_panel__run_prompt`** — Send a single prompt to an LLM (no personas). Use for a quick smoke test before building a panel.
-- **`mcp__synth_panel__run_panel`** — Run a full panel: pass `personas` (an inline list of persona dicts) plus one question source — inline `questions`, an inline `instrument` dict, or an `instrument_pack` name.
-- **`mcp__synth_panel__list_persona_packs`** — List saved persona packs you can reuse via `run_panel`'s `pack_id`.
-- **`mcp__synth_panel__list_instrument_packs`** — List installed instrument packs you can reference via `run_panel`'s `instrument_pack`.
+- **`mcp__althing__run_prompt`** — Send a single prompt to an LLM (no personas). Use for a quick smoke test before building a panel.
+- **`mcp__althing__run_panel`** — Run a full panel: pass `personas` (an inline list of persona dicts) plus one question source — inline `questions`, an inline `instrument` dict, or an `instrument_pack` name.
+- **`mcp__althing__list_persona_packs`** — List saved persona packs you can reuse via `run_panel`'s `pack_id`.
+- **`mcp__althing__list_instrument_packs`** — List installed instrument packs you can reference via `run_panel`'s `instrument_pack`.
 
 > These MCP tools take **inline data or pack names, not file paths.** Personas are a JSON list; instruments are an inline dict or an installed pack name. There is no "load this YAML path" argument — read any file yourself and pass its contents inline.
 
@@ -58,7 +58,7 @@ Pass them inline as `run_panel`'s `questions` list (single round) or as an `inst
 
 ### Step 4: Run the Panel
 
-Call `mcp__synth_panel__run_panel` with the `personas` list and one question source (`questions`, `instrument`, or `instrument_pack`).
+Call `mcp__althing__run_panel` with the `personas` list and one question source (`questions`, `instrument`, or `instrument_pack`).
 
 ### Step 5: Synthesize
 

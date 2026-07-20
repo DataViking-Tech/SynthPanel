@@ -1,0 +1,30 @@
+# Transitional shim distribution: keeps `pip install synthpanel` working
+# after the rename to althing. Publishes to the existing PyPI `synthpanel`
+# project; the only runtime dependency is the renamed distribution, which
+# ships `synthpanel` / `synth_panel` import shims and the deprecated
+# `synthpanel` console script itself.
+[project]
+name = "synthpanel"
+version = "1.7.0"
+description = "DEPRECATED — synthpanel was renamed to althing. This shim installs althing."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+dependencies = [
+    "althing>=1.7.0",
+]
+classifiers = [
+    "Development Status :: 7 - Inactive",
+]
+
+[project.urls]
+Homepage = "https://althing.dev"
+Repository = "https://github.com/DataViking-Tech/Althing"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# Metapackage: no code of its own — the real shims live in the althing dist.
+packages = []

@@ -58,7 +58,7 @@ def _build_wheel(target_dir: Path) -> Path:
         check=True,
         capture_output=True,
     )
-    wheels = sorted(target_dir.glob("synthpanel-*.whl"))
+    wheels = sorted(target_dir.glob("althing-*.whl"))
     assert wheels, f"no wheel produced in {target_dir}"
     return wheels[-1]
 
@@ -78,7 +78,7 @@ def _smoke_env() -> dict[str, str]:
     """Build the env passed to smoke subprocesses.
 
     Strips the parent's PYTHONPATH so the wheel install is the *only*
-    way ``synthpanel`` can resolve — that's the whole point of the test.
+    way ``althing`` can resolve — that's the whole point of the test.
     Adds a fake credential so ``doctor`` exits 0.
     """
     env = dict(os.environ)
@@ -137,8 +137,8 @@ def _install_and_smoke(
         capture_output=True,
     )
 
-    synthpanel = py.parent / ("synthpanel.exe" if os.name == "nt" else "synthpanel")
-    assert synthpanel.exists(), f"entry-point binary missing after install: {synthpanel}"
+    althing = py.parent / ("althing.exe" if os.name == "nt" else "althing")
+    assert althing.exists(), f"entry-point binary missing after install: {althing}"
 
     env = _smoke_env()
 
@@ -146,16 +146,16 @@ def _install_and_smoke(
     # smallest possible CLI smoke — entry-point dispatch + package
     # metadata load.
     out = subprocess.run(
-        [str(synthpanel), "--version"],
+        [str(althing), "--version"],
         check=True,
         capture_output=True,
         text=True,
         env=env,
     )
-    assert "synthpanel" in out.stdout.lower(), f"--version missing 'synthpanel': {out.stdout!r}"
+    assert "althing" in out.stdout.lower(), f"--version missing 'althing': {out.stdout!r}"
 
     subprocess.run(
-        [str(synthpanel), "--help"],
+        [str(althing), "--help"],
         check=True,
         capture_output=True,
         text=True,
@@ -165,7 +165,7 @@ def _install_and_smoke(
     # whoami always exits 0 (informational) — it must not raise on a
     # fresh install with no credential store.
     subprocess.run(
-        [str(synthpanel), "whoami"],
+        [str(althing), "whoami"],
         check=True,
         capture_output=True,
         text=True,
@@ -176,7 +176,7 @@ def _install_and_smoke(
     # checkpoint root writable, packs loaded. Our fake env satisfies
     # the credential check; the rest must come from the wheel.
     subprocess.run(
-        [str(synthpanel), "doctor"],
+        [str(althing), "doctor"],
         check=True,
         capture_output=True,
         text=True,
@@ -191,7 +191,7 @@ def _install_and_smoke(
             [
                 str(py),
                 "-c",
-                "from synth_panel.mcp.server import mcp; assert mcp is not None",
+                "from althing.mcp.server import mcp; assert mcp is not None",
             ],
             check=True,
             capture_output=True,
@@ -204,7 +204,7 @@ def test_pip_install_bare_wheel_yields_working_cli(
     installed_wheel: Path,
     tmp_path: Path,
 ) -> None:
-    """``pip install synthpanel`` (no extras) must give us a CLI that
+    """``pip install althing`` (no extras) must give us a CLI that
     survives --version / --help / whoami / doctor on a fresh venv."""
     _install_and_smoke(tmp_path, installed_wheel, extras="")
 
@@ -213,7 +213,7 @@ def test_pip_install_with_mcp_extra_yields_working_mcp_surface(
     installed_wheel: Path,
     tmp_path: Path,
 ) -> None:
-    """``pip install 'synthpanel[mcp]'`` must additionally let us import
+    """``pip install 'althing[mcp]'`` must additionally let us import
     the MCP server (FastMCP top-level object). This is the agent-onboarding
     happy path."""
     _install_and_smoke(tmp_path, installed_wheel, extras="[mcp]", expect_mcp=True)

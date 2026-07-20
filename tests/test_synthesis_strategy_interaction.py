@@ -25,12 +25,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from synth_panel.cost import ZERO_USAGE
-from synth_panel.llm.models import CompletionResponse, ToolInvocationBlock
-from synth_panel.llm.models import TokenUsage as LLMTokenUsage
-from synth_panel.main import main
-from synth_panel.orchestrator import PanelistResult
-from synth_panel.synthesis import (
+from althing.cost import ZERO_USAGE
+from althing.llm.models import CompletionResponse, ToolInvocationBlock
+from althing.llm.models import TokenUsage as LLMTokenUsage
+from althing.main import main
+from althing.orchestrator import PanelistResult
+from althing.synthesis import (
     MapChunkOverflowError,
     SynthesisResult,
     synthesize_panel_mapreduce,
@@ -77,16 +77,16 @@ def _tool_response(marker: str) -> CompletionResponse:
 
 
 class TestAutoRoutesOverflowToMapReduce:
-    @patch("synth_panel.cli.commands.synthesize_panel_mapreduce")
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel_mapreduce")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_auto_falls_over_to_map_reduce_when_single_overflows(
         self, _mock_client, mock_run, mock_synth_single, mock_synth_mr, capsys, tmp_path
     ):
         """sp-exu6 AC 1, 2, 6: auto + overflow → map-reduce (not hard fail)."""
-        from synth_panel.cost import CostEstimate, TokenUsage
-        from synth_panel.orchestrator import WorkerRegistry
+        from althing.cost import CostEstimate, TokenUsage
+        from althing.orchestrator import WorkerRegistry
 
         # Large enough to overflow single-pass haiku (200k - 8k headroom).
         giant = "A" * 800_000
@@ -137,15 +137,15 @@ class TestAutoRoutesOverflowToMapReduce:
 
 
 class TestSingleStillRejectsOnOverflow:
-    @patch("synth_panel.cli.commands.synthesize_panel_mapreduce")
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel_mapreduce")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_single_still_rejects_on_overflow(
         self, _mock_client, mock_run, mock_synth_single, mock_synth_mr, capsys, tmp_path
     ):
         """sp-exu6 AC 4: explicit single preserves the sp-avmm pre-flight."""
-        from synth_panel.orchestrator import WorkerRegistry
+        from althing.orchestrator import WorkerRegistry
 
         giant = "A" * 800_000
         huge_results = [
@@ -190,16 +190,16 @@ class TestSingleStillRejectsOnOverflow:
 
 
 class TestMapReduceSkipsPanelLevelOverflow:
-    @patch("synth_panel.cli.commands.synthesize_panel_mapreduce")
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel_mapreduce")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_map_reduce_bypasses_panel_level_overflow(
         self, _mock_client, mock_run, mock_synth_single, mock_synth_mr, capsys, tmp_path
     ):
         """sp-exu6 AC 5: explicit map-reduce skips the whole-panel pre-flight."""
-        from synth_panel.cost import CostEstimate, TokenUsage
-        from synth_panel.orchestrator import WorkerRegistry
+        from althing.cost import CostEstimate, TokenUsage
+        from althing.orchestrator import WorkerRegistry
 
         giant = "A" * 800_000
         huge_results = [
@@ -318,16 +318,16 @@ class TestMapReducePerChunkOverflowCheck:
 
 
 class TestCliMapChunkOverflowErrorShape:
-    @patch("synth_panel.cli.commands.synthesize_panel_mapreduce")
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel_mapreduce")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_per_chunk_overflow_becomes_structured_payload(
         self, _mock_client, mock_run, mock_synth_single, mock_synth_mr, capsys, tmp_path
     ):
         """A raised MapChunkOverflowError becomes a structured
         ``synthesis_map_chunk_overflow`` error in the CLI envelope."""
-        from synth_panel.orchestrator import WorkerRegistry
+        from althing.orchestrator import WorkerRegistry
 
         mock_run.return_value = (
             [

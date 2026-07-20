@@ -7,20 +7,20 @@ package:
   by Cloudflare Pages (three version slots).
 * ``server.json`` — the root MCP server descriptor that
   ``site/.well-known/api-catalog`` points RFC-9727 discovery at (two
-  version slots: top-level + ``packages[synthpanel].version``).
+  version slots: top-level + ``packages[althing].version``).
 
 Single-source-of-truth model identical to :mod:`scripts.render_site`:
-read ``src/synth_panel/__version__.py``, then rewrite the
+read ``src/althing/__version__.py``, then rewrite the
 version fields each descriptor exposes:
 
 server-card.json (three slots):
 1. Top-level ``version``
 2. ``serverInfo.version`` (runtime metadata the host server prints)
-3. Every ``packages[].version`` where ``identifier == "synthpanel"``
+3. Every ``packages[].version`` where ``identifier == "althing"``
 
 server.json (two slots):
 1. Top-level ``version``
-2. ``packages[synthpanel].version``
+2. ``packages[althing].version``
 
 We do *targeted line-level substitution* rather than ``json.load`` +
 ``json.dump`` because the committed file uses a compact style
@@ -57,7 +57,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CARD_PATH = REPO_ROOT / "site" / ".well-known" / "mcp" / "server-card.json"
 SERVER_JSON_PATH = REPO_ROOT / "server.json"
-VERSION_PATH = REPO_ROOT / "src" / "synth_panel" / "__version__.py"
+VERSION_PATH = REPO_ROOT / "src" / "althing" / "__version__.py"
 
 
 def _read_version() -> str:

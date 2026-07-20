@@ -11,10 +11,10 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
-from synth_panel.cost import ZERO_USAGE, TokenUsage
-from synth_panel.main import main
-from synth_panel.persistence import ConversationMessage
-from synth_panel.runtime import TurnSummary
+from althing.cost import ZERO_USAGE, TokenUsage
+from althing.main import main
+from althing.persistence import ConversationMessage
+from althing.runtime import TurnSummary
 
 
 def _mock_turn(text: str = "ok") -> TurnSummary:
@@ -28,8 +28,8 @@ def _mock_turn(text: str = "ok") -> TurnSummary:
 
 
 def _mock_synthesis():
-    from synth_panel.cost import CostEstimate
-    from synth_panel.synthesis import SynthesisResult
+    from althing.cost import CostEstimate
+    from althing.synthesis import SynthesisResult
 
     return SynthesisResult(
         summary="s",
@@ -54,9 +54,9 @@ def _write_fixtures(tmp_path, *, base_names, merge_names):
     return base, merge, survey
 
 
-@patch("synth_panel.cli.commands.synthesize_panel")
-@patch("synth_panel.orchestrator.AgentRuntime")
-@patch("synth_panel.cli.commands.LLMClient")
+@patch("althing.cli.commands.synthesize_panel")
+@patch("althing.orchestrator.AgentRuntime")
+@patch("althing.cli.commands.LLMClient")
 def test_collision_emits_warning_to_stderr(mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path):
     mock_runtime = MagicMock()
     mock_runtime.run_turn.return_value = _mock_turn()
@@ -86,9 +86,9 @@ def test_collision_emits_warning_to_stderr(mock_client_cls, mock_runtime_cls, mo
     assert "4" in err
 
 
-@patch("synth_panel.cli.commands.synthesize_panel")
-@patch("synth_panel.orchestrator.AgentRuntime")
-@patch("synth_panel.cli.commands.LLMClient")
+@patch("althing.cli.commands.synthesize_panel")
+@patch("althing.orchestrator.AgentRuntime")
+@patch("althing.cli.commands.LLMClient")
 def test_collision_appears_in_json_output(mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path):
     mock_runtime = MagicMock()
     mock_runtime.run_turn.return_value = _mock_turn()
@@ -125,9 +125,9 @@ def test_collision_appears_in_json_output(mock_client_cls, mock_runtime_cls, moc
     assert w["pre_dedup_count"] == 4
 
 
-@patch("synth_panel.cli.commands.synthesize_panel")
-@patch("synth_panel.orchestrator.AgentRuntime")
-@patch("synth_panel.cli.commands.LLMClient")
+@patch("althing.cli.commands.synthesize_panel")
+@patch("althing.orchestrator.AgentRuntime")
+@patch("althing.cli.commands.LLMClient")
 def test_dry_run_surfaces_collision(mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path):
     # Dry-run short-circuits before any LLM call fires; the mocks exist
     # only to guarantee we never accidentally hit the provider layer.
@@ -163,9 +163,9 @@ def test_dry_run_surfaces_collision(mock_client_cls, mock_runtime_cls, mock_synt
     mock_runtime_cls.assert_not_called()
 
 
-@patch("synth_panel.cli.commands.synthesize_panel")
-@patch("synth_panel.orchestrator.AgentRuntime")
-@patch("synth_panel.cli.commands.LLMClient")
+@patch("althing.cli.commands.synthesize_panel")
+@patch("althing.orchestrator.AgentRuntime")
+@patch("althing.cli.commands.LLMClient")
 def test_no_collision_no_warning(mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path):
     mock_runtime = MagicMock()
     mock_runtime.run_turn.return_value = _mock_turn()
@@ -200,9 +200,9 @@ def test_no_collision_no_warning(mock_client_cls, mock_runtime_cls, mock_synth, 
     assert data.get("personas_merge_warnings") == []
 
 
-@patch("synth_panel.cli.commands.synthesize_panel")
-@patch("synth_panel.orchestrator.AgentRuntime")
-@patch("synth_panel.cli.commands.LLMClient")
+@patch("althing.cli.commands.synthesize_panel")
+@patch("althing.orchestrator.AgentRuntime")
+@patch("althing.cli.commands.LLMClient")
 def test_on_collision_error_fails_run(mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path):
     base, merge, survey = _write_fixtures(tmp_path, base_names=["Alice"], merge_names=["Alice"])
 
@@ -251,9 +251,9 @@ def test_on_collision_keep_is_reserved(capsys, tmp_path):
     assert "reserved" in err.lower()
 
 
-@patch("synth_panel.cli.commands.synthesize_panel")
-@patch("synth_panel.orchestrator.AgentRuntime")
-@patch("synth_panel.cli.commands.LLMClient")
+@patch("althing.cli.commands.synthesize_panel")
+@patch("althing.orchestrator.AgentRuntime")
+@patch("althing.cli.commands.LLMClient")
 def test_default_policy_is_dedup_with_warning(mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path):
     """Default --personas-merge-on-collision is dedup (back-compat).
 

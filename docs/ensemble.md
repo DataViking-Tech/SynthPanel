@@ -15,7 +15,7 @@ assignments, and the edge cases operators have tripped on.
 ### 1. Weighted per-persona assignment (has `:`)
 
 ```bash
-synthpanel panel run \
+althing panel run \
   --personas examples/personas.yaml \
   --instrument examples/survey.yaml \
   --models 'haiku:0.5,gemini-2.5-flash:0.5'
@@ -34,7 +34,7 @@ Useful for:
 ### 2. Ensemble (no `:`)
 
 ```bash
-synthpanel panel run \
+althing panel run \
   --personas examples/personas.yaml \
   --instrument examples/survey.yaml \
   --models 'haiku,sonnet,gemini-2.5-flash'

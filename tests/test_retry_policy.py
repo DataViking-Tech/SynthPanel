@@ -18,21 +18,21 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from synth_panel.llm.client import LLMClient, _provider_name
-from synth_panel.llm.errors import LLMError, LLMErrorCategory
-from synth_panel.llm.models import (
+from althing.llm.client import LLMClient, _provider_name
+from althing.llm.errors import LLMError, LLMErrorCategory
+from althing.llm.models import (
     CompletionRequest,
     CompletionResponse,
     InputMessage,
     TextBlock,
     TokenUsage,
 )
-from synth_panel.llm.providers.anthropic import AnthropicProvider
-from synth_panel.llm.providers.gemini import GeminiProvider
-from synth_panel.llm.providers.openai_compat import OpenAICompatibleProvider
-from synth_panel.llm.providers.openrouter import OpenRouterProvider
-from synth_panel.llm.providers.xai import XAIProvider
-from synth_panel.llm.retry import RetryPolicy
+from althing.llm.providers.anthropic import AnthropicProvider
+from althing.llm.providers.gemini import GeminiProvider
+from althing.llm.providers.openai_compat import OpenAICompatibleProvider
+from althing.llm.providers.openrouter import OpenRouterProvider
+from althing.llm.providers.xai import XAIProvider
+from althing.llm.retry import RetryPolicy
 
 
 def _req(model: str = "claude-sonnet-4-6-20250414") -> CompletionRequest:
@@ -107,7 +107,7 @@ class TestRequiredScenarios:
 
             sleeps: list[float] = []
             with patch(
-                "synth_panel.llm.retry.time.sleep",
+                "althing.llm.retry.time.sleep",
                 side_effect=sleeps.append,
             ):
                 client.send(_req())
@@ -163,13 +163,13 @@ class TestRetryLogLine:
             return "ok"
 
         with (
-            caplog.at_level(logging.INFO, logger="synth_panel.llm.retry"),
-            patch("synth_panel.llm.retry.time.sleep"),
+            caplog.at_level(logging.INFO, logger="althing.llm.retry"),
+            patch("althing.llm.retry.time.sleep"),
         ):
             got = policy.run(fn, provider_name="Anthropic")
 
         assert got == "ok"
-        records = [r for r in caplog.records if r.name == "synth_panel.llm.retry"]
+        records = [r for r in caplog.records if r.name == "althing.llm.retry"]
         assert len(records) == 1
         msg = records[0].getMessage()
         assert "provider=Anthropic" in msg

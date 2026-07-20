@@ -1,11 +1,11 @@
-"""Cross-repo contract test: SynthPanel submission payloads vs SynthBench's validator.
+"""Cross-repo contract test: Althing submission payloads vs SynthBench's validator.
 
 This is the guard for the product→benchmark data funnel (sp-ezz, gap-analysis
 P0-2): a payload built by ``build_submission_payload`` from a realistic
 calibrated panel run must pass SynthBench's *actual* ``validate_submission``
 with zero ERROR-severity issues in tier 1 (schema + plausibility) AND
 tier 2 (metric recomputation). Historically the payload failed tier 1 with
-6+ schema errors, so no SynthPanel run ever validly reached the leaderboard.
+6+ schema errors, so no Althing run ever validly reached the leaderboard.
 
 Dependency note: the ``synthbench`` distribution on PyPI is an UNRELATED
 project (synthetic ML datasets); the real harness is GitHub-only
@@ -28,9 +28,9 @@ from typing import Any
 
 import pytest
 
-from synth_panel.convergence import ConvergenceTracker, identify_tracked_questions
-from synth_panel.instrument import parse_instrument
-from synth_panel.synthbench_submit import (
+from althing.convergence import ConvergenceTracker, identify_tracked_questions
+from althing.instrument import parse_instrument
+from althing.synthbench_submit import (
     _vendored_jsd,
     _vendored_kendall_tau_b,
     build_submission_payload,
@@ -44,7 +44,7 @@ _GSS_HAPPY_HUMAN = {"Very happy": 0.31, "Pretty happy": 0.56, "Not too happy": 0
 def _happiness_probe_questions() -> list[dict[str, Any]]:
     """Load the *bundled* happiness-probe pack — the instrument the README's
     ``--submit-to-synthbench`` recipe uses — and return its flat questions."""
-    from synth_panel.mcp.data import _bundled_instrument_packs
+    from althing.mcp.data import _bundled_instrument_packs
 
     pack = _bundled_instrument_packs()["happiness-probe"]
     instrument = parse_instrument(dict(pack["instrument"]))
@@ -123,7 +123,7 @@ def test_submission_payload_passes_synthbench_validator_tier1_and_tier2():
 
     report = sb_validation.validate_submission(
         wire_payload,
-        source="synthpanel --submit-to-synthbench",
+        source="althing --submit-to-synthbench",
         tier1=True,
         tier2=True,
     )
@@ -154,7 +154,7 @@ def test_multi_question_run_submits_only_the_calibrated_question():
     assert payload["aggregate"]["n_questions"] == 1
 
     report = sb_validation.validate_submission(
-        json.loads(json.dumps(payload)), source="synthpanel multi-question", tier1=True, tier2=True
+        json.loads(json.dumps(payload)), source="althing multi-question", tier1=True, tier2=True
     )
     assert report.errors == [], f"SynthBench validator rejected the payload:\n{report.format()}"
 
@@ -261,7 +261,7 @@ def test_vendored_jsd_known_values():
     # Bounded in [0, 1].
     assert 0.0 < _vendored_jsd(p, q) <= 1.0
     # Empty / zero-mass distribution → 1.0 (synthbench convention; NOTE this
-    # deliberately differs from synth_panel.convergence.jensen_shannon_divergence,
+    # deliberately differs from althing.convergence.jensen_shannon_divergence,
     # which returns 0.0 for "no signal yet").
     assert _vendored_jsd({}, {"a": 1.0}) == 1.0
     assert _vendored_jsd({"a": 0.0}, {"a": 1.0}) == 1.0

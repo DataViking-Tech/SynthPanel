@@ -4,11 +4,11 @@ Synthesis of three research dimensions for the D-phase gate. Ticket now revealed
 
 ## What the codebase currently provides
 
-**Pack delivery is wheel-packaged + directory-scanned.** 9 bundled persona packs + 8 instrument packs ship as `*.yaml` resources under `synth_panel.packs` / `synth_panel.packs.instruments`. Discovery via `importlib.resources.files()` + filename-stem pack ID. Update mechanism: `pip install --upgrade synthpanel`.
+**Pack delivery is wheel-packaged + directory-scanned.** 9 bundled persona packs + 8 instrument packs ship as `*.yaml` resources under `althing.packs` / `althing.packs.instruments`. Discovery via `importlib.resources.files()` + filename-stem pack ID. Update mechanism: `pip install --upgrade althing`.
 
-**User-saved packs live at `~/.synthpanel/persona_packs/`** (overridable by `SYNTH_PANEL_DATA_DIR`). User-saved shadows bundled by pack ID (no warning). 5 pack subcommands: `list`, `import`, `export`, `show`, `generate`. Instruments have `install` (with pre-install validation) but no `import/export/generate` equivalents yet.
+**User-saved packs live at `~/.althing/persona_packs/`** (overridable by `SYNTH_PANEL_DATA_DIR`). User-saved shadows bundled by pack ID (no warning). 5 pack subcommands: `list`, `import`, `export`, `show`, `generate`. Instruments have `install` (with pre-install validation) but no `import/export/generate` equivalents yet.
 
-**Persona schema is implicit, code-enforced:** `validate_persona_pack()` at `mcp/data.py:204-241` requires `personas` list non-empty + each persona dict with `name`. Optional fields (`age`, `occupation`, `background`, `personality_traits`) unvalidated beyond type. **No `version:` field for persona packs.** Instruments require `version:` in manifest (schema version 1/2/3, all bundled are v1, unrelated to synthpanel version). No migration tooling for either.
+**Persona schema is implicit, code-enforced:** `validate_persona_pack()` at `mcp/data.py:204-241` requires `personas` list non-empty + each persona dict with `name`. Optional fields (`age`, `occupation`, `background`, `personality_traits`) unvalidated beyond type. **No `version:` field for persona packs.** Instruments require `version:` in manifest (schema version 1/2/3, all bundled are v1, unrelated to althing version). No migration tooling for either.
 
 **Actual corpus shows authoring-friction patterns.** Audit of 19 pack files (9 bundled + 10 custom) = 172 personas, 2,149 LOC:
 - **~40 personas duplicated byte-identically** across packs (e.g., Abdul Rahman appears in both `job-seekers.yaml` and `extra_50_traitprint.yaml`)
@@ -41,8 +41,8 @@ Synthesis of three research dimensions for the D-phase gate. Ticket now revealed
 
 ## Observable seams (current extensibility)
 
-1. **`_bundled_packs()` directory scan** (`mcp/data.py:83-102`) — any `*.yaml` in `synth_panel.packs` is discovered. A community-pack directory on disk would plug in via the same mechanism if packaged as a namespace package or via a separate entry point.
-2. **`$SYNTH_PANEL_DATA_DIR` override** — single env-var configuration. A registry install-path could reuse this or extend with a subdirectory (`~/.synthpanel/registry-packs/`).
+1. **`_bundled_packs()` directory scan** (`mcp/data.py:83-102`) — any `*.yaml` in `althing.packs` is discovered. A community-pack directory on disk would plug in via the same mechanism if packaged as a namespace package or via a separate entry point.
+2. **`$SYNTH_PANEL_DATA_DIR` override** — single env-var configuration. A registry install-path could reuse this or extend with a subdirectory (`~/.althing/registry-packs/`).
 3. **Pack ID shadowing with no warning** — `data.py:162-173` check silently. Adding a collision warning is a focused change that also benefits sp-g270's existing work on merge-level collisions.
 4. **`pack import`** — already handles file → saved-pack flow. Extending to accept URLs (`pack import https://...` or `pack import gh:user/repo`) is an additive flag on an existing command.
 5. **`pack generate`** — already produces a pack via LLM with structured output. A "submit this to a registry" action is adjacent.
@@ -52,7 +52,7 @@ Synthesis of three research dimensions for the D-phase gate. Ticket now revealed
 
 **Centralization tension.** Decentralized git-URL (cookiecutter style) is zero-infra but fragments discovery; centralized registry is moderatable but becomes a governance surface. Precedent in Gas Town favors minimal centralization, but a registry's value is primarily discoverability.
 
-**Where the registry lives** — synthpanel.dev static site vs GitHub Pages vs a dedicated repo (`synthpanel/registry` or `synthpanel-packs/index`) vs a third-party tap pattern. Each has different implications for author submission friction, moderation surface, and cross-machine reproducibility.
+**Where the registry lives** — althing.dev static site vs GitHub Pages vs a dedicated repo (`althing/registry` or `althing-packs/index`) vs a third-party tap pattern. Each has different implications for author submission friction, moderation surface, and cross-machine reproducibility.
 
 **Versioning semantics.** Persona packs currently have no version field; adding one is a schema change. Options: (a) ignore versioning, let authors re-submit (pre-commit style), (b) add optional `version:` field, (c) adopt the instrument manifest pattern wholesale for consistency. Registry needs *some* version signal for users to pin or upgrade.
 
@@ -62,7 +62,7 @@ Synthesis of three research dimensions for the D-phase gate. Ticket now revealed
 
 **Security surface.** Persona packs are YAML — safe to load via `yaml.safe_load`. But packs executed as panel personas carry *behavioral* content (prompt content shaping what LLMs emit) that can be adversarial without being executable code. Community packs could be used to inject prompt-injection attacks into downstream consumers' panels. Moderation considerations extend beyond executable-code safety.
 
-**Branding tension.** A community marketplace with DataViking/synthpanel attribution raises brand exposure. HACS-style centralization puts maintenance of the manifest registry on synthpanel maintainers; pure decentralization (cookiecutter-style) fragments but lets the community self-identify.
+**Branding tension.** A community marketplace with DataViking/althing attribution raises brand exposure. HACS-style centralization puts maintenance of the manifest registry on althing maintainers; pure decentralization (cookiecutter-style) fragments but lets the community self-identify.
 
 **Sharing-the-authoring-corpus tension.** The audit shows ~40 duplicate personas across existing packs — evidence that scale-out via copy-paste is the current authoring workflow. A registry could reduce duplication if the discovery surface made reuse easier than copying. But if the registry is too far from the current `pack import` workflow, duplication continues.
 

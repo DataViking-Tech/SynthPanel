@@ -1,8 +1,8 @@
-"""Tests for synth_panel.text_width display-width helpers."""
+"""Tests for althing.text_width display-width helpers."""
 
 from __future__ import annotations
 
-from synth_panel.text_width import char_width, display_width, pad, truncate
+from althing.text_width import char_width, display_width, pad, truncate
 
 
 class TestDisplayWidth:

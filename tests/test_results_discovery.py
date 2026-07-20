@@ -12,9 +12,9 @@ import json
 
 import pytest
 
-from synth_panel.cost import PRICING_SNAPSHOT_DATE, CostEstimate, TokenUsage
-from synth_panel.main import main
-from synth_panel.metadata import build_metadata
+from althing.cost import PRICING_SNAPSHOT_DATE, CostEstimate, TokenUsage
+from althing.main import main
+from althing.metadata import build_metadata
 
 
 @pytest.fixture(autouse=True)
@@ -24,7 +24,7 @@ def _data_dir(tmp_path, monkeypatch):
 
 def _save_with_metadata() -> str:
     """Persist a minimal result the way the CLI ``--save`` path now does."""
-    from synth_panel.mcp.data import save_panel_result
+    from althing.mcp.data import save_panel_result
 
     usage = TokenUsage(input_tokens=10, output_tokens=20)
     cost = CostEstimate(input_cost=0.0005, output_cost=0.0005)
@@ -51,21 +51,21 @@ def _save_with_metadata() -> str:
 
 class TestProvenancePersisted:
     def test_metadata_block_round_trips(self):
-        from synth_panel.mcp.data import get_panel_result
+        from althing.mcp.data import get_panel_result
 
         rid = _save_with_metadata()
         data = get_panel_result(rid)
 
         assert "metadata" in data
-        assert data["metadata"]["version"]["synthpanel"]
+        assert data["metadata"]["version"]["althing"]
         assert data["metadata"]["version"]["python"]
         assert data["metadata"]["config_hash"]
         assert data["metadata"]["cost"]["pricing_snapshot_date"] == PRICING_SNAPSHOT_DATE
 
     def test_report_provenance_is_populated(self):
-        from synth_panel.analysis.inspect import build_inspect_report
-        from synth_panel.mcp.data import get_panel_result
-        from synth_panel.reporting import render_markdown
+        from althing.analysis.inspect import build_inspect_report
+        from althing.mcp.data import get_panel_result
+        from althing.reporting import render_markdown
 
         rid = _save_with_metadata()
         data = get_panel_result(rid)
@@ -73,7 +73,7 @@ class TestProvenancePersisted:
 
         # The dogfood report showed all four of these as (unknown)/(not recorded).
         assert "(not recorded)" not in md
-        assert "synthpanel_version | (unknown)" not in md
+        assert "althing_version | (unknown)" not in md
         assert "python_version | (unknown)" not in md
         assert "pricing_snapshot_date | (unknown)" not in md
         assert PRICING_SNAPSHOT_DATE in md
@@ -114,7 +114,7 @@ class TestResultsShow:
         assert f"{rid}.json" in out
         assert PRICING_SNAPSHOT_DATE in out
         # The canonical follow-up command is advertised.
-        assert f"synthpanel report {rid}" in out
+        assert f"althing report {rid}" in out
 
     def test_json_mode_includes_saved_path(self, capsys):
         rid = _save_with_metadata()
@@ -139,23 +139,23 @@ class TestRunsListPointsAtResults:
         code = main(["runs", "list", "--root", str(tmp_path / "ckpt")])
         out = capsys.readouterr().out
         assert code == 0
-        assert "synthpanel results list" in out
+        assert "althing results list" in out
 
 
 class TestSavedResultHintCommands:
     """The saved-result "Next:" block must only suggest real commands (#538)."""
 
     def test_hint_suggests_real_commands_not_per_result_cost(self, capsys):
-        from synth_panel.cli.commands import _print_saved_result_hint
+        from althing.cli.commands import _print_saved_result_hint
 
         _print_saved_result_hint("result-abc123")
         err = capsys.readouterr().err
 
         # Real, existing commands are surfaced.
-        assert "synthpanel report result-abc123" in err
-        assert "synthpanel results show result-abc123" in err
-        assert "synthpanel results list" in err
+        assert "althing report result-abc123" in err
+        assert "althing results show result-abc123" in err
+        assert "althing results list" in err
         # The per-run cost rollup is reachable via the real `cost summary`
         # subcommand, not a nonexistent per-result `cost <id>` command.
-        assert "synthpanel cost summary" in err
+        assert "althing cost summary" in err
         assert "cost result-abc123" not in err

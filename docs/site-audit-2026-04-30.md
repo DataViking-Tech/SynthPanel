@@ -1,4 +1,4 @@
-# Site Audit: synthpanel.dev vs CLI Surface
+# Site Audit: althing.dev vs CLI Surface
 
 **Date:** 2026-04-30  
 **CLI version audited:** 0.12.0  
@@ -19,27 +19,27 @@ site/CLI sync.
 | `/mcp` | `site/mcp/index.html` | ✅ Up-to-date — all 12 MCP tools documented |
 | `/recommended-models` | *(missing)* | ❌ Missing — promised in 0.12.0 CHANGELOG, `docs/recommended-models.md` exists but no site page |
 | `/docs/calibration` | *(missing)* | ❌ Missing — referenced in `calibration:` pack YAML output (`methodology_url`), `docs/calibration.md` exists |
-| `/blog/synthpanel-vs-commercial-alternatives.html` | `site/blog/…` | ✅ Up-to-date |
+| `/blog/althing-vs-commercial-alternatives.html` | `site/blog/…` | ✅ Up-to-date |
 
 ## CLI commands vs site coverage
 
 ### Documented on site
 
-- [x] `synthpanel prompt` — Quick Start snippet on `/`
-- [x] `synthpanel panel run` — Quick Start snippet on `/`
-- [x] `synthpanel report` — Quick Start snippet on `/`
-- [x] `synthpanel mcp-serve` — MCP section on `/` and full docs on `/mcp`
+- [x] `althing prompt` — Quick Start snippet on `/`
+- [x] `althing panel run` — Quick Start snippet on `/`
+- [x] `althing report` — Quick Start snippet on `/`
+- [x] `althing mcp-serve` — MCP section on `/` and full docs on `/mcp`
 
 ### Missing or undocumented
 
-- [ ] `synthpanel login` / `logout` / `whoami` — not mentioned anywhere (added in 0.9.x)
-- [ ] `synthpanel pack calibrate` — new in 0.12.0, not on site
-- [ ] `synthpanel pack generate` / `search` / `import` / `export` / `show` / `list` — not on site
-- [ ] `synthpanel instruments list` / `install` / `show` / `graph` — not on site
-- [ ] `synthpanel analyze` — not on site
-- [ ] `synthpanel cost summary` — not on site
-- [ ] `synthpanel panel inspect` — not on site
-- [ ] `synthpanel panel synthesize` — not on site
+- [ ] `althing login` / `logout` / `whoami` — not mentioned anywhere (added in 0.9.x)
+- [ ] `althing pack calibrate` — new in 0.12.0, not on site
+- [ ] `althing pack generate` / `search` / `import` / `export` / `show` / `list` — not on site
+- [ ] `althing instruments list` / `install` / `show` / `graph` — not on site
+- [ ] `althing analyze` — not on site
+- [ ] `althing cost summary` — not on site
+- [ ] `althing panel inspect` — not on site
+- [ ] `althing panel synthesize` — not on site
 
 ### panel run flags not documented
 
@@ -58,7 +58,7 @@ site/CLI sync.
 
 ## Gaps fixed in this PR (GH-318)
 
-- `site/index.html.j2`: Quick Start step 2 now shows `synthpanel login` as
+- `site/index.html.j2`: Quick Start step 2 now shows `althing login` as
   an alternative to the env-var approach
 - `site/index.html.j2`: Added `pack calibrate` to the "further features" note
   below the Quick Start
@@ -77,5 +77,5 @@ See linked beads. Priority order:
 4. **Advanced `panel run` flag docs** — ensemble, convergence, calibration
    flags are significant features with no site coverage
 5. **CI sync check** — add a GitHub Actions job that runs
-   `synthpanel --help` and diffs against known coverage so drift is caught
+   `althing --help` and diffs against known coverage so drift is caught
    at the PR level

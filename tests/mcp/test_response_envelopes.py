@@ -32,8 +32,8 @@ pytest.importorskip("mcp")
 def _data_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("SYNTH_PANEL_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-placeholder")
-    monkeypatch.delenv("SYNTHPANEL_SCHEMA_MIN", raising=False)
-    monkeypatch.delenv("SYNTHPANEL_DRIFT_DEGRADE", raising=False)
+    monkeypatch.delenv("ALTHING_SCHEMA_MIN", raising=False)
+    monkeypatch.delenv("ALTHING_DRIFT_DEGRADE", raising=False)
 
 
 from .test_decision_wiring import (
@@ -49,11 +49,11 @@ def _stub_all_failed_panelists(error: str = "model 'bogus-alias-xyz' not found (
     """Stub ``run_panel_parallel`` returning an all-failed panel.
 
     Every persona comes back with ``error`` set and no clean response, so
-    :func:`synth_panel._runners.detect_total_failure` classifies the run as
+    :func:`althing._runners.detect_total_failure` classifies the run as
     a total wipeout — the exact shape a knowingly-bad model alias produces.
     """
-    from synth_panel.cost import TokenUsage
-    from synth_panel.orchestrator import PanelistResult
+    from althing.cost import TokenUsage
+    from althing.orchestrator import PanelistResult
 
     def _fake(client=None, personas=None, questions=None, model=None, sessions=None, **_kwargs):
         results = [
@@ -72,7 +72,7 @@ def _stub_all_failed_panelists(error: str = "model 'bogus-alias-xyz' not found (
 
 
 async def _run_panel(detail: str | None = None, **extra):
-    from synth_panel.mcp import server as _server
+    from althing.mcp import server as _server
 
     kwargs: dict = {
         "personas": [{"name": "Alice"}, {"name": "Bob"}],
@@ -87,15 +87,15 @@ async def _run_panel(detail: str | None = None, **extra):
 
     with (
         patch(
-            "synth_panel.orchestrator.run_panel_parallel",
+            "althing.orchestrator.run_panel_parallel",
             side_effect=_stub_run_panel_parallel_with_sessions(),
         ),
         patch(
-            "synth_panel._runners.run_panel_parallel",
+            "althing._runners.run_panel_parallel",
             side_effect=_stub_run_panel_parallel_with_sessions(),
         ),
-        patch("synth_panel._runners.synthesize_panel", side_effect=_stub_synthesize_panel),
-        patch("synth_panel.mcp.server._shared_client", None),
+        patch("althing._runners.synthesize_panel", side_effect=_stub_synthesize_panel),
+        patch("althing.mcp.server._shared_client", None),
     ):
         raw = await _server.run_panel(**kwargs)
     return json.loads(raw)
@@ -197,21 +197,21 @@ async def test_flat_questions_summary_still_reports_terminal_round():
 
 
 async def _run_quick_poll(**kwargs):
-    from synth_panel.mcp import server as _server
+    from althing.mcp import server as _server
 
     kwargs.setdefault("decision_being_informed", _VALID_DECISION)
     kwargs.setdefault("ctx", _StubMcpContext())
     with (
         patch(
-            "synth_panel.orchestrator.run_panel_parallel",
+            "althing.orchestrator.run_panel_parallel",
             side_effect=_stub_run_panel_parallel_with_sessions(),
         ),
         patch(
-            "synth_panel._runners.run_panel_parallel",
+            "althing._runners.run_panel_parallel",
             side_effect=_stub_run_panel_parallel_with_sessions(),
         ),
-        patch("synth_panel._runners.synthesize_panel", side_effect=_stub_synthesize_panel),
-        patch("synth_panel.mcp.server._shared_client", None),
+        patch("althing._runners.synthesize_panel", side_effect=_stub_synthesize_panel),
+        patch("althing.mcp.server._shared_client", None),
     ):
         raw = await _server.run_quick_poll(**kwargs)
     return json.loads(raw)
@@ -219,7 +219,7 @@ async def _run_quick_poll(**kwargs):
 
 @pytest.mark.asyncio
 async def test_quick_poll_pack_id_resolves_personas():
-    from synth_panel.mcp.data import save_persona_pack
+    from althing.mcp.data import save_persona_pack
 
     save_persona_pack(
         "Trio",
@@ -233,7 +233,7 @@ async def test_quick_poll_pack_id_resolves_personas():
     # The three pack personas ran (not the 3-persona built-in default —
     # verify by name via the persisted transcript).
     assert data["persona_count"] == 3
-    from synth_panel.mcp.data import get_panel_result
+    from althing.mcp.data import get_panel_result
 
     saved = get_panel_result(data["result_id"])
     assert sorted(r["persona"] for r in saved["results"]) == ["Pat", "Quinn", "Rae"]
@@ -241,7 +241,7 @@ async def test_quick_poll_pack_id_resolves_personas():
 
 @pytest.mark.asyncio
 async def test_quick_poll_pack_id_merges_with_inline_personas():
-    from synth_panel.mcp.data import save_persona_pack
+    from althing.mcp.data import save_persona_pack
 
     save_persona_pack("One", [{"name": "Zed"}], pack_id="one")
     data = await _run_quick_poll(
@@ -263,14 +263,14 @@ async def test_quick_poll_unknown_pack_id_returns_typed_envelope():
 
 @pytest.mark.asyncio
 async def test_quick_poll_bad_alias_returns_typed_envelope_not_exception():
-    from synth_panel.mcp import server as _server
+    from althing.mcp import server as _server
 
     with (
         patch(
-            "synth_panel._runners.run_panel_parallel",
+            "althing._runners.run_panel_parallel",
             side_effect=_stub_all_failed_panelists(),
         ),
-        patch("synth_panel.mcp.server._shared_client", None),
+        patch("althing.mcp.server._shared_client", None),
     ):
         raw = await _server.run_quick_poll(
             question="What would you pay?",
@@ -302,7 +302,7 @@ async def test_quick_poll_byok_default_is_summary():
 
 @pytest.mark.asyncio
 async def test_extend_panel_unknown_result_id_returns_typed_envelope():
-    from synth_panel.mcp import server as _server
+    from althing.mcp import server as _server
 
     raw = await _server.extend_panel(
         result_id="result-does-not-exist",
@@ -323,15 +323,15 @@ async def test_extend_panel_bad_alias_returns_typed_envelope():
     first = await _run_panel()
     result_id = first["result_id"]
 
-    from synth_panel.mcp import server as _server
+    from althing.mcp import server as _server
 
     with (
         patch(
-            "synth_panel.mcp.server.run_panel_parallel",
+            "althing.mcp.server.run_panel_parallel",
             side_effect=_stub_all_failed_panelists(),
         ),
-        patch("synth_panel.mcp.server.synthesize_panel", side_effect=_stub_synthesize_panel),
-        patch("synth_panel.mcp.server._shared_client", None),
+        patch("althing.mcp.server.synthesize_panel", side_effect=_stub_synthesize_panel),
+        patch("althing.mcp.server._shared_client", None),
     ):
         raw = await _server.extend_panel(
             result_id=result_id,
@@ -352,7 +352,7 @@ async def test_extend_panel_bad_alias_returns_typed_envelope():
 
 @pytest.mark.asyncio
 async def test_get_panel_result_defaults_to_full_and_can_summarize():
-    from synth_panel.mcp import server as _server
+    from althing.mcp import server as _server
 
     first = await _run_panel(detail="full")
     result_id = first["result_id"]
@@ -372,7 +372,7 @@ async def test_get_panel_result_defaults_to_full_and_can_summarize():
 
 @pytest.mark.asyncio
 async def test_get_panel_result_rejects_bad_detail():
-    from synth_panel.mcp import server as _server
+    from althing.mcp import server as _server
 
     raw = await _server.get_panel_result(result_id="whatever", detail="loud")
     data = json.loads(raw)

@@ -11,8 +11,8 @@ import json
 
 import pytest
 
-from synth_panel.cost import TokenUsage
-from synth_panel.persistence import (
+from althing.cost import TokenUsage
+from althing.persistence import (
     ConversationMessage,
     Session,
     append_message,

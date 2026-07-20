@@ -1,4 +1,4 @@
-"""Tests for ``synth_panel.sdk._extract_attachment_refs`` (hq-hjk8 G7).
+"""Tests for ``althing.sdk._extract_attachment_refs`` (hq-hjk8 G7).
 
 Covers the wiring that pulls inline attachment payloads out of panelist
 ``responses[i]["attachments"]`` and into the CAS sidecar before
@@ -30,10 +30,10 @@ from pathlib import Path
 
 import pytest
 
-from synth_panel.attachments.store import attachments_dir, read_blob, refs_path
-from synth_panel.instrument import Instrument
-from synth_panel.mcp.data import get_panel_result, save_panel_result
-from synth_panel.sdk import _extract_attachment_refs
+from althing.attachments.store import attachments_dir, read_blob, refs_path
+from althing.instrument import Instrument
+from althing.mcp.data import get_panel_result, save_panel_result
+from althing.sdk import _extract_attachment_refs
 from tests.attachments.fixtures import tiny_jpeg, tiny_pdf_text, tiny_png
 
 

@@ -45,7 +45,7 @@ When you aggregate, expect:
 ## Run it
 
 ```bash
-synthpanel panel run \
+althing panel run \
   --personas examples/consumer-name-test/personas.yaml \
   --instrument examples/consumer-name-test/instrument.yaml
 ```
@@ -61,7 +61,7 @@ to copy the instrument and edit in place:
 ```bash
 cp examples/consumer-name-test/instrument.yaml my-name-test.yaml
 # edit the {name_*} placeholders in my-name-test.yaml
-synthpanel panel run \
+althing panel run \
   --personas examples/consumer-name-test/personas.yaml \
   --instrument my-name-test.yaml
 ```
@@ -72,11 +72,11 @@ CLI version supports it; see the main README for current syntax.
 ## Pack substitution
 
 For a wider 8-persona panel, swap to the bundled
-[`general-consumer.yaml`](../../src/synth_panel/packs/general-consumer.yaml)
+[`general-consumer.yaml`](../../src/althing/packs/general-consumer.yaml)
 pack:
 
 ```bash
-synthpanel panel run \
+althing panel run \
   --personas-pack general-consumer \
   --instrument examples/consumer-name-test/instrument.yaml
 ```

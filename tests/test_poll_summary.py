@@ -1,6 +1,6 @@
 """sy-4yd: deterministic poll summary computation.
 
-Tests cover the contract surface of :mod:`synth_panel.poll_summary`:
+Tests cover the contract surface of :mod:`althing.poll_summary`:
 
 * Enum questions roll up to first-choice / second-choice / weighted-score
   tables with the highest-vote winner.
@@ -18,7 +18,7 @@ Tests cover the contract surface of :mod:`synth_panel.poll_summary`:
 
 from __future__ import annotations
 
-from synth_panel.poll_summary import (
+from althing.poll_summary import (
     PollSummary,
     QuestionSummary,
     build_poll_summary,
@@ -290,15 +290,15 @@ class TestFreeTextQuestions:
             # this — the regression here is that the same envelope without
             # the schema (or with the schema stripped during persistence)
             # was classifying as scale via inference.
-            "questions": [{"text": "Would SynthPanel v1.5.1 feel agent-ready?"}],
+            "questions": [{"text": "Would Althing v1.5.1 feel agent-ready?"}],
             "results": [
                 {
                     "persona": "A",
                     "responses": [
                         {
-                            "question": "Would SynthPanel v1.5.1 feel agent-ready?",
+                            "question": "Would Althing v1.5.1 feel agent-ready?",
                             "response": (
-                                "Yes — SynthPanel v1.5.1 has the discovery affordances "
+                                "Yes — Althing v1.5.1 has the discovery affordances "
                                 "agents need, especially MCP install."
                             ),
                         }
@@ -308,7 +308,7 @@ class TestFreeTextQuestions:
                     "persona": "B",
                     "responses": [
                         {
-                            "question": "Would SynthPanel v1.5.1 feel agent-ready?",
+                            "question": "Would Althing v1.5.1 feel agent-ready?",
                             "response": (
                                 "Almost. v1.5.1 needs a clearer agent quickstart before I'd call it agent-ready."
                             ),
@@ -331,7 +331,7 @@ class TestFreeTextQuestions:
         env: dict[str, object] = {
             "persona_count": 3,
             "questions": [
-                {"text": "Would SynthPanel v1.5.1 feel agent-ready?", "response_schema": {"type": "text"}},
+                {"text": "Would Althing v1.5.1 feel agent-ready?", "response_schema": {"type": "text"}},
                 {"text": "Confidence (1-5)?", "response_schema": {"type": "scale", "min": 1, "max": 5}},
             ],
             "results": [
@@ -339,7 +339,7 @@ class TestFreeTextQuestions:
                     "persona": p,
                     "responses": [
                         {
-                            "question": "Would SynthPanel v1.5.1 feel agent-ready?",
+                            "question": "Would Althing v1.5.1 feel agent-ready?",
                             "response": text,
                         },
                         {"question": "Confidence (1-5)?", "response": str(score)},
@@ -476,7 +476,7 @@ def test_question_summary_truncates_long_question_text() -> None:
 def _structured_schema_envelope() -> dict[str, object]:
     """Three-panelist run with --schema (JSON Schema) enforcing a structured response.
 
-    Mirrors the shape persisted by ``synthpanel panel run --schema=...``:
+    Mirrors the shape persisted by ``althing panel run --schema=...``:
     ``response`` is a dict, ``extraction`` is absent. Pre-sy-bn7 this
     shape silently fell through to ``kind: "text"`` (the GH #496 bug).
     """

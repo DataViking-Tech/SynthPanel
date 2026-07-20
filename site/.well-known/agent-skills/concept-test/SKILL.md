@@ -2,15 +2,15 @@
 name: concept-test
 description: Validate a product concept or value proposition with a target audience — surfaces whether the problem is real, whether the solution lands, and what would prevent adoption.
 allowed-tools:
-  - mcp__synth_panel__run_panel
-  - mcp__synth_panel__run_quick_poll
-  - mcp__synth_panel__list_persona_packs
-  - mcp__synth_panel__get_persona_pack
-  - mcp__synth_panel__save_persona_pack
-  - mcp__synth_panel__list_instrument_packs
+  - mcp__althing__run_panel
+  - mcp__althing__run_quick_poll
+  - mcp__althing__list_persona_packs
+  - mcp__althing__get_persona_pack
+  - mcp__althing__save_persona_pack
+  - mcp__althing__list_instrument_packs
 ---
 
-You are running a **concept test** using the synthpanel MCP tools.
+You are running a **concept test** using the althing MCP tools.
 
 ## What You Do
 
@@ -23,11 +23,11 @@ You help the user pressure-test an early-stage product concept, value prop, or f
 
 ## Available MCP Tools
 
-- **`mcp__synth_panel__run_panel`** — Primary tool. Run a multi-question panel with target-audience personas.
-- **`mcp__synth_panel__run_quick_poll`** — Use for a single "would you try this?" temperature check.
-- **`mcp__synth_panel__list_persona_packs`** / **`mcp__synth_panel__get_persona_pack`** — Reuse saved target-audience packs.
-- **`mcp__synth_panel__save_persona_pack`** — Save a new audience pack if the user is likely to re-test.
-- **`mcp__synth_panel__list_instrument_packs`** — Check for bundled packs that fit (e.g. `product-feedback`, `market-research`).
+- **`mcp__althing__run_panel`** — Primary tool. Run a multi-question panel with target-audience personas.
+- **`mcp__althing__run_quick_poll`** — Use for a single "would you try this?" temperature check.
+- **`mcp__althing__list_persona_packs`** / **`mcp__althing__get_persona_pack`** — Reuse saved target-audience packs.
+- **`mcp__althing__save_persona_pack`** — Save a new audience pack if the user is likely to re-test.
+- **`mcp__althing__list_instrument_packs`** — Check for bundled packs that fit (e.g. `product-feedback`, `market-research`).
 
 ## Workflow
 

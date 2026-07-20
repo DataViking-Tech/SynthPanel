@@ -7,7 +7,7 @@ import textwrap
 
 import pytest
 
-from synth_panel.profiles import (
+from althing.profiles import (
     Profile,
     apply_profile_to_args,
     list_available_profiles,
@@ -340,14 +340,14 @@ class TestListProfiles:
 
 class TestParserProfile:
     def test_profile_flag_parsed(self):
-        from synth_panel.cli.parser import build_parser
+        from althing.cli.parser import build_parser
 
         parser = build_parser()
         args = parser.parse_args(["--profile", "consumer", "prompt", "hello"])
         assert args.profile == "consumer"
 
     def test_profile_default_none(self):
-        from synth_panel.cli.parser import build_parser
+        from althing.cli.parser import build_parser
 
         parser = build_parser()
         args = parser.parse_args(["prompt", "hello"])

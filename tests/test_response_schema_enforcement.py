@@ -16,11 +16,11 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from synth_panel.cost import TokenUsage as CostTokenUsage
-from synth_panel.orchestrator import run_panel_parallel
-from synth_panel.persistence import ConversationMessage
-from synth_panel.poll_summary import build_poll_summary
-from synth_panel.runtime import TurnSummary
+from althing.cost import TokenUsage as CostTokenUsage
+from althing.orchestrator import run_panel_parallel
+from althing.persistence import ConversationMessage
+from althing.poll_summary import build_poll_summary
+from althing.runtime import TurnSummary
 
 
 def _system(p: dict[str, Any]) -> str:
@@ -42,7 +42,7 @@ def _turn(text: str) -> TurnSummary:
 # ---------------------------------------------------------------------------
 
 
-@patch("synth_panel.orchestrator.AgentRuntime")
+@patch("althing.orchestrator.AgentRuntime")
 def test_enum_answer_is_coerced_and_persisted(mock_runtime_cls: MagicMock) -> None:
     """The #547 repro: 'Blue.' for an enum coerces to 'blue', raw kept."""
     questions = [
@@ -76,7 +76,7 @@ def test_enum_answer_is_coerced_and_persisted(mock_runtime_cls: MagicMock) -> No
     assert "schema_unmapped" not in resp
 
 
-@patch("synth_panel.orchestrator.AgentRuntime")
+@patch("althing.orchestrator.AgentRuntime")
 def test_unmappable_enum_answer_is_flagged(mock_runtime_cls: MagicMock) -> None:
     questions = [
         {
@@ -108,7 +108,7 @@ def test_unmappable_enum_answer_is_flagged(mock_runtime_cls: MagicMock) -> None:
     assert "response_typed" not in resp
 
 
-@patch("synth_panel.orchestrator.AgentRuntime")
+@patch("althing.orchestrator.AgentRuntime")
 def test_scale_answer_coerced_to_int(mock_runtime_cls: MagicMock) -> None:
     questions = [{"text": "Rate 1-5.", "response_schema": {"type": "scale", "min": 1, "max": 5}}]
 
@@ -133,7 +133,7 @@ def test_scale_answer_coerced_to_int(mock_runtime_cls: MagicMock) -> None:
     assert resp["response_typed"] == 4
 
 
-@patch("synth_panel.orchestrator.AgentRuntime")
+@patch("althing.orchestrator.AgentRuntime")
 def test_text_schema_left_untouched(mock_runtime_cls: MagicMock) -> None:
     questions = [{"text": "Tell me a story.", "response_schema": {"type": "text"}}]
 
@@ -247,7 +247,7 @@ class _FakeEnsemble:
 
 
 def test_blend_dropped_models_detects_all_error_member() -> None:
-    from synth_panel.cli.commands import _blend_dropped_models
+    from althing.cli.commands import _blend_dropped_models
 
     good = _FakeMR("good-model", [_FakePR([{"question": "Q", "response": "an answer"}])])
     # Every response is an error / inline error string → dropped.
@@ -264,7 +264,7 @@ def test_blend_dropped_models_detects_all_error_member() -> None:
 
 
 def test_blend_dropped_models_empty_when_all_healthy() -> None:
-    from synth_panel.cli.commands import _blend_dropped_models
+    from althing.cli.commands import _blend_dropped_models
 
     a = _FakeMR("a", [_FakePR([{"question": "Q", "response": "x"}])])
     b = _FakeMR("b", [_FakePR([{"question": "Q", "response": "y"}])])

@@ -1,4 +1,4 @@
-"""Tests for ``synth_panel.integrations.composio``.
+"""Tests for ``althing.integrations.composio``.
 
 The real ``composio`` package is intentionally not a hard dependency, so
 these tests exercise the adapter against a minimal stub that imitates the
@@ -6,12 +6,12 @@ surface we rely on: ``composio_client.experimental.Toolkit`` and the
 ``@toolkit.tool()`` decorator. That's enough to verify the module builds
 a well-formed toolkit, registers the right number of actions with the
 right slugs, wires each tool's docstring and input schema, and delegates
-to the SynthPanel SDK with the arguments the LLM passed in.
+to the Althing SDK with the arguments the LLM passed in.
 
 Two adversarial paths are also covered:
 
 * Import-guard: when ``composio`` is absent, importing the adapter
-  succeeds (cheap) but calling :func:`synthpanel_toolkit` raises a
+  succeeds (cheap) but calling :func:`althing_toolkit` raises a
   targeted :class:`ComposioNotInstalledError` with install instructions.
 * Shape-guard: when the client lacks ``experimental.Toolkit`` (older
   Composio), the adapter raises :class:`RuntimeError` rather than
@@ -109,23 +109,23 @@ def _fake_composio_module(monkeypatch):
 
 class TestToolkitShape:
     def test_returns_toolkit_with_expected_slug_and_name(self, stub_client):
-        from synth_panel.integrations.composio import (
+        from althing.integrations.composio import (
             TOOLKIT_DESCRIPTION,
             TOOLKIT_NAME,
             TOOLKIT_SLUG,
-            synthpanel_toolkit,
+            althing_toolkit,
         )
 
-        tk = synthpanel_toolkit(stub_client)
-        assert tk.slug == TOOLKIT_SLUG == "SYNTHPANEL"
-        assert tk.name == TOOLKIT_NAME == "SynthPanel"
+        tk = althing_toolkit(stub_client)
+        assert tk.slug == TOOLKIT_SLUG == "ALTHING"
+        assert tk.name == TOOLKIT_NAME == "Althing"
         assert tk.description == TOOLKIT_DESCRIPTION
         assert "synthetic focus groups" in tk.description.lower()
 
     def test_registers_exactly_five_actions(self, stub_client):
-        from synth_panel.integrations.composio import synthpanel_toolkit
+        from althing.integrations.composio import althing_toolkit
 
-        tk = synthpanel_toolkit(stub_client)
+        tk = althing_toolkit(stub_client)
         names = sorted(t.name for t in tk.tools)
         assert names == [
             "get_panel_result",
@@ -137,9 +137,9 @@ class TestToolkitShape:
 
     def test_every_action_has_a_docstring(self, stub_client):
         """Composio surfaces docstrings to the LLM — none may be blank."""
-        from synth_panel.integrations.composio import synthpanel_toolkit
+        from althing.integrations.composio import althing_toolkit
 
-        tk = synthpanel_toolkit(stub_client)
+        tk = althing_toolkit(stub_client)
         for tool in tk.tools:
             assert tool.func.__doc__ and tool.func.__doc__.strip(), f"{tool.name} must have a non-empty docstring"
 
@@ -159,9 +159,9 @@ class _FakePoll:
 
 class TestDelegation:
     def test_quick_poll_forwards_to_sdk(self, stub_client):
-        from synth_panel.integrations.composio import synthpanel_toolkit
+        from althing.integrations.composio import althing_toolkit
 
-        tk = synthpanel_toolkit(stub_client)
+        tk = althing_toolkit(stub_client)
         quick_poll_tool = next(t for t in tk.tools if t.name == "quick_poll")
 
         # Pydantic input instance — the decorator passes it positionally.
@@ -173,7 +173,7 @@ class TestDelegation:
         )
 
         fake_result = _FakePoll({"result_id": "r1", "question": req.question})
-        with patch("synth_panel.sdk.quick_poll", return_value=fake_result) as mocked:
+        with patch("althing.sdk.quick_poll", return_value=fake_result) as mocked:
             out = quick_poll_tool.func(req, ctx=None)
 
         mocked.assert_called_once_with(
@@ -186,15 +186,15 @@ class TestDelegation:
         assert out == {"result_id": "r1", "question": req.question}
 
     def test_run_panel_forwards_instrument_pack(self, stub_client):
-        from synth_panel.integrations.composio import synthpanel_toolkit
+        from althing.integrations.composio import althing_toolkit
 
-        tk = synthpanel_toolkit(stub_client)
+        tk = althing_toolkit(stub_client)
         run_panel_tool = next(t for t in tk.tools if t.name == "run_panel")
         RunPanelInput = run_panel_tool.func.__annotations__["request"]
 
         req = RunPanelInput(instrument_pack="pricing-discovery", pack_id="smb-owners")
         fake_result = _FakePoll({"result_id": "r2", "rounds": []})
-        with patch("synth_panel.sdk.run_panel", return_value=fake_result) as mocked:
+        with patch("althing.sdk.run_panel", return_value=fake_result) as mocked:
             out = run_panel_tool.func(req, ctx=None)
 
         kwargs = mocked.call_args.kwargs
@@ -204,14 +204,14 @@ class TestDelegation:
         assert out["result_id"] == "r2"
 
     def test_list_personas_returns_dict_with_packs_key(self, stub_client):
-        from synth_panel.integrations.composio import synthpanel_toolkit
+        from althing.integrations.composio import althing_toolkit
 
-        tk = synthpanel_toolkit(stub_client)
+        tk = althing_toolkit(stub_client)
         list_personas_tool = next(t for t in tk.tools if t.name == "list_personas")
         EmptyInput = list_personas_tool.func.__annotations__["request"]
 
         with patch(
-            "synth_panel.sdk.list_personas",
+            "althing.sdk.list_personas",
             return_value=[{"id": "general-consumer", "name": "General", "persona_count": 5, "builtin": True}],
         ):
             out = list_personas_tool.func(EmptyInput(), ctx=None)
@@ -220,14 +220,14 @@ class TestDelegation:
         assert out["packs"][0]["id"] == "general-consumer"
 
     def test_list_instruments_returns_dict_with_packs_key(self, stub_client):
-        from synth_panel.integrations.composio import synthpanel_toolkit
+        from althing.integrations.composio import althing_toolkit
 
-        tk = synthpanel_toolkit(stub_client)
+        tk = althing_toolkit(stub_client)
         tool = next(t for t in tk.tools if t.name == "list_instruments")
         EmptyInput = tool.func.__annotations__["request"]
 
         with patch(
-            "synth_panel.sdk.list_instruments",
+            "althing.sdk.list_instruments",
             return_value=[{"id": "pricing-discovery", "version": "3"}],
         ):
             out = tool.func(EmptyInput(), ctx=None)
@@ -235,14 +235,14 @@ class TestDelegation:
         assert out == {"packs": [{"id": "pricing-discovery", "version": "3"}]}
 
     def test_get_panel_result_forwards_result_id(self, stub_client):
-        from synth_panel.integrations.composio import synthpanel_toolkit
+        from althing.integrations.composio import althing_toolkit
 
-        tk = synthpanel_toolkit(stub_client)
+        tk = althing_toolkit(stub_client)
         tool = next(t for t in tk.tools if t.name == "get_panel_result")
         GetInput = tool.func.__annotations__["request"]
 
         fake_result = _FakePoll({"result_id": "r3", "synthesis": {"recommendation": "ok"}})
-        with patch("synth_panel.sdk.get_panel_result", return_value=fake_result) as mocked:
+        with patch("althing.sdk.get_panel_result", return_value=fake_result) as mocked:
             out = tool.func(GetInput(result_id="r3"), ctx=None)
 
         mocked.assert_called_once_with("r3")
@@ -266,16 +266,16 @@ class TestGuards:
                 raise ImportError("No module named 'composio'")
             return real_import(name, *args, **kwargs)
 
-        from synth_panel.integrations.composio import (
+        from althing.integrations.composio import (
             ComposioNotInstalledError,
-            synthpanel_toolkit,
+            althing_toolkit,
         )
 
         with (
             patch("builtins.__import__", side_effect=_fake_import),
             pytest.raises(ComposioNotInstalledError) as excinfo,
         ):
-            synthpanel_toolkit(stub_client)
+            althing_toolkit(stub_client)
 
         msg = str(excinfo.value)
         assert "pip install" in msg
@@ -283,30 +283,30 @@ class TestGuards:
 
     def test_client_without_experimental_toolkit_raises(self):
         """Older Composio releases lack `experimental.Toolkit`."""
-        from synth_panel.integrations.composio import synthpanel_toolkit
+        from althing.integrations.composio import althing_toolkit
 
         class _Old:
             experimental = None
 
         with pytest.raises(RuntimeError, match="experimental.Toolkit"):
-            synthpanel_toolkit(_Old())
+            althing_toolkit(_Old())
 
     def test_module_imports_without_composio(self, monkeypatch):
         """Importing the adapter itself must not require composio.
 
-        Users of SynthPanel who never touch Composio should not pay an
+        Users of Althing who never touch Composio should not pay an
         import-time price. We don't reload — we just assert the module
         is in sys.modules after a plain import below (via other tests)
         and re-verify the import is cheap here.
         """
         monkeypatch.delitem(sys.modules, "composio", raising=False)
-        monkeypatch.delitem(sys.modules, "synth_panel.integrations.composio", raising=False)
+        monkeypatch.delitem(sys.modules, "althing.integrations.composio", raising=False)
 
-        import synth_panel.integrations.composio as mod
+        import althing.integrations.composio as mod
 
-        assert hasattr(mod, "synthpanel_toolkit")
+        assert hasattr(mod, "althing_toolkit")
         assert hasattr(mod, "ComposioNotInstalledError")
-        assert mod.TOOLKIT_SLUG == "SYNTHPANEL"
+        assert mod.TOOLKIT_SLUG == "ALTHING"
 
 
 # ---------------------------------------------------------------------------
@@ -330,9 +330,9 @@ class TestUpstreamShapeCanary:
     """
 
     def test_composio_shaped_invocation_round_trip(self, stub_client):
-        from synth_panel.integrations.composio import synthpanel_toolkit
+        from althing.integrations.composio import althing_toolkit
 
-        tk = synthpanel_toolkit(stub_client)
+        tk = althing_toolkit(stub_client)
 
         # Composio constructs the pydantic input from a dict, then calls
         # the registered tool. Build that exact shape per tool and assert
@@ -346,7 +346,7 @@ class TestUpstreamShapeCanary:
                     "model": "haiku",
                     "synthesis": True,
                 },
-                "sdk_target": "synth_panel.sdk.quick_poll",
+                "sdk_target": "althing.sdk.quick_poll",
                 "expected_kwargs": {
                     "question": "How would you describe the value here?",
                     "pack_id": "general-consumer",
@@ -366,7 +366,7 @@ class TestUpstreamShapeCanary:
                     "model": None,
                     "synthesis": True,
                 },
-                "sdk_target": "synth_panel.sdk.run_panel",
+                "sdk_target": "althing.sdk.run_panel",
                 "expected_kwargs": {
                     "instrument_pack": "pricing-discovery",
                     "instrument": None,
@@ -380,19 +380,19 @@ class TestUpstreamShapeCanary:
             },
             "list_personas": {
                 "input": {},
-                "sdk_target": "synth_panel.sdk.list_personas",
+                "sdk_target": "althing.sdk.list_personas",
                 "expected_kwargs": {},
                 "fake_payload": [{"id": "general-consumer", "persona_count": 5, "builtin": True}],
             },
             "list_instruments": {
                 "input": {},
-                "sdk_target": "synth_panel.sdk.list_instruments",
+                "sdk_target": "althing.sdk.list_instruments",
                 "expected_kwargs": {},
                 "fake_payload": [{"id": "pricing-discovery", "version": "3"}],
             },
             "get_panel_result": {
                 "input": {"result_id": "r-saved-1"},
-                "sdk_target": "synth_panel.sdk.get_panel_result",
+                "sdk_target": "althing.sdk.get_panel_result",
                 "expected_kwargs": {"_positional": ("r-saved-1",)},
                 "fake_payload": {"result_id": "r-saved-1", "synthesis": {"recommendation": "ok"}},
             },

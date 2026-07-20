@@ -2,7 +2,7 @@
 
 Replaces the sp-lwy drift guard. Drift between ``pyproject.toml`` / package
 metadata and ``site/index.html`` is now structurally impossible: both derive
-from ``src/synth_panel/__version__.py``. This test's job is ensuring the
+from ``src/althing/__version__.py``. This test's job is ensuring the
 template actually renders and still surfaces the version in every place the
 landing page relies on it.
 """
@@ -27,7 +27,7 @@ def _load_render_site():
 
 
 def test_template_renders_with_current_version() -> None:
-    from synth_panel import __version__
+    from althing import __version__
 
     rendered = _load_render_site().render()
 

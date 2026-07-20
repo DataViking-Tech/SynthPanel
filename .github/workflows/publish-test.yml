@@ -1,15 +1,15 @@
 name: Publish Dev to TestPyPI
 
 # Every merge to main publishes a dev build to test.pypi.org.
-# Version is auto-generated: {src/synth_panel/__version__.py version}.dev{run_number}
+# Version is auto-generated: {src/althing/__version__.py version}.dev{run_number}
 #
 # ONE-TIME MANUAL SETUP (required before the first successful publish):
 #
 #   1. On https://test.pypi.org/manage/account/publishing/ add a trusted
 #      publisher with:
-#        project name = synthpanel
+#        project name = althing
 #        owner        = DataViking-Tech
-#        repo         = synthpanel
+#        repo         = althing
 #        workflow     = publish-test.yml
 #        environment  = pypi-test   (must match the `environment:` key below)
 #   2. In GitHub repo Settings -> Environments, create an environment
@@ -48,18 +48,18 @@ jobs:
         run: |
           set -euo pipefail
           # pyproject.toml declares `dynamic = ["version"]` and reads the
-          # version from src/synth_panel/__version__.py, so that file — not
+          # version from src/althing/__version__.py, so that file — not
           # pyproject.toml — is what must be rewritten here. The previous
           # pyproject-based sed silently no-oped after the dynamic-version
           # migration and every push re-uploaded the same wheel, which
           # TestPyPI rejected with "400 File already exists".
-          BASE=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/synth_panel/__version__.py)
+          BASE=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/althing/__version__.py)
           if [ -z "$BASE" ]; then
-            echo "::error::Could not read base version from src/synth_panel/__version__.py"
+            echo "::error::Could not read base version from src/althing/__version__.py"
             exit 1
           fi
           DEV_VERSION="${BASE}.dev${GITHUB_RUN_NUMBER}"
-          printf '__version__ = "%s"\n' "$DEV_VERSION" > src/synth_panel/__version__.py
+          printf '__version__ = "%s"\n' "$DEV_VERSION" > src/althing/__version__.py
           echo "version=$DEV_VERSION" >> "$GITHUB_OUTPUT"
           echo "Dev version: $DEV_VERSION"
 
@@ -89,8 +89,8 @@ jobs:
           DEV_VERSION: ${{ steps.version.outputs.version }}
         run: |
           {
-            echo "## Published synthpanel ${DEV_VERSION} (dev)"
+            echo "## Published althing ${DEV_VERSION} (dev)"
             echo ""
-            echo "- TestPyPI: https://test.pypi.org/project/synthpanel/${DEV_VERSION}/"
-            echo "- Install: \`pip install -i https://test.pypi.org/simple/ synthpanel==${DEV_VERSION}\`"
+            echo "- TestPyPI: https://test.pypi.org/project/althing/${DEV_VERSION}/"
+            echo "- Install: \`pip install -i https://test.pypi.org/simple/ althing==${DEV_VERSION}\`"
           } >> "$GITHUB_STEP_SUMMARY"

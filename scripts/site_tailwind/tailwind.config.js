@@ -1,5 +1,5 @@
 /**
- * Tailwind config for the synthpanel.dev static site (site/).
+ * Tailwind config for the althing.dev static site (site/).
  *
  * This replaces the former Play-CDN inline `tailwind.config = {...}` blocks
  * that every page carried (identical on all pages): the only customisation

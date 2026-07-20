@@ -4,8 +4,8 @@
 
 Four authoring paths:
 
-1. **Manual YAML authoring** — create `name` + `personas: [{name, age, occupation, background, personality_traits}]`. Example format: `src/synth_panel/packs/developer.yaml:1-83`.
-2. **`pack import`** (`cli/commands.py:2114-2144`): `synthpanel pack import file.yaml [--name] [--id]` → saved to `$SYNTH_PANEL_DATA_DIR/persona_packs/<pack_id>.yaml` (default `~/.synthpanel/persona_packs/`).
+1. **Manual YAML authoring** — create `name` + `personas: [{name, age, occupation, background, personality_traits}]`. Example format: `src/althing/packs/developer.yaml:1-83`.
+2. **`pack import`** (`cli/commands.py:2114-2144`): `althing pack import file.yaml [--name] [--id]` → saved to `$SYNTH_PANEL_DATA_DIR/persona_packs/<pack_id>.yaml` (default `~/.althing/persona_packs/`).
 3. **`pack generate`** (`cli/commands.py:2188-2286`): LLM-driven synthesis via structured output. Fields enforced: `name`, `age`, `occupation`, `background`, `personality_traits`. Validated via `validate_persona_pack()` (data.py:204-241).
 4. **SDK `save_persona_pack(name, personas, pack_id=None)`** (data.py:244-260). Auto-generates `pack-{8-char hex}` if no ID.
 
@@ -20,7 +20,7 @@ Four authoring paths:
 
 ## 2. Instrument Pack Lifecycle
 
-1. **Manual YAML authoring** — top-level manifest (`name`, `version` required) + instrument (`version: 1|2|3`, `rounds: [...]`). Example: `src/synth_panel/packs/instruments/product-feedback.yaml:1-47`.
+1. **Manual YAML authoring** — top-level manifest (`name`, `version` required) + instrument (`version: 1|2|3`, `rounds: [...]`). Example: `src/althing/packs/instruments/product-feedback.yaml:1-47`.
 2. **`instruments install`** (`cli/commands.py:2322-2372`): validates via `parse_instrument()` before saving to `$SYNTH_PANEL_DATA_DIR/packs/instruments/<name>.yaml`.
 3. **SDK `save_instrument_pack(name, content)`** (data.py:330-348).
 
@@ -30,15 +30,15 @@ Four authoring paths:
 
 **Mechanism:** Packaged data in the wheel via `pyproject.toml` `[tool.setuptools.package-data]`:
 ```toml
-"synth_panel.packs" = ["*.yaml"]
-"synth_panel.packs.instruments" = ["*.yaml"]
+"althing.packs" = ["*.yaml"]
+"althing.packs.instruments" = ["*.yaml"]
 ```
 
-**Discovery:** `_bundled_packs()` / `_bundled_instrument_packs()` (`mcp/data.py:83-124`) scans via `importlib.resources.files("synth_panel.packs")`. Directory scan for `.yaml` files; silently skips unparseable (line 98: `except Exception: continue`). Pack ID = filename stem.
+**Discovery:** `_bundled_packs()` / `_bundled_instrument_packs()` (`mcp/data.py:83-124`) scans via `importlib.resources.files("althing.packs")`. Directory scan for `.yaml` files; silently skips unparseable (line 98: `except Exception: continue`). Pack ID = filename stem.
 
 **Inventory:** 9 persona packs (developer, enterprise-buyer, general-consumer, healthcare-patient, startup-founder, job-seekers, recruiters-talent, product-research, ai-eval-buyers) + 8 instrument packs.
 
-**Update mechanism:** pip upgrade synthpanel → new packs appear on next `_bundled_packs()` call.
+**Update mechanism:** pip upgrade althing → new packs appear on next `_bundled_packs()` call.
 
 ## 4. Namespacing and Collision Resolution
 
@@ -47,7 +47,7 @@ Four authoring paths:
 - Bundled packs listed only if not shadowed
 
 **Collision behavior** (`test_mcp_data.py:137-147` `test_user_pack_overrides_bundled`):
-- `get_persona_pack("developer")` checks `~/.synthpanel/persona_packs/developer.yaml` first
+- `get_persona_pack("developer")` checks `~/.althing/persona_packs/developer.yaml` first
 - Falls back to bundled only if file doesn't exist
 - **No warning or error.** User override silently wins.
 
@@ -55,14 +55,14 @@ Four authoring paths:
 
 ## 5. User-Saved Pack Persistence
 
-**Default location:** `~/.synthpanel/` via `_data_dir()` (`mcp/data.py:38-54`):
+**Default location:** `~/.althing/` via `_data_dir()` (`mcp/data.py:38-54`):
 ```python
-Path(os.environ.get("SYNTH_PANEL_DATA_DIR", "~/.synthpanel")).expanduser()
+Path(os.environ.get("SYNTH_PANEL_DATA_DIR", "~/.althing")).expanduser()
 ```
 
 **Structure:**
 ```
-~/.synthpanel/
+~/.althing/
   persona_packs/<pack_id>.yaml
   packs/instruments/<instrument_id>.yaml
   results/<result_id>.json
@@ -121,7 +121,7 @@ Validation via `parse_instrument()` (not shown in this audit); called before sav
 
 **Version tracking:**
 - Persona packs: **no `version:` field supported.** No per-pack version. Overwriting same ID replaces content silently.
-- Instrument packs: **required `version:` at top level.** Indicates instrument *schema* version (not pack version). All bundled instruments are `version: 1`. No interaction with synthpanel's own version.
+- Instrument packs: **required `version:` at top level.** Indicates instrument *schema* version (not pack version). All bundled instruments are `version: 1`. No interaction with althing's own version.
 - **No migration tooling.** Breaking schema changes would require manual user YAML updates.
 
 **`_MANIFEST_FIELDS` shared pattern** (`data.py:61-69`):
@@ -135,7 +135,7 @@ Used by `list_instrument_packs()` for metadata display. Personas don't use `vers
 
 1. **Personas lack version field.** Unlike instruments. Overwriting pack ID = silent replace, no history/rollback.
 2. **No schema registry.** Schemas inferred from Python validation functions, not published JSON Schema or OpenAPI.
-3. **`SYNTH_PANEL_DATA_DIR` is the only configuration point.** No `~/.synthpanel/config.yaml`, no XDG alternative.
+3. **`SYNTH_PANEL_DATA_DIR` is the only configuration point.** No `~/.althing/config.yaml`, no XDG alternative.
 4. **Bundled pack immutability.** No in-place replacement mechanism; pip upgrade required.
 5. **File-based collision resolution.** ID-based filename matching; no registry or metadata check for conflicts.
 6. **LLM generation schema hardcoded.** `pack generate` schema defined inline in handler, not referenceable as a pack-level constraint.
@@ -144,4 +144,4 @@ Used by `list_instrument_packs()` for metadata display. Personas don't use `vers
 
 ## Citations
 
-mcp/data.py:1-533; cli/commands.py:2096-2372; cli/parser.py:507-606; tests/test_mcp_data.py:12-225; tests/test_cli.py:2087-2303; src/synth_panel/packs/*.yaml (9 bundled); packs/instruments/*.yaml (8 bundled); pyproject.toml.
+mcp/data.py:1-533; cli/commands.py:2096-2372; cli/parser.py:507-606; tests/test_mcp_data.py:12-225; tests/test_cli.py:2087-2303; src/althing/packs/*.yaml (9 bundled); packs/instruments/*.yaml (8 bundled); pyproject.toml.

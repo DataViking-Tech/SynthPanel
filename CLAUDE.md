@@ -1,4 +1,4 @@
-# synthpanel
+# althing
 
 A lightweight, LLM-agnostic research harness for running synthetic focus groups using AI personas.
 
@@ -7,7 +7,7 @@ A lightweight, LLM-agnostic research harness for running synthetic focus groups 
 Pure Python 3.10+ with minimal dependencies (`httpx` for HTTP, `pyyaml` for YAML parsing). Optional deps: `mcp` (MCP server).
 
 ```
-src/synth_panel/
+src/althing/
 ├── llm/                  # Provider-agnostic LLM client
 │   ├── client.py         # Unified send/stream interface
 │   ├── aliases.py        # Model alias resolution (sonnet → claude-sonnet-4-6)
@@ -43,26 +43,26 @@ src/synth_panel/
 
 ```bash
 # Single prompt
-synthpanel prompt "Say hello"
+althing prompt "Say hello"
 
 # Full panel run (file path or installed pack name)
-synthpanel panel run --personas examples/personas.yaml --instrument examples/survey.yaml
-synthpanel panel run --personas examples/personas.yaml --instrument pricing-discovery
+althing panel run --personas examples/personas.yaml --instrument examples/survey.yaml
+althing panel run --personas examples/personas.yaml --instrument pricing-discovery
 
 # v3 branching: list / show / install / graph instrument packs
-synthpanel instruments list
-synthpanel instruments graph pricing-discovery --format mermaid
+althing instruments list
+althing instruments graph pricing-discovery --format mermaid
 
 # MCP server (stdio, for Claude Code / Cursor / Windsurf)
-synthpanel mcp-serve
+althing mcp-serve
 
 # With specific model
-synthpanel prompt "Hello" --model haiku
-synthpanel prompt "Hello" --model gemini
+althing prompt "Hello" --model haiku
+althing prompt "Hello" --model gemini
 
 # Output formats
-synthpanel prompt "Hello" --output-format json
-synthpanel prompt "Hello" --output-format ndjson
+althing prompt "Hello" --output-format json
+althing prompt "Hello" --output-format ndjson
 ```
 
 ## Development
@@ -73,7 +73,7 @@ uv venv .venv && source .venv/bin/activate
 uv pip install -e ".[dev,mcp]"
 
 # Or without install
-PYTHONPATH=src python3 -m synth_panel prompt "Hello"
+PYTHONPATH=src python3 -m althing prompt "Hello"
 
 # Run tests
 pytest tests/
@@ -139,7 +139,7 @@ the *exact* strings the synthesizer emits. Always prefix v3 instruments
 with a comment block listing canonical theme tags so the synthesizer
 prefers them — otherwise routes silently fall through to `else`. See
 the README "Theme Matching" section and any bundled pack
-(`src/synth_panel/packs/instruments/`) for the pattern.
+(`src/althing/packs/instruments/`) for the pattern.
 
 Predicate ops: `contains` (substring), `equals` (exact), `matches`
 (regex). Targets: any round name or the reserved `__end__` sentinel.
@@ -170,14 +170,14 @@ instrument (with `route_when` clauses) instead. The boundary is intentional:
 `extend_panel` is for human-in-the-loop follow-ups; v3 routing is for
 agent-driven, instrument-authored adaptivity.
 
-Claude Code plugin: install via `/plugin install synthpanel`. Adds `/focus-group` skill.
+Claude Code plugin: install via `/plugin install althing`. Adds `/focus-group` skill.
 
 Standalone MCP config for any editor:
 ```json
 {
   "mcpServers": {
-    "synth_panel": {
-      "command": "synthpanel",
+    "althing": {
+      "command": "althing",
       "args": ["mcp-serve"],
       "env": { "ANTHROPIC_API_KEY": "sk-..." }
     }

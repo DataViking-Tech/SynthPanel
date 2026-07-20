@@ -24,8 +24,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from synth_panel.cost import ZERO_USAGE
-from synth_panel.main import main
+from althing.cost import ZERO_USAGE
+from althing.main import main
 
 # --- helpers --------------------------------------------------------------
 
@@ -43,7 +43,7 @@ def _write_instrument(path, question: str = "Q1") -> str:
 
 
 def _panelist_results(n: int = 2, *, answer: str = "A clean answer"):
-    from synth_panel.orchestrator import PanelistResult
+    from althing.orchestrator import PanelistResult
 
     return [
         PanelistResult(
@@ -62,9 +62,9 @@ def _panelist_results(n: int = 2, *, answer: str = "A clean answer"):
 class TestCliNonEnsembleSynthesisFailure:
     """commands.py:1113-1126 — synthesis exception must not silently skip."""
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_synthesis_api_error_degrades_gracefully(self, _mock_client, mock_run, mock_synth, capsys, tmp_path):
         """When synthesize_panel raises an API error but every panelist
         completed, the run must exit 0 with run_invalid=False, keep the
@@ -73,7 +73,7 @@ class TestCliNonEnsembleSynthesisFailure:
         NOT invalidate the whole run (regression: synthesis-stage failure
         used to exit 2 with message="PANEL RUN INVALID").
         """
-        from synth_panel.orchestrator import WorkerRegistry
+        from althing.orchestrator import WorkerRegistry
 
         mock_run.return_value = (_panelist_results(2), WorkerRegistry(), {})
         mock_synth.side_effect = RuntimeError("Anthropic 400: prompt too long (262000 > 200000)")
@@ -111,9 +111,9 @@ class TestCliNonEnsembleSynthesisFailure:
         assert any("synthesis_failed" in w for w in payload["warnings"])
         mock_synth.assert_called_once()
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_preflight_rejects_oversized_input(self, _mock_client, mock_run, mock_synth, capsys, tmp_path):
         """When the estimated prompt overflows the synthesis model's context,
         the run must fail BEFORE synthesize_panel is called.
@@ -121,7 +121,7 @@ class TestCliNonEnsembleSynthesisFailure:
         sp-exu6: must pass ``--synthesis-strategy=single`` explicitly.
         Under ``auto`` (the new default behavior after sp-exu6), overflow
         would instead route to map-reduce."""
-        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+        from althing.orchestrator import PanelistResult, WorkerRegistry
 
         # Build one giant panelist response that comfortably overflows
         # haiku's 200k (with 8k headroom). 800_000 chars ≈ 200k tokens.
@@ -175,9 +175,9 @@ class TestCliNonEnsembleSynthesisFailure:
 class TestResynthesizeSynthesisFailure:
     """commands.py:2305 — panel synthesize must fail loud too."""
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.synthesize_panel")
     def test_resynthesize_api_error_emits_structured_payload(self, mock_synth, capsys, tmp_path):
-        from synth_panel.mcp.data import save_panel_result
+        from althing.mcp.data import save_panel_result
 
         mock_synth.side_effect = RuntimeError("provider 429: rate-limited")
 
@@ -223,10 +223,10 @@ class TestRunPanelSyncSynthesisFailure:
     """_runners.py:420-435 — synthesis_dict gains structured payload and the
     MCP server surfaces run_invalid=True at the envelope top-level."""
 
-    @patch("synth_panel._runners.synthesize_panel")
-    @patch("synth_panel._runners.run_panel_parallel")
+    @patch("althing._runners.synthesize_panel")
+    @patch("althing._runners.run_panel_parallel")
     def test_synthesis_api_error_returns_structured_payload(self, mock_run, mock_synth):
-        from synth_panel._runners import run_panel_sync
+        from althing._runners import run_panel_sync
 
         mock_run.return_value = (_panelist_results(2), None, {})
         mock_synth.side_effect = RuntimeError("Anthropic 400: prompt too long")
@@ -246,12 +246,12 @@ class TestRunPanelSyncSynthesisFailure:
         assert "message" in err
         assert "suggested_fix" in err
 
-    @patch("synth_panel._runners.synthesize_panel")
-    @patch("synth_panel._runners.run_panel_parallel")
+    @patch("althing._runners.synthesize_panel")
+    @patch("althing._runners.run_panel_parallel")
     def test_preflight_rejects_before_api_call(self, mock_run, mock_synth):
         """Pre-flight check must short-circuit before synthesize_panel is called."""
-        from synth_panel._runners import run_panel_sync
-        from synth_panel.orchestrator import PanelistResult
+        from althing._runners import run_panel_sync
+        from althing.orchestrator import PanelistResult
 
         giant = "A" * 800_000
         mock_run.return_value = (
@@ -308,14 +308,14 @@ class TestContextWindowResolution:
         ],
     )
     def test_known_aliases_resolve(self, model, expected):
-        from synth_panel._runners import _resolve_context_window
+        from althing._runners import _resolve_context_window
 
         window, is_default = _resolve_context_window(model)
         assert window == expected
         assert is_default is False
 
     def test_unknown_model_falls_back_to_default(self):
-        from synth_panel._runners import _resolve_context_window
+        from althing._runners import _resolve_context_window
 
         window, is_default = _resolve_context_window("totally-made-up-99b")
         assert window == 128_000
@@ -335,8 +335,8 @@ class TestSynthesisOpenRouterRouting:
     """
 
     def test_openrouter_synthesis_never_demands_anthropic_key(self, monkeypatch):
-        from synth_panel.llm.client import LLMClient
-        from synth_panel.synthesis import synthesize_panel
+        from althing.llm.client import LLMClient
+        from althing.synthesis import synthesize_panel
 
         # OpenRouter-only environment.
         monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
@@ -392,8 +392,8 @@ class TestSynthesisNativeGeminiRouting:
     "Missing API key for Anthropic"."""
 
     def test_gemini_synthesis_never_demands_anthropic_key(self, monkeypatch):
-        from synth_panel.llm.client import LLMClient
-        from synth_panel.synthesis import synthesize_panel
+        from althing.llm.client import LLMClient
+        from althing.synthesis import synthesize_panel
 
         # Gemini-only environment (the live gh#571 repro shape).
         monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
@@ -469,7 +469,7 @@ class TestSynthesisFallbackSurfaced:
     synthesis_error + warning (without invalidating the completed panel)."""
 
     def test_to_dict_marks_fallback(self):
-        from synth_panel.synthesis import SynthesisResult
+        from althing.synthesis import SynthesisResult
 
         sr = SynthesisResult(
             summary="Synthesis failed — see error field.",
@@ -486,7 +486,7 @@ class TestSynthesisFallbackSurfaced:
         assert d["error"] == "judge exhausted retries"
 
     def test_healthy_synthesis_has_no_fallback_marker(self):
-        from synth_panel.synthesis import SynthesisResult
+        from althing.synthesis import SynthesisResult
 
         sr = SynthesisResult(
             summary="All good",
@@ -500,12 +500,12 @@ class TestSynthesisFallbackSurfaced:
         assert "is_fallback" not in d
         assert "error" not in d
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_inrun_fallback_degrades_gracefully(self, _mock_client, mock_run, mock_synth, capsys, tmp_path):
-        from synth_panel.orchestrator import WorkerRegistry
-        from synth_panel.synthesis import SynthesisResult
+        from althing.orchestrator import WorkerRegistry
+        from althing.synthesis import SynthesisResult
 
         mock_run.return_value = (_panelist_results(2), WorkerRegistry(), {})
         mock_synth.return_value = SynthesisResult(
@@ -540,10 +540,10 @@ class TestSynthesisFallbackSurfaced:
         assert err["error_type"] == "synthesis_fallback"
         assert any("synthesis_failed" in w for w in payload["warnings"])
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.synthesize_panel")
     def test_resynthesize_fallback_exits_two(self, mock_synth, capsys, tmp_path):
-        from synth_panel.mcp.data import save_panel_result
-        from synth_panel.synthesis import SynthesisResult
+        from althing.mcp.data import save_panel_result
+        from althing.synthesis import SynthesisResult
 
         mock_synth.return_value = SynthesisResult(
             summary="Synthesis failed — see error field.",
@@ -585,8 +585,8 @@ class TestSynthesisFallbackSurfaced:
 
 class TestSynthesisOverflowDetector:
     def test_returns_none_when_fits(self):
-        from synth_panel._runners import detect_synthesis_context_overflow
-        from synth_panel.orchestrator import PanelistResult
+        from althing._runners import detect_synthesis_context_overflow
+        from althing.orchestrator import PanelistResult
 
         results = [
             PanelistResult(
@@ -605,8 +605,8 @@ class TestSynthesisOverflowDetector:
         )
 
     def test_returns_diagnostic_when_overflows(self):
-        from synth_panel._runners import detect_synthesis_context_overflow
-        from synth_panel.orchestrator import PanelistResult
+        from althing._runners import detect_synthesis_context_overflow
+        from althing.orchestrator import PanelistResult
 
         giant = "x" * 900_000
         results = [

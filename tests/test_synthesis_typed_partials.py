@@ -2,11 +2,11 @@
 
 Covers two surfaces:
 
-* :func:`synth_panel.synthesis._typed_or_dict` — the helper that lets
+* :func:`althing.synthesis._typed_or_dict` — the helper that lets
   callers consume ``responses[i]["extraction"]`` whether it's a Pydantic
   ``BaseModel`` (new, attached when ``extract_schema=`` resolved a typed
   model) or a plain dict (legacy / no-model fallback).
-* :func:`synth_panel.synthesis.synthesize_panel_mapreduce` — the
+* :func:`althing.synthesis.synthesize_panel_mapreduce` — the
   map-boundary validation pass that fails loud when a per-question map
   call returns an unusable partial (explicit fallback, or schema drift
   caught by :class:`PartialSummary`) instead of silently feeding empty
@@ -20,19 +20,19 @@ from unittest.mock import patch
 
 import pytest
 
-from synth_panel.cost import ZERO_USAGE
-from synth_panel.llm.models import (
+from althing.cost import ZERO_USAGE
+from althing.llm.models import (
     CompletionResponse,
     TokenUsage,
     ToolInvocationBlock,
 )
-from synth_panel.orchestrator import PanelistResult
-from synth_panel.structured.models import (
+from althing.orchestrator import PanelistResult
+from althing.structured.models import (
     AnnotatedChoice,
     PartialSummary,
     PickOne,
 )
-from synth_panel.synthesis import (
+from althing.synthesis import (
     MapPhaseFailure,
     SynthesisResult,
     _typed_or_dict,
@@ -167,7 +167,7 @@ class TestMapPhaseFailureOnFallback:
         # Patch synthesize_panel so the second map returns is_fallback=True.
         # Caller sees a clean MapPhaseFailure naming the offending question
         # rather than reduce silently consuming "(no summary produced)".
-        from synth_panel import synthesis
+        from althing import synthesis
 
         def _fake_synth(client, panelists, questions, **kwargs):
             # Inspect the question text to decide which call is which.
@@ -210,7 +210,7 @@ class TestMapPhaseFailureOnFallback:
 
     def test_fallback_first_question_names_index_zero(self):
         """The question_index attribute reports the offending question."""
-        from synth_panel import synthesis
+        from althing import synthesis
 
         def _fake_synth(client, panelists, questions, **kwargs):
             q_text = questions[0].get("text") if isinstance(questions[0], dict) else str(questions[0])
@@ -245,7 +245,7 @@ class TestMapPhaseFailureOnFallback:
 class TestMapPhaseFailureOnSchemaDrift:
     def test_themes_wrong_type_raises(self):
         """A map result with a wrong-typed field triggers ValidationError."""
-        from synth_panel import synthesis
+        from althing import synthesis
 
         def _fake_synth(client, panelists, questions, **kwargs):
             # ``themes`` should be list[str]; deliberately set to a dict
@@ -271,7 +271,7 @@ class TestMapPhaseFailureOnSchemaDrift:
         assert err.__cause__ is err.validation_error
 
     def test_summary_wrong_type_raises(self):
-        from synth_panel import synthesis
+        from althing import synthesis
 
         def _fake_synth(client, panelists, questions, **kwargs):
             return SynthesisResult(
@@ -415,7 +415,7 @@ class TestMapReduceToleratesStringListFields:
     written back onto the map result before reduce."""
 
     def test_string_valued_map_partial_parses_and_reduce_runs(self):
-        from synth_panel import synthesis
+        from althing import synthesis
 
         map_results: list[SynthesisResult] = []
 

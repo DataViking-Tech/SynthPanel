@@ -27,8 +27,8 @@ def _data_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-placeholder")
 
 
-from synth_panel.mcp.server import mcp
-from synth_panel.structured.validate import apply_response_gate
+from althing.mcp.server import mcp
+from althing.structured.validate import apply_response_gate
 
 _VALID_DECISION = "choosing launch tier price"
 
@@ -112,7 +112,7 @@ async def test_invalid_flag_blocks_egress() -> None:
     boundary; non-conformant artifacts can never reach the caller.
     """
     bad = _verdict(flags=[{"code": "totally_made_up", "severity": "warn"}])
-    with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+    with patch("althing.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
         mock_run.return_value = bad
         result = await mcp.call_tool(
             "run_panel",
@@ -137,7 +137,7 @@ async def test_valid_verdict_passes_egress_unchanged() -> None:
     same headline, same schema_version. The gate must not mutate or
     repackage successful artifacts."""
     good = _verdict()
-    with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+    with patch("althing.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
         mock_run.return_value = good
         result = await mcp.call_tool(
             "run_panel",
@@ -158,7 +158,7 @@ async def test_legacy_shape_unaffected() -> None:
     """Pre-contract MCP responses (no ``schema_version``) must still flow
     through unchanged so the AC-9 wiring doesn't regress shipped clients."""
     legacy = {"results": [], "result_id": "xyz", "warnings": []}
-    with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+    with patch("althing.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
         mock_run.return_value = legacy
         result = await mcp.call_tool(
             "run_panel",

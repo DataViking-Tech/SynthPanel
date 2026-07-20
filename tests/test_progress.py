@@ -6,9 +6,9 @@ import io
 import sys
 from unittest.mock import MagicMock, patch
 
-from synth_panel.cli.output import OutputFormat
-from synth_panel.cli.progress import PanelProgressBar, _fmt_secs
-from synth_panel.cost import TokenUsage
+from althing.cli.output import OutputFormat
+from althing.cli.progress import PanelProgressBar, _fmt_secs
+from althing.cost import TokenUsage
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -65,7 +65,7 @@ class TestPanelProgressBar:
 
     def test_update_writes_to_file(self):
         bar, buf = self._bar(total=3)
-        with patch("synth_panel.cli.progress.resolve_cost") as mock_rc:
+        with patch("althing.cli.progress.resolve_cost") as mock_rc:
             mock_rc.return_value = MagicMock(total_cost=0.001)
             bar.update(_make_usage())
         output = buf.getvalue()
@@ -74,7 +74,7 @@ class TestPanelProgressBar:
 
     def test_update_increments_completed_count(self):
         bar, buf = self._bar(total=4)
-        with patch("synth_panel.cli.progress.resolve_cost") as mock_rc:
+        with patch("althing.cli.progress.resolve_cost") as mock_rc:
             mock_rc.return_value = MagicMock(total_cost=0.0)
             bar.update(_make_usage())
             bar.update(_make_usage())
@@ -83,7 +83,7 @@ class TestPanelProgressBar:
 
     def test_cost_accumulates(self):
         bar, buf = self._bar(total=2)
-        with patch("synth_panel.cli.progress.resolve_cost") as mock_rc:
+        with patch("althing.cli.progress.resolve_cost") as mock_rc:
             mock_rc.return_value = MagicMock(total_cost=0.0050)
             bar.update(_make_usage())
             bar.update(_make_usage())
@@ -92,7 +92,7 @@ class TestPanelProgressBar:
 
     def test_close_emits_newline_after_render(self):
         bar, buf = self._bar(total=1)
-        with patch("synth_panel.cli.progress.resolve_cost") as mock_rc:
+        with patch("althing.cli.progress.resolve_cost") as mock_rc:
             mock_rc.return_value = MagicMock(total_cost=0.0)
             bar.update(_make_usage())
         bar.close()
@@ -106,20 +106,20 @@ class TestPanelProgressBar:
 
     def test_resolve_cost_exception_does_not_crash(self):
         bar, buf = self._bar(total=2)
-        with patch("synth_panel.cli.progress.resolve_cost", side_effect=ValueError("no pricing")):
+        with patch("althing.cli.progress.resolve_cost", side_effect=ValueError("no pricing")):
             bar.update(_make_usage())  # must not raise
         assert "1/2" in buf.getvalue()
 
     def test_renders_carriage_return(self):
         bar, buf = self._bar(total=2)
-        with patch("synth_panel.cli.progress.resolve_cost") as mock_rc:
+        with patch("althing.cli.progress.resolve_cost") as mock_rc:
             mock_rc.return_value = MagicMock(total_cost=0.0)
             bar.update(_make_usage())
         assert buf.getvalue().startswith("\r")
 
     def test_done_label_at_completion(self):
         bar, buf = self._bar(total=2)
-        with patch("synth_panel.cli.progress.resolve_cost") as mock_rc:
+        with patch("althing.cli.progress.resolve_cost") as mock_rc:
             mock_rc.return_value = MagicMock(total_cost=0.0)
             bar.update(_make_usage())
             bar.update(_make_usage())

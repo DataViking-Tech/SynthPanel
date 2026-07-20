@@ -7,9 +7,9 @@ inconclusive and never block the run.
 
 from __future__ import annotations
 
-from synth_panel.llm.errors import LLMError, LLMErrorCategory
-from synth_panel.llm.models import CompletionRequest
-from synth_panel.preflight import (
+from althing.llm.errors import LLMError, LLMErrorCategory
+from althing.llm.models import CompletionRequest
+from althing.preflight import (
     PreflightReport,
     preflight_models,
 )

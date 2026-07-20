@@ -7,14 +7,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from synth_panel.cost import ZERO_USAGE
-from synth_panel.llm.models import (
+from althing.cost import ZERO_USAGE
+from althing.llm.models import (
     CompletionResponse,
     TokenUsage,
     ToolInvocationBlock,
 )
-from synth_panel.orchestrator import PanelistResult
-from synth_panel.synthesis import (
+from althing.orchestrator import PanelistResult
+from althing.synthesis import (
     _ESCALATION_MODEL,
     _MAP_PROMPT_TEMPLATE,
     STRATEGY_MAP_REDUCE,
@@ -96,7 +96,7 @@ class TestPartition:
         assert sum(len(b) for b in batches) == 10
         assert len(batches) >= 2
         # No single batch exceeds the limit
-        from synth_panel.synthesis import estimate_single_pass_tokens
+        from althing.synthesis import estimate_single_pass_tokens
 
         for b in batches:
             assert estimate_single_pass_tokens(b, _Q_OVERFLOW, prompt=_MAP_PROMPT_TEMPLATE) <= 60_000
@@ -428,7 +428,7 @@ class TestLongQuestionPrefix:
     product-brief question duplicated across 100 panelists contributes
     ~250k tokens on its own — enough to overflow haiku's 192k window even
     with trivially short answers. The audit run
-    ``ensemble_100_v099_ctx2/synthpanel__product-feedback.json`` failed
+    ``ensemble_100_v099_ctx2/althing__product-feedback.json`` failed
     this way before sub-chunking was in place; these tests pin that the
     estimator and partitioner both see the prefix cost and split
     accordingly.
@@ -441,9 +441,9 @@ class TestLongQuestionPrefix:
         # brief whose content dwarfs the actual ask. Sized so 101
         # repetitions push the map body past haiku's 192k effective
         # limit with trivially short answers.
-        header = "On a scale of 0 to 10, how likely are you to recommend SynthPanel to a peer? Context follows.\n\n"
+        header = "On a scale of 0 to 10, how likely are you to recommend Althing to a peer? Context follows.\n\n"
         brief = (
-            "SynthPanel is an open-source Python package and MCP server that "
+            "Althing is an open-source Python package and MCP server that "
             "orchestrates synthetic focus groups — panels of LLM-powered "
             "personas that answer research questions in parallel. "
         ) * 50
@@ -465,7 +465,7 @@ class TestLongQuestionPrefix:
         # Sanity: the full-panel single-pass estimate must exceed haiku's
         # effective limit — otherwise the scenario isn't actually
         # exercising the overflow path.
-        from synth_panel.synthesis import estimate_single_pass_tokens
+        from althing.synthesis import estimate_single_pass_tokens
 
         full_est = estimate_single_pass_tokens(panelists, [q], prompt=_MAP_PROMPT_TEMPLATE)
         assert full_est > 192_000, f"scenario must overflow haiku; got {full_est}"
@@ -484,7 +484,7 @@ class TestLongQuestionPrefix:
         """End-to-end: n=100 + long-brief Q on haiku succeeds via sub-chunking.
 
         Reproduces the shape of the audit failure
-        (``ensemble_100_v099_ctx2/synthpanel__product-feedback.json``):
+        (``ensemble_100_v099_ctx2/althing__product-feedback.json``):
         n=100 panelists answering a long-brief question on haiku. The
         current sub-chunk fallback must carry the run to completion
         rather than raising ``MapChunkOverflowError``.

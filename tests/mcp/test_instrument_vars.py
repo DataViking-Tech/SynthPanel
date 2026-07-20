@@ -33,7 +33,7 @@ def _data_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-placeholder")
 
 
-from synth_panel.mcp.server import mcp
+from althing.mcp.server import mcp
 
 _TEMPLATED_INSTRUMENT = {
     "version": 1,
@@ -50,7 +50,7 @@ _PLAIN_INSTRUMENT = {
 
 
 def _save_pack(name: str, instrument: dict) -> None:
-    from synth_panel.mcp.data import save_instrument_pack as _save
+    from althing.mcp.data import save_instrument_pack as _save
 
     _save(name, {"name": name, "instrument": instrument})
 
@@ -76,7 +76,7 @@ class TestVarsSubstitution:
         panel runner carries the substituted, panelist-visible text."""
         _save_pack("templated", _TEMPLATED_INSTRUMENT)
         with patch(
-            "synth_panel.mcp.server._run_panel_async_instrument",
+            "althing.mcp.server._run_panel_async_instrument",
             new_callable=AsyncMock,
         ) as mock_run:
             mock_run.return_value = {"rounds": [], "path": [], "warnings": []}
@@ -93,7 +93,7 @@ class TestVarsSubstitution:
     @pytest.mark.asyncio
     async def test_vars_substituted_into_inline_instrument(self):
         with patch(
-            "synth_panel.mcp.server._run_panel_async_instrument",
+            "althing.mcp.server._run_panel_async_instrument",
             new_callable=AsyncMock,
         ) as mock_run:
             mock_run.return_value = {"rounds": [], "path": [], "warnings": []}
@@ -109,7 +109,7 @@ class TestVarsSubstitution:
     async def test_bundled_pricing_discovery_pack_substitutes(self):
         """The real bundled pack that motivated GH#562 renders cleanly."""
         with patch(
-            "synth_panel.mcp.server._run_panel_async_instrument",
+            "althing.mcp.server._run_panel_async_instrument",
             new_callable=AsyncMock,
         ) as mock_run:
             mock_run.return_value = {"rounds": [], "path": [], "warnings": []}
@@ -130,7 +130,7 @@ class TestPlaceholderFailFast:
         typed error, not a 'successful' run with literal {problem} text."""
         _save_pack("templated", _TEMPLATED_INSTRUMENT)
         with patch(
-            "synth_panel.mcp.server._run_panel_async_instrument",
+            "althing.mcp.server._run_panel_async_instrument",
             new_callable=AsyncMock,
         ) as mock_run:
             result = await _call_run_panel(instrument_pack="templated")
@@ -180,7 +180,7 @@ class TestNoPlaceholderInstrumentsUnaffected:
     async def test_plain_pack_runs_without_vars(self):
         _save_pack("plain", _PLAIN_INSTRUMENT)
         with patch(
-            "synth_panel.mcp.server._run_panel_async_instrument",
+            "althing.mcp.server._run_panel_async_instrument",
             new_callable=AsyncMock,
         ) as mock_run:
             mock_run.return_value = {"rounds": [], "path": [], "warnings": []}
@@ -195,7 +195,7 @@ class TestNoPlaceholderInstrumentsUnaffected:
         entries that match no placeholder are simply unused."""
         _save_pack("plain", _PLAIN_INSTRUMENT)
         with patch(
-            "synth_panel.mcp.server._run_panel_async_instrument",
+            "althing.mcp.server._run_panel_async_instrument",
             new_callable=AsyncMock,
         ) as mock_run:
             mock_run.return_value = {"rounds": [], "path": [], "warnings": []}
@@ -207,7 +207,7 @@ class TestNoPlaceholderInstrumentsUnaffected:
     @pytest.mark.asyncio
     async def test_plain_questions_without_vars_unaffected(self):
         with patch(
-            "synth_panel.mcp.server._run_panel_async",
+            "althing.mcp.server._run_panel_async",
             new_callable=AsyncMock,
         ) as mock_run:
             mock_run.return_value = {"results": [], "warnings": []}

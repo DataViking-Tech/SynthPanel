@@ -31,7 +31,7 @@
 
 ## Why model packs exist
 
-SynthPanel's [SynthBench](https://synthbench.org) leaderboard tracks model
+Althing's [SynthBench](https://synthbench.org) leaderboard tracks model
 fidelity against real human distributions (GlobalOpinionQA and friends). Two
 findings from the live data drive these packs:
 
@@ -62,7 +62,7 @@ with only male software engineers.
 Each pack lists:
 
 - **When to use it** — the decision shape the pack is calibrated for.
-- **CLI** — drop-in `synthpanel panel run` invocation.
+- **CLI** — drop-in `althing panel run` invocation.
 - **MCP / SDK** — equivalent agent invocation (the `models` array passed to
   the [`run_panel`](mcp.md) tool, or `persona_models=` from the
   [Python SDK](../README.md#use-as-a-python-library)).
@@ -78,7 +78,7 @@ this pack is for "is this question even legible?" not "what would users do?".
 **CLI:**
 
 ```bash
-synthpanel panel run \
+althing panel run \
   --personas examples/personas.yaml \
   --instrument pricing-discovery \
   --var problem="choosing a project management tool" \
@@ -100,7 +100,7 @@ synthpanel panel run \
 
 ```python
 # Python SDK
-from synth_panel import run_panel
+from althing import run_panel
 panel = run_panel(pack_id="general-consumer", instrument_pack="pricing-discovery", model="haiku")
 ```
 
@@ -120,7 +120,7 @@ panel per model.
 **CLI:**
 
 ```bash
-synthpanel panel run \
+althing panel run \
   --personas examples/personas.yaml \
   --instrument pricing-discovery \
   --var problem="choosing a project management tool" \
@@ -158,7 +158,7 @@ more objections.
 **CLI:**
 
 ```bash
-synthpanel panel run \
+althing panel run \
   --personas examples/personas.yaml \
   --instrument 'landing-page-comprehension' \
   --var landing_page="Acme — ship faster with automated deploys. Start free, no card required." \
@@ -198,7 +198,7 @@ three families gets you cross-provider diversity at preflight prices.
 **CLI:**
 
 ```bash
-synthpanel panel run \
+althing panel run \
   --personas examples/personas.yaml \
   --instrument 'name-test' \
   --var candidates="Core, Plus, Pro" \
@@ -241,7 +241,7 @@ general-purpose models.
 **CLI:**
 
 ```bash
-synthpanel panel run \
+althing panel run \
   --personas enterprise-buyer \
   --instrument 'feature-prioritization' \
   --var features="SSO, audit logs, and role-based access control" \
@@ -278,7 +278,7 @@ to over-index on technical detail in free-text.
 **CLI:**
 
 ```bash
-synthpanel panel run \
+althing panel run \
   --personas developer \
   --instrument 'feature-prioritization' \
   --var features="SSO, audit logs, and role-based access control" \
@@ -306,7 +306,7 @@ per model, with blending. **This is the most expensive pack.**
 **CLI:**
 
 ```bash
-synthpanel panel run \
+althing panel run \
   --personas examples/personas.yaml \
   --instrument pricing-discovery \
   --var problem="choosing a project management tool" \
@@ -333,7 +333,7 @@ synthpanel panel run \
 **What you get:** four full passes of the panel (15 personas × 4 models ×
 N questions). Cost typically $1–$5 for a moderate instrument. The `blend`
 block's `convergence` score is the headline signal — high convergence across
-four families is the strongest fidelity claim SynthPanel can make.
+four families is the strongest fidelity claim Althing can make.
 
 ---
 

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-from synth_panel.llm.models import (
+from althing.llm.models import (
     CompletionRequest,
     DocumentBlock,
     ImageBlock,
@@ -25,15 +25,15 @@ from synth_panel.llm.models import (
     TextBlock,
     URLSource,
 )
-from synth_panel.llm.providers.anthropic import AnthropicProvider, _build_messages
-from synth_panel.orchestrator import (
+from althing.llm.providers.anthropic import AnthropicProvider, _build_messages
+from althing.orchestrator import (
     PanelPlanningError,
     _approx_prefix_chars,
     _enforce_strata_cap,
     _min_stratum_population,
     _stratum_fingerprint,
 )
-from synth_panel.prompts import build_question_blocks
+from althing.prompts import build_question_blocks
 
 
 def _body(req: CompletionRequest) -> dict:
@@ -328,7 +328,7 @@ def test_approx_prefix_chars_counts_text_and_estimates_blobs():
 def test_5m_tier_is_default_and_logged(caplog):
     """v0.1 hard-codes 5m. The orchestrator log line carries the tier so
     operators can distinguish 5m vs 1h runs without reading config."""
-    from synth_panel.orchestrator import _run_panelist  # noqa: F401 — import smoke
+    from althing.orchestrator import _run_panelist  # noqa: F401 — import smoke
 
     # The tier is propagated as a kwarg; default surfaces in log lines
     # exercised by the integration tests in hq-3o1r. Here we only assert

@@ -1,10 +1,10 @@
-"""Tests for synth_panel.stats — sp-5on.7 + sp-5on.8 + sp-5on.9 + sp-5on.12 + sp-5on.14."""
+"""Tests for althing.stats — sp-5on.7 + sp-5on.8 + sp-5on.9 + sp-5on.12 + sp-5on.14."""
 
 from __future__ import annotations
 
 import pytest
 
-from synth_panel.stats import (
+from althing.stats import (
     ConvergenceLevel,
     bootstrap_ci,
     borda_count,

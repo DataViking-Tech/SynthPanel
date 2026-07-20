@@ -15,7 +15,7 @@ from typing import Any
 
 import pytest
 
-from synth_panel.convergence import (
+from althing.convergence import (
     DEFAULT_DIVERSITY_ENTROPY_THRESHOLD,
     DEFAULT_DIVERSITY_MIN_N,
     DEFAULT_EPSILON,
@@ -28,7 +28,7 @@ from synth_panel.convergence import (
     jensen_shannon_divergence,
     load_synthbench_baseline,
 )
-from synth_panel.structured.schemas import PICK_ONE_SCHEMA
+from althing.structured.schemas import PICK_ONE_SCHEMA
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -232,7 +232,7 @@ def test_convergence_baseline_clear_error_when_synthbench_missing(monkeypatch):
     with pytest.raises(SynthbenchUnavailableError) as exc_info:
         load_synthbench_baseline("gss:happiness")
     msg = str(exc_info.value)
-    assert "synthpanel[convergence]" in msg
+    assert "althing[convergence]" in msg
     assert "pip install" in msg
 
 
@@ -655,7 +655,7 @@ def test_compute_calibration_jsd_wraps_local_implementation():
 
 def test_compute_calibration_cramers_v_exact_match_yields_zero():
     """Model dist matches baseline proportions exactly → Cramer's V is 0."""
-    from synth_panel.convergence import compute_calibration_cramers_v
+    from althing.convergence import compute_calibration_cramers_v
 
     v, df, p, warn = compute_calibration_cramers_v(
         {"a": 5, "b": 3, "c": 2},
@@ -670,7 +670,7 @@ def test_compute_calibration_cramers_v_exact_match_yields_zero():
 
 def test_compute_calibration_cramers_v_small_deviation():
     """Mild deviation from baseline → small effect size in [0.1, 0.3)."""
-    from synth_panel.convergence import compute_calibration_cramers_v
+    from althing.convergence import compute_calibration_cramers_v
 
     v, df, _p, _warn = compute_calibration_cramers_v(
         {"a": 6, "b": 3, "c": 1},
@@ -682,7 +682,7 @@ def test_compute_calibration_cramers_v_small_deviation():
 
 def test_compute_calibration_cramers_v_clamped_to_one():
     """Smoothed expected counts can blow up chi-squared past 1.0; result is clamped."""
-    from synth_panel.convergence import compute_calibration_cramers_v
+    from althing.convergence import compute_calibration_cramers_v
 
     v, _df, _p, _warn = compute_calibration_cramers_v(
         {"red": 7, "blue": 3},
@@ -693,7 +693,7 @@ def test_compute_calibration_cramers_v_clamped_to_one():
 
 def test_compute_calibration_cramers_v_rejects_empty_inputs():
     """Empty model or empty baseline → zero effect, no chi-squared computed."""
-    from synth_panel.convergence import compute_calibration_cramers_v
+    from althing.convergence import compute_calibration_cramers_v
 
     v, df, p, warn = compute_calibration_cramers_v({}, {"a": 1.0})
     assert (v, df, p, warn) == (0.0, 0, 1.0, None)

@@ -1,7 +1,7 @@
 {
-  "resource": "https://synthpanel.dev",
+  "resource": "https://althing.dev",
   "authorization_servers": [
-    "https://synthpanel.dev"
+    "https://althing.dev"
   ],
   "scopes_supported": []
 }

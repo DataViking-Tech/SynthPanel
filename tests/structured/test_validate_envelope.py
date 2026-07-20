@@ -1,7 +1,7 @@
 """Tests for the v1.0.0 validator-core (AC-2).
 
 The validator returns ``None`` when input conforms to the frozen contract,
-and a typed :class:`~synth_panel.structured.validate.ErrorEnvelope` (whose
+and a typed :class:`~althing.structured.validate.ErrorEnvelope` (whose
 shape mirrors ``error_envelope`` in ``schemas/v1.0.0.json``) on failure.
 """
 
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from synth_panel.structured.validate import (
+from althing.structured.validate import (
     ErrorEnvelope,
     validate_request,
     validate_response,

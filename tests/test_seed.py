@@ -12,8 +12,8 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterator
 
-from synth_panel.llm.client import LLMClient
-from synth_panel.llm.models import (
+from althing.llm.client import LLMClient
+from althing.llm.models import (
     CompletionRequest,
     CompletionResponse,
     InputMessage,
@@ -21,9 +21,9 @@ from synth_panel.llm.models import (
     TextBlock,
     TokenUsage,
 )
-from synth_panel.llm.providers.anthropic import ANTHROPIC_CONFIG, AnthropicProvider
-from synth_panel.llm.providers.base import LLMProvider, ProviderConfig
-from synth_panel.llm.providers.openai_compat import OPENAI_COMPAT_CONFIG
+from althing.llm.providers.anthropic import ANTHROPIC_CONFIG, AnthropicProvider
+from althing.llm.providers.base import LLMProvider, ProviderConfig
+from althing.llm.providers.openai_compat import OPENAI_COMPAT_CONFIG
 
 
 def _request(model: str = "gpt-4o-mini", seed: int | None = 42) -> CompletionRequest:
@@ -45,13 +45,13 @@ class TestProviderConfigSeed:
 
 class TestBuildOpenaiBodySeed:
     def test_seed_in_body(self):
-        from synth_panel.llm.providers._openai_format import build_openai_body
+        from althing.llm.providers._openai_format import build_openai_body
 
         body = build_openai_body(_request(seed=42))
         assert body["seed"] == 42
 
     def test_no_seed_when_none(self):
-        from synth_panel.llm.providers._openai_format import build_openai_body
+        from althing.llm.providers._openai_format import build_openai_body
 
         body = build_openai_body(_request(seed=None))
         assert "seed" not in body
@@ -87,7 +87,7 @@ class TestSeedWarning:
         client._provider_cache["claude-sonnet-4-6"] = fake
 
         req = _request(model="claude-sonnet-4-6", seed=7)
-        with caplog.at_level(logging.WARNING, logger="synth_panel.llm.client"):
+        with caplog.at_level(logging.WARNING, logger="althing.llm.client"):
             client.send(req)
             client.send(req)
             client.send(req)
@@ -102,7 +102,7 @@ class TestSeedWarning:
         fake = _FakeProvider(OPENAI_COMPAT_CONFIG)
         client._provider_cache["gpt-4o-mini"] = fake
 
-        with caplog.at_level(logging.WARNING, logger="synth_panel.llm.client"):
+        with caplog.at_level(logging.WARNING, logger="althing.llm.client"):
             client.send(_request(model="gpt-4o-mini", seed=42))
 
         warnings = [r for r in caplog.records if "--seed" in r.getMessage()]
@@ -113,7 +113,7 @@ class TestSeedWarning:
         fake = _FakeProvider(ANTHROPIC_CONFIG)
         client._provider_cache["claude-sonnet-4-6"] = fake
 
-        with caplog.at_level(logging.WARNING, logger="synth_panel.llm.client"):
+        with caplog.at_level(logging.WARNING, logger="althing.llm.client"):
             client.send(_request(model="claude-sonnet-4-6", seed=None))
 
         warnings = [r for r in caplog.records if "--seed" in r.getMessage()]
@@ -134,7 +134,7 @@ class TestSeedWarning:
         client._provider_cache["claude-sonnet-4-6"] = anth
         client._provider_cache["llama3"] = local
 
-        with caplog.at_level(logging.WARNING, logger="synth_panel.llm.client"):
+        with caplog.at_level(logging.WARNING, logger="althing.llm.client"):
             client.send(_request(model="claude-sonnet-4-6", seed=1))
             client.send(_request(model="llama3", seed=1))
 
@@ -146,14 +146,14 @@ class TestSeedWarning:
 
 class TestCliParser:
     def test_seed_flag_accepted(self):
-        from synth_panel.cli.parser import build_parser
+        from althing.cli.parser import build_parser
 
         parser = build_parser()
         args = parser.parse_args(["panel", "run", "--seed", "42", "--personas", "p.yaml", "--instrument", "i.yaml"])
         assert args.seed == 42
 
     def test_seed_defaults_to_none(self):
-        from synth_panel.cli.parser import build_parser
+        from althing.cli.parser import build_parser
 
         parser = build_parser()
         args = parser.parse_args(["panel", "run", "--personas", "p.yaml", "--instrument", "i.yaml"])

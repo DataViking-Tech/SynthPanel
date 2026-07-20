@@ -1,4 +1,4 @@
-"""Tests for the synthpanel CLI framework."""
+"""Tests for the althing CLI framework."""
 
 from __future__ import annotations
 
@@ -9,21 +9,21 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from synth_panel.cli.commands import (
+from althing.cli.commands import (
     _build_rounds_shape,
     _load_instrument,
     _load_personas,
     _load_schema,
     _merge_persona_lists,
 )
-from synth_panel.cli.output import OutputFormat, emit
-from synth_panel.cli.parser import build_parser
-from synth_panel.cli.repl import SessionState
-from synth_panel.cli.slash import SLASH_COMMANDS, dispatch_slash
-from synth_panel.cost import ZERO_USAGE, TokenUsage
-from synth_panel.main import main
-from synth_panel.prompts import persona_system_prompt
-from synth_panel.runtime import TurnSummary
+from althing.cli.output import OutputFormat, emit
+from althing.cli.parser import build_parser
+from althing.cli.repl import SessionState
+from althing.cli.slash import SLASH_COMMANDS, dispatch_slash
+from althing.cost import ZERO_USAGE, TokenUsage
+from althing.main import main
+from althing.prompts import persona_system_prompt
+from althing.runtime import TurnSummary
 
 # --- Parser tests ---
 
@@ -321,7 +321,7 @@ class TestSlashCommands:
 
 def _mock_turn_summary(text: str = "Hello!") -> TurnSummary:
     """Create a TurnSummary with a text response."""
-    from synth_panel.persistence import ConversationMessage
+    from althing.persistence import ConversationMessage
 
     usage = TokenUsage(input_tokens=10, output_tokens=20)
     msg = ConversationMessage(
@@ -340,8 +340,8 @@ def _mock_turn_summary(text: str = "Hello!") -> TurnSummary:
 
 
 class TestMain:
-    @patch("synth_panel.cli.commands.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_prompt_command(self, mock_client_cls, mock_runtime_cls, capsys):
         mock_runtime = MagicMock()
         mock_runtime.run_turn.return_value = _mock_turn_summary("Hi there!")
@@ -352,8 +352,8 @@ class TestMain:
         out = capsys.readouterr().out
         assert "Hi there!" in out
 
-    @patch("synth_panel.cli.commands.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_prompt_json_output(self, mock_client_cls, mock_runtime_cls, capsys):
         mock_runtime = MagicMock()
         mock_runtime.run_turn.return_value = _mock_turn_summary("response text")
@@ -366,8 +366,8 @@ class TestMain:
         assert "cost" in data
         assert "usage" in data
 
-    @patch("synth_panel.cli.commands.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_prompt_error_returns_nonzero(self, mock_client_cls, mock_runtime_cls, capsys):
         mock_runtime = MagicMock()
         mock_runtime.run_turn.side_effect = RuntimeError("API failure")
@@ -419,7 +419,7 @@ class TestYAMLLoading:
         # to distinguish "filesystem path" from "pack alias" so an agent
         # can pick the right next step. Force the registry probe to
         # return None so we exercise the generic-error branch.
-        from synth_panel.cli import commands as cmd_mod
+        from althing.cli import commands as cmd_mod
 
         monkeypatch.setattr(cmd_mod, "_registry_install_hint", lambda _name: None)
         with pytest.raises(FileNotFoundError) as exc:
@@ -430,15 +430,15 @@ class TestYAMLLoading:
 
     def test_load_personas_registry_pack_gets_install_hint(self, monkeypatch):
         # sy-n80 / gh-508: when the name is a known registry pack, the
-        # error must point the caller at `synthpanel pack import <id>`.
-        from synth_panel.cli import commands as cmd_mod
+        # error must point the caller at `althing pack import <id>`.
+        from althing.cli import commands as cmd_mod
 
         monkeypatch.setattr(
             cmd_mod,
             "_registry_install_hint",
             lambda name: (
                 f"{name!r} is a registry pack, not yet installed locally. "
-                f"Run `synthpanel pack import {name}` to install it, then "
+                f"Run `althing pack import {name}` to install it, then "
                 f"re-run with `--personas {name}`."
             ),
         )
@@ -451,7 +451,7 @@ class TestYAMLLoading:
     def test_load_personas_registry_probe_is_offline_safe(self, monkeypatch):
         # sy-n80 / gh-508: a network failure in the registry probe must
         # not crash; it should fall through to the generic error.
-        from synth_panel.cli import commands as cmd_mod
+        from althing.cli import commands as cmd_mod
 
         def _boom(_name):
             raise RuntimeError("network down")
@@ -460,7 +460,7 @@ class TestYAMLLoading:
         # the wrapper actually returns None on failure and we fall
         # through to the generic "not found" error.
         monkeypatch.setattr(
-            "synth_panel.registry.resolve_pack",
+            "althing.registry.resolve_pack",
             lambda *_a, **_kw: (_ for _ in ()).throw(RuntimeError("network down")),
         )
         # Direct probe returns None (offline-safe).
@@ -546,8 +546,8 @@ class TestYAMLLoading:
 
 def _mock_synthesis_result():
     """Create a mock SynthesisResult for CLI integration tests."""
-    from synth_panel.cost import CostEstimate
-    from synth_panel.synthesis import SynthesisResult
+    from althing.cost import CostEstimate
+    from althing.synthesis import SynthesisResult
 
     return SynthesisResult(
         summary="Test synthesis summary",
@@ -563,9 +563,9 @@ def _mock_synthesis_result():
 
 
 class TestPanelRun:
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_panel_run_basic(self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path):
         mock_runtime = MagicMock()
         mock_runtime.run_turn.return_value = _mock_turn_summary("I think...")
@@ -594,9 +594,9 @@ class TestPanelRun:
         assert "SYNTHESIS" in out
         assert "Test synthesis summary" in out
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_panel_run_json(self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path):
         mock_runtime = MagicMock()
         mock_runtime.run_turn.return_value = _mock_turn_summary("answer")
@@ -633,9 +633,9 @@ class TestPanelRun:
         assert data["synthesis"]["summary"] == "Test synthesis summary"
         assert "panelist_cost" in data
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_panel_run_output_format_after_subcommand(
         self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path
     ):
@@ -669,8 +669,8 @@ class TestPanelRun:
         assert data["persona_count"] == 1
         assert data["synthesis"] is not None
 
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_panel_run_no_synthesis(self, mock_client_cls, mock_runtime_cls, capsys, tmp_path):
         """--no-synthesis skips the synthesis step entirely."""
         mock_runtime = MagicMock()
@@ -700,9 +700,9 @@ class TestPanelRun:
         assert data["synthesis"] is None
         assert data["total_cost"] == data["panelist_cost"]
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_panel_run_multi_question_emits_full_cost_shape(
         self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path
     ):
@@ -766,9 +766,9 @@ class TestPanelRun:
         assert "cost" in data["metadata"]
         assert "total_cost_usd" in data["metadata"]["cost"]
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_panel_run_synthesis_model(self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path):
         """--synthesis-model is passed through to synthesize_panel."""
         mock_runtime = MagicMock()
@@ -832,15 +832,15 @@ class TestPanelRun:
 
     # --- sp-2hg: silent-failure-on-universal-provider-errors ------------
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_panel_run_all_errored_returns_nonzero_and_skips_synthesis(
         self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path
     ):
         """sp-2hg: when every question errors the run must exit non-zero,
         surface a fatal banner, and NOT call synthesize_panel."""
-        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+        from althing.orchestrator import PanelistResult, WorkerRegistry
 
         registry = WorkerRegistry()
         mock_run.return_value = (
@@ -888,12 +888,12 @@ class TestPanelRun:
         # Synthesis MUST not run on a fully-errored panel
         mock_synth.assert_not_called()
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_panel_run_strict_flag_bails_on_any_error(self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path):
         """sp-2hg: --strict turns any error into a fatal run (exit 3)."""
-        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+        from althing.orchestrator import PanelistResult, WorkerRegistry
 
         registry = WorkerRegistry()
         mock_run.return_value = (
@@ -940,16 +940,16 @@ class TestPanelRun:
         assert "--strict" in err
         mock_synth.assert_not_called()
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_panel_run_partial_errors_below_threshold_still_synthesizes(
         self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path
     ):
         """sp-2hg: a single-error panel (25% failure) should still synthesize
         when --strict is NOT set and the failure rate is below the default
         threshold (0.5). Exit code is 0."""
-        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+        from althing.orchestrator import PanelistResult, WorkerRegistry
 
         registry = WorkerRegistry()
         mock_run.return_value = (
@@ -994,15 +994,15 @@ class TestPanelRun:
         assert code == 0
         mock_synth.assert_called_once()
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_panel_run_json_output_includes_failure_stats(
         self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path
     ):
         """sp-2hg: structured output must carry failure_stats + run_invalid
         so MCP/CI consumers can gate without parsing banners."""
-        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+        from althing.orchestrator import PanelistResult, WorkerRegistry
 
         registry = WorkerRegistry()
         mock_run.return_value = (
@@ -1044,9 +1044,9 @@ class TestPanelRun:
         assert data["failure_stats"]["failure_rate"] == 1.0
         mock_synth.assert_not_called()
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_panel_run_total_failure_names_model_and_upstream_error(
         self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path
     ):
@@ -1057,7 +1057,7 @@ class TestPanelRun:
         result with 0-token panelists and a misleading "panel complete"
         exit code when every request was rejected upstream.
         """
-        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+        from althing.orchestrator import PanelistResult, WorkerRegistry
 
         registry = WorkerRegistry()
         upstream_err = "OpenRouter API error 400: invalid model 'haiku:0.25' is not a recognized identifier"
@@ -1120,16 +1120,16 @@ class TestPanelRun:
         assert "400" in first_err
         mock_synth.assert_not_called()
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_panel_run_total_failure_when_every_panelist_exploded(
         self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path
     ):
         """sp-efip: wholesale panelist exceptions (pr.error set, responses
         empty) must also trigger the total-failure banner even if the
         aggregate failure rate somehow rounds to the threshold."""
-        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+        from althing.orchestrator import PanelistResult, WorkerRegistry
 
         registry = WorkerRegistry()
         mock_run.return_value = (
@@ -1178,8 +1178,8 @@ class TestDetectTotalFailure:
     """Unit coverage for the shared helper that the CLI + MCP both use."""
 
     def test_detects_all_error_responses(self):
-        from synth_panel._runners import detect_total_failure
-        from synth_panel.orchestrator import PanelistResult
+        from althing._runners import detect_total_failure
+        from althing.orchestrator import PanelistResult
 
         results = [
             PanelistResult(
@@ -1197,8 +1197,8 @@ class TestDetectTotalFailure:
         assert "400" in failure["sample_errors"][0][1]
 
     def test_detects_wholesale_panelist_error(self):
-        from synth_panel._runners import detect_total_failure
-        from synth_panel.orchestrator import PanelistResult
+        from althing._runners import detect_total_failure
+        from althing.orchestrator import PanelistResult
 
         results = [
             PanelistResult(
@@ -1215,8 +1215,8 @@ class TestDetectTotalFailure:
         assert failure["sample_errors"][0] == ("Alice", "provider 400")
 
     def test_returns_none_when_any_panelist_has_usable_data(self):
-        from synth_panel._runners import detect_total_failure
-        from synth_panel.orchestrator import PanelistResult
+        from althing._runners import detect_total_failure
+        from althing.orchestrator import PanelistResult
 
         results = [
             PanelistResult(
@@ -1235,7 +1235,7 @@ class TestDetectTotalFailure:
         assert detect_total_failure(results) is None
 
     def test_empty_results_is_total_failure(self):
-        from synth_panel._runners import detect_total_failure
+        from althing._runners import detect_total_failure
 
         failure = detect_total_failure([])
         assert failure is not None
@@ -1249,10 +1249,10 @@ class TestRunPanelSyncTotalFailure:
     """The shared runner used by MCP + SDK must raise, not silently return
     a 'success' envelope, when every panelist failed."""
 
-    @patch("synth_panel._runners.run_panel_parallel")
+    @patch("althing._runners.run_panel_parallel")
     def test_raises_when_every_panelist_errored(self, mock_run):
-        from synth_panel._runners import PanelTotalFailureError, run_panel_sync
-        from synth_panel.orchestrator import PanelistResult
+        from althing._runners import PanelTotalFailureError, run_panel_sync
+        from althing.orchestrator import PanelistResult
 
         mock_run.return_value = (
             [
@@ -1292,8 +1292,8 @@ class TestMissingInputDetection:
     ≥50% of panelists reporting missing/unavailable input."""
 
     def test_detector_flags_above_threshold(self):
-        from synth_panel.cli.commands import _detect_missing_input_refusals
-        from synth_panel.orchestrator import PanelistResult
+        from althing.cli.commands import _detect_missing_input_refusals
+        from althing.orchestrator import PanelistResult
 
         results = [
             PanelistResult(
@@ -1328,8 +1328,8 @@ class TestMissingInputDetection:
     def test_detector_ignores_follow_ups(self):
         """Primary-response refusals count; follow-ups piggyback and are skipped
         so we don't double-count a single refusal."""
-        from synth_panel.cli.commands import _detect_missing_input_refusals
-        from synth_panel.orchestrator import PanelistResult
+        from althing.cli.commands import _detect_missing_input_refusals
+        from althing.orchestrator import PanelistResult
 
         results = [
             PanelistResult(
@@ -1353,8 +1353,8 @@ class TestMissingInputDetection:
     def test_detector_excludes_errored_panelists(self):
         """A wholesale panelist failure is already flagged by _analyze_failures;
         including it here would double-count and distort the rate."""
-        from synth_panel.cli.commands import _detect_missing_input_refusals
-        from synth_panel.orchestrator import PanelistResult
+        from althing.cli.commands import _detect_missing_input_refusals
+        from althing.orchestrator import PanelistResult
 
         results = [
             PanelistResult(
@@ -1377,7 +1377,7 @@ class TestMissingInputDetection:
         assert stats["refusal_rate"] == 1.0
 
     def test_detector_returns_zero_rate_when_empty(self):
-        from synth_panel.cli.commands import _detect_missing_input_refusals
+        from althing.cli.commands import _detect_missing_input_refusals
 
         stats = _detect_missing_input_refusals([])
         assert stats["considered"] == 0
@@ -1385,15 +1385,15 @@ class TestMissingInputDetection:
         assert stats["refusal_rate"] == 0.0
         assert stats["refusing_personas"] == []
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_panel_run_sets_run_invalid_on_majority_missing_input(
         self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path
     ):
         """End-to-end: three clean panelists, two refuse for missing input
         → run_invalid=True, warning surfaced, synthesis skipped."""
-        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+        from althing.orchestrator import PanelistResult, WorkerRegistry
 
         registry = WorkerRegistry()
         mock_run.return_value = (
@@ -1452,13 +1452,13 @@ class TestMissingInputDetection:
         assert any("missing_input_refusals" in w for w in data["warnings"])
         mock_synth.assert_not_called()
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_panel_run_stays_valid_below_threshold(self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path):
         """One refusal out of three (~33%) is below the 50% threshold — the
         run is still valid and synthesis proceeds."""
-        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+        from althing.orchestrator import PanelistResult, WorkerRegistry
 
         registry = WorkerRegistry()
         mock_run.return_value = (
@@ -1514,9 +1514,9 @@ class TestMissingInputDetection:
 
 
 class TestPanelRunSave:
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_save_flag_writes_result_and_prints_id(
         self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path, monkeypatch
     ):
@@ -1526,7 +1526,7 @@ class TestPanelRunSave:
         mock_runtime_cls.return_value = mock_runtime
         mock_synth.return_value = _mock_synthesis_result()
 
-        # Redirect results to tmp_path so we don't pollute ~/.synthpanel
+        # Redirect results to tmp_path so we don't pollute ~/.althing
         monkeypatch.setenv("SYNTH_PANEL_DATA_DIR", str(tmp_path / "data"))
 
         personas_file = tmp_path / "personas.yaml"
@@ -1569,13 +1569,13 @@ class TestPanelRunSave:
         assert "total_usage" in data
         assert "total_cost" in data
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_save_result_works_with_analyze(
         self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path, monkeypatch
     ):
-        """Saved result can be loaded by 'synthpanel analyze'."""
+        """Saved result can be loaded by 'althing analyze'."""
         mock_runtime = MagicMock()
         mock_runtime.run_turn.return_value = _mock_turn_summary("Strongly agree")
         mock_runtime_cls.return_value = mock_runtime
@@ -1626,8 +1626,8 @@ class TestPanelRunSave:
         args = parser.parse_args(["panel", "run", "--personas", "p.yaml", "--instrument", "i.yaml"])
         assert args.save is False
 
-    @patch("synth_panel.ensemble.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.ensemble.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_save_flag_writes_result_in_ensemble_mode(self, mock_client_cls, mock_rpp, capsys, tmp_path, monkeypatch):
         """hq-0pnq: --save must persist a result file in ensemble (--models a,b) mode.
 
@@ -1635,8 +1635,8 @@ class TestPanelRunSave:
         reaching the persistence block at the end of handle_panel_run(),
         so ``--save`` was a silent no-op for any multi-model panel.
         """
-        from synth_panel.cost import TokenUsage as CostTokenUsage
-        from synth_panel.orchestrator import PanelistResult
+        from althing.cost import TokenUsage as CostTokenUsage
+        from althing.orchestrator import PanelistResult
 
         def _fake_run_parallel(**kwargs):
             model = kwargs["model"]
@@ -1701,9 +1701,9 @@ class TestPanelRunSave:
 
     # --- sy-659 (#471): result handle in machine-readable output ----------
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_save_json_output_includes_result_handle(
         self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path, monkeypatch
     ):
@@ -1761,9 +1761,9 @@ class TestPanelRunSave:
                 break
         assert stderr_id == data["result_id"]
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_no_save_omits_result_handle_from_json(
         self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path, monkeypatch
     ):
@@ -1797,14 +1797,14 @@ class TestPanelRunSave:
         assert "result_id" not in data
         assert "saved_path" not in data
 
-    @patch("synth_panel.ensemble.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.ensemble.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_save_json_output_includes_result_handle_in_ensemble_mode(
         self, mock_client_cls, mock_rpp, capsys, tmp_path, monkeypatch
     ):
         """#471: ensemble (--models a,b) --save --output-format json carries the handle too."""
-        from synth_panel.cost import TokenUsage as CostTokenUsage
-        from synth_panel.orchestrator import PanelistResult
+        from althing.cost import TokenUsage as CostTokenUsage
+        from althing.orchestrator import PanelistResult
 
         def _fake_run_parallel(**kwargs):
             model = kwargs["model"]
@@ -1863,14 +1863,14 @@ class TestPanelRunBlendEnsemble:
     documented feature.
     """
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.ensemble.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.ensemble.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_blend_with_ensemble_spec_produces_synthesis_and_blend(
         self, mock_client_cls, mock_rpp, mock_synth, capsys, tmp_path
     ):
-        from synth_panel.cost import TokenUsage as CostTokenUsage
-        from synth_panel.orchestrator import PanelistResult
+        from althing.cost import TokenUsage as CostTokenUsage
+        from althing.orchestrator import PanelistResult
 
         mock_synth.return_value = _mock_synthesis_result()
 
@@ -1965,8 +1965,8 @@ class TestPanelSynthesize:
         assert args.synthesis_model is None
         assert args.synthesis_prompt is None
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.LLMClient")
     def test_panel_synthesize_reloads_result_and_saves_sidecar(
         self, mock_client_cls, mock_synth, capsys, tmp_path, monkeypatch
     ):
@@ -2035,8 +2035,8 @@ class TestPanelSynthesize:
         assert "Test synthesis summary" in out.out
         assert "Saved synthesis:" in out.err
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.LLMClient")
     def test_panel_synthesize_passes_custom_prompt(self, mock_client_cls, mock_synth, capsys, tmp_path, monkeypatch):
         """``--synthesis-prompt`` flows through as custom_prompt."""
         mock_synth.return_value = _mock_synthesis_result()
@@ -2095,7 +2095,7 @@ class TestDefaultModelResolution:
     surface the chosen model so the user can cancel/override."""
 
     def test_resolve_default_model_prefers_anthropic(self, monkeypatch):
-        from synth_panel.cli.commands import _resolve_default_model
+        from althing.cli.commands import _resolve_default_model
 
         for env in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "XAI_API_KEY"):
             monkeypatch.delenv(env, raising=False)
@@ -2105,7 +2105,7 @@ class TestDefaultModelResolution:
         assert source == "ANTHROPIC_API_KEY"
 
     def test_resolve_default_model_falls_through_to_gemini(self, monkeypatch):
-        from synth_panel.cli.commands import _resolve_default_model
+        from althing.cli.commands import _resolve_default_model
 
         for env in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "XAI_API_KEY"):
             monkeypatch.delenv(env, raising=False)
@@ -2115,7 +2115,7 @@ class TestDefaultModelResolution:
         assert source == "GEMINI_API_KEY"
 
     def test_resolve_default_model_falls_back_to_sonnet_when_no_creds(self, monkeypatch):
-        from synth_panel.cli.commands import _resolve_default_model
+        from althing.cli.commands import _resolve_default_model
 
         for env in (
             "ANTHROPIC_API_KEY",
@@ -2132,7 +2132,7 @@ class TestDefaultModelResolution:
 
     def test_resolve_default_model_respects_preference_order(self, monkeypatch):
         """Anthropic beats Gemini even if both keys are set."""
-        from synth_panel.cli.commands import _resolve_default_model
+        from althing.cli.commands import _resolve_default_model
 
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
         monkeypatch.setenv("GEMINI_API_KEY", "gemkey")
@@ -2140,15 +2140,15 @@ class TestDefaultModelResolution:
         assert alias == "sonnet"
         assert source == "ANTHROPIC_API_KEY"
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_panel_run_announces_default_model_on_stderr(
         self, mock_client_cls, mock_run, mock_synth, monkeypatch, capsys, tmp_path
     ):
         """When --model is omitted, the chosen default is printed to stderr
         so an operator can cancel and re-run with an explicit override."""
-        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+        from althing.orchestrator import PanelistResult, WorkerRegistry
 
         for env in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "XAI_API_KEY"):
             monkeypatch.delenv(env, raising=False)
@@ -2183,14 +2183,14 @@ class TestDefaultModelResolution:
         assert "GEMINI_API_KEY" in err
         assert "Override with --model" in err
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_panel_run_explicit_model_suppresses_announcement(
         self, mock_client_cls, mock_run, mock_synth, monkeypatch, capsys, tmp_path
     ):
         """When --model is explicit, no auto-select message is printed."""
-        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+        from althing.orchestrator import PanelistResult, WorkerRegistry
 
         monkeypatch.setenv("GEMINI_API_KEY", "gemkey")
 
@@ -2234,7 +2234,7 @@ class TestVarSubstitution:
     def test_collect_template_vars_parses_cli_flags(self):
         import argparse as _ap
 
-        from synth_panel.cli.commands import _collect_template_vars
+        from althing.cli.commands import _collect_template_vars
 
         ns = _ap.Namespace(vars=["candidates=Alpha, Beta", "theme=pricing"], vars_file=None)
         result = _collect_template_vars(ns)
@@ -2243,7 +2243,7 @@ class TestVarSubstitution:
     def test_collect_template_vars_allows_equals_in_value(self):
         import argparse as _ap
 
-        from synth_panel.cli.commands import _collect_template_vars
+        from althing.cli.commands import _collect_template_vars
 
         ns = _ap.Namespace(vars=["equation=a=b+c"], vars_file=None)
         assert _collect_template_vars(ns) == {"equation": "a=b+c"}
@@ -2251,7 +2251,7 @@ class TestVarSubstitution:
     def test_collect_template_vars_rejects_malformed_flag(self):
         import argparse as _ap
 
-        from synth_panel.cli.commands import _collect_template_vars
+        from althing.cli.commands import _collect_template_vars
 
         ns = _ap.Namespace(vars=["novalue"], vars_file=None)
         with pytest.raises(ValueError, match="KEY=VALUE"):
@@ -2260,7 +2260,7 @@ class TestVarSubstitution:
     def test_collect_template_vars_rejects_empty_key(self):
         import argparse as _ap
 
-        from synth_panel.cli.commands import _collect_template_vars
+        from althing.cli.commands import _collect_template_vars
 
         ns = _ap.Namespace(vars=["=hello"], vars_file=None)
         with pytest.raises(ValueError, match="empty key"):
@@ -2269,7 +2269,7 @@ class TestVarSubstitution:
     def test_collect_template_vars_merges_file_and_cli_flags(self, tmp_path):
         import argparse as _ap
 
-        from synth_panel.cli.commands import _collect_template_vars
+        from althing.cli.commands import _collect_template_vars
 
         f = tmp_path / "vars.yaml"
         f.write_text("candidates:\n  - Alpha\n  - Beta\ntheme: memorability\n")
@@ -2283,7 +2283,7 @@ class TestVarSubstitution:
     def test_collect_template_vars_rejects_non_mapping_file(self, tmp_path):
         import argparse as _ap
 
-        from synth_panel.cli.commands import _collect_template_vars
+        from althing.cli.commands import _collect_template_vars
 
         f = tmp_path / "bad.yaml"
         f.write_text("- just\n- a\n- list\n")
@@ -2292,8 +2292,8 @@ class TestVarSubstitution:
             _collect_template_vars(ns)
 
     def test_apply_vars_to_instrument_mutates_round_questions(self):
-        from synth_panel.cli.commands import _apply_vars_to_instrument
-        from synth_panel.instrument import parse_instrument
+        from althing.cli.commands import _apply_vars_to_instrument
+        from althing.instrument import parse_instrument
 
         inst = parse_instrument(
             {
@@ -2319,16 +2319,16 @@ class TestVarSubstitution:
         assert inst.rounds[0].questions[0]["text"] == ("Evaluate: Alpha, Beta, Gamma. Reaction?")
         assert inst.rounds[1].questions[0]["text"] == ("Which of Alpha, Beta, Gamma do you remember?")
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_panel_run_cli_var_substitutes_bundled_placeholder(
         self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path
     ):
         """End-to-end: a question containing ``{candidates}`` is passed to
         ``run_panel_parallel`` already rendered when ``--var candidates=...``
         is supplied."""
-        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+        from althing.orchestrator import PanelistResult, WorkerRegistry
 
         registry = WorkerRegistry()
         mock_run.return_value = (
@@ -2366,9 +2366,9 @@ class TestVarSubstitution:
         assert len(questions_passed) == 1
         assert questions_passed[0]["text"] == "Evaluate: Alpha, Beta, Gamma"
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_panel_run_malformed_var_returns_error(self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path):
         personas_file = tmp_path / "personas.yaml"
         personas_file.write_text("personas:\n  - name: A\n")
@@ -2392,9 +2392,9 @@ class TestVarSubstitution:
         assert "KEY=VALUE" in err
         mock_run.assert_not_called()
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_panel_run_aborts_on_unsubstituted_placeholder(
         self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path
     ):
@@ -2422,14 +2422,14 @@ class TestVarSubstitution:
         assert "--var features=" in err
         mock_run.assert_not_called()
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_panel_run_allow_unresolved_warns_and_proceeds(
         self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path
     ):
         """sp-6yi: --allow-unresolved keeps literal braces and emits a warning."""
-        from synth_panel.orchestrator import PanelistResult, WorkerRegistry
+        from althing.orchestrator import PanelistResult, WorkerRegistry
 
         registry = WorkerRegistry()
         mock_run.return_value = (
@@ -2468,9 +2468,9 @@ class TestVarSubstitution:
         _, kwargs = mock_run.call_args
         assert kwargs["questions"][0]["text"] == "Rate {features}"
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_panel_run_partial_vars_still_aborts_on_remaining_placeholder(
         self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path
     ):
@@ -2503,9 +2503,9 @@ class TestVarSubstitution:
         assert "features" not in err.split("placeholders:", 1)[-1].split(".")[0]
         mock_run.assert_not_called()
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_panel_run_landing_page_pack_aborts_on_missing_landing_page(
         self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path, monkeypatch
     ):
@@ -2588,7 +2588,7 @@ class TestPackCommands:
         assert "Validation error" in capsys.readouterr().err
 
     def test_pack_export_stdout(self, capsys):
-        from synth_panel.mcp.data import save_persona_pack
+        from althing.mcp.data import save_persona_pack
 
         save_persona_pack("Export Test", [{"name": "Eve"}], pack_id="exp")
         code = main(["pack", "export", "exp"])
@@ -2598,7 +2598,7 @@ class TestPackCommands:
         assert "Export Test" in out
 
     def test_pack_export_to_file(self, capsys):
-        from synth_panel.mcp.data import save_persona_pack
+        from althing.mcp.data import save_persona_pack
 
         save_persona_pack("File Export", [{"name": "Dan"}], pack_id="fexp")
         outfile = self._tmp / "out.yaml"
@@ -2614,7 +2614,7 @@ class TestPackCommands:
     def test_pack_export_creates_missing_parent_dirs(self, capsys):
         """hq-pmi1: -o /path/to/missing/foo.yaml must mkdir -p the parent
         rather than crashing in pathlib.write_text with FileNotFoundError."""
-        from synth_panel.mcp.data import save_persona_pack
+        from althing.mcp.data import save_persona_pack
 
         save_persona_pack("Nested Export", [{"name": "Mira"}], pack_id="nexp")
         outfile = self._tmp / "nested" / "deeper" / "out.yaml"
@@ -2626,7 +2626,7 @@ class TestPackCommands:
 
     def test_pack_show_prints_yaml_to_stdout(self, capsys):
         """sp-oem: `pack show <id>` is an alias for stdout export."""
-        from synth_panel.mcp.data import save_persona_pack
+        from althing.mcp.data import save_persona_pack
 
         save_persona_pack("Show Test", [{"name": "Zoe"}], pack_id="shtest")
         code = main(["pack", "show", "shtest"])
@@ -2639,7 +2639,7 @@ class TestPackCommands:
         """sp-oem: `pack show <id>` must produce the same output as
         `pack export <id>` with no output file - the whole point of the
         alias is that they are interchangeable for inspection use."""
-        from synth_panel.mcp.data import save_persona_pack
+        from althing.mcp.data import save_persona_pack
 
         save_persona_pack("Parity Test", [{"name": "Iris", "age": 40}], pack_id="parity")
         main(["pack", "export", "parity"])
@@ -2654,8 +2654,8 @@ class TestPackCommands:
 
     def test_pack_inspect_wraps_long_prose(self, capsys, monkeypatch):
         """GH #311: long description / persona fields wrap to terminal width."""
-        from synth_panel.cli import commands as cli_commands
-        from synth_panel.mcp.data import save_persona_pack
+        from althing.cli import commands as cli_commands
+        from althing.mcp.data import save_persona_pack
 
         monkeypatch.setattr(cli_commands, "terminal_columns", lambda fallback=80: 36)
         long_bg = "word " * 20
@@ -2682,7 +2682,7 @@ class TestPackCommands:
 
     def test_pack_inspect_full_preserves_newlines(self, capsys):
         """--full keeps paragraph breaks in persona background."""
-        from synth_panel.mcp.data import save_persona_pack
+        from althing.mcp.data import save_persona_pack
 
         save_persona_pack(
             "Full Pack",
@@ -2703,7 +2703,7 @@ class TestPackCommands:
         assert "\n\n" in out
 
     def test_pack_inspect_json_includes_full_flag(self, capsys):
-        from synth_panel.mcp.data import save_persona_pack
+        from althing.mcp.data import save_persona_pack
 
         save_persona_pack("J", [{"name": "Y"}], pack_id="jpack")
         code = main(["--output-format", "json", "pack", "inspect", "jpack", "--full"])
@@ -2718,7 +2718,7 @@ class TestPackCommands:
         assert code == 1
 
     def test_pack_list_json(self, capsys):
-        from synth_panel.mcp.data import save_persona_pack
+        from althing.mcp.data import save_persona_pack
 
         save_persona_pack("JSON Pack", [{"name": "X"}], pack_id="jp")
         code = main(["--output-format", "json", "pack", "list"])
@@ -2740,7 +2740,7 @@ class TestPackCommands:
         """Write a fresh registry cache so fetch_registry() reads it and
         does not hit the network. The fixture sets SYNTH_PANEL_DATA_DIR
         to tmp_path, so the cache lives under the per-test temp dir."""
-        from synth_panel.registry import registry_url, write_cache
+        from althing.registry import registry_url, write_cache
 
         write_cache(
             {"schema_version": 1, "packs": entries},
@@ -2757,7 +2757,7 @@ class TestPackCommands:
                     "name": "Zeta",
                     "description": "Last letter persona",
                     "repo": "a/b",
-                    "path": "synthpanel-pack.yaml",
+                    "path": "althing-pack.yaml",
                     "ref": "main",
                     "version": "1",
                     "tags": ["greek"],
@@ -2769,7 +2769,7 @@ class TestPackCommands:
                     "name": "Alpha",
                     "description": "First letter persona",
                     "repo": "c/d",
-                    "path": "synthpanel-pack.yaml",
+                    "path": "althing-pack.yaml",
                     "ref": "v2",
                     "version": "3",
                     "tags": ["greek"],
@@ -2795,7 +2795,7 @@ class TestPackCommands:
                     "name": "One",
                     "description": "",
                     "repo": "a/b",
-                    "path": "synthpanel-pack.yaml",
+                    "path": "althing-pack.yaml",
                     "ref": "main",
                     "version": "1",
                     "tags": [],
@@ -2818,7 +2818,7 @@ class TestPackCommands:
         # No cache file written; make fetch_registry return empty registry
         # (matching the load_registry empty-on-fail contract).
         monkeypatch.setattr(
-            "synth_panel.registry.fetch_registry",
+            "althing.registry.fetch_registry",
             lambda **kw: {"schema_version": 1, "packs": []},
         )
         code = main(["pack", "list", "--registry"])
@@ -2836,7 +2836,7 @@ class TestPackCommands:
                     "name": "Pricing Probe",
                     "description": "Nothing special",
                     "repo": "a/b",
-                    "path": "synthpanel-pack.yaml",
+                    "path": "althing-pack.yaml",
                     "ref": "main",
                     "version": "1",
                     "tags": [],
@@ -2848,7 +2848,7 @@ class TestPackCommands:
                     "name": "Developers",
                     "description": "Engineers who love PRICING discussions",
                     "repo": "c/d",
-                    "path": "synthpanel-pack.yaml",
+                    "path": "althing-pack.yaml",
                     "ref": "main",
                     "version": "1",
                     "tags": ["software"],
@@ -2860,7 +2860,7 @@ class TestPackCommands:
                     "name": "Unrelated",
                     "description": "Nothing matching",
                     "repo": "e/f",
-                    "path": "synthpanel-pack.yaml",
+                    "path": "althing-pack.yaml",
                     "ref": "main",
                     "version": "1",
                     "tags": [],
@@ -2872,7 +2872,7 @@ class TestPackCommands:
                     "name": "Tagged",
                     "description": "No literal match in description",
                     "repo": "g/h",
-                    "path": "synthpanel-pack.yaml",
+                    "path": "althing-pack.yaml",
                     "ref": "main",
                     "version": "1",
                     "tags": ["pricing"],
@@ -2898,7 +2898,7 @@ class TestPackCommands:
                     "name": "Only",
                     "description": "solo",
                     "repo": "a/b",
-                    "path": "synthpanel-pack.yaml",
+                    "path": "althing-pack.yaml",
                     "ref": "main",
                     "version": "1",
                     "tags": [],
@@ -2913,7 +2913,7 @@ class TestPackCommands:
 
     def test_pack_search_empty_cache_fetch_fail_is_advisory(self, capsys, monkeypatch):
         monkeypatch.setattr(
-            "synth_panel.registry.fetch_registry",
+            "althing.registry.fetch_registry",
             lambda **kw: {"schema_version": 1, "packs": []},
         )
         code = main(["pack", "search", "--registry", "anything"])
@@ -2930,7 +2930,7 @@ class TestPackCommands:
                     "name": "Match",
                     "description": "",
                     "repo": "a/b",
-                    "path": "synthpanel-pack.yaml",
+                    "path": "althing-pack.yaml",
                     "ref": "main",
                     "version": "1",
                     "tags": [],
@@ -3016,7 +3016,7 @@ class TestPackCommands:
     # --- pack uninstall ---
 
     def test_pack_uninstall_removes_local_pack(self, capsys):
-        from synth_panel.mcp.data import save_persona_pack
+        from althing.mcp.data import save_persona_pack
 
         save_persona_pack("Temp", [{"name": "X"}], pack_id="temp-pack")
         code = main(["pack", "uninstall", "temp-pack"])
@@ -3037,7 +3037,7 @@ class TestPackCommands:
         assert code == 1
 
     def test_pack_uninstall_json(self, capsys):
-        from synth_panel.mcp.data import save_persona_pack
+        from althing.mcp.data import save_persona_pack
 
         save_persona_pack("J", [{"name": "Y"}], pack_id="jdel")
         code = main(["--output-format", "json", "pack", "uninstall", "jdel"])
@@ -3055,7 +3055,7 @@ class TestPackCommands:
         assert "[bundled]" in out
 
     def test_pack_search_local_matches_user_saved(self, capsys):
-        from synth_panel.mcp.data import save_persona_pack
+        from althing.mcp.data import save_persona_pack
 
         save_persona_pack("Unique Local", [{"name": "Z"}], pack_id="unique-local")
         code = main(["pack", "search", "unique"])
@@ -3070,7 +3070,7 @@ class TestPackCommands:
         assert "No packs match" in capsys.readouterr().out
 
     def test_pack_search_local_json(self, capsys):
-        from synth_panel.mcp.data import save_persona_pack
+        from althing.mcp.data import save_persona_pack
 
         save_persona_pack("Search Me", [{"name": "A"}], pack_id="search-me")
         code = main(["--output-format", "json", "pack", "search", "search-me"])
@@ -3082,7 +3082,7 @@ class TestPackCommands:
     # --- pack list origin column ---
 
     def test_pack_list_shows_local_origin(self, capsys):
-        from synth_panel.mcp.data import save_persona_pack
+        from althing.mcp.data import save_persona_pack
 
         save_persona_pack("My Local", [{"name": "L"}], pack_id="my-local")
         code = main(["pack", "list"])
@@ -3095,7 +3095,7 @@ class TestPackCommands:
         """pack generate calls LLM and saves a valid persona pack."""
         from unittest.mock import MagicMock
 
-        from synth_panel.llm.models import CompletionResponse, TokenUsage, ToolInvocationBlock
+        from althing.llm.models import CompletionResponse, TokenUsage, ToolInvocationBlock
 
         mock_personas = [
             {
@@ -3129,7 +3129,7 @@ class TestPackCommands:
 
         mock_client = MagicMock()
         mock_client.send.return_value = mock_response
-        monkeypatch.setattr("synth_panel.cli.commands.LLMClient", lambda: mock_client)
+        monkeypatch.setattr("althing.cli.commands.LLMClient", lambda: mock_client)
 
         code = main(
             [
@@ -3152,7 +3152,7 @@ class TestPackCommands:
         """pack generate respects --name and --id flags."""
         from unittest.mock import MagicMock
 
-        from synth_panel.llm.models import CompletionResponse, TokenUsage, ToolInvocationBlock
+        from althing.llm.models import CompletionResponse, TokenUsage, ToolInvocationBlock
 
         mock_response = CompletionResponse(
             id="r1",
@@ -3179,7 +3179,7 @@ class TestPackCommands:
 
         mock_client = MagicMock()
         mock_client.send.return_value = mock_response
-        monkeypatch.setattr("synth_panel.cli.commands.LLMClient", lambda: mock_client)
+        monkeypatch.setattr("althing.cli.commands.LLMClient", lambda: mock_client)
 
         code = main(
             [
@@ -3206,7 +3206,7 @@ class TestPackCommands:
         """pack generate returns 1 when LLM fails to produce structured output."""
         from unittest.mock import MagicMock
 
-        from synth_panel.llm.models import CompletionResponse, TextBlock, TokenUsage
+        from althing.llm.models import CompletionResponse, TextBlock, TokenUsage
 
         mock_response = CompletionResponse(
             id="r1",
@@ -3217,7 +3217,7 @@ class TestPackCommands:
 
         mock_client = MagicMock()
         mock_client.send.return_value = mock_response
-        monkeypatch.setattr("synth_panel.cli.commands.LLMClient", lambda: mock_client)
+        monkeypatch.setattr("althing.cli.commands.LLMClient", lambda: mock_client)
 
         code = main(
             [
@@ -3254,7 +3254,7 @@ class TestPackCommands:
         """pack generate emits JSON when --output-format json is used."""
         from unittest.mock import MagicMock
 
-        from synth_panel.llm.models import CompletionResponse, TokenUsage, ToolInvocationBlock
+        from althing.llm.models import CompletionResponse, TokenUsage, ToolInvocationBlock
 
         mock_response = CompletionResponse(
             id="r1",
@@ -3281,7 +3281,7 @@ class TestPackCommands:
 
         mock_client = MagicMock()
         mock_client.send.return_value = mock_response
-        monkeypatch.setattr("synth_panel.cli.commands.LLMClient", lambda: mock_client)
+        monkeypatch.setattr("althing.cli.commands.LLMClient", lambda: mock_client)
 
         code = main(
             [
@@ -3400,8 +3400,8 @@ class TestParserSchemaFlag:
 
 
 class TestPanelRunWithSchema:
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_panel_run_invalid_schema(self, mock_client_cls, mock_runtime_cls, capsys, tmp_path):
         personas_file = tmp_path / "personas.yaml"
         personas_file.write_text("personas:\n  - name: X\n")
@@ -3422,13 +3422,13 @@ class TestPanelRunWithSchema:
         )
         assert code == 1
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_panel_run_passes_schema_to_orchestrator(self, mock_client_cls, mock_run, mock_synth, capsys, tmp_path):
         """Verify --schema is loaded and passed to run_panel_parallel."""
-        from synth_panel.cost import ZERO_USAGE
-        from synth_panel.orchestrator import PanelistResult
+        from althing.cost import ZERO_USAGE
+        from althing.orchestrator import PanelistResult
 
         mock_run.return_value = (
             [
@@ -3476,10 +3476,10 @@ class TestPanelRunWithSchema:
 class TestMainModule:
     def test_main_module_importable(self):
         """Verify __main__.py exists and references main()."""
-        main_path = Path(__file__).parent.parent / "src" / "synth_panel" / "__main__.py"
+        main_path = Path(__file__).parent.parent / "src" / "althing" / "__main__.py"
         assert main_path.exists()
         content = main_path.read_text()
-        assert "from synth_panel.main import main" in content
+        assert "from althing.main import main" in content
 
 
 # ---------------------------------------------------------------------------
@@ -3496,7 +3496,7 @@ class TestInstrumentsGraph:
         return str(p)
 
     def test_v1_text(self, tmp_path, capsys):
-        from synth_panel.cli.commands import handle_instruments_graph
+        from althing.cli.commands import handle_instruments_graph
 
         src = self._write(
             tmp_path,
@@ -3514,7 +3514,7 @@ instrument:
         assert "[default]" in out or "default" in out
 
     def test_v2_mermaid_linear_chain(self, tmp_path, capsys):
-        from synth_panel.cli.commands import handle_instruments_graph
+        from althing.cli.commands import handle_instruments_graph
 
         src = self._write(
             tmp_path,
@@ -3541,7 +3541,7 @@ instrument:
         assert "explore --> probe" in out
 
     def test_v3_branching_mermaid_with_end(self, tmp_path, capsys):
-        from synth_panel.cli.commands import handle_instruments_graph
+        from althing.cli.commands import handle_instruments_graph
 
         src = self._write(
             tmp_path,
@@ -3575,7 +3575,7 @@ instrument:
         assert "__end__(((end)))" in out
 
     def test_v3_branching_text_format(self, tmp_path, capsys):
-        from synth_panel.cli.commands import handle_instruments_graph
+        from althing.cli.commands import handle_instruments_graph
 
         src = self._write(
             tmp_path,
@@ -3605,7 +3605,7 @@ instrument:
         assert "else -> __end__" in out
 
     def test_missing_source(self, tmp_path, capsys):
-        from synth_panel.cli.commands import handle_instruments_graph
+        from althing.cli.commands import handle_instruments_graph
 
         args = MagicMock(source=str(tmp_path / "nope.yaml"), format="text")
         rc = handle_instruments_graph(args, OutputFormat.TEXT)
@@ -3648,10 +3648,10 @@ class TestVariantsFlag:
         )
         assert args.variants is None
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
-    @patch("synth_panel.cli.commands.generate_panel_variants")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
+    @patch("althing.cli.commands.generate_panel_variants")
     def test_variants_expands_personas(
         self,
         mock_gen_variants,
@@ -3661,7 +3661,7 @@ class TestVariantsFlag:
         capsys,
         tmp_path,
     ):
-        from synth_panel.perturbation import PersonaVariant, PerturbationAxis, PerturbationRecord, VariantSet
+        from althing.perturbation import PersonaVariant, PerturbationAxis, PerturbationRecord, VariantSet
 
         mock_runtime = MagicMock()
         mock_runtime.run_turn.return_value = _mock_turn_summary("variant answer")
@@ -3717,7 +3717,7 @@ class TestVariantsFlag:
         assert "Generating 2 variants for 1 personas" in err
         assert "Variant expansion complete" in err
 
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.LLMClient")
     def test_variants_out_of_range_returns_error(self, mock_client_cls, capsys, tmp_path):
         personas_file = tmp_path / "personas.yaml"
         personas_file.write_text("personas:\n  - name: Alice\n")
@@ -3776,11 +3776,11 @@ class TestPanelRunDryRun:
         )
         assert args.dry_run is False
 
-    @patch("synth_panel.cli.commands.generate_panel_variants")
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.generate_panel_variants")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_dry_run_makes_no_llm_calls(
         self,
         mock_client_cls,
@@ -3814,8 +3814,8 @@ class TestPanelRunDryRun:
         mock_variants.assert_not_called()
         mock_runtime_cls.assert_not_called()
 
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_dry_run_text_output_shows_substituted_questions(self, mock_client_cls, mock_run_panel, capsys, tmp_path):
         """Question text appears after {var} substitution."""
         personas_file = tmp_path / "personas.yaml"
@@ -3851,8 +3851,8 @@ class TestPanelRunDryRun:
         assert "Estimated input tokens" in err
         mock_run_panel.assert_not_called()
 
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_dry_run_multi_round_lists_rounds(self, mock_client_cls, mock_run_panel, capsys, tmp_path):
         """Multi-round instruments show each round's questions."""
         personas_file = tmp_path / "personas.yaml"
@@ -3891,8 +3891,8 @@ class TestPanelRunDryRun:
         assert "across 2 rounds" in err
         mock_run_panel.assert_not_called()
 
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_dry_run_json_output(self, mock_client_cls, mock_run_panel, capsys, tmp_path):
         """JSON output returns a structured dry-run payload on stdout."""
         personas_file = tmp_path / "personas.yaml"
@@ -3926,8 +3926,8 @@ class TestPanelRunDryRun:
 
     # --- sp-ekayy9: cost estimate + validation + composition --------------
 
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_dry_run_text_shows_panel_composition_and_cost(self, mock_client_cls, mock_run_panel, capsys, tmp_path):
         """Text preview prints LLM call count, cost estimate, and validation."""
         personas_file = tmp_path / "personas.yaml"
@@ -3958,8 +3958,8 @@ class TestPanelRunDryRun:
         assert "Validation: OK" in err
         mock_run_panel.assert_not_called()
 
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_dry_run_json_includes_cost_and_validation(self, mock_client_cls, mock_run_panel, capsys, tmp_path):
         """JSON payload exposes llm_calls, cost, and validation fields."""
         personas_file = tmp_path / "personas.yaml"
@@ -3991,8 +3991,8 @@ class TestPanelRunDryRun:
         assert data["validation"] == "ok"
         mock_run_panel.assert_not_called()
 
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_dry_run_text_only_model_with_image_attachment_warns(
         self, mock_client_cls, mock_run_panel, capsys, tmp_path
     ):
@@ -4035,8 +4035,8 @@ class TestPanelRunDryRun:
         assert "image" in err
         mock_run_panel.assert_not_called()
 
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_dry_run_text_only_model_with_image_attachment_json(
         self, mock_client_cls, mock_run_panel, capsys, tmp_path
     ):
@@ -4080,8 +4080,8 @@ class TestPanelRunDryRun:
         assert "text-only" in data["vision_conflict"]["message"]
         mock_run_panel.assert_not_called()
 
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_dry_run_vision_model_with_image_attachment_ok(self, mock_client_cls, mock_run_panel, capsys, tmp_path):
         """A vision-capable model + image attachment still validates OK."""
         personas_file = tmp_path / "personas.yaml"
@@ -4119,8 +4119,8 @@ class TestPanelRunDryRun:
         assert "Validation: OK" in err
         mock_run_panel.assert_not_called()
 
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_dry_run_text_only_model_with_screenshot_url_warns(self, mock_client_cls, mock_run_panel, capsys, tmp_path):
         """#536: a url attachment fetched as a screenshot also warns."""
         personas_file = tmp_path / "personas.yaml"
@@ -4157,8 +4157,8 @@ class TestPanelRunDryRun:
         assert "screenshot" in err
         mock_run_panel.assert_not_called()
 
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_dry_run_unknown_model_flags_estimated_pricing(self, mock_client_cls, mock_run_panel, capsys, tmp_path):
         """Models not in the pricing table fall back to DEFAULT_PRICING."""
         personas_file = tmp_path / "personas.yaml"
@@ -4187,8 +4187,8 @@ class TestPanelRunDryRun:
         assert data["estimated_cost_usd"] > 0
         mock_run_panel.assert_not_called()
 
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_dry_run_response_schema_max_tokens_drives_output_estimate(
         self, mock_client_cls, mock_run_panel, capsys, tmp_path
     ):
@@ -4284,7 +4284,7 @@ class TestBuildRoundsShapeCostFallback:
     """Cost fallback warnings must merge into ``warnings`` and flip the flag."""
 
     def _zero_cost(self):
-        from synth_panel.cost import CostEstimate
+        from althing.cost import CostEstimate
 
         return CostEstimate()
 
@@ -4380,8 +4380,8 @@ instrument:
 
 def _mock_routing_synthesis(themes: list[str]):
     """SynthesisResult whose themes drive route_when predicates."""
-    from synth_panel.cost import CostEstimate
-    from synth_panel.synthesis import SynthesisResult
+    from althing.cost import CostEstimate
+    from althing.synthesis import SynthesisResult
 
     return SynthesisResult(
         summary="routing summary",
@@ -4407,9 +4407,9 @@ def _write_multi_round_fixtures(tmp_path, instrument_yaml: str = V3_BRANCHING_YA
 class TestPanelRunMultiRound:
     """v3 branching instruments execute through the real multi-round engine."""
 
-    @patch("synth_panel._runners.synthesize_panel")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing._runners.synthesize_panel")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_route_when_fires_and_json_carries_real_path(
         self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path
     ):
@@ -4456,9 +4456,9 @@ class TestPanelRunMultiRound:
         assert data["synthesis"] is not None
         assert data["run_invalid"] is False
 
-    @patch("synth_panel._runners.synthesize_panel")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing._runners.synthesize_panel")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_only_routed_rounds_questions_are_asked(
         self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path
     ):
@@ -4488,9 +4488,9 @@ class TestPanelRunMultiRound:
         # The probe_pain branch was NOT taken; its question must not be asked.
         assert not any("biggest pain" in q for q in asked)
 
-    @patch("synth_panel._runners.synthesize_panel")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing._runners.synthesize_panel")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_else_branch_routes_to_pain_probe(self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path):
         """When the predicate does NOT match, the else target executes."""
         mock_runtime = MagicMock()
@@ -4518,9 +4518,9 @@ class TestPanelRunMultiRound:
         assert "else" in data["path"][0]["branch"]
         assert data["terminal_round"] == "probe_pain"
 
-    @patch("synth_panel._runners.synthesize_panel")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing._runners.synthesize_panel")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_text_mode_prints_real_path_not_fabricated_linear(
         self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path
     ):
@@ -4553,9 +4553,9 @@ class TestPanelRunMultiRound:
         assert "probe_pain" not in out
         assert "SYNTHESIS" in out
 
-    @patch("synth_panel._runners.synthesize_panel")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing._runners.synthesize_panel")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_ndjson_mode_carries_real_path(self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path):
         mock_runtime = MagicMock()
         mock_runtime.run_turn.return_value = _mock_turn_summary("panel answer")
@@ -4582,9 +4582,9 @@ class TestPanelRunMultiRound:
         assert payload["terminal_round"] == "probe_pricing"
         assert [r["name"] for r in payload["rounds"]] == ["discovery", "probe_pricing"]
 
-    @patch("synth_panel._runners.synthesize_panel")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing._runners.synthesize_panel")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_save_persists_multi_round_result(
         self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path, monkeypatch
     ):
@@ -4614,9 +4614,9 @@ class TestPanelRunMultiRound:
         saved = json.loads(Path(data["saved_path"]).read_text(encoding="utf-8"))
         assert saved["model"]
 
-    @patch("synth_panel._runners.synthesize_panel")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing._runners.synthesize_panel")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_v2_linear_runs_every_round_with_no_synthesis(
         self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path
     ):
@@ -4665,8 +4665,8 @@ class TestPanelRunMultiRoundFlagAudit:
             (["--allow-empty-attachments"], "--allow-empty-attachments"),
         ],
     )
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_incompatible_flag_exits_nonzero_with_clear_message(
         self, mock_client_cls, mock_runtime_cls, extra_argv, needle, capsys, tmp_path
     ):
@@ -4689,8 +4689,8 @@ class TestPanelRunMultiRoundFlagAudit:
         # Refusal happened before any panelist was dispatched.
         mock_runtime_cls.assert_not_called()
 
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_no_synthesis_refused_for_branching_instruments(self, mock_client_cls, mock_runtime_cls, capsys, tmp_path):
         personas_file, survey_file = _write_multi_round_fixtures(tmp_path)
         code = main(
@@ -4710,8 +4710,8 @@ class TestPanelRunMultiRoundFlagAudit:
         assert "route_when" in err
         mock_runtime_cls.assert_not_called()
 
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_blend_refused_for_multi_round(self, mock_client_cls, mock_runtime_cls, capsys, tmp_path):
         personas_file, survey_file = _write_multi_round_fixtures(tmp_path)
         code = main(
@@ -4734,8 +4734,8 @@ class TestPanelRunMultiRoundFlagAudit:
         assert "not supported with multi-round" in err
         mock_runtime_cls.assert_not_called()
 
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_ensemble_models_refused_for_multi_round(self, mock_client_cls, mock_runtime_cls, capsys, tmp_path):
         personas_file, survey_file = _write_multi_round_fixtures(tmp_path)
         code = main(
@@ -4757,9 +4757,9 @@ class TestPanelRunMultiRoundFlagAudit:
         assert "not supported with multi-round" in err
         mock_runtime_cls.assert_not_called()
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_single_round_still_accepts_audited_flags(
         self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, tmp_path
     ):
@@ -4800,8 +4800,8 @@ class TestPanelRunMultiRoundFlagAudit:
 class TestDryRunEngineStatement:
     """--dry-run states which engine will run and previews the DAG (P1-2)."""
 
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_multi_round_dry_run_states_engine_and_dag(self, mock_client_cls, mock_run_panel, capsys, tmp_path):
         personas_file, survey_file = _write_multi_round_fixtures(tmp_path)
         code = main(
@@ -4823,8 +4823,8 @@ class TestDryRunEngineStatement:
         assert "if themes contains 'price' -> probe_pricing" in err
         mock_run_panel.assert_not_called()
 
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_single_round_dry_run_states_engine(self, mock_client_cls, mock_run_panel, capsys, tmp_path):
         personas_file = tmp_path / "personas.yaml"
         personas_file.write_text("personas:\n  - name: Alice\n")
@@ -4846,8 +4846,8 @@ class TestDryRunEngineStatement:
         assert "Engine: single-round parallel panel" in err
         mock_run_panel.assert_not_called()
 
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_multi_round_dry_run_json_engine_and_routes(self, mock_client_cls, mock_run_panel, capsys, tmp_path):
         personas_file, survey_file = _write_multi_round_fixtures(tmp_path)
         code = main(
@@ -4871,8 +4871,8 @@ class TestDryRunEngineStatement:
         assert discovery["route_when"][0]["goto"] == "probe_pricing"
         mock_run_panel.assert_not_called()
 
-    @patch("synth_panel.cli.commands.run_panel_parallel")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.run_panel_parallel")
+    @patch("althing.cli.commands.LLMClient")
     def test_dry_run_with_incompatible_flag_still_fails_loudly(self, mock_client_cls, mock_run_panel, capsys, tmp_path):
         """Dry-run 'OK' must mean the real run is runnable (sy-546 spirit)."""
         personas_file, survey_file = _write_multi_round_fixtures(tmp_path)

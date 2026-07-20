@@ -3,9 +3,9 @@
 
 **Status:** active
 
-**Authors:** midgard mayor (drafted), jotunheim mayor (PR via synthpanel), yggdrasil mayor (cross-coverage)
+**Authors:** midgard mayor (drafted), jotunheim mayor (PR via althing), yggdrasil mayor (cross-coverage)
 
-**Empirical anchor:** 7 instances cataloged 2026-05-09 / 2026-05-10 across boardroom, dataviking-infra, synthpanel, traitprint_cloud, dataviking-site (see Inventory below).
+**Empirical anchor:** 7 instances cataloged 2026-05-09 / 2026-05-10 across boardroom, dataviking-infra, althing, traitprint_cloud, dataviking-site (see Inventory below).
 
 ## TL;DR
 
@@ -41,25 +41,25 @@ No exception is raised. No 500. No log line saying "feature X disabled here." Ju
 
 ### Cache-Control across DV properties (dvi-25f)
 
-Same pattern, repo-wide: boardroom Worker, mtg-api Worker, dataviking-site (CF Pages), mtg-frontend (CF Pages), synthpanel.dev (CF Pages) — every one had a different combination of missing Cache-Control on HTML, wrong directive on hashed assets, or wrong duration on unhashed assets. Different surface, identical root: nobody was thinking about cache headers as a property of the dispatch surface, only of the immediate response.
+Same pattern, repo-wide: boardroom Worker, mtg-api Worker, dataviking-site (CF Pages), mtg-frontend (CF Pages), althing.dev (CF Pages) — every one had a different combination of missing Cache-Control on HTML, wrong directive on hashed assets, or wrong duration on unhashed assets. Different surface, identical root: nobody was thinking about cache headers as a property of the dispatch surface, only of the immediate response.
 
-### Image content blocks via OpenRouter→Anthropic (synthpanel hq-m333)
+### Image content blocks via OpenRouter→Anthropic (althing hq-m333)
 
-synthpanel emits Anthropic-shaped `image` content blocks. Direct Anthropic API receives and renders them. OpenRouter route to the same Anthropic models: image blocks are dropped at the proxy layer, model receives only text. **Persona output silently fabricated visual reasoning** ("squints at imaginary screen") instead of refusing. 100% delivery failure masked by persona roleplay until a deterministic probe with explicit "say NO IMAGE RECEIVED if you can't see it" instruction made it visible.
+althing emits Anthropic-shaped `image` content blocks. Direct Anthropic API receives and renders them. OpenRouter route to the same Anthropic models: image blocks are dropped at the proxy layer, model receives only text. **Persona output silently fabricated visual reasoning** ("squints at imaginary screen") instead of refusing. 100% delivery failure masked by persona roleplay until a deterministic probe with explicit "say NO IMAGE RECEIVED if you can't see it" instruction made it visible.
 
-### `html` attachments via MCP (synthpanel hq-aaca)
+### `html` attachments via MCP (althing hq-aaca)
 
 CLI path renders html attachments correctly into the user message. MCP path: ~50% of personas saw the html, ~50% said "you didn't attach anything." Same instrument YAML, different dispatch path, different delivery rate. Inconsistent rather than zero — even worse to debug.
 
-### Attachment resolver in v1 single-round (synthpanel hq-ilke)
+### Attachment resolver in v1 single-round (althing hq-ilke)
 
 v3 multi-round path resolves bank-ref attachments before sending to the model. v1 single-round path silently drops them. v1 callers got an attachment-less response with no error.
 
-### Multi-round termination via MCP (synthpanel hq-fjdx)
+### Multi-round termination via MCP (althing hq-fjdx)
 
 CLI v3 multi-round runs all N rounds. MCP v3 multi-round terminates after round 1 and falls through positionally on the rest. Caller gets an "ensemble complete" event and a partial result; never sees the rest of the rounds attempted.
 
-### `fetch_mode: screenshot` without playwright (synthpanel hq-gjh7)
+### `fetch_mode: screenshot` without playwright (althing hq-gjh7)
 
 When an instrument requests `fetch_mode: screenshot` but playwright extras aren't installed, the URL fetch silently degrades to `html_text` mode instead of failing loudly. Caller gets text where they specified pixels; no warning surfaces in the run log.
 
@@ -92,7 +92,7 @@ The pattern that's worked best across these 7 instances is a CI test class: **fo
 Examples:
 
 ```python
-# synthpanel hq-83ye: dispatch-path symmetry for multi-round v3
+# althing hq-83ye: dispatch-path symmetry for multi-round v3
 @pytest.mark.parametrize("dispatcher", [cli_dispatcher, mcp_dispatcher])
 def test_v3_multi_round_runs_all_rounds(dispatcher):
     instrument = load_fixture("five_round_v3.yaml")
@@ -150,5 +150,5 @@ What's missing isn't *more* tests; it's *parametrized-over-dispatchers* tests, p
 
 - `feedback_sibling_merge_cascade` (cross-town mayor memory) — the merge-time analog: code paths that touched shared files re-conflicting under parallel polecat execution. Different mechanism, same systemic shape.
 - `docs/cache-control-policy.md` (dataviking-infra) — the cross-property cache policy that fell out of dvi-25f.
-- `docs/known-patterns/openrouter-byok-visual-review.md` (synthpanel) — empirical workaround for the OR→Anthropic image-block drop while hq-m333 was still open.
-- synthpanel `hq-83ye` — the first CI symmetry test of this kind in the org; reference implementation for follow-on coverage.
+- `docs/known-patterns/openrouter-byok-visual-review.md` (althing) — empirical workaround for the OR→Anthropic image-block drop while hq-m333 was still open.
+- althing `hq-83ye` — the first CI symmetry test of this kind in the org; reference implementation for follow-on coverage.

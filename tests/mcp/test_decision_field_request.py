@@ -23,7 +23,7 @@ def _data_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-placeholder")
 
 
-from synth_panel.mcp.server import mcp
+from althing.mcp.server import mcp
 
 _VALID_DECISION = "Should we ship the new pricing tier next quarter?"
 _PANEL_TOOLS = ("run_panel", "run_quick_poll", "extend_panel")
@@ -123,7 +123,7 @@ async def test_omitted_decision_is_pass_through(tool: str):
     """
     if tool == "extend_panel":
         pytest.skip("extend_panel post-validation path needs a real result_id")
-    with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+    with patch("althing.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
         mock_run.return_value = {"results": []}
         result = await mcp.call_tool(tool, _call_args_for(tool, decision=None))
         data = _payload(result[0][0].text)
@@ -180,7 +180,7 @@ async def test_minimum_length_accepted(tool: str):
     real ``result_id`` to load — the boundary semantics are exercised at
     the validator-core level (AC-2 unit tests).
     """
-    with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_panel:
+    with patch("althing.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_panel:
         mock_panel.return_value = {"results": []}
         result = await mcp.call_tool(tool, _call_args_for(tool, decision="exactly12chr"))
         data = _payload(result[0][0].text)
@@ -193,7 +193,7 @@ async def test_minimum_length_accepted(tool: str):
 @pytest.mark.parametrize("tool", ["run_panel", "run_quick_poll"])
 async def test_maximum_length_accepted(tool: str):
     """Exactly 280 chars after trim must pass the length gate."""
-    with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_panel:
+    with patch("althing.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_panel:
         mock_panel.return_value = {"results": []}
         result = await mcp.call_tool(tool, _call_args_for(tool, decision="x" * 280))
         data = _payload(result[0][0].text)
@@ -210,7 +210,7 @@ async def test_maximum_length_accepted(tool: str):
 
 @pytest.mark.asyncio
 async def test_run_panel_valid_decision_reaches_runner():
-    with patch("synth_panel.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
+    with patch("althing.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
         mock_run.return_value = {"results": []}
         result = await mcp.call_tool(
             "run_panel",

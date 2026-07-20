@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from synth_panel.credentials import (
+from althing.credentials import (
     KNOWN_CREDENTIAL_ENV_VARS,
     PROVIDER_CLI_NAMES,
     PROVIDER_KEY_PREFIXES,
@@ -28,19 +28,19 @@ from synth_panel.credentials import (
 class TestCredentialsPath:
     def test_honors_override_env_var(self, monkeypatch, tmp_path):
         override = tmp_path / "custom.json"
-        monkeypatch.setenv("SYNTHPANEL_CREDENTIALS_PATH", str(override))
+        monkeypatch.setenv("ALTHING_CREDENTIALS_PATH", str(override))
         assert credentials_path() == override
 
     def test_respects_xdg_config_home(self, monkeypatch, tmp_path):
-        monkeypatch.delenv("SYNTHPANEL_CREDENTIALS_PATH", raising=False)
+        monkeypatch.delenv("ALTHING_CREDENTIALS_PATH", raising=False)
         monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-        assert credentials_path() == tmp_path / "synthpanel" / "credentials.json"
+        assert credentials_path() == tmp_path / "althing" / "credentials.json"
 
     def test_default_is_under_home_dot_config(self, monkeypatch, tmp_path):
-        monkeypatch.delenv("SYNTHPANEL_CREDENTIALS_PATH", raising=False)
+        monkeypatch.delenv("ALTHING_CREDENTIALS_PATH", raising=False)
         monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
         monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
-        assert credentials_path() == tmp_path / ".config" / "synthpanel" / "credentials.json"
+        assert credentials_path() == tmp_path / ".config" / "althing" / "credentials.json"
 
 
 class TestSaveAndLoad:
@@ -74,19 +74,19 @@ class TestSaveAndLoad:
     def test_load_tolerates_malformed_json(self, monkeypatch, tmp_path):
         path = tmp_path / "bad.json"
         path.write_text("{not valid json")
-        monkeypatch.setenv("SYNTHPANEL_CREDENTIALS_PATH", str(path))
+        monkeypatch.setenv("ALTHING_CREDENTIALS_PATH", str(path))
         assert load_credentials() == {}
 
     def test_load_tolerates_wrong_top_level_type(self, monkeypatch, tmp_path):
         path = tmp_path / "list.json"
         path.write_text("[1, 2, 3]")
-        monkeypatch.setenv("SYNTHPANEL_CREDENTIALS_PATH", str(path))
+        monkeypatch.setenv("ALTHING_CREDENTIALS_PATH", str(path))
         assert load_credentials() == {}
 
     def test_load_drops_non_string_entries(self, monkeypatch, tmp_path):
         path = tmp_path / "mixed.json"
         path.write_text(json.dumps({"ANTHROPIC_API_KEY": "sk-ok", "N": 42, "X": ""}))
-        monkeypatch.setenv("SYNTHPANEL_CREDENTIALS_PATH", str(path))
+        monkeypatch.setenv("ALTHING_CREDENTIALS_PATH", str(path))
         assert load_credentials() == {"ANTHROPIC_API_KEY": "sk-ok"}
 
 
@@ -163,13 +163,13 @@ class TestSha256Sidecar:
     def test_load_raises_on_sidecar_mismatch(self):
         path = save_credential("ANTHROPIC_API_KEY", "sk-x")
         path.write_text('{"ANTHROPIC_API_KEY": "tampered"}\n', encoding="utf-8")
-        with pytest.raises(CredentialIntegrityError, match="synthpanel login"):
+        with pytest.raises(CredentialIntegrityError, match="althing login"):
             load_credentials()
 
     def test_migration_generates_sidecar_on_first_read(self, monkeypatch, tmp_path):
         creds = tmp_path / "credentials.json"
         creds.write_text('{"ANTHROPIC_API_KEY": "sk-legacy"}\n', encoding="utf-8")
-        monkeypatch.setenv("SYNTHPANEL_CREDENTIALS_PATH", str(creds))
+        monkeypatch.setenv("ALTHING_CREDENTIALS_PATH", str(creds))
         result = load_credentials()
         assert result == {"ANTHROPIC_API_KEY": "sk-legacy"}
         sidecar = tmp_path / "credentials.json.sha256"
@@ -181,7 +181,7 @@ class TestSha256Sidecar:
         content = '{"ANTHROPIC_API_KEY": "sk-legacy"}\n'
         creds = tmp_path / "credentials.json"
         creds.write_text(content, encoding="utf-8")
-        monkeypatch.setenv("SYNTHPANEL_CREDENTIALS_PATH", str(creds))
+        monkeypatch.setenv("ALTHING_CREDENTIALS_PATH", str(creds))
         load_credentials()
         sidecar = tmp_path / "credentials.json.sha256"
         expected = hashlib.sha256(content.encode()).hexdigest()
@@ -226,7 +226,7 @@ class TestProviderIntegration:
     """Provider config reads credentials through ``get_credential``."""
 
     def test_anthropic_provider_uses_stored_credential(self, monkeypatch):
-        from synth_panel.llm.providers.anthropic import AnthropicProvider
+        from althing.llm.providers.anthropic import AnthropicProvider
 
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         save_credential("ANTHROPIC_API_KEY", "sk-disk")
@@ -234,7 +234,7 @@ class TestProviderIntegration:
         assert provider._api_key == "sk-disk"
 
     def test_anthropic_provider_env_wins_over_stored(self, monkeypatch):
-        from synth_panel.llm.providers.anthropic import AnthropicProvider
+        from althing.llm.providers.anthropic import AnthropicProvider
 
         save_credential("ANTHROPIC_API_KEY", "sk-disk")
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-env")
@@ -242,7 +242,7 @@ class TestProviderIntegration:
         assert provider._api_key == "sk-env"
 
     def test_gemini_provider_uses_stored_credential(self, monkeypatch):
-        from synth_panel.llm.providers.gemini import GeminiProvider
+        from althing.llm.providers.gemini import GeminiProvider
 
         monkeypatch.delenv("GEMINI_API_KEY", raising=False)
         monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
@@ -251,8 +251,8 @@ class TestProviderIntegration:
         assert provider._api_key == "sk-gem"
 
     def test_missing_credentials_error_mentions_login(self, monkeypatch):
-        from synth_panel.llm.errors import LLMErrorCategory
-        from synth_panel.llm.providers.anthropic import AnthropicProvider
+        from althing.llm.errors import LLMErrorCategory
+        from althing.llm.providers.anthropic import AnthropicProvider
 
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         # No stored credential thanks to the autouse conftest fixture.
@@ -260,14 +260,14 @@ class TestProviderIntegration:
             AnthropicProvider()
         err = exc_info.value
         assert getattr(err, "category", None) == LLMErrorCategory.MISSING_CREDENTIALS
-        assert "synthpanel login" in str(err)
+        assert "althing login" in str(err)
 
 
 class TestProviderKeyPrefixes:
     """Prefix table + key detection for cross-provider mistake catch (sy-bybx)."""
 
     def test_table_covers_every_known_env_var(self):
-        from synth_panel.credentials import KNOWN_CREDENTIAL_ENV_VARS
+        from althing.credentials import KNOWN_CREDENTIAL_ENV_VARS
 
         # Each known credential has an entry — even if the entry is `()`
         # to mean "no prefix convention". Missing entries would silently
@@ -301,9 +301,9 @@ class TestProviderKeyPrefixes:
 
 class TestClientErrorMessage:
     def test_no_credentials_error_mentions_login(self, monkeypatch):
-        from synth_panel.llm.client import LLMClient
-        from synth_panel.llm.errors import LLMError, LLMErrorCategory
-        from synth_panel.llm.models import CompletionRequest, InputMessage, TextBlock
+        from althing.llm.client import LLMClient
+        from althing.llm.errors import LLMError, LLMErrorCategory
+        from althing.llm.models import CompletionRequest, InputMessage, TextBlock
 
         for env in (
             "ANTHROPIC_API_KEY",
@@ -324,11 +324,11 @@ class TestClientErrorMessage:
         with pytest.raises(LLMError) as exc_info:
             client.send(req)
         assert exc_info.value.category == LLMErrorCategory.MISSING_CREDENTIALS
-        assert "synthpanel login" in str(exc_info.value)
+        assert "althing login" in str(exc_info.value)
 
 
 class TestMissingApiKeyMessage:
-    """Per-provider 'Missing API key' message points users at `synthpanel login` (sp-stkj2w)."""
+    """Per-provider 'Missing API key' message points users at `althing login` (sp-stkj2w)."""
 
     def test_provider_cli_names_cover_every_known_env_var(self):
         # If a new credential env var is added without a CLI name,
@@ -340,7 +340,7 @@ class TestMissingApiKeyMessage:
     def test_anthropic_message_names_env_var_login_and_export_paths(self):
         msg = missing_api_key_message("ANTHROPIC_API_KEY")
         assert "ANTHROPIC_API_KEY" in msg
-        assert "synthpanel login --provider anthropic" in msg
+        assert "althing login --provider anthropic" in msg
         assert "Anthropic" in msg
 
     def test_anthropic_message_warns_about_claude_code_oauth_footgun(self):
@@ -357,7 +357,7 @@ class TestMissingApiKeyMessage:
     def test_openai_message_names_provider_and_skips_oauth_note(self):
         msg = missing_api_key_message("OPENAI_API_KEY")
         assert "OPENAI_API_KEY" in msg
-        assert "synthpanel login --provider openai" in msg
+        assert "althing login --provider openai" in msg
         # OAuth footgun is Anthropic-specific; don't pollute other providers.
         assert "Claude Code" not in msg
         assert "OAuth" not in msg
@@ -365,12 +365,12 @@ class TestMissingApiKeyMessage:
     def test_xai_message_uses_xai_provider_name(self):
         msg = missing_api_key_message("XAI_API_KEY")
         assert "XAI_API_KEY" in msg
-        assert "synthpanel login --provider xai" in msg
+        assert "althing login --provider xai" in msg
 
     def test_openrouter_message_uses_openrouter_provider_name(self):
         msg = missing_api_key_message("OPENROUTER_API_KEY")
         assert "OPENROUTER_API_KEY" in msg
-        assert "synthpanel login --provider openrouter" in msg
+        assert "althing login --provider openrouter" in msg
 
     def test_gemini_message_lists_both_env_vars(self):
         # Gemini accepts either GEMINI_API_KEY or GOOGLE_API_KEY; the
@@ -379,41 +379,41 @@ class TestMissingApiKeyMessage:
         msg = missing_api_key_message("GEMINI_API_KEY", alt_env_vars=("GOOGLE_API_KEY",))
         assert "GEMINI_API_KEY" in msg
         assert "GOOGLE_API_KEY" in msg
-        assert "synthpanel login --provider gemini" in msg
+        assert "althing login --provider gemini" in msg
 
 
 class TestProviderMissingKeyErrors:
     """End-to-end: each provider raises the new helper's message (sp-stkj2w)."""
 
     def test_anthropic_provider_error_includes_login_and_oauth_note(self, monkeypatch):
-        from synth_panel.llm.errors import LLMError, LLMErrorCategory
-        from synth_panel.llm.providers.anthropic import AnthropicProvider
+        from althing.llm.errors import LLMError, LLMErrorCategory
+        from althing.llm.providers.anthropic import AnthropicProvider
 
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         with pytest.raises(LLMError) as exc_info:
             AnthropicProvider()
         msg = str(exc_info.value)
         assert exc_info.value.category == LLMErrorCategory.MISSING_CREDENTIALS
-        assert "synthpanel login --provider anthropic" in msg
+        assert "althing login --provider anthropic" in msg
         assert "ANTHROPIC_API_KEY" in msg
         assert "Claude Code" in msg
 
     def test_openai_provider_error_includes_provider_hint(self, monkeypatch):
-        from synth_panel.llm.errors import LLMError, LLMErrorCategory
-        from synth_panel.llm.providers.openai_compat import OpenAICompatibleProvider
+        from althing.llm.errors import LLMError, LLMErrorCategory
+        from althing.llm.providers.openai_compat import OpenAICompatibleProvider
 
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         with pytest.raises(LLMError) as exc_info:
             OpenAICompatibleProvider()
         msg = str(exc_info.value)
         assert exc_info.value.category == LLMErrorCategory.MISSING_CREDENTIALS
-        assert "synthpanel login --provider openai" in msg
+        assert "althing login --provider openai" in msg
         # No Anthropic-only OAuth note for non-Anthropic providers.
         assert "Claude Code" not in msg
 
     def test_gemini_provider_error_lists_both_env_vars(self, monkeypatch):
-        from synth_panel.llm.errors import LLMError, LLMErrorCategory
-        from synth_panel.llm.providers.gemini import GeminiProvider
+        from althing.llm.errors import LLMError, LLMErrorCategory
+        from althing.llm.providers.gemini import GeminiProvider
 
         monkeypatch.delenv("GEMINI_API_KEY", raising=False)
         monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
@@ -423,4 +423,4 @@ class TestProviderMissingKeyErrors:
         assert exc_info.value.category == LLMErrorCategory.MISSING_CREDENTIALS
         assert "GEMINI_API_KEY" in msg
         assert "GOOGLE_API_KEY" in msg
-        assert "synthpanel login --provider gemini" in msg
+        assert "althing login --provider gemini" in msg

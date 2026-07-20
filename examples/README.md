@@ -1,4 +1,4 @@
-# synthpanel examples
+# althing examples
 
 Drop-in YAML files for getting started. Pair any persona pack with any
 instrument pack — the CLI takes both as separate `--personas` and
@@ -33,7 +33,7 @@ schema demo. Use these as starting points for your own studies.
 The `instruments/` subdirectory holds three additional standalone
 instrument files (`general_survey.yaml`, `market_research.yaml`,
 `product_feedback.yaml`) kept for backward compatibility. Prefer the
-bundled packs (`synthpanel instruments list`) for new work.
+bundled packs (`althing instruments list`) for new work.
 
 ## Showing panelists images, web pages, or HTML
 
@@ -47,37 +47,37 @@ full attachment-type reference.
 
 ```bash
 # v1: single round, flat questions
-synthpanel panel run \
+althing panel run \
   --personas examples/personas.yaml \
   --instrument examples/survey.yaml
 
 # v2: linear multi-round
-synthpanel panel run \
+althing panel run \
   --personas examples/personas.yaml \
   --instrument examples/multi-round-study.yaml
 
 # v3: branching — pricing segmentation
-synthpanel panel run \
+althing panel run \
   --personas examples/personas.yaml \
   --instrument examples/pricing-segmentation-study.yaml
 
 # v3: branching — A/B concept test
-synthpanel panel run \
+althing panel run \
   --personas examples/personas.yaml \
   --instrument examples/concept-test-ab.yaml
 
 # Industry-specific: SaaS onboarding friction (v2)
-synthpanel panel run \
+althing panel run \
   --personas examples/saas-onboarding-friction/personas.yaml \
   --instrument examples/saas-onboarding-friction/instrument.yaml
 
 # Industry-specific: developer tools pricing (v3 branching)
-synthpanel panel run \
+althing panel run \
   --personas examples/devtools-pricing/personas.yaml \
   --instrument examples/devtools-pricing/instrument.yaml
 
 # Industry-specific: consumer name test (v1)
-synthpanel panel run \
+althing panel run \
   --personas examples/consumer-name-test/personas.yaml \
   --instrument examples/consumer-name-test/instrument.yaml
 ```
@@ -90,23 +90,23 @@ The 14 bundled packs cover most common audiences:
 
 ```bash
 # Pressure-test pricing on AI/ML buyers
-synthpanel panel run --personas ai-eval-buyers --instrument pricing-discovery
+althing panel run --personas ai-eval-buyers --instrument pricing-discovery
 
 # Read your positioning against a hostile senior-buyer audience
-synthpanel panel run --personas skeptical-executives --instrument landing-page-comprehension
+althing panel run --personas skeptical-executives --instrument landing-page-comprehension
 
 # Stress-test methodology claims against professional skeptics
-synthpanel panel run --personas market-research-critics --instrument general-survey
+althing panel run --personas market-research-critics --instrument general-survey
 
 # Broad gut-check across a wide professional cross-section
-synthpanel panel run --personas broad-professionals --instrument name-test
+althing panel run --personas broad-professionals --instrument name-test
 
 # Enterprise AI procurement framing check
-synthpanel panel run --personas enterprise-ai-buyers --instrument feature-prioritization
+althing panel run --personas enterprise-ai-buyers --instrument feature-prioritization
 ```
 
-Run `synthpanel pack list` to see every installed pack and its persona
-count, or `synthpanel pack show <name>` to inspect personas before
+Run `althing pack list` to see every installed pack and its persona
+count, or `althing pack show <name>` to inspect personas before
 running. The [main README](../README.md#builtin-persona-packs-14-232-personas-total)
 lists every bundled pack with one-line audience summaries.
 
@@ -115,15 +115,15 @@ lists every bundled pack with one-line audience summaries.
 Render the round DAG to sanity-check routing before you spend tokens:
 
 ```bash
-synthpanel instruments graph examples/pricing-segmentation-study.yaml --format mermaid
-synthpanel instruments graph examples/concept-test-ab.yaml --format mermaid
+althing instruments graph examples/pricing-segmentation-study.yaml --format mermaid
+althing instruments graph examples/concept-test-ab.yaml --format mermaid
 ```
 
 Validate a file without running it (parse-only — fails on bad DAGs,
 missing `else` clauses, unreachable rounds, etc.):
 
 ```bash
-synthpanel instruments install examples/concept-test-ab.yaml --name concept-test-ab
+althing instruments install examples/concept-test-ab.yaml --name concept-test-ab
 ```
 
 `install` parses the file through the full v3 validator before writing

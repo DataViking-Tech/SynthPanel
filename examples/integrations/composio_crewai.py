@@ -1,11 +1,11 @@
-"""SynthPanel + Composio + CrewAI.
+"""Althing + Composio + CrewAI.
 
-Expose SynthPanel actions to a CrewAI agent via Composio's CrewAI
-provider. The same `synthpanel_toolkit` works across Composio providers;
+Expose Althing actions to a CrewAI agent via Composio's CrewAI
+provider. The same `althing_toolkit` works across Composio providers;
 only the provider object changes from the LangChain example.
 
 Install:
-    pip install composio composio_crewai crewai synthpanel
+    pip install composio composio_crewai crewai althing
 
 Run:
     export ANTHROPIC_API_KEY=sk-...
@@ -17,12 +17,12 @@ from composio import Composio
 from composio_crewai import CrewAIProvider
 from crewai import Agent, Crew, Task
 
-from synth_panel.integrations.composio import synthpanel_toolkit
+from althing.integrations.composio import althing_toolkit
 
 
 def main() -> None:
     composio = Composio(provider=CrewAIProvider())
-    toolkit = synthpanel_toolkit(composio)
+    toolkit = althing_toolkit(composio)
 
     session = composio.create(
         user_id="researcher_1",
@@ -33,7 +33,7 @@ def main() -> None:
     researcher = Agent(
         role="Market Researcher",
         goal="Surface honest panelist reactions to product concepts.",
-        backstory="You probe AI personas via SynthPanel and distil the findings.",
+        backstory="You probe AI personas via Althing and distil the findings.",
         tools=tools,
     )
     task = Task(

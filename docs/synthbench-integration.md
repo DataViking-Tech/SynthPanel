@@ -2,7 +2,7 @@
 
 SynthBench is the public benchmark and leaderboard for measuring how
 faithfully an LLM-driven panel reproduces a known human distribution.
-SynthPanel can submit a calibrated panel run directly to SynthBench at
+Althing can submit a calibrated panel run directly to SynthBench at
 the end of the run with one extra flag.
 
 This integration is **opt-in**, **gated on `--calibrate-against`**, and
@@ -11,16 +11,16 @@ ships nothing without explicit user consent.
 ## When you can submit
 
 Only **calibrated** runs are submittable. SynthBench scores per-question
-JSD against a published human baseline, which SynthPanel produces only
+JSD against a published human baseline, which Althing produces only
 when you pass `--calibrate-against DATASET:QUESTION` (see
 [`docs/convergence.md`](convergence.md) for the calibration mechanics).
 
-A bare `synthpanel panel run --personas ... --topic "pricing"` is
+A bare `althing panel run --personas ... --topic "pricing"` is
 qualitative output and has no SynthBench score to submit. The CLI
 hard-fails at parse time if you try:
 
 ```bash
-$ synthpanel panel run ... --submit-to-synthbench
+$ althing panel run ... --submit-to-synthbench
 Error: --submit-to-synthbench requires --calibrate-against. Only
 calibrated runs produce a SynthBench-shaped score; bare panel runs
 cannot be submitted to the leaderboard.
@@ -33,7 +33,7 @@ cannot be submitted to the leaderboard.
 export SYNTHBENCH_API_KEY=sk_synthbench_...
 
 # 2. Run a calibrated panel and submit at completion.
-synthpanel panel run \
+althing panel run \
   --personas examples/personas.yaml \
   --instrument happiness-probe \
   --calibrate-against gss:HAPPY \
@@ -42,12 +42,12 @@ synthpanel panel run \
 ```
 
 First-time use prints a one-screen consent block; accept with `y`. The
-acceptance is recorded at `~/.synthpanel/synthbench-consent.json` so
+acceptance is recorded at `~/.althing/synthbench-consent.json` so
 subsequent runs do not re-prompt. For CI pass `--yes` to bypass the
 prompt:
 
 ```bash
-synthpanel panel run \
+althing panel run \
   --personas ./ci-personas.yaml \
   --instrument happiness-probe \
   --calibrate-against gss:HAPPY \
@@ -74,7 +74,7 @@ Per the consent notice:
 * The calibration spec (e.g. `gss:HAPPY`), extractor label, and panel
   sample size *n*.
 * Run config: model identifier(s), persona pack name, instrument name.
-* The SynthPanel client version.
+* The Althing client version.
 
 ## Payload contract
 
@@ -88,11 +88,11 @@ see SynthBench's `SUBMISSIONS.md`). Concretely:
   "version": "0.1.0",
   "config": {
     "dataset": "gss",
-    "provider": "synthpanel/claude-haiku-4-5-20251001",
-    "framework": "synthpanel",
+    "provider": "althing/claude-haiku-4-5-20251001",
+    "framework": "althing",
     "calibration_spec": "gss:HAPPY",
     "n": 60,
-    "client": "synthpanel",
+    "client": "althing",
     "client_version": "1.5.7",
     "panelist_model": "claude-haiku-4-5-20251001",
     "instrument": "happiness-probe",
@@ -130,7 +130,7 @@ Contract notes:
   payload targets (`synthbench.__version__` when the harness is
   importable).
 * `config.dataset` is the `DATASET` half of the calibration spec;
-  `config.provider` uses SynthBench's `synthpanel/<model>` provider
+  `config.provider` uses SynthBench's `althing/<model>` provider
   format so leaderboard rows classify under the *product* framework.
 * `jsd` and `kendall_tau` are computed from the exact distributions in
   the payload using SynthBench's own metric functions (base-2 JSD,
@@ -188,7 +188,7 @@ reason. Surface that to the SynthBench team if it persists across runs.
 
 ## Privacy + consent record
 
-Consent is stored as JSON at `~/.synthpanel/synthbench-consent.json`:
+Consent is stored as JSON at `~/.althing/synthbench-consent.json`:
 
 ```json
 {
@@ -217,5 +217,5 @@ SynthBench-side development. Both env vars match the names the
 
 * [`docs/convergence.md`](convergence.md) — the calibration / JSD
   mechanics that produce the score this integration uploads.
-* `synth_panel.synthbench_submit` — the implementation, including the
+* `althing.synthbench_submit` — the implementation, including the
   payload transformer and HTTP transport.

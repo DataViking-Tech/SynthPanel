@@ -1,4 +1,4 @@
-"""End-to-end demo of the synthpanel Python SDK.
+"""End-to-end demo of the althing Python SDK.
 
 Run with::
 
@@ -10,12 +10,12 @@ only the arguments the average caller needs. Each step prints a short
 summary so you can confirm the API surface without reading source.
 
 Every call here also works identically from inside a Jupyter notebook —
-``from synth_panel import quick_poll`` and you're off.
+``from althing import quick_poll`` and you're off.
 """
 
 from __future__ import annotations
 
-from synth_panel import (
+from althing import (
     extend_panel,
     get_panel_result,
     list_instruments,

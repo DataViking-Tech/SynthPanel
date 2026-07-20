@@ -1,7 +1,7 @@
 """Guard tests for the shipped Claude Code plugin assets.
 
 These tests exist because sp-tcf was closed with the claim that
-``/synthpanel-poll`` had shipped, but the file was never actually
+``/althing-poll`` had shipped, but the file was never actually
 committed (sp-ftr). A filesystem existence check is cheap insurance
 against that regression for every command the plugin advertises.
 """
@@ -33,28 +33,28 @@ def _read_frontmatter(path: Path) -> str:
 def test_plugin_manifest_exists_and_is_valid_json() -> None:
     assert PLUGIN_MANIFEST.is_file(), f"missing {PLUGIN_MANIFEST}"
     data = json.loads(PLUGIN_MANIFEST.read_text(encoding="utf-8"))
-    assert data.get("name") == "synthpanel"
+    assert data.get("name") == "althing"
     assert "mcp_servers" in data
 
 
-def test_synthpanel_poll_command_ships() -> None:
-    """The `/synthpanel-poll` slash command must be present on disk.
+def test_althing_poll_command_ships() -> None:
+    """The `/althing-poll` slash command must be present on disk.
 
     Claude Code auto-discovers ``commands/*.md`` at the plugin root, so
     the existence of this file is what determines whether installed
     users get the advertised slash command.
     """
-    path = COMMANDS_DIR / "synthpanel-poll.md"
+    path = COMMANDS_DIR / "althing-poll.md"
     assert path.is_file(), (
-        "commands/synthpanel-poll.md is missing — the README advertises "
-        "/synthpanel-poll as a plugin command, so the file must ship."
+        "commands/althing-poll.md is missing — the README advertises "
+        "/althing-poll as a plugin command, so the file must ship."
     )
 
     frontmatter = _read_frontmatter(path)
     assert "description:" in frontmatter
     assert "allowed-tools:" in frontmatter
-    assert "mcp__synth_panel__run_quick_poll" in frontmatter, (
-        "synthpanel-poll must list the run_quick_poll MCP tool in "
+    assert "mcp__althing__run_quick_poll" in frontmatter, (
+        "althing-poll must list the run_quick_poll MCP tool in "
         "allowed-tools — otherwise the slash command can't call it."
     )
 
@@ -87,7 +87,7 @@ def test_agent_skills_doc_exists() -> None:
 @pytest.mark.parametrize(
     "artifact",
     [
-        "synthpanel-poll",
+        "althing-poll",
         "focus-group",
         "name-test",
         "concept-test",

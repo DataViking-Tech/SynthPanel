@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from synth_panel.schemas import load
+from althing.schemas import load
 
 
 def test_schema_loads_and_is_frozen() -> None:

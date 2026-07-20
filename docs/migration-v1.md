@@ -4,7 +4,7 @@
 > contract is what changes; the CLI surface is largely unchanged.
 
 v1.0.0 freezes the MCP request/response contract. The schema lives in the
-package at [`synthpanel/schemas/v1.0.0.json`](../src/synth_panel/schemas/v1.0.0.json)
+package at [`althing/schemas/v1.0.0.json`](../src/althing/schemas/v1.0.0.json)
 and is the source of truth for everything below.
 
 ## What changed
@@ -103,7 +103,7 @@ stateDiagram-v2
 courtesy, not a contract — you'll lose your panel runs the day v1.1 lands if
 you haven't added the field.
 
-## Schema-drift behavior (`SYNTHPANEL_DRIFT_DEGRADE`)
+## Schema-drift behavior (`ALTHING_DRIFT_DEGRADE`)
 
 The structured-output engine retries malformed responses up to 3 strikes (see
 the `sp-d1x0` retry policy). What happens *after* exhaustion changes between
@@ -122,7 +122,7 @@ v1.0 and v1.1.
 
 The agent sees an error and decides — retry, fall back, surface to the user.
 
-### v1.0.0 with `SYNTHPANEL_DRIFT_DEGRADE=1` — opt-in beta of v1.1 behavior
+### v1.0.0 with `ALTHING_DRIFT_DEGRADE=1` — opt-in beta of v1.1 behavior
 
 ```json
 {
@@ -165,7 +165,7 @@ the host-side semantics.
 
 ## Migration checklist
 
-For agent code that calls SynthPanel via MCP:
+For agent code that calls Althing via MCP:
 
 - [ ] Add `decision_being_informed` to every `run_panel`, `run_quick_poll`,
       and `extend_panel` call. 12–280 chars, single line.
@@ -174,13 +174,13 @@ For agent code that calls SynthPanel via MCP:
       Branch on `code` + `severity`; log `extension[]` but don't branch on it.
 - [ ] Update error handling to read `error_code` and `retry_safe` instead of
       string-matching `message`.
-- [ ] Decide your stance on `SYNTHPANEL_DRIFT_DEGRADE`:
+- [ ] Decide your stance on `ALTHING_DRIFT_DEGRADE`:
       leave it off (typed error) or flip it on now to preview v1.1.
 
 For MCP host operators:
 
-- [ ] Pin to `synthpanel>=1.0,<2.0` once your callers are migrated.
-- [ ] Decide whether to set `SYNTHPANEL_DRIFT_DEGRADE=1` in the env block.
+- [ ] Pin to `althing>=1.0,<2.0` once your callers are migrated.
+- [ ] Decide whether to set `ALTHING_DRIFT_DEGRADE=1` in the env block.
       Document the choice for callers.
 - [ ] Plan the v1.1 cutover — the grace window closes when v1.1.0 lands.
 
@@ -189,4 +189,4 @@ For MCP host operators:
 - Full field-by-field reference: [docs/response-contract.md](response-contract.md)
 - Methodology and inspectability: [docs/methodology.md](methodology.md)
 - MCP host integration: [docs/mcp.md](mcp.md)
-- Schema source: [`src/synth_panel/schemas/v1.0.0.json`](../src/synth_panel/schemas/v1.0.0.json)
+- Schema source: [`src/althing/schemas/v1.0.0.json`](../src/althing/schemas/v1.0.0.json)

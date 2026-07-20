@@ -50,7 +50,7 @@ def test_drift_within_tolerance_returns_zero(refresh_module):
     output advertises the OK summary."""
     # Use the live mapping but feed rates equal to whatever the local
     # table has for each id, so drift is mechanically zero.
-    from synth_panel.cost import lookup_pricing
+    from althing.cost import lookup_pricing
 
     models = []
     for or_id in refresh_module.EXPECTED_OR_MAPPING:
@@ -71,7 +71,7 @@ def test_drift_within_tolerance_returns_zero(refresh_module):
 
 def test_input_drift_above_threshold_fails(refresh_module):
     """A model whose OR rate is 2x the local rate must trip the gate."""
-    from synth_panel.cost import lookup_pricing
+    from althing.cost import lookup_pricing
 
     or_id = next(iter(refresh_module.EXPECTED_OR_MAPPING))
     local, _ = lookup_pricing(f"openrouter/{or_id}")
@@ -107,7 +107,7 @@ def test_missing_model_fails(refresh_module):
     """If OR drops a model we map, the script must flag it (not silently
     skip) so the table can be pruned or the mapping updated."""
     # Provide everything except the first mapped model.
-    from synth_panel.cost import lookup_pricing
+    from althing.cost import lookup_pricing
 
     keys = list(refresh_module.EXPECTED_OR_MAPPING)
     missing = keys[0]
@@ -135,7 +135,7 @@ def test_mapping_covers_opus_and_current_flagships(refresh_module):
     """P1-7: the drift check must cover opus (previously uncovered, so its
     stale pricing could not self-heal) and the current-generation Anthropic
     flagship ids the aliases now resolve to."""
-    from synth_panel.cost import OPUS_PRICING, SONNET_PRICING, lookup_pricing
+    from althing.cost import OPUS_PRICING, SONNET_PRICING, lookup_pricing
 
     mapping = refresh_module.EXPECTED_OR_MAPPING
     assert "anthropic/claude-opus-4.8" in mapping
@@ -154,7 +154,7 @@ def test_mapping_covers_opus_and_current_flagships(refresh_module):
 def test_new_mapping_entries_report_zero_drift_at_local_rates(refresh_module):
     """Feeding OR rates equal to the local table for the opus/sonnet-5 entries
     yields zero drift (regression guard that they route to a real tier)."""
-    from synth_panel.cost import lookup_pricing
+    from althing.cost import lookup_pricing
 
     targets = ["anthropic/claude-opus-4.8", "anthropic/claude-sonnet-5"]
     models = []

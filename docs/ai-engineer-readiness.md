@@ -1,9 +1,9 @@
-# SynthPanel — AI Engineer Miami Readiness Assessment
+# Althing — AI Engineer Miami Readiness Assessment
 
-**Author:** cpo (synthpanel)
+**Author:** cpo (althing)
 **Date:** 2026-04-19
 **Subject:** Pre-spotlight readiness for tonight's AI Engineer Miami demo
-**Version assessed:** synthpanel v0.9.3 (live on PyPI, site https://synthpanel.dev HTTP 200)
+**Version assessed:** althing v0.9.3 (live on PyPI, site https://althing.dev HTTP 200)
 
 ---
 
@@ -19,7 +19,7 @@ not for anything missing from the product itself.
 - ✅ MCP sampling fallback (`sp-6at`) — zero-config demo is real
 - ✅ 8 agent-framework examples live (OpenAI Agents, LangChain/LangGraph, CrewAI, LlamaIndex, MS Agent Framework, n8n, plus 2 Composio flavors)
 - ✅ awesome-mcp-servers PR #4930 pending — can reference it ("we're getting listed upstream")
-- ⚠️ CLI ergonomic gotcha: `--model` must precede the subcommand (`synthpanel --model sonnet prompt …`). Trivial, but it will trip the founder live if they type it the other way.
+- ⚠️ CLI ergonomic gotcha: `--model` must precede the subcommand (`althing --model sonnet prompt …`). Trivial, but it will trip the founder live if they type it the other way.
 - ✅ Framework-count drift resolved (sp-dub): README table and `examples/integrations/` both list **8 framework entries** (6 MCP-native + 2 Composio bridges). Founder's script, README, and directory now agree on "eight agent frameworks." Cite that number on stage.
 
 ---
@@ -31,8 +31,8 @@ audience. The people at Miami are building agents, evaluating MCP servers,
 fighting eval infrastructure, and picking tools they can drop into a
 CrewAI/LangGraph/Agents-SDK pipeline by Monday. What resonates:
 
-1. **"Works with my stack without a SynthPanel-specific SDK."** The fact
-   that the integration is just "point your MCP client at `synthpanel
+1. **"Works with my stack without a Althing-specific SDK."** The fact
+   that the integration is just "point your MCP client at `althing
    mcp-serve`" is the whole pitch. Every framework-specific wrapper they've
    had to maintain has been a tax; MCP is the escape hatch.
 2. **Zero-config via MCP sampling.** "No API key needed if your host
@@ -56,9 +56,9 @@ CrewAI/LangGraph/Agents-SDK pipeline by Monday. What resonates:
 ## 3. Gap analysis
 
 ### Installable in under 60 seconds?
-Yes. `pip install synthpanel[mcp]` → set one provider key → `synthpanel
+Yes. `pip install althing[mcp]` → set one provider key → `althing
 mcp-serve` is the happy path. Docker path (`docker run ghcr.io/dataviking-
-tech/synthpanel …`) is live as a fallback.
+tech/althing …`) is live as a fallback.
 
 ### Is the MCP story clear?
 Mostly yes, but **the sampling fallback is the sharpest message and it's
@@ -73,7 +73,7 @@ flip the fold.
 
 - **No API key in at least one development environment I tried** — I could
   not dogfood the survey below without one. If a founder's own CPO agent
-  can't run `synthpanel prompt` without extra setup, the conference
+  can't run `althing prompt` without extra setup, the conference
   hands-on booth should have at minimum a pre-seeded `.env` sample or a
   one-liner that explicitly demonstrates the **no-key sampling path** via
   Claude Code as host. The sampling story is the answer to this friction;
@@ -81,7 +81,7 @@ flip the fold.
 - **CLI flag ordering (`--model` before the subcommand)** is unusual
   argparse behavior and will bite on stage. Either switch to a subcommand-
   local `--model` (ideal), or bake the model into the demo alias so the
-  founder types `synthpanel demo` instead of an argparse puzzle. Do not
+  founder types `althing demo` instead of an argparse puzzle. Do not
   leave this to live typing.
 - **"Works with X" matrix needs a live link on the landing page** if it
   is not already there. Engineers at Miami will ask "does it work with
@@ -100,7 +100,7 @@ flip the fold.
 
 ## 4. Synthetic survey — dogfood result
 
-**Transparency note:** I attempted to run the requested `synthpanel
+**Transparency note:** I attempted to run the requested `althing
 prompt` with a simulated AI-engineer persona. My crew environment has no
 `ANTHROPIC_API_KEY` (or any other provider key) configured, so the live
 CLI call errored with `Missing API key: set ANTHROPIC_API_KEY`. **This is
@@ -125,7 +125,7 @@ agents with LangGraph:**
 > "Honestly, the MCP angle is what gets me off the fence. I've been
 > burned twice by research tools that ship a bespoke Python SDK I have
 > to pin and wrap. If I can point my existing `MultiServerMCPClient` at
-> `synthpanel mcp-serve` and get structured persona output with cost
+> `althing mcp-serve` and get structured persona output with cost
 > tracking, yes — I'd try it next week. My one hesitation: I want to see
 > the cost-per-turn telemetry before I commit it to a workflow my PM can
 > trigger."
@@ -158,7 +158,7 @@ All three are gaps that can be closed tonight.
 ## 5. Recommended 3-minute demo script
 
 Everything below assumes a laptop with Claude Code installed, no
-provider key set, and synthpanel v0.9.3 already `pip install`ed. Total
+provider key set, and althing v0.9.3 already `pip install`ed. Total
 walk is ~180 seconds with 15s of buffer.
 
 ### 0:00 – 0:20 — Cold open, land the hook
@@ -166,7 +166,7 @@ walk is ~180 seconds with 15s of buffer.
 > three minutes. No API key on this laptop. Watch."
 
 Open a terminal with Claude Code running as the MCP host. Have
-`synthpanel mcp-serve` registered. Say out loud: "Claude, use synthpanel
+`althing mcp-serve` registered. Say out loud: "Claude, use althing
 to run a quick poll of three AI engineers: 'would you try an MCP server
 for synthetic focus groups?'"
 
@@ -187,8 +187,8 @@ forcing. You get JSON, not vibes."*
 Open `examples/integrations/openai_agents.py` in a second pane (or the
 web page if it renders better). Scroll — do not read. Say:
 
-> "Eight agent frameworks, one MCP server. No SynthPanel-specific SDK.
-> If your framework speaks MCP, you already have a SynthPanel adapter."
+> "Eight agent frameworks, one MCP server. No Althing-specific SDK.
+> If your framework speaks MCP, you already have a Althing adapter."
 
 Highlight the shortest example (OpenAI Agents SDK is ~20 lines). Call
 out that the same server hosts `run_panel`, `extend_panel`, persona
@@ -197,7 +197,7 @@ packs, and v3 branching DAGs.
 ### 2:00 – 2:40 — v3 branching as the "but can it do real research?" beat
 Run:
 ```
-synthpanel instruments graph pricing-discovery --format mermaid
+althing instruments graph pricing-discovery --format mermaid
 ```
 Show the Mermaid DAG. One sentence: *"This is a branching instrument —
 the router picks the next round based on what the panel said. It's
@@ -207,11 +207,11 @@ This closes the "is this a toy?" question without labouring the point.
 
 ### 2:40 – 3:00 — Close
 Three beats, one each:
-1. `pip install synthpanel[mcp]`
+1. `pip install althing[mcp]`
 2. Docker image on GHCR for zero-Python installs
 3. Landing page + awesome-mcp-servers PR pending
 
-End with: *"synthpanel.dev. Try it with the host you're already using.
+End with: *"althing.dev. Try it with the host you're already using.
 If it doesn't work with your stack, I want to hear about it at the
 booth."*
 
@@ -219,13 +219,13 @@ booth."*
 
 ## What to fix in the next hour if possible (ordered by ROI)
 
-1. **Alias `synthpanel demo`** to a pre-flagged prompt that uses
+1. **Alias `althing demo`** to a pre-flagged prompt that uses
    sampling + the most visually-impressive pack. Avoids live argparse
    typos.
 2. **Promote the sampling-fallback line** to the first paragraph of the
    README and the landing hero. It is the strongest differentiator we
    have and it's currently under-sold.
-3. **Pin a terminal window** with `synthpanel mcp-serve` already running
+3. **Pin a terminal window** with `althing mcp-serve` already running
    inside Claude Code before walking on stage. Avoid cold-start risk.
 4. **Have the `examples/integrations/` directory open** in a second tab
    so any follow-up question ("does it work with LangGraph?") is a
@@ -240,7 +240,7 @@ booth."*
 
 - **API-key demo-fail risk:** if any part of the script falls back to a
   direct CLI call instead of MCP-sampling and the laptop doesn't have
-  a key set, the demo dies. Mitigation: the aliased `synthpanel demo`
+  a key set, the demo dies. Mitigation: the aliased `althing demo`
   above should force the MCP-sampling path, not a direct provider call.
 - ~~**Framework-integration claim drift:**~~ **Resolved (sp-dub):** README
   table, `examples/integrations/` directory, and founder's script all

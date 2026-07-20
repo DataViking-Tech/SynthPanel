@@ -1,10 +1,10 @@
 # product_feedback: NPS + feature satisfaction + open-ended follow-up.
 #
 # Usage:
-#   synthpanel panel run --personas examples/personas.yaml --instrument examples/instruments/product_feedback.yaml --var product="Acme Widget"
+#   althing panel run --personas examples/personas.yaml --instrument examples/instruments/product_feedback.yaml --var product="Acme Widget"
 #
 # Also available as a bundled pack:
-#   synthpanel panel run --personas examples/personas.yaml --instrument product-feedback --var product="Acme Widget"
+#   althing panel run --personas examples/personas.yaml --instrument product-feedback --var product="Acme Widget"
 instrument:
   version: 3
   rounds:

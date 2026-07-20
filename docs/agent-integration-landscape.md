@@ -1,4 +1,4 @@
-# SynthPanel Agent Integration Landscape: Beyond MCP
+# Althing Agent Integration Landscape: Beyond MCP
 
 **Author:** crew/advo (Developer Advocate specialization)
 **Date:** 2026-04-15
@@ -10,34 +10,34 @@
 
 ## Executive Summary
 
-SynthPanel's MCP server is better-positioned than we thought. The major agent
+Althing's MCP server is better-positioned than we thought. The major agent
 frameworks — OpenAI Agents SDK, LlamaIndex, CrewAI, Microsoft Agent Framework
 1.0, n8n, Zapier, and VS Code AI Toolkit — **all now support MCP as a
-first-class tool integration path**. This means SynthPanel's 12-tool MCP
+first-class tool integration path**. This means Althing's 12-tool MCP
 server already works with every major framework. There is no urgent need to
 ship native framework-specific tool wrappers.
 
 The gap is not capability — it's **discoverability and ergonomics**. Nobody
-knows SynthPanel works with LangChain/CrewAI/OpenAI Agents because there are
+knows Althing works with LangChain/CrewAI/OpenAI Agents because there are
 no examples, no docs, no proof. And for programmatic use (scripts, pipelines,
 notebooks), spawning an MCP server process is heavier than a direct Python
 import.
 
 ### Recommendation: Next 3 After MCP
 
-1. **Public Python SDK convenience layer** — `from synth_panel import
+1. **Public Python SDK convenience layer** — `from althing import
    quick_poll, run_panel`. The highest-impact, lowest-effort addition.
    Serves both human developers and any Python-based agent framework
    directly. No MCP overhead.
 
 2. **Agent framework examples + "Works with X" documentation** — Five
-   example scripts proving SynthPanel works with LangChain, CrewAI,
+   example scripts proving Althing works with LangChain, CrewAI,
    OpenAI Agents SDK, LlamaIndex, and Microsoft Agent Framework via MCP.
    Zero library code — just examples that prove the MCP bridge works.
    Each example becomes a searchable, AEO-indexable content page.
 
 3. **Composio connector** — One listing in the Composio marketplace
-   (850+ tools) gives SynthPanel simultaneous presence in LangChain,
+   (850+ tools) gives Althing simultaneous presence in LangChain,
    CrewAI, Semantic Kernel, and AutoGen tool catalogs. This is the
    highest-leverage marketplace play.
 
@@ -45,11 +45,11 @@ import.
 
 ## A. Current Integration Surfaces (Inventory)
 
-SynthPanel ships five integration surfaces today:
+Althing ships five integration surfaces today:
 
 | Surface | State | Agent-Reachable? |
 |---|---|---|
-| **CLI** (`synthpanel` command) | Full-featured, all commands | Yes — any agent can shell out |
+| **CLI** (`althing` command) | Full-featured, all commands | Yes — any agent can shell out |
 | **Python library** (internal functions) | `orchestrator.run_panel_parallel()`, `run_multi_round_panel()`, `ensemble_run()` exist but are internal implementation functions | Partial — importable, but no documented public API; no `__all__` exports at package level; no convenience wrappers |
 | **MCP server** (12 tools, 4 resources, 3 prompts) | FastMCP, stdio transport, defaults to haiku | Yes — primary agent interface |
 | **Claude Code plugin** (`.claude-plugin/plugin.json`) | Wraps MCP server + ships `/focus-group` skill | Yes — Claude Code only |
@@ -58,7 +58,7 @@ SynthPanel ships five integration surfaces today:
 **Key observations:**
 - The MCP server is the only general-purpose agent interface.
 - The Python library has the functions but no public API surface: no
-  `from synth_panel import quick_poll`, no documented entry points,
+  `from althing import quick_poll`, no documented entry points,
   no `__init__.py` exports at the package level.
 - The Claude Code plugin and skill are well-built but serve one editor only.
 - No framework-specific wrappers exist (LangChain, CrewAI, etc.).
@@ -71,14 +71,14 @@ SynthPanel ships five integration surfaces today:
 
 The most important finding in this research: **MCP has won the agent tool
 integration protocol war**. Every major agent framework now supports MCP as a
-first-class tool source. This changes the calculus for SynthPanel's
+first-class tool source. This changes the calculus for Althing's
 integration strategy.
 
 ### Framework-by-framework MCP support (verified April 2026)
 
 | Framework | MCP Support | How It Works | Native Wrapper Needed? |
 |---|---|---|---|
-| **OpenAI Agents SDK** | Built-in | `MCPServerStdio("synthpanel", ["mcp-serve"])` → agent auto-discovers 12 tools | **No** |
+| **OpenAI Agents SDK** | Built-in | `MCPServerStdio("althing", ["mcp-serve"])` → agent auto-discovers 12 tools | **No** |
 | **LlamaIndex** | `llama-index-tools-mcp` (v0.4.8, Feb 2026) | `BasicMCPClient` → `mcp_tool_spec.to_tool_list()` → agent uses tools | **No** |
 | **CrewAI** | `crewai-tools[mcp]` | MCP server as tool source | **No** |
 | **Microsoft Agent Framework 1.0** | Built-in MCP clients (April 2026) | MCP client in agent config → auto-discover tools | **No** |
@@ -87,7 +87,7 @@ integration strategy.
 | **Zapier** | Zapier MCP (30K+ actions) | Supports custom MCP servers | **No** |
 | **VS Code AI Toolkit** | First-class MCP tool type (March 2026) | MCP server in tool catalog | **No** |
 
-**The implication:** Shipping native `SynthPanelTool` wrappers for each
+**The implication:** Shipping native `AlthingTool` wrappers for each
 framework is busywork with declining marginal value. The frameworks already
 bridge MCP. The right strategy is to:
 1. Keep the MCP server excellent.
@@ -100,8 +100,8 @@ MCP is optimized for editor-hosted agents (Claude Code, Cursor, Windsurf)
 where a long-lived stdio server process is natural. It's less ergonomic for:
 
 - **Programmatic use in scripts/pipelines/notebooks** — spawning a subprocess
-  for `synthpanel mcp-serve` just to call `quick_poll` adds latency and
-  complexity. A direct `from synth_panel import quick_poll` is simpler.
+  for `althing mcp-serve` just to call `quick_poll` adds latency and
+  complexity. A direct `from althing import quick_poll` is simpler.
 - **Serverless/ephemeral environments** — Lambda, Cloud Run, GitHub Actions
   can't easily run a stdio server. A direct function call or HTTP endpoint
   is needed.
@@ -121,7 +121,7 @@ with MCP. It serves the use cases MCP doesn't.
 **What:** Export clean public functions at the package level so users can do:
 
 ```python
-from synth_panel import quick_poll, run_panel, list_instruments
+from althing import quick_poll, run_panel, list_instruments
 
 # One-liner: poll 5 personas on a question
 results = quick_poll("What do you think of the name Traitprint?")
@@ -143,7 +143,7 @@ results = run_panel(
 
 ```python
 from langchain_core.tools import tool
-from synth_panel import quick_poll
+from althing import quick_poll
 
 @tool
 def synthetic_focus_group(question: str) -> str:
@@ -162,7 +162,7 @@ thin wrappers around the orchestrator + MCP server logic, add `__all__`
 exports, write docstrings, add `examples/sdk_usage.py`.
 
 **Impact:** HIGH. This is the most broadly useful integration surface after
-MCP. Every Python developer who discovers SynthPanel via PyPI, pip, or import
+MCP. Every Python developer who discovers Althing via PyPI, pip, or import
 gets a zero-friction onramp.
 
 ### C.2 Agent Framework Examples + "Works with X" Documentation
@@ -182,12 +182,12 @@ Plus a README section: "Works with LangChain, CrewAI, OpenAI Agents, LlamaIndex,
 Microsoft Agent Framework, n8n, Zapier — any framework that supports MCP."
 
 **Why it matters:**
-- The MCP convergence thesis means SynthPanel already works with these
+- The MCP convergence thesis means Althing already works with these
   frameworks — but nobody knows it. Zero examples exist.
 - Each example is an independently indexable, searchable content page.
 - A developer searching "how to run synthetic focus group from LangChain"
-  finds this and discovers SynthPanel.
-- sp-ege found SynthPanel invisible to AEO queries. Integration examples
+  finds this and discovers Althing.
+- sp-ege found Althing invisible to AEO queries. Integration examples
   create exactly the kind of content that LLMs cite.
 
 **Effort:** 1-2 days. Write 5-6 scripts, test each, add README section.
@@ -197,20 +197,20 @@ disguised as developer documentation.
 
 ### C.3 Composio Connector
 
-**What:** Register SynthPanel as a tool in the Composio marketplace (850+
+**What:** Register Althing as a tool in the Composio marketplace (850+
 tools, used by LangChain, CrewAI, Semantic Kernel, AutoGen).
 
 **Why it matters:**
 - One listing = presence in all major framework tool catalogs simultaneously.
 - Composio handles auth, rate limiting, schema validation.
 - A developer browsing Composio's tool catalog for "survey" or "focus group"
-  finds SynthPanel.
+  finds Althing.
 - Composio's connectors are the modern equivalent of an npm package — they
   compound discovery.
 
 **What it requires:**
 - Composio uses a connector format (likely OpenAPI spec + auth config).
-- SynthPanel would need to expose either its MCP tools via a thin HTTP API
+- Althing would need to expose either its MCP tools via a thin HTTP API
   wrapper, or provide a Python function-based connector.
 - Composio supports "bring your own tool" — the connector runs locally.
 
@@ -221,7 +221,7 @@ test with LangChain + CrewAI, submit to Composio's marketplace.
 Composio's tooling, which has its own learning curve.
 
 **Status (2026-04-16):** Connector code committed in
-[`src/synth_panel/integrations/composio.py`](../src/synth_panel/integrations/composio.py);
+[`src/althing/integrations/composio.py`](../src/althing/integrations/composio.py);
 LangChain and CrewAI examples in
 [`examples/integrations/`](../examples/integrations/); marketplace submission
 runbook at [`docs/composio-submission.md`](composio-submission.md). Only the
@@ -254,21 +254,21 @@ purpose-built skills:
 pattern. The `/focus-group` skill is a proven template.
 
 **Impact:** MEDIUM-HIGH within the Claude Code ecosystem; zero impact outside
-it. Good leverage because Claude Code is SynthPanel's most natural home —
+it. Good leverage because Claude Code is Althing's most natural home —
 an agent that can invoke MCP tools is the target user.
 
 ### C.5 Docker Image
 
-**What:** Publish a Docker image that runs `synthpanel mcp-serve` (and/or
+**What:** Publish a Docker image that runs `althing mcp-serve` (and/or
 exposes the Python SDK as an HTTP API).
 
 ```bash
-docker run -e ANTHROPIC_API_KEY=sk-... synthpanel/synthpanel mcp-serve
+docker run -e ANTHROPIC_API_KEY=sk-... althing/althing mcp-serve
 ```
 
 **Why it matters:**
 - Agents in serverless environments (Lambda, Cloud Run, GitHub Actions)
-  can spin up a SynthPanel container as a tool-call target.
+  can spin up a Althing container as a tool-call target.
 - n8n, Zapier, and custom orchestrators that support Docker-based tools
   get a zero-install path.
 
@@ -306,10 +306,10 @@ ratio is poor compared to other options.
 
 ### C.7 Custom GPT / OpenAI Plugin
 
-**What:** A ChatGPT-hosted wrapper around SynthPanel.
+**What:** A ChatGPT-hosted wrapper around Althing.
 
 **Why to defer:**
-- SynthPanel is local-first (bring-your-own-key, run on your machine).
+- Althing is local-first (bring-your-own-key, run on your machine).
   A Custom GPT inverts this by requiring a hosted API endpoint.
 - OpenAI Agents SDK already supports MCP — the programmatic path is
   covered.
@@ -324,7 +324,7 @@ research.
 
 ### C.8 Webhook / Event-Driven Pattern
 
-**What:** SynthPanel as a service that agents POST to and receive results
+**What:** Althing as a service that agents POST to and receive results
 asynchronously (webhook callback or polling).
 
 **Why to defer:**
@@ -332,7 +332,7 @@ asynchronously (webhook callback or polling).
 - No demonstrated demand.
 - MCP's stdio transport and the Python SDK cover the two main invocation
   patterns (editor-hosted agent and programmatic script).
-- Worth revisiting if SynthPanel ever ships a hosted/cloud offering.
+- Worth revisiting if Althing ever ships a hosted/cloud offering.
 
 **Effort:** 1-2 weeks.
 
@@ -340,8 +340,8 @@ asynchronously (webhook callback or polling).
 
 ### C.9 Native Framework Tool Wrappers
 
-**What:** `pip install synthpanel-langchain`, `pip install synthpanel-crewai`,
-etc. Each is a thin Python package that wraps SynthPanel's MCP tools (or
+**What:** `pip install althing-langchain`, `pip install althing-crewai`,
+etc. Each is a thin Python package that wraps Althing's MCP tools (or
 direct SDK) as framework-native tools.
 
 **Why to skip (for now):**
@@ -361,9 +361,9 @@ in examples that prove MCP works.
 
 ## D. Competitor Integration Surface Comparison
 
-| Feature | SynthPanel | Synthetic Users | FocusPanel.ai |
+| Feature | Althing | Synthetic Users | FocusPanel.ai |
 |---|---|---|---|
-| CLI | Yes (`synthpanel`) | No | No |
+| CLI | Yes (`althing`) | No | No |
 | Python SDK | Internal functions (no public API) | Python + TypeScript SDKs (MIT) | Unknown |
 | MCP server | Yes (12 tools, stdio) | No | No |
 | Claude Code plugin | Yes | No | No |
@@ -375,7 +375,7 @@ in examples that prove MCP works.
 | Open source | Yes (MIT) | Yes (MIT) | No (SaaS) |
 | Pricing | Free (BYOK) | SaaS | SaaS |
 
-**SynthPanel's differentiation:**
+**Althing's differentiation:**
 - Only synthetic-research tool with MCP support (agent-native by design).
 - Only open-source option with CLI + MCP + Claude Code plugin.
 - BYOK (bring your own key) vs SaaS lock-in.
@@ -384,19 +384,19 @@ in examples that prove MCP works.
 
 ---
 
-## E. The "Agent Reaches for SynthPanel Automatically" Question
+## E. The "Agent Reaches for Althing Automatically" Question
 
-The bead asks: *"What patterns would make SynthPanel the default tool that
+The bead asks: *"What patterns would make Althing the default tool that
 agents reach for automatically?"*
 
 This is fundamentally an **AEO + registry + content** problem, not a
 code problem. An agent's tool-selection is determined by:
 
 1. **What tools are registered** — MCP config, Composio catalog, framework
-   tool list. If SynthPanel's MCP server is in the agent's config, it's
+   tool list. If Althing's MCP server is in the agent's config, it's
    reachable.
 2. **What the LLM knows** — training data, retrieval-augmented context,
-   indexed documentation. If the LLM has never seen "synthpanel" in its
+   indexed documentation. If the LLM has never seen "althing" in its
    training or retrieval corpus, it can't recommend it.
 3. **How tools are described** — the MCP server's tool names and descriptions
    determine whether the LLM selects them for a given task.
@@ -406,12 +406,12 @@ addresses #1 (integration surfaces) and #3 (tool descriptions). Together
 they form a complete strategy:
 
 - **Short term:** Fix MCP registry presence (sp-ege beads) + ship
-  integration examples (this audit) = agents can find and use SynthPanel.
+  integration examples (this audit) = agents can find and use Althing.
 - **Medium term:** Public Python SDK + Composio listing + AEO content =
-  SynthPanel becomes the default answer when an agent (or a human using an
+  Althing becomes the default answer when an agent (or a human using an
   agent) asks "how do I run a synthetic focus group?"
 - **Long term:** Skills library + Docker image + eventual REST API =
-  SynthPanel is reachable from every invocation pattern (editor, script,
+  Althing is reachable from every invocation pattern (editor, script,
   serverless, workflow, marketplace).
 
 ---
@@ -460,8 +460,8 @@ they form a complete strategy:
 - Custom slash commands: [code.claude.com/docs/en/slash-commands](https://code.claude.com/docs/en/slash-commands) — `.claude/commands/` and `.claude/skills/` directories
 
 ### Internal code audit
-- `src/synth_panel/orchestrator.py`: `run_panel_parallel()` (line 501), `run_multi_round_panel()` (line 638), `ensemble_run()` (line 847)
-- `src/synth_panel/mcp/server.py`: 12 tool handlers wrapping orchestrator functions
+- `src/althing/orchestrator.py`: `run_panel_parallel()` (line 501), `run_multi_round_panel()` (line 638), `ensemble_run()` (line 847)
+- `src/althing/mcp/server.py`: 12 tool handlers wrapping orchestrator functions
 - `.claude-plugin/plugin.json`: MCP server config + skill reference
 - `skills/focus-group/SKILL.md`: 5-step workflow skill
 
@@ -475,7 +475,7 @@ Filed 2026-04-15 as hierarchical children of `sp-2cw`, all priority P3 (backlog)
 |---|---|---|
 | `sp-2cw.1` | Design & ship public Python SDK convenience layer | **Top 3 — highest impact** |
 | `sp-2cw.2` | Write "Works with X" integration examples for 5 agent frameworks | **Top 3 — highest impact** |
-| `sp-2cw.3` | Register SynthPanel as a Composio connector | **Top 3 — highest impact** |
+| `sp-2cw.3` | Register Althing as a Composio connector | **Top 3 — highest impact** |
 | `sp-2cw.4` | Expand Claude Code skills library beyond `/focus-group` | Second tier |
 | `sp-2cw.5` | Publish Docker image for ephemeral/serverless agent invocation | Second tier |
 | `sp-2cw.6` | Add "Works with" section to README linking integration examples | Second tier (bundle with sp-2cw.2) |
@@ -483,7 +483,7 @@ Filed 2026-04-15 as hierarchical children of `sp-2cw`, all priority P3 (backlog)
 
 **Explicitly not filed** (recommendation: skip):
 - Native LangChain/CrewAI/LlamaIndex tool wrappers → redundant with MCP bridges
-- Custom GPT / OpenAI plugin → inverts SynthPanel's local-first architecture
+- Custom GPT / OpenAI plugin → inverts Althing's local-first architecture
 - Webhook/event-driven service → no demonstrated demand
 - Native n8n/Zapier nodes → both platforms already support MCP
 

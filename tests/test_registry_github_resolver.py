@@ -1,4 +1,4 @@
-"""Tests for the GitHub URL resolver (``synth_panel.registry.github``)."""
+"""Tests for the GitHub URL resolver (``althing.registry.github``)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from collections.abc import Callable
 import httpx
 import pytest
 
-from synth_panel.registry.github import (
+from althing.registry.github import (
     DEFAULT_PATH,
     DEFAULT_REF,
     GitHubSource,
@@ -224,7 +224,7 @@ def test_resolve_default_path_fallback_ignores_directories() -> None:
 def test_resolve_fallback_honors_ref() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.host == "raw.githubusercontent.com":
-            assert request.url.path == "/owner/repo/v2.0/synthpanel-pack.yaml"
+            assert request.url.path == "/owner/repo/v2.0/althing-pack.yaml"
             return httpx.Response(404)
         assert request.url.params.get("ref") == "v2.0"
         return httpx.Response(200, json=[{"name": "alt.yaml", "type": "file"}])

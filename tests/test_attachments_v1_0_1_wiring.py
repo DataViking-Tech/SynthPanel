@@ -3,7 +3,7 @@
 These tests lock in two regressions surfaced during the 2026-05-09 dogfood
 panel against dataviking.tech preview tiles:
 
-* **G1** — :func:`synth_panel.llm.providers._openai_format._content_to_openai`
+* **G1** — :func:`althing.llm.providers._openai_format._content_to_openai`
   used to silently drop ``ImageBlock`` / ``DocumentBlock`` / ``HTMLBlock``,
   emitting only the question text. Every persona on the OpenRouter /
   OpenAI-compat path responded "I don't see an attached image" even when the
@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import pytest
 
-from synth_panel.llm.models import (
+from althing.llm.models import (
     DocumentBlock,
     HTMLBlock,
     ImageBlock,
@@ -30,8 +30,8 @@ from synth_panel.llm.models import (
     TextBlock,
     URLSource,
 )
-from synth_panel.llm.providers._openai_format import _content_to_openai
-from synth_panel.orchestrator import _resolve_question_attachment_refs
+from althing.llm.providers._openai_format import _content_to_openai
+from althing.orchestrator import _resolve_question_attachment_refs
 
 # ---------------------------------------------------------------------------
 # G1 — _openai_format multimodal serialisation
@@ -118,7 +118,7 @@ class TestHTMLAttachmentInlining:
     """
 
     def test_html_attachment_collapses_to_single_text_block(self):
-        from synth_panel.prompts import build_question_blocks
+        from althing.prompts import build_question_blocks
 
         blocks = build_question_blocks(
             {"text": "React to this UI."},
@@ -135,7 +135,7 @@ class TestHTMLAttachmentInlining:
         assert blocks[0].text.index("<p>hi</p>") < blocks[0].text.index("React to this UI.")
 
     def test_html_attachment_uses_delimiter(self):
-        from synth_panel.prompts import build_question_blocks
+        from althing.prompts import build_question_blocks
 
         blocks = build_question_blocks(
             {"text": "Q?"},
@@ -145,7 +145,7 @@ class TestHTMLAttachmentInlining:
         assert "--- END HTML SOURCE ---" in blocks[0].text
 
     def test_multiple_html_attachments_all_inline(self):
-        from synth_panel.prompts import build_question_blocks
+        from althing.prompts import build_question_blocks
 
         blocks = build_question_blocks(
             {"text": "Q?"},
@@ -160,7 +160,7 @@ class TestHTMLAttachmentInlining:
         assert "<b>two</b>" in blocks[0].text
 
     def test_html_alongside_image_keeps_image_as_block(self):
-        from synth_panel.prompts import build_question_blocks
+        from althing.prompts import build_question_blocks
 
         blocks = build_question_blocks(
             {"text": "Compare these."},
@@ -177,7 +177,7 @@ class TestHTMLAttachmentInlining:
         assert "Compare these." in blocks[1].text
 
     def test_shared_html_attachment_inlines(self):
-        from synth_panel.prompts import build_question_blocks
+        from althing.prompts import build_question_blocks
 
         blocks = build_question_blocks(
             {"text": "Q?"},
@@ -188,7 +188,7 @@ class TestHTMLAttachmentInlining:
         assert "<p>shared</p>" in blocks[0].text
 
     def test_empty_html_text_skipped(self):
-        from synth_panel.prompts import build_question_blocks
+        from althing.prompts import build_question_blocks
 
         blocks = build_question_blocks(
             {"text": "Q?"},
@@ -201,7 +201,7 @@ class TestHTMLAttachmentInlining:
         assert "HTML SOURCE" not in blocks[0].text
 
     def test_non_string_html_text_raises(self):
-        from synth_panel.prompts import build_question_blocks
+        from althing.prompts import build_question_blocks
 
         with pytest.raises(ValueError, match="html attachment"):
             build_question_blocks(
@@ -213,7 +213,7 @@ class TestHTMLAttachmentInlining:
         # End-to-end: build_question_blocks → _content_to_openai must
         # produce a single text content (string fast path) carrying both
         # the HTML and the question text.
-        from synth_panel.prompts import build_question_blocks
+        from althing.prompts import build_question_blocks
 
         blocks = build_question_blocks(
             {"text": "What do you think?"},

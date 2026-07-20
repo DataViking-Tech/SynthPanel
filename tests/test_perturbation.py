@@ -1,4 +1,4 @@
-"""Tests for synth_panel.perturbation -- sp-5on.14."""
+"""Tests for althing.perturbation -- sp-5on.14."""
 
 from __future__ import annotations
 
@@ -6,12 +6,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from synth_panel.llm.models import (
+from althing.llm.models import (
     CompletionResponse,
     TokenUsage,
     ToolInvocationBlock,
 )
-from synth_panel.perturbation import (
+from althing.perturbation import (
     ALL_AXES,
     PersonaVariant,
     PerturbationAxis,
@@ -49,7 +49,7 @@ def _make_extraction_response(
 
 def _make_fallback_response() -> CompletionResponse:
     """Build a CompletionResponse with no tool call (triggers fallback)."""
-    from synth_panel.llm.models import TextBlock
+    from althing.llm.models import TextBlock
 
     return CompletionResponse(
         id="r1",

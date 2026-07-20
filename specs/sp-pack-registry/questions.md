@@ -20,19 +20,19 @@ Users author persona packs and instruments as YAML files today. Map how packs cu
 
 - How do the 9 bundled packs reach a user's machine? Package data in the wheel? Downloaded? Inlined?
 - How does the code discover bundled packs at runtime (directory scan, explicit registry, entry points)?
-- What's the update mechanism today — upgrade `synthpanel` and new packs appear?
+- What's the update mechanism today — upgrade `althing` and new packs appear?
 - How are bundled packs namespaced vs user-authored packs vs mayor's `extra_*` packs? What's the collision-resolution behavior (sp-g270 is partially related)?
 
 ### 3. Pack validation and versioning
 
 - Is there a schema for persona packs? For instruments? Where is it defined? What does it enforce?
-- How are pack versions tracked today? Is there a `version:` field? How does it interact with `synthpanel`'s own version?
+- How are pack versions tracked today? Is there a `version:` field? How does it interact with `althing`'s own version?
 - How are breaking changes to persona / instrument schemas handled in the codebase? Any migration tooling?
 - If two packs have the same name, what wins? What's the deterministic order?
 
 ### 4. User-saved pack persistence
 
-- What user-owned storage does `synthpanel` use (`~/.synthpanel/*`, XDG_DATA_HOME, other)?
+- What user-owned storage does `althing` use (`~/.althing/*`, XDG_DATA_HOME, other)?
 - How is the location selected, overridden, and documented?
 - What's the permission / privacy model — are saved packs world-readable, user-only, other?
 - How do tests avoid collision with real user state (env-var overrides, tempdir fixtures)?
@@ -41,12 +41,12 @@ Users author persona packs and instruments as YAML files today. Map how packs cu
 
 - How do comparable tools distribute user-authored content: `pre-commit` hooks, `cookiecutter` templates, `dbt` packages, `jinja` templates, `jupyter-contrib-extensions`, `homeassistant` integrations, `opensearch-dashboards` plugins?
 - Which use a git-URL install model (`pip install git+…`), a registry server (PyPI, npm, custom), a GitHub-topic-based discovery model, a static-index file, or other?
-- What is `pip install synthpanel-pack-foo` style namespace distribution like for those tools? Does anyone do it?
+- What is `pip install althing-pack-foo` style namespace distribution like for those tools? Does anyone do it?
 - What's the submission / review / moderation model in each? Any failure patterns documented?
 
 ### 6. SynthBench cross-link
 
-- SynthBench computes calibration metrics on synthpanel output against real human datasets. Is there already any per-pack signal flowing between the two projects?
+- SynthBench computes calibration metrics on althing output against real human datasets. Is there already any per-pack signal flowing between the two projects?
 - Could a pack carry a "calibration fingerprint" (hash + score) computed from a SynthBench run? What would that require from both sides?
 - Is there any existing pack-level quality signal in the repo (test coverage, example runs, provenance metadata)?
 - How does SynthBench reference persona / instrument packs today — by name, by hash, by path?

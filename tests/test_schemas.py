@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from synth_panel.structured.schemas import (
+from althing.structured.schemas import (
     LIKERT_SCHEMA,
     PICK_ONE_SCHEMA,
     RANKING_SCHEMA,

@@ -10,8 +10,8 @@ from __future__ import annotations
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from synth_panel._runners import resolve_extract_schema
-from synth_panel.structured.models import (
+from althing._runners import resolve_extract_schema
+from althing.structured.models import (
     MODEL_REGISTRY,
     AnnotatedChoice,
     Likert,
@@ -19,13 +19,13 @@ from synth_panel.structured.models import (
     Ranking,
     YesNo,
 )
-from synth_panel.structured.schemas import (
+from althing.structured.schemas import (
     ANNOTATED_CHOICE_SCHEMA,
     LIKERT_SCHEMA,
     PICK_ONE_SCHEMA,
     YES_NO_SCHEMA,
 )
-from synth_panel.structured.schemas import MODEL_REGISTRY as SCHEMAS_MODEL_REGISTRY
+from althing.structured.schemas import MODEL_REGISTRY as SCHEMAS_MODEL_REGISTRY
 
 
 class TestModelRegistry:
@@ -151,7 +151,7 @@ class TestModelJsonSchema:
             if name == "ranking":
                 # Ranking has nested item required fields; checked separately.
                 continue
-            from synth_panel.structured.schemas import get_schema
+            from althing.structured.schemas import get_schema
 
             static = get_schema(name)
             gen = model.model_json_schema()

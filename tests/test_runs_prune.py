@@ -4,7 +4,7 @@ Covers:
 - parse_duration: valid and invalid formats
 - list_runs: empty root, normal runs, malformed entries
 - prune_runs: --older-than, --keep, --dry-run, in-progress protection
-- CLI wiring: synthpanel runs prune / list
+- CLI wiring: althing runs prune / list
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from synth_panel.checkpoint import (
+from althing.checkpoint import (
     PanelCheckpoint,
     _is_in_progress,
     checkpoint_dir_for,
@@ -23,7 +23,7 @@ from synth_panel.checkpoint import (
     parse_duration,
     prune_runs,
 )
-from synth_panel.main import main
+from althing.main import main
 
 # ---------------------------------------------------------------------------
 # parse_duration

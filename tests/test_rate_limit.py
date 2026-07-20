@@ -21,15 +21,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from synth_panel.llm.client import LLMClient, _TokenBucket
-from synth_panel.llm.errors import (
+from althing.llm.client import LLMClient, _TokenBucket
+from althing.llm.errors import (
     LLMError,
     LLMErrorCategory,
     llm_error_from_response,
     parse_retry_after,
     retry_after_from_headers,
 )
-from synth_panel.llm.models import (
+from althing.llm.models import (
     CompletionRequest,
     CompletionResponse,
     InputMessage,
@@ -195,7 +195,7 @@ class TestRateLimitRetry:
             def fake_sleep(s: float) -> None:
                 sleep_calls.append(s)
 
-            with patch("synth_panel.llm.retry.time.sleep", side_effect=fake_sleep):
+            with patch("althing.llm.retry.time.sleep", side_effect=fake_sleep):
                 result = client.send(_req())
             assert result.text == "recovered"
             assert len(sleep_calls) == 1
@@ -222,7 +222,7 @@ class TestRateLimitRetry:
             client._provider_cache["claude-sonnet-4-6-20250414"] = provider
             sleep_calls: list[float] = []
             with patch(
-                "synth_panel.llm.retry.time.sleep",
+                "althing.llm.retry.time.sleep",
                 side_effect=lambda s: sleep_calls.append(s),
             ):
                 client.send(_req())

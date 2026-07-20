@@ -12,8 +12,8 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from synth_panel.llm.errors import LLMError, LLMErrorCategory
-from synth_panel.llm.models import (
+from althing.llm.errors import LLMError, LLMErrorCategory
+from althing.llm.models import (
     CompletionRequest,
     InputMessage,
     StopReason,
@@ -79,7 +79,7 @@ class TestBuildOpenaiBody:
     """Test OpenAI request body serialization."""
 
     def test_simple_message(self):
-        from synth_panel.llm.providers._openai_format import build_openai_body
+        from althing.llm.providers._openai_format import build_openai_body
 
         req = _simple_request()
         body = build_openai_body(req)
@@ -90,7 +90,7 @@ class TestBuildOpenaiBody:
         assert body["messages"][0]["content"] == "Hello"
 
     def test_system_prompt(self):
-        from synth_panel.llm.providers._openai_format import build_openai_body
+        from althing.llm.providers._openai_format import build_openai_body
 
         req = CompletionRequest(
             model="test",
@@ -103,7 +103,7 @@ class TestBuildOpenaiBody:
         assert body["messages"][1]["role"] == "user"
 
     def test_assistant_with_tool_calls(self):
-        from synth_panel.llm.providers._openai_format import build_openai_body
+        from althing.llm.providers._openai_format import build_openai_body
 
         req = CompletionRequest(
             model="test",
@@ -126,7 +126,7 @@ class TestBuildOpenaiBody:
         assert json.loads(msg["tool_calls"][0]["function"]["arguments"]) == {"q": "test"}
 
     def test_assistant_tool_calls_with_text(self):
-        from synth_panel.llm.providers._openai_format import build_openai_body
+        from althing.llm.providers._openai_format import build_openai_body
 
         req = CompletionRequest(
             model="test",
@@ -147,7 +147,7 @@ class TestBuildOpenaiBody:
         assert len(msg["tool_calls"]) == 1
 
     def test_tool_result_messages(self):
-        from synth_panel.llm.providers._openai_format import build_openai_body
+        from althing.llm.providers._openai_format import build_openai_body
 
         req = CompletionRequest(
             model="test",
@@ -171,7 +171,7 @@ class TestBuildOpenaiBody:
         assert msg["content"] == "Result data"
 
     def test_tools_serialized(self):
-        from synth_panel.llm.providers._openai_format import build_openai_body
+        from althing.llm.providers._openai_format import build_openai_body
 
         req = CompletionRequest(
             model="test",
@@ -185,7 +185,7 @@ class TestBuildOpenaiBody:
         assert body["tools"][0]["function"]["description"] == "A calculator"
 
     def test_tool_choice_auto(self):
-        from synth_panel.llm.providers._openai_format import build_openai_body
+        from althing.llm.providers._openai_format import build_openai_body
 
         req = CompletionRequest(
             model="test",
@@ -197,7 +197,7 @@ class TestBuildOpenaiBody:
         assert body["tool_choice"] == "auto"
 
     def test_tool_choice_any(self):
-        from synth_panel.llm.providers._openai_format import build_openai_body
+        from althing.llm.providers._openai_format import build_openai_body
 
         req = CompletionRequest(
             model="test",
@@ -209,7 +209,7 @@ class TestBuildOpenaiBody:
         assert body["tool_choice"] == "required"
 
     def test_tool_choice_specific(self):
-        from synth_panel.llm.providers._openai_format import build_openai_body
+        from althing.llm.providers._openai_format import build_openai_body
 
         req = CompletionRequest(
             model="test",
@@ -221,13 +221,13 @@ class TestBuildOpenaiBody:
         assert body["tool_choice"]["function"]["name"] == "calc"
 
     def test_stream_flag(self):
-        from synth_panel.llm.providers._openai_format import build_openai_body
+        from althing.llm.providers._openai_format import build_openai_body
 
         body = build_openai_body(_simple_request(), stream=True)
         assert body["stream"] is True
 
     def test_no_stream_flag_by_default(self):
-        from synth_panel.llm.providers._openai_format import build_openai_body
+        from althing.llm.providers._openai_format import build_openai_body
 
         body = build_openai_body(_simple_request())
         assert "stream" not in body
@@ -242,7 +242,7 @@ class TestParseOpenaiResponse:
     """Test OpenAI response parsing."""
 
     def test_text_response(self):
-        from synth_panel.llm.providers._openai_format import parse_openai_response
+        from althing.llm.providers._openai_format import parse_openai_response
 
         data = _openai_json_response("Hello!")
         resp = parse_openai_response(data, "test-model")
@@ -253,7 +253,7 @@ class TestParseOpenaiResponse:
         assert resp.usage.output_tokens == 5
 
     def test_tool_call_response(self):
-        from synth_panel.llm.providers._openai_format import parse_openai_response
+        from althing.llm.providers._openai_format import parse_openai_response
 
         data = {
             "id": "chatcmpl-456",
@@ -284,7 +284,7 @@ class TestParseOpenaiResponse:
         assert resp.stop_reason == StopReason.TOOL_USE
 
     def test_malformed_tool_arguments(self):
-        from synth_panel.llm.providers._openai_format import parse_openai_response
+        from althing.llm.providers._openai_format import parse_openai_response
 
         data = {
             "id": "x",
@@ -303,7 +303,7 @@ class TestParseOpenaiResponse:
         assert resp.tool_calls[0].input == {"_raw": "not-json"}
 
     def test_max_tokens_stop(self):
-        from synth_panel.llm.providers._openai_format import parse_openai_response
+        from althing.llm.providers._openai_format import parse_openai_response
 
         data = {
             "id": "x",
@@ -316,7 +316,7 @@ class TestParseOpenaiResponse:
 
     def test_openrouter_cost_captured(self):
         """sp-j3vk: OpenRouter's usage.cost must flow into TokenUsage."""
-        from synth_panel.llm.providers._openai_format import parse_openai_response
+        from althing.llm.providers._openai_format import parse_openai_response
 
         data = {
             "id": "x",
@@ -333,7 +333,7 @@ class TestParseOpenaiResponse:
 
     def test_openrouter_cost_details_upstream_inference_cost(self):
         """Prefer cost_details.upstream_inference_cost over absent top-level cost."""
-        from synth_panel.llm.providers._openai_format import parse_openai_response
+        from althing.llm.providers._openai_format import parse_openai_response
 
         data = {
             "id": "x",
@@ -350,7 +350,7 @@ class TestParseOpenaiResponse:
 
     def test_openrouter_cost_details_prompt_plus_completion(self):
         """Fall back to prompt+completion cost sum if upstream total is missing."""
-        from synth_panel.llm.providers._openai_format import parse_openai_response
+        from althing.llm.providers._openai_format import parse_openai_response
 
         data = {
             "id": "x",
@@ -370,7 +370,7 @@ class TestParseOpenaiResponse:
 
     def test_reasoning_and_cached_tokens_captured(self):
         """sp-loil: reasoning_tokens and cached_tokens subcounts land in TokenUsage."""
-        from synth_panel.llm.providers._openai_format import parse_openai_response
+        from althing.llm.providers._openai_format import parse_openai_response
 
         data = {
             "id": "x",
@@ -392,7 +392,7 @@ class TestParseOpenaiResponse:
 
     def test_missing_cost_is_none_not_zero(self):
         """Absent provider cost must be None so resolve_cost falls back to table."""
-        from synth_panel.llm.providers._openai_format import parse_openai_response
+        from althing.llm.providers._openai_format import parse_openai_response
 
         data = {
             "id": "x",
@@ -413,7 +413,7 @@ class TestParseOpenaiSseStream:
     """Test OpenAI SSE stream parsing."""
 
     def test_text_stream(self):
-        from synth_panel.llm.providers._openai_format import parse_openai_sse_stream
+        from althing.llm.providers._openai_format import parse_openai_sse_stream
 
         lines = iter(
             [
@@ -435,7 +435,7 @@ class TestParseOpenaiSseStream:
         assert events[3].type == StreamEventType.MESSAGE_STOP
 
     def test_tool_call_stream(self):
-        from synth_panel.llm.providers._openai_format import parse_openai_sse_stream
+        from althing.llm.providers._openai_format import parse_openai_sse_stream
 
         lines = iter(
             [
@@ -449,7 +449,7 @@ class TestParseOpenaiSseStream:
         assert "tool_calls" in events[0].data
 
     def test_comment_lines_ignored(self):
-        from synth_panel.llm.providers._openai_format import parse_openai_sse_stream
+        from althing.llm.providers._openai_format import parse_openai_sse_stream
 
         lines = iter(
             [
@@ -463,7 +463,7 @@ class TestParseOpenaiSseStream:
         assert events[0].type == StreamEventType.CONTENT_BLOCK_DELTA
 
     def test_no_choices_emits_message_start(self):
-        from synth_panel.llm.providers._openai_format import parse_openai_sse_stream
+        from althing.llm.providers._openai_format import parse_openai_sse_stream
 
         lines = iter(
             [
@@ -476,7 +476,7 @@ class TestParseOpenaiSseStream:
         assert events[0].type == StreamEventType.MESSAGE_START
 
     def test_malformed_json_skipped(self):
-        from synth_panel.llm.providers._openai_format import parse_openai_sse_stream
+        from althing.llm.providers._openai_format import parse_openai_sse_stream
 
         lines = iter(
             [
@@ -501,7 +501,7 @@ class TestAnthropicProvider:
     """Test the Anthropic provider send/stream and helpers."""
 
     def test_send_success(self):
-        from synth_panel.llm.providers.anthropic import AnthropicProvider
+        from althing.llm.providers.anthropic import AnthropicProvider
 
         mock_resp = _mock_httpx_response(_anthropic_json_response("Hello!"))
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-test"}):
@@ -512,7 +512,7 @@ class TestAnthropicProvider:
         assert result.usage.input_tokens == 10
 
     def test_send_with_tool_use_response(self):
-        from synth_panel.llm.providers.anthropic import AnthropicProvider
+        from althing.llm.providers.anthropic import AnthropicProvider
 
         data = {
             "id": "msg_1",
@@ -531,7 +531,7 @@ class TestAnthropicProvider:
         assert result.stop_reason == StopReason.TOOL_USE
 
     def test_send_with_thinking_block(self):
-        from synth_panel.llm.providers.anthropic import AnthropicProvider
+        from althing.llm.providers.anthropic import AnthropicProvider
 
         data = {
             "id": "msg_2",
@@ -552,7 +552,7 @@ class TestAnthropicProvider:
         assert len(result.content) == 2
 
     def test_send_transport_error(self):
-        from synth_panel.llm.providers.anthropic import AnthropicProvider
+        from althing.llm.providers.anthropic import AnthropicProvider
 
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-test"}):
             provider = AnthropicProvider()
@@ -562,7 +562,7 @@ class TestAnthropicProvider:
             assert exc_info.value.category == LLMErrorCategory.TRANSPORT
 
     def test_send_non_200_status(self):
-        from synth_panel.llm.providers.anthropic import AnthropicProvider
+        from althing.llm.providers.anthropic import AnthropicProvider
 
         mock_resp = _mock_httpx_response({}, status_code=429)
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-test"}):
@@ -573,7 +573,7 @@ class TestAnthropicProvider:
             assert exc_info.value.category == LLMErrorCategory.RATE_LIMIT
 
     def test_send_json_decode_error(self):
-        from synth_panel.llm.providers.anthropic import AnthropicProvider
+        from althing.llm.providers.anthropic import AnthropicProvider
 
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -586,7 +586,7 @@ class TestAnthropicProvider:
             assert exc_info.value.category == LLMErrorCategory.DESERIALIZATION
 
     def test_missing_api_key(self):
-        from synth_panel.llm.providers.anthropic import AnthropicProvider
+        from althing.llm.providers.anthropic import AnthropicProvider
 
         with patch.dict(os.environ, {}, clear=True):
             os.environ.pop("ANTHROPIC_API_KEY", None)
@@ -595,7 +595,7 @@ class TestAnthropicProvider:
             assert exc_info.value.category == LLMErrorCategory.MISSING_CREDENTIALS
 
     def test_cache_token_usage(self):
-        from synth_panel.llm.providers.anthropic import AnthropicProvider
+        from althing.llm.providers.anthropic import AnthropicProvider
 
         data = {
             "id": "msg_3",
@@ -618,7 +618,7 @@ class TestAnthropicProvider:
         assert result.usage.cache_read_tokens == 80
 
     def test_build_body_with_system_and_tools(self):
-        from synth_panel.llm.providers.anthropic import AnthropicProvider
+        from althing.llm.providers.anthropic import AnthropicProvider
 
         req = CompletionRequest(
             model="claude-sonnet-4-6-20250414",
@@ -636,7 +636,7 @@ class TestAnthropicProvider:
         assert body["tool_choice"] == {"type": "any"}
 
     def test_cache_control_on_system_prompt(self):
-        from synth_panel.llm.providers.anthropic import AnthropicProvider
+        from althing.llm.providers.anthropic import AnthropicProvider
 
         req = CompletionRequest(
             model="claude-sonnet-4-6-20250414",
@@ -655,7 +655,7 @@ class TestAnthropicProvider:
         assert system[0]["cache_control"] == {"type": "ephemeral"}
 
     def test_no_system_omits_system_key(self):
-        from synth_panel.llm.providers.anthropic import AnthropicProvider
+        from althing.llm.providers.anthropic import AnthropicProvider
 
         req = CompletionRequest(
             model="claude-sonnet-4-6-20250414",
@@ -668,7 +668,7 @@ class TestAnthropicProvider:
         assert "system" not in body
 
     def test_cache_control_on_last_user_message_last_text_block(self):
-        from synth_panel.llm.providers.anthropic import _build_messages
+        from althing.llm.providers.anthropic import _build_messages
 
         req = CompletionRequest(
             model="claude-sonnet-4-6-20250414",
@@ -687,7 +687,7 @@ class TestAnthropicProvider:
         assert "cache_control" not in first_user_content[0]
 
     def test_cache_control_only_on_last_user_message(self):
-        from synth_panel.llm.providers.anthropic import _build_messages
+        from althing.llm.providers.anthropic import _build_messages
 
         req = CompletionRequest(
             model="claude-sonnet-4-6-20250414",
@@ -700,7 +700,7 @@ class TestAnthropicProvider:
         assert messages[0]["content"][0]["cache_control"] == {"type": "ephemeral"}
 
     def test_cache_control_not_on_assistant_messages(self):
-        from synth_panel.llm.providers.anthropic import _build_messages
+        from althing.llm.providers.anthropic import _build_messages
 
         req = CompletionRequest(
             model="claude-sonnet-4-6-20250414",
@@ -719,8 +719,8 @@ class TestAnthropicAttachmentSerialization:
     """Wire serialization for image / document / html / url blocks (hq-l0lw)."""
 
     def test_image_inline_base64(self):
-        from synth_panel.llm.models import ImageBlock, InlineSource
-        from synth_panel.llm.providers.anthropic import _build_content_blocks
+        from althing.llm.models import ImageBlock, InlineSource
+        from althing.llm.providers.anthropic import _build_content_blocks
 
         out = _build_content_blocks([ImageBlock(source=InlineSource(data="AAAA"), media_type="image/png")])
         assert out == [
@@ -731,22 +731,22 @@ class TestAnthropicAttachmentSerialization:
         ]
 
     def test_image_url_source(self):
-        from synth_panel.llm.models import ImageBlock, URLSource
-        from synth_panel.llm.providers.anthropic import _build_content_blocks
+        from althing.llm.models import ImageBlock, URLSource
+        from althing.llm.providers.anthropic import _build_content_blocks
 
         out = _build_content_blocks([ImageBlock(source=URLSource(url="https://x/y.jpg"), media_type="image/jpeg")])
         assert out[0]["source"] == {"type": "url", "url": "https://x/y.jpg"}
 
     def test_image_file_ref_source(self):
-        from synth_panel.llm.models import FileRefSource, ImageBlock
-        from synth_panel.llm.providers.anthropic import _build_content_blocks
+        from althing.llm.models import FileRefSource, ImageBlock
+        from althing.llm.providers.anthropic import _build_content_blocks
 
         out = _build_content_blocks([ImageBlock(source=FileRefSource(file_id="f_1"), media_type="image/png")])
         assert out[0]["source"] == {"type": "file", "file_id": "f_1"}
 
     def test_image_with_cache_control(self):
-        from synth_panel.llm.models import ImageBlock, InlineSource
-        from synth_panel.llm.providers.anthropic import _build_content_blocks
+        from althing.llm.models import ImageBlock, InlineSource
+        from althing.llm.providers.anthropic import _build_content_blocks
 
         out = _build_content_blocks(
             [
@@ -760,16 +760,16 @@ class TestAnthropicAttachmentSerialization:
         assert out[0]["cache_control"] == {"type": "ephemeral"}
 
     def test_document_pdf_inline(self):
-        from synth_panel.llm.models import DocumentBlock, InlineSource
-        from synth_panel.llm.providers.anthropic import _build_content_blocks
+        from althing.llm.models import DocumentBlock, InlineSource
+        from althing.llm.providers.anthropic import _build_content_blocks
 
         out = _build_content_blocks([DocumentBlock(source=InlineSource(data="JVBERi0..."))])
         assert out[0]["type"] == "document"
         assert out[0]["source"]["media_type"] == "application/pdf"
 
     def test_html_block_lowers_to_text(self):
-        from synth_panel.llm.models import HTMLBlock
-        from synth_panel.llm.providers.anthropic import _build_content_blocks
+        from althing.llm.models import HTMLBlock
+        from althing.llm.providers.anthropic import _build_content_blocks
 
         out = _build_content_blocks([HTMLBlock(text="<b>hi</b>")])
         assert out == [{"type": "text", "text": "<b>hi</b>"}]
@@ -777,14 +777,14 @@ class TestAnthropicAttachmentSerialization:
     def test_url_block_at_wire_raises(self):
         # URLBlock must be lowered by the fetcher (hq-hqlp) before serialization.
         # If one reaches the wire, fail loudly rather than silently dropping it.
-        from synth_panel.llm.models import URLBlock
-        from synth_panel.llm.providers.anthropic import _build_content_blocks
+        from althing.llm.models import URLBlock
+        from althing.llm.providers.anthropic import _build_content_blocks
 
         with pytest.raises(ValueError, match="URLBlock"):
             _build_content_blocks([URLBlock(url="https://example.com")])
 
     def test_existing_text_block_serialization_unchanged(self):
-        from synth_panel.llm.providers.anthropic import _build_content_blocks
+        from althing.llm.providers.anthropic import _build_content_blocks
 
         out = _build_content_blocks([TextBlock(text="hi")])
         assert out == [{"type": "text", "text": "hi"}]
@@ -799,7 +799,7 @@ class TestAnthropicStream:
     """Test Anthropic SSE stream parsing."""
 
     def test_parse_sse_stream(self):
-        from synth_panel.llm.providers.anthropic import _parse_sse_stream
+        from althing.llm.providers.anthropic import _parse_sse_stream
 
         lines = iter(
             [
@@ -817,7 +817,7 @@ class TestAnthropicStream:
         assert events[2].type == StreamEventType.MESSAGE_STOP
 
     def test_ping_events_skipped(self):
-        from synth_panel.llm.providers.anthropic import _parse_sse_stream
+        from althing.llm.providers.anthropic import _parse_sse_stream
 
         lines = iter(
             [
@@ -832,7 +832,7 @@ class TestAnthropicStream:
         assert events[0].type == StreamEventType.MESSAGE_STOP
 
     def test_done_sentinel(self):
-        from synth_panel.llm.providers.anthropic import _parse_sse_stream
+        from althing.llm.providers.anthropic import _parse_sse_stream
 
         lines = iter(
             [
@@ -844,7 +844,7 @@ class TestAnthropicStream:
         assert events == []
 
     def test_comment_keepalive_ignored(self):
-        from synth_panel.llm.providers.anthropic import _parse_sse_stream
+        from althing.llm.providers.anthropic import _parse_sse_stream
 
         lines = iter(
             [
@@ -857,7 +857,7 @@ class TestAnthropicStream:
         assert len(events) == 1
 
     def test_unknown_event_type_skipped(self):
-        from synth_panel.llm.providers.anthropic import _sse_payload_to_event
+        from althing.llm.providers.anthropic import _sse_payload_to_event
 
         result = _sse_payload_to_event({"type": "unknown_event_xyz"})
         assert result is None
@@ -872,7 +872,7 @@ class TestAnthropicHelpers:
     """Test Anthropic serialization helpers."""
 
     def test_build_tool_choice_auto(self):
-        from synth_panel.llm.providers.anthropic import _build_tool_choice
+        from althing.llm.providers.anthropic import _build_tool_choice
 
         req = CompletionRequest(
             model="m",
@@ -883,7 +883,7 @@ class TestAnthropicHelpers:
         assert _build_tool_choice(req) == {"type": "auto"}
 
     def test_build_tool_choice_specific(self):
-        from synth_panel.llm.providers.anthropic import _build_tool_choice
+        from althing.llm.providers.anthropic import _build_tool_choice
 
         req = CompletionRequest(
             model="m",
@@ -894,13 +894,13 @@ class TestAnthropicHelpers:
         assert _build_tool_choice(req) == {"type": "tool", "name": "calc"}
 
     def test_build_tool_choice_none(self):
-        from synth_panel.llm.providers.anthropic import _build_tool_choice
+        from althing.llm.providers.anthropic import _build_tool_choice
 
         req = CompletionRequest(model="m", max_tokens=1, messages=[])
         assert _build_tool_choice(req) is None
 
     def test_build_content_blocks_with_tool_result(self):
-        from synth_panel.llm.providers.anthropic import _build_content_blocks
+        from althing.llm.providers.anthropic import _build_content_blocks
 
         blocks = [
             TextBlock(text="Hello"),
@@ -917,19 +917,19 @@ class TestAnthropicHelpers:
         assert result[1]["is_error"] is True
 
     def test_parse_content_block_unknown_type(self):
-        from synth_panel.llm.providers.anthropic import _parse_content_block
+        from althing.llm.providers.anthropic import _parse_content_block
 
         block = _parse_content_block({"type": "mystery", "data": 42})
         assert isinstance(block, TextBlock)
         assert "mystery" in block.text
 
     def test_parse_stop_reason_unknown(self):
-        from synth_panel.llm.providers.anthropic import _parse_stop_reason
+        from althing.llm.providers.anthropic import _parse_stop_reason
 
         assert _parse_stop_reason("something_weird") == StopReason.END_TURN
 
     def test_parse_stop_reason_none(self):
-        from synth_panel.llm.providers.anthropic import _parse_stop_reason
+        from althing.llm.providers.anthropic import _parse_stop_reason
 
         assert _parse_stop_reason(None) is None
 
@@ -943,7 +943,7 @@ class TestGeminiProvider:
     """Test the Gemini provider."""
 
     def test_send_success(self):
-        from synth_panel.llm.providers.gemini import GeminiProvider
+        from althing.llm.providers.gemini import GeminiProvider
 
         mock_resp = _mock_httpx_response(_openai_json_response("Gemini says hi"))
         with patch.dict(os.environ, {"GEMINI_API_KEY": "gk-test"}, clear=False):
@@ -953,7 +953,7 @@ class TestGeminiProvider:
         assert result.text == "Gemini says hi"
 
     def test_google_api_key_fallback(self):
-        from synth_panel.llm.providers.gemini import GeminiProvider
+        from althing.llm.providers.gemini import GeminiProvider
 
         env = {"GOOGLE_API_KEY": "google-key"}
         with patch.dict(os.environ, env, clear=True):
@@ -961,7 +961,7 @@ class TestGeminiProvider:
         assert provider._api_key == "google-key"
 
     def test_missing_both_keys(self):
-        from synth_panel.llm.providers.gemini import GeminiProvider
+        from althing.llm.providers.gemini import GeminiProvider
 
         with patch.dict(os.environ, {}, clear=True):
             with pytest.raises(LLMError) as exc_info:
@@ -969,7 +969,7 @@ class TestGeminiProvider:
             assert exc_info.value.category == LLMErrorCategory.MISSING_CREDENTIALS
 
     def test_send_transport_error(self):
-        from synth_panel.llm.providers.gemini import GeminiProvider
+        from althing.llm.providers.gemini import GeminiProvider
 
         with patch.dict(os.environ, {"GEMINI_API_KEY": "gk-test"}, clear=False):
             provider = GeminiProvider()
@@ -979,7 +979,7 @@ class TestGeminiProvider:
             assert exc_info.value.category == LLMErrorCategory.TRANSPORT
 
     def test_send_non_200(self):
-        from synth_panel.llm.providers.gemini import GeminiProvider
+        from althing.llm.providers.gemini import GeminiProvider
 
         mock_resp = _mock_httpx_response({}, status_code=500)
         with patch.dict(os.environ, {"GEMINI_API_KEY": "gk-test"}, clear=False):
@@ -990,7 +990,7 @@ class TestGeminiProvider:
             assert exc_info.value.category == LLMErrorCategory.SERVER_ERROR
 
     def test_send_json_error(self):
-        from synth_panel.llm.providers.gemini import GeminiProvider
+        from althing.llm.providers.gemini import GeminiProvider
 
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -1003,7 +1003,7 @@ class TestGeminiProvider:
             assert exc_info.value.category == LLMErrorCategory.DESERIALIZATION
 
     def test_headers_use_bearer(self):
-        from synth_panel.llm.providers.gemini import GeminiProvider
+        from althing.llm.providers.gemini import GeminiProvider
 
         with patch.dict(os.environ, {"GEMINI_API_KEY": "gk-test"}, clear=False):
             provider = GeminiProvider()
@@ -1020,7 +1020,7 @@ class TestOpenAICompatProvider:
     """Test the OpenAI-compatible provider."""
 
     def test_send_success(self):
-        from synth_panel.llm.providers.openai_compat import OpenAICompatibleProvider
+        from althing.llm.providers.openai_compat import OpenAICompatibleProvider
 
         mock_resp = _mock_httpx_response(_openai_json_response("OpenAI says hi"))
         with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-oai"}, clear=False):
@@ -1030,7 +1030,7 @@ class TestOpenAICompatProvider:
         assert result.text == "OpenAI says hi"
 
     def test_missing_api_key(self):
-        from synth_panel.llm.providers.openai_compat import OpenAICompatibleProvider
+        from althing.llm.providers.openai_compat import OpenAICompatibleProvider
 
         with patch.dict(os.environ, {}, clear=True):
             with pytest.raises(LLMError) as exc_info:
@@ -1038,7 +1038,7 @@ class TestOpenAICompatProvider:
             assert exc_info.value.category == LLMErrorCategory.MISSING_CREDENTIALS
 
     def test_send_transport_error(self):
-        from synth_panel.llm.providers.openai_compat import OpenAICompatibleProvider
+        from althing.llm.providers.openai_compat import OpenAICompatibleProvider
 
         with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-oai"}, clear=False):
             provider = OpenAICompatibleProvider()
@@ -1048,7 +1048,7 @@ class TestOpenAICompatProvider:
             assert exc_info.value.category == LLMErrorCategory.TRANSPORT
 
     def test_send_non_200(self):
-        from synth_panel.llm.providers.openai_compat import OpenAICompatibleProvider
+        from althing.llm.providers.openai_compat import OpenAICompatibleProvider
 
         mock_resp = _mock_httpx_response({}, status_code=401)
         with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-oai"}, clear=False):
@@ -1059,7 +1059,7 @@ class TestOpenAICompatProvider:
             assert exc_info.value.category == LLMErrorCategory.AUTHENTICATION
 
     def test_send_json_error(self):
-        from synth_panel.llm.providers.openai_compat import OpenAICompatibleProvider
+        from althing.llm.providers.openai_compat import OpenAICompatibleProvider
 
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -1072,7 +1072,7 @@ class TestOpenAICompatProvider:
             assert exc_info.value.category == LLMErrorCategory.DESERIALIZATION
 
     def test_custom_base_url(self):
-        from synth_panel.llm.providers.openai_compat import OpenAICompatibleProvider
+        from althing.llm.providers.openai_compat import OpenAICompatibleProvider
 
         with patch.dict(
             os.environ, {"OPENAI_API_KEY": "sk-oai", "OPENAI_BASE_URL": "http://localhost:8080"}, clear=False
@@ -1090,7 +1090,7 @@ class TestXAIProvider:
     """Test the xAI / Grok provider."""
 
     def test_send_success(self):
-        from synth_panel.llm.providers.xai import XAIProvider
+        from althing.llm.providers.xai import XAIProvider
 
         mock_resp = _mock_httpx_response(_openai_json_response("Grok says hi"))
         with patch.dict(os.environ, {"XAI_API_KEY": "xk-test"}, clear=False):
@@ -1100,7 +1100,7 @@ class TestXAIProvider:
         assert result.text == "Grok says hi"
 
     def test_missing_api_key(self):
-        from synth_panel.llm.providers.xai import XAIProvider
+        from althing.llm.providers.xai import XAIProvider
 
         with patch.dict(os.environ, {}, clear=True):
             with pytest.raises(LLMError) as exc_info:
@@ -1108,7 +1108,7 @@ class TestXAIProvider:
             assert exc_info.value.category == LLMErrorCategory.MISSING_CREDENTIALS
 
     def test_send_transport_error(self):
-        from synth_panel.llm.providers.xai import XAIProvider
+        from althing.llm.providers.xai import XAIProvider
 
         with patch.dict(os.environ, {"XAI_API_KEY": "xk-test"}, clear=False):
             provider = XAIProvider()
@@ -1118,7 +1118,7 @@ class TestXAIProvider:
             assert exc_info.value.category == LLMErrorCategory.TRANSPORT
 
     def test_send_non_200(self):
-        from synth_panel.llm.providers.xai import XAIProvider
+        from althing.llm.providers.xai import XAIProvider
 
         mock_resp = _mock_httpx_response({}, status_code=500)
         with patch.dict(os.environ, {"XAI_API_KEY": "xk-test"}, clear=False):
@@ -1129,7 +1129,7 @@ class TestXAIProvider:
             assert exc_info.value.category == LLMErrorCategory.SERVER_ERROR
 
     def test_send_json_error(self):
-        from synth_panel.llm.providers.xai import XAIProvider
+        from althing.llm.providers.xai import XAIProvider
 
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -1142,7 +1142,7 @@ class TestXAIProvider:
             assert exc_info.value.category == LLMErrorCategory.DESERIALIZATION
 
     def test_headers_use_bearer(self):
-        from synth_panel.llm.providers.xai import XAIProvider
+        from althing.llm.providers.xai import XAIProvider
 
         with patch.dict(os.environ, {"XAI_API_KEY": "xk-test"}, clear=False):
             provider = XAIProvider()
@@ -1159,7 +1159,7 @@ class TestOpenRouterProvider:
     """Test the OpenRouter provider."""
 
     def test_send_success(self):
-        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+        from althing.llm.providers.openrouter import OpenRouterProvider
 
         mock_resp = _mock_httpx_response(_openai_json_response("OpenRouter says hi"))
         with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}, clear=False):
@@ -1169,7 +1169,7 @@ class TestOpenRouterProvider:
         assert result.text == "OpenRouter says hi"
 
     def test_missing_api_key(self):
-        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+        from althing.llm.providers.openrouter import OpenRouterProvider
 
         with patch.dict(os.environ, {}, clear=True):
             with pytest.raises(LLMError) as exc_info:
@@ -1177,7 +1177,7 @@ class TestOpenRouterProvider:
             assert exc_info.value.category == LLMErrorCategory.MISSING_CREDENTIALS
 
     def test_send_transport_error(self):
-        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+        from althing.llm.providers.openrouter import OpenRouterProvider
 
         with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}, clear=False):
             provider = OpenRouterProvider()
@@ -1187,7 +1187,7 @@ class TestOpenRouterProvider:
             assert exc_info.value.category == LLMErrorCategory.TRANSPORT
 
     def test_send_non_200(self):
-        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+        from althing.llm.providers.openrouter import OpenRouterProvider
 
         mock_resp = _mock_httpx_response({}, status_code=500)
         with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}, clear=False):
@@ -1198,7 +1198,7 @@ class TestOpenRouterProvider:
             assert exc_info.value.category == LLMErrorCategory.SERVER_ERROR
 
     def test_send_json_error(self):
-        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+        from althing.llm.providers.openrouter import OpenRouterProvider
 
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -1211,14 +1211,14 @@ class TestOpenRouterProvider:
             assert exc_info.value.category == LLMErrorCategory.DESERIALIZATION
 
     def test_default_base_url(self):
-        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+        from althing.llm.providers.openrouter import OpenRouterProvider
 
         with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}, clear=False):
             provider = OpenRouterProvider()
         assert provider._base_url == "https://openrouter.ai/api"
 
     def test_custom_base_url(self):
-        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+        from althing.llm.providers.openrouter import OpenRouterProvider
 
         env = {"OPENROUTER_API_KEY": "or-test", "OPENROUTER_BASE_URL": "http://custom:8080"}
         with patch.dict(os.environ, env, clear=False):
@@ -1226,7 +1226,7 @@ class TestOpenRouterProvider:
         assert provider._base_url == "http://custom:8080"
 
     def test_headers_use_bearer(self):
-        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+        from althing.llm.providers.openrouter import OpenRouterProvider
 
         with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}, clear=False):
             provider = OpenRouterProvider()
@@ -1239,7 +1239,7 @@ class TestOpenRouterProvider:
         Without this flag, some upstream providers omit ``usage`` entirely,
         which zeros out panelist_cost / total_cost in the panel JSON output.
         """
-        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+        from althing.llm.providers.openrouter import OpenRouterProvider
 
         mock_resp = _mock_httpx_response(_openai_json_response("hi"))
         with patch.dict(os.environ, {"OPENROUTER_API_KEY": "or-test"}, clear=False):
@@ -1251,7 +1251,7 @@ class TestOpenRouterProvider:
 
     def test_stream_requests_detailed_usage(self):
         """sp-2xy: streaming requests must also set ``usage.include=true``."""
-        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+        from althing.llm.providers.openrouter import OpenRouterProvider
 
         # Minimal mock of an httpx streaming context manager
         mock_stream_cm = MagicMock()
@@ -1275,7 +1275,7 @@ class TestOpenRouterProvider:
         ``openrouter/anthropic/*`` traffic away from chat-completions onto
         OR's Anthropic Messages passthrough (different response shape).
         """
-        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+        from althing.llm.providers.openrouter import OpenRouterProvider
 
         payload = _openai_json_response("hello")
         payload["usage"] = {"prompt_tokens": 1234, "completion_tokens": 56, "total_tokens": 1290}
@@ -1289,7 +1289,7 @@ class TestOpenRouterProvider:
 
     def test_null_usage_does_not_crash(self):
         """sp-2xy: some providers return ``"usage": null`` — parser must tolerate it."""
-        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+        from althing.llm.providers.openrouter import OpenRouterProvider
 
         payload = _openai_json_response("hello")
         payload["usage"] = None  # Defensive: provider returned null instead of a dict
@@ -1305,7 +1305,7 @@ class TestOpenRouterProvider:
 
     def test_missing_usage_block_does_not_crash(self):
         """sp-2xy: some providers omit the ``usage`` block entirely."""
-        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+        from althing.llm.providers.openrouter import OpenRouterProvider
 
         payload = _openai_json_response("hello")
         payload.pop("usage", None)
@@ -1319,7 +1319,7 @@ class TestOpenRouterProvider:
 
     def test_send_429_surfaces_downstream_provider_and_type(self):
         """sy-2185: typed error JSON exposes downstream provider + error type."""
-        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+        from althing.llm.providers.openrouter import OpenRouterProvider
 
         body = {
             "error": {
@@ -1352,7 +1352,7 @@ class TestOpenRouterProvider:
 
     def test_send_429_generic_body_falls_back_gracefully(self):
         """sy-2185: a 429 without typed-error JSON must not crash."""
-        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+        from althing.llm.providers.openrouter import OpenRouterProvider
 
         mock_resp = _mock_httpx_response({}, status_code=429)
         mock_resp.headers = {}
@@ -1368,7 +1368,7 @@ class TestOpenRouterProvider:
 
     def test_send_429_malformed_body_falls_back_gracefully(self):
         """sy-2185: non-JSON body on 429 must not crash error construction."""
-        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+        from althing.llm.providers.openrouter import OpenRouterProvider
 
         mock_resp = MagicMock()
         mock_resp.status_code = 429
@@ -1387,7 +1387,7 @@ class TestOpenRouterProvider:
 
     def test_send_500_typed_error_keeps_server_error_category(self):
         """sy-2185: enrichment must not change the HTTP-status-derived category."""
-        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+        from althing.llm.providers.openrouter import OpenRouterProvider
 
         body = {
             "error": {
@@ -1416,7 +1416,7 @@ class TestOpenRouterProvider:
 
     def test_stream_429_surfaces_downstream_provider(self):
         """sy-2185: streaming path enriches errors the same as send()."""
-        from synth_panel.llm.providers.openrouter import OpenRouterProvider
+        from althing.llm.providers.openrouter import OpenRouterProvider
 
         body = {
             "error": {
@@ -1459,14 +1459,14 @@ class TestOpenAICompatOverrides:
     """Test OpenAICompatibleProvider with explicit base_url/api_key overrides."""
 
     def test_explicit_base_url(self):
-        from synth_panel.llm.providers.openai_compat import OpenAICompatibleProvider
+        from althing.llm.providers.openai_compat import OpenAICompatibleProvider
 
         provider = OpenAICompatibleProvider(base_url="http://localhost:11434", api_key="no-key-required")
         assert provider._base_url == "http://localhost:11434"
         assert provider._api_key == "no-key-required"
 
     def test_send_with_overrides(self):
-        from synth_panel.llm.providers.openai_compat import OpenAICompatibleProvider
+        from althing.llm.providers.openai_compat import OpenAICompatibleProvider
 
         provider = OpenAICompatibleProvider(base_url="http://localhost:11434", api_key="no-key-required")
         mock_resp = _mock_httpx_response(_openai_json_response("Local model says hi"))

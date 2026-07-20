@@ -1,4 +1,4 @@
-"""Tests for the registry cache layer (``synth_panel.registry.cache``).
+"""Tests for the registry cache layer (``althing.registry.cache``).
 
 Covers TTL, ETag conditional refresh, offline mode, stale fallback with
 warning, and the empty-registry graceful-degrade path.
@@ -14,7 +14,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from synth_panel.registry import (
+from althing.registry import (
     CACHE_FILENAME,
     CACHE_TTL,
     EMPTY_REGISTRY,
@@ -26,8 +26,8 @@ from synth_panel.registry import (
     resolve_pack,
     write_cache,
 )
-from synth_panel.registry.cache import load_registry
-from synth_panel.registry.fetch import REGISTRY_URL_ENV
+from althing.registry.cache import load_registry
+from althing.registry.fetch import REGISTRY_URL_ENV
 
 SAMPLE = {
     "schema_version": 1,
@@ -38,7 +38,7 @@ SAMPLE = {
             "name": "Traitprint",
             "description": "d",
             "repo": "example/traitprint",
-            "path": "synthpanel-pack.yaml",
+            "path": "althing-pack.yaml",
             "ref": "v0.1",
             "author": {"github": "example"},
             "tags": ["b2b"],
@@ -202,7 +202,7 @@ def test_no_cache_and_http_404_returns_empty_registry() -> None:
     assert data == EMPTY_REGISTRY
 
 
-# ---------- SYNTHPANEL_REGISTRY_OFFLINE ----------
+# ---------- ALTHING_REGISTRY_OFFLINE ----------
 
 
 def test_offline_env_var_prevents_any_network(
@@ -247,7 +247,7 @@ def test_offline_env_var_false_values_ignored(
     assert data == SAMPLE
 
 
-# ---------- SYNTHPANEL_REGISTRY_REFRESH ----------
+# ---------- ALTHING_REGISTRY_REFRESH ----------
 
 
 def test_refresh_env_bypasses_fresh_cache(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -280,7 +280,7 @@ def test_refresh_flag_argument_bypasses_fresh_cache() -> None:
     assert data["packs"] == []
 
 
-# ---------- SYNTHPANEL_REGISTRY_URL override on cache ----------
+# ---------- ALTHING_REGISTRY_URL override on cache ----------
 
 
 def test_url_change_invalidates_cache(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -347,7 +347,7 @@ def test_resolve_pack_missing_ref_defaults_to_main() -> None:
                 "name": "No Ref",
                 "description": "",
                 "repo": "example/no-ref",
-                "path": "synthpanel-pack.yaml",
+                "path": "althing-pack.yaml",
                 "author": {"github": "example"},
             }
         ],

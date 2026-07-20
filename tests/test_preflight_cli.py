@@ -11,8 +11,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from synth_panel.main import main
-from synth_panel.preflight import ModelProbe, PreflightReport
+from althing.main import main
+from althing.preflight import ModelProbe, PreflightReport
 
 BAD = "openrouter/google/gemini-2.0-flash-001"
 GOOD_A = "openrouter/openai/gpt-4o-mini"
@@ -33,7 +33,7 @@ def _report(reachable: list[str], unreachable: list[str]) -> PreflightReport:
     return PreflightReport(probes=probes)
 
 
-@patch("synth_panel.preflight.preflight_models")
+@patch("althing.preflight.preflight_models")
 def test_bad_slug_aborts_naming_it(
     mock_preflight: MagicMock,
     capsys: pytest.CaptureFixture[str],
@@ -64,8 +64,8 @@ def test_bad_slug_aborts_naming_it(
     mock_preflight.assert_called_once()
 
 
-@patch("synth_panel.orchestrator.AgentRuntime")
-@patch("synth_panel.preflight.preflight_models")
+@patch("althing.orchestrator.AgentRuntime")
+@patch("althing.preflight.preflight_models")
 def test_skip_preflight_bypasses_check(
     mock_preflight: MagicMock,
     mock_runtime: MagicMock,
@@ -73,9 +73,9 @@ def test_skip_preflight_bypasses_check(
 ) -> None:
     mock_preflight.return_value = _report([], [BAD])  # would abort if consulted
     runtime = MagicMock()
-    from synth_panel.cost import TokenUsage as CostTokenUsage
-    from synth_panel.persistence import ConversationMessage
-    from synth_panel.runtime import TurnSummary
+    from althing.cost import TokenUsage as CostTokenUsage
+    from althing.persistence import ConversationMessage
+    from althing.runtime import TurnSummary
 
     usage = CostTokenUsage(input_tokens=5, output_tokens=2)
     runtime.run_turn.return_value = TurnSummary(
@@ -110,7 +110,7 @@ def test_skip_preflight_bypasses_check(
     assert code == 0
 
 
-@patch("synth_panel.preflight.preflight_models")
+@patch("althing.preflight.preflight_models")
 def test_dry_run_performs_preflight(
     mock_preflight: MagicMock,
     capsys: pytest.CaptureFixture[str],
@@ -140,8 +140,8 @@ def test_dry_run_performs_preflight(
     mock_preflight.assert_called_once()
 
 
-@patch("synth_panel.orchestrator.AgentRuntime")
-@patch("synth_panel.preflight.preflight_models")
+@patch("althing.orchestrator.AgentRuntime")
+@patch("althing.preflight.preflight_models")
 def test_min_models_allows_degraded_run(
     mock_preflight: MagicMock,
     mock_runtime: MagicMock,
@@ -151,9 +151,9 @@ def test_min_models_allows_degraded_run(
     # 2 reachable, 1 bad; --min-models 2 should proceed with a warning.
     mock_preflight.return_value = _report([GOOD_A, GOOD_B], [BAD])
     runtime = MagicMock()
-    from synth_panel.cost import TokenUsage as CostTokenUsage
-    from synth_panel.persistence import ConversationMessage
-    from synth_panel.runtime import TurnSummary
+    from althing.cost import TokenUsage as CostTokenUsage
+    from althing.persistence import ConversationMessage
+    from althing.runtime import TurnSummary
 
     usage = CostTokenUsage(input_tokens=5, output_tokens=2)
     runtime.run_turn.return_value = TurnSummary(

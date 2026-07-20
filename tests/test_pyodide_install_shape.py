@@ -1,11 +1,11 @@
 """Tests for sy-v8z: `trafilatura` moved out of core dependencies into the
-``synthpanel[full]`` optional extra.
+``althing[full]`` optional extra.
 
-The bead was opened from boardroom bo-2ra after `synth_panel 1.2.0`'s
+The bead was opened from boardroom bo-2ra after `althing 1.2.0`'s
 `pyodide_safe_mode` runtime flag was discovered not to reach the
-*import-time* dependency cliff. `synthpanel 1.2.0` listed `trafilatura`
+*import-time* dependency cliff. `althing 1.2.0` listed `trafilatura`
 in `[project.dependencies]`, which hard-requires `lxml` (a C extension
-absent from the Cloudflare Python Workers curated set). `import synthpanel`
+absent from the Cloudflare Python Workers curated set). `import althing`
 therefore failed at Worker boot regardless of any runtime flag.
 
 These tests pin the install-shape contract so a future PR can't silently
@@ -18,10 +18,10 @@ re-introduce the cliff:
 2. **`trafilatura` is in `[project.optional-dependencies][full]`.** Pins
    the extras name so consumer documentation and migration guides keep
    working.
-3. **`import synth_panel.ensemble` succeeds when `trafilatura` is
+3. **`import althing.ensemble` succeeds when `trafilatura` is
    unimportable.** Simulates the pyodide environment by installing a
    meta-path finder that raises `ImportError` for `trafilatura` (and
-   `lxml`) and re-imports `synth_panel.ensemble` in a clean subprocess.
+   `lxml`) and re-imports `althing.ensemble` in a clean subprocess.
 4. **`synthesize_panel(..., pyodide_safe_mode=True, judge_enabled=False)`
    works without trafilatura installed.** End-to-end behavioural mirror
    of the boardroom pyodide invocation. Also a subprocess so the assertion
@@ -56,7 +56,7 @@ _PYPROJECT = _REPO_ROOT / "pyproject.toml"
 
 
 class TestInstallShape:
-    """Pin the contract that `pip install synthpanel` (no extras) does
+    """Pin the contract that `pip install althing` (no extras) does
     not pull `trafilatura` (and therefore not `lxml`)."""
 
     @pytest.fixture(scope="class")
@@ -141,21 +141,19 @@ def _run_under_pyodide_sim(body: str) -> subprocess.CompletedProcess[str]:
 
 class TestPyodideImportCliff:
     """The canonical Cloudflare Python Workers shape: trafilatura and lxml
-    are unimportable. `synth_panel.ensemble` and `synthesize_panel` must
+    are unimportable. `althing.ensemble` and `synthesize_panel` must
     work anyway."""
 
-    def test_import_synth_panel_ensemble_without_trafilatura(self) -> None:
+    def test_import_althing_ensemble_without_trafilatura(self) -> None:
         result = _run_under_pyodide_sim(
-            "import synth_panel.ensemble\n"
+            "import althing.ensemble\n"
             "import sys\n"
             "assert 'trafilatura' not in sys.modules, sys.modules.get('trafilatura')\n"
             "assert 'lxml' not in sys.modules, sys.modules.get('lxml')\n"
             "print('ok')\n"
         )
         assert result.returncode == 0, (
-            f"`import synth_panel.ensemble` failed under pyodide-sim.\n"
-            f"stdout:\n{result.stdout}\n"
-            f"stderr:\n{result.stderr}"
+            f"`import althing.ensemble` failed under pyodide-sim.\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
         )
         assert "ok" in result.stdout
 
@@ -164,9 +162,9 @@ class TestPyodideImportCliff:
         synthesize_panel must produce a SynthesisResult in
         pyodide_safe_mode + judge_enabled=False without trafilatura."""
         body = """
-from synth_panel.cost import ZERO_USAGE
-from synth_panel.ensemble import SynthesisResult, synthesize_panel
-from synth_panel.orchestrator import PanelistResult
+from althing.cost import ZERO_USAGE
+from althing.ensemble import SynthesisResult, synthesize_panel
+from althing.orchestrator import PanelistResult
 
 questions = [{"text": "What do you think?"}]
 panelists = [
@@ -204,7 +202,7 @@ print("ok")
 
 
 class TestFullExtraRegression:
-    """When `synthpanel[full]` is installed (the dev environment is one),
+    """When `althing[full]` is installed (the dev environment is one),
     the trafilatura step is reachable and `_step_trafilatura` is wired
     in. We don't exercise an end-to-end fetch here — `test_fetch_lower.py`
     already does — but we pin the symbol and skip cleanly when the extra
@@ -213,7 +211,7 @@ class TestFullExtraRegression:
     def test_step_trafilatura_returns_string_or_none(self) -> None:
         trafilatura = pytest.importorskip("trafilatura")
         assert trafilatura is not None  # extra installed
-        from synth_panel.fetch.ladder import _step_trafilatura
+        from althing.fetch.ladder import _step_trafilatura
 
         html = b"<html><body><article><p>Hello world.</p></article></body></html>"
         out = _step_trafilatura(html, "https://example.com/")

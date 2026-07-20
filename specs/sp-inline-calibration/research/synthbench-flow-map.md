@@ -1,13 +1,13 @@
-# SynthBench ↔ SynthPanel Data Flow — Research Summary
+# SynthBench ↔ Althing Data Flow — Research Summary
 
 ## 1. SynthBench's Ingestion of Synthpanel Output
 
 ### Provider contract
 
-`SynthPanelProvider` (`src/synthbench/providers/synthpanel.py:287-400`) implements two execution paths:
+`AlthingProvider` (`src/synthbench/providers/althing.py:287-400`) implements two execution paths:
 
-- **Direct API path** (`_HAS_SYNTH_PANEL_API=True`): imports `synth_panel.llm.client.LLMClient`, uses `ThreadPoolExecutor` for concurrency. Zero subprocess overhead (~1s/call saved).
-- **CLI fallback**: `synthpanel` binary via subprocess when API import fails.
+- **Direct API path** (`_HAS_SYNTH_PANEL_API=True`): imports `althing.llm.client.LLMClient`, uses `ThreadPoolExecutor` for concurrency. Zero subprocess overhead (~1s/call saved).
+- **CLI fallback**: `althing` binary via subprocess when API import fails.
 
 Config:
 - `model` (str): alias or canonical name
@@ -17,7 +17,7 @@ Config:
 
 ### Data consumed
 
-From `synthpanel panel run --output-format json`:
+From `althing panel run --output-format json`:
 ```
 data["rounds"][0]["results"][*].responses[i].response  → raw text
 data["rounds"][0]["results"][*].usage                  → token metadata
@@ -31,7 +31,7 @@ Provider extracts: (1) raw `.response` text per panelist × question; (2) select
 
 ### Idempotency
 
-**Re-runnable, no cache.** Each `get_distribution()` or `batch_get_distribution()` call re-invokes synthpanel. No checkpointing. By design.
+**Re-runnable, no cache.** Each `get_distribution()` or `batch_get_distribution()` call re-invokes althing. No checkpointing. By design.
 
 ## 2. Question Representation & Distribution Keying
 
@@ -67,7 +67,7 @@ Flow:
 2. Provider called with `question.text` + `question.options` directly
 3. Provider returns `Distribution` aligned to `question.options` ordering
 
-**No fuzzy-matching, no registry of synthpanel-output-question-name → SynthBench-key.** Integration assumes: SynthBench orchestrates (picks dataset, loads questions, calls provider); SynthPanel is invoked *only* by SynthBench's provider; `Question.key` is internal to dataset adapter, not exposed to synthpanel.
+**No fuzzy-matching, no registry of althing-output-question-name → SynthBench-key.** Integration assumes: SynthBench orchestrates (picks dataset, loads questions, calls provider); Althing is invoked *only* by SynthBench's provider; `Question.key` is internal to dataset adapter, not exposed to althing.
 
 ## 4. Metric Computation
 
@@ -120,19 +120,19 @@ model_refusal_rate: float
 
 ## 5. Cross-Package Dependency Posture
 
-**One-way: SynthBench → synthpanel.** Provider calls synthpanel; synthpanel does NOT import SynthBench in core paths.
+**One-way: SynthBench → althing.** Provider calls althing; althing does NOT import SynthBench in core paths.
 
-**Optional extras** (`synthpanel/pyproject.toml:46-48`):
+**Optional extras** (`althing/pyproject.toml:46-48`):
 ```toml
 [project.optional-dependencies]
 convergence = ["synthbench>=0.1"]
 ```
 
-**Lazy import** (`src/synth_panel/convergence.py:554-608`): `load_synthbench_baseline(spec: str)` attempts `import synthbench` inside the function; raises `SynthbenchUnavailableError` with install instructions if missing. Calls synthbench's exported loader (tries `load_convergence_baseline`, `load_baseline`, `convergence_baseline` attribute). Returns baseline payload dict (human distribution + convergence metadata).
+**Lazy import** (`src/althing/convergence.py:554-608`): `load_synthbench_baseline(spec: str)` attempts `import synthbench` inside the function; raises `SynthbenchUnavailableError` with install instructions if missing. Calls synthbench's exported loader (tries `load_convergence_baseline`, `load_baseline`, `convergence_baseline` attribute). Returns baseline payload dict (human distribution + convergence metadata).
 
 **CLI flag** (`--convergence-baseline "gss:happiness"`): opt-in, only triggered if user explicitly requests.
 
-**No circular dependency.** Synthpanel core CLI works without synthbench. SynthBench includes synthpanel as a provider. Synthpanel imports synthbench lazily, at CLI time not import time.
+**No circular dependency.** Synthpanel core CLI works without synthbench. SynthBench includes althing as a provider. Synthpanel imports synthbench lazily, at CLI time not import time.
 
 ## 6. Nine Datasets & Redistribution Tiers
 
@@ -163,11 +163,11 @@ All in `src/synthbench/datasets/__init__.py:DATASETS`:
 
 ```bash
 synthbench run --provider raw-anthropic --model haiku --dataset opinionsqa --n 100 --samples 30 --output results/
-synthbench run --provider synthpanel --model sonnet --dataset gss --submit --wait
+synthbench run --provider althing --model sonnet --dataset gss --submit --wait
 ```
 
 Key calibration flags:
-- `--provider {raw-anthropic,raw-openai,raw-gemini,openrouter,ollama,synthpanel,http}`
+- `--provider {raw-anthropic,raw-openai,raw-gemini,openrouter,ollama,althing,http}`
 - `--model`, `--dataset`, `--samples`, `--suite {smoke,core,full}`, `--topic {political,consumer,neutral}`
 - `--baselines-dir PATH`
 - `--demographics` (AGE, POLIDEOLOGY, ...)
@@ -177,7 +177,7 @@ Key calibration flags:
 
 **No dedicated `synthbench report` subcommand.** Results land in `--output` directory as JSON.
 
-## 8. Inline-Consumption Integration Points (synthpanel side)
+## 8. Inline-Consumption Integration Points (althing side)
 
 ### Current convergence output structure (sp-0h9x, sp-yaru)
 
@@ -219,10 +219,10 @@ Key calibration flags:
 
 Natural integration points for inline calibration:
 
-1. **Per-question JSD attachment** — synthpanel already loads SynthBench baseline via `--convergence-baseline`. Could emit `per_question[key].human_jsd` during run. No data-model changes needed; wire additional metric computation in `_run_check_locked()`.
+1. **Per-question JSD attachment** — althing already loads SynthBench baseline via `--convergence-baseline`. Could emit `per_question[key].human_jsd` during run. No data-model changes needed; wire additional metric computation in `_run_check_locked()`.
 2. **Baseline question registry** — SynthBench datasets have stable keys (`"gss:spkath"`). Synthpanel instruments could tag questions with synthbench keys. `load_synthbench_baseline()` could load a full mapping payload, enabling per-question human distributions without manual alignment.
 3. **Output schema versioning** — `convergence` is opt-in; could become default when inline calibration is. `per_question_metrics` sibling could house JSD + refusal + token attribution per question without enlarging `convergence`.
-4. **CLI integration** — `synthpanel panel run --calibrate-against {gss,opinionsqa}` shorthand for `--convergence-baseline gss:*`. `synthpanel panel inspect --calibration` rendering.
+4. **CLI integration** — `althing panel run --calibrate-against {gss,opinionsqa}` shorthand for `--convergence-baseline gss:*`. `althing panel inspect --calibration` rendering.
 5. **MCP attachment** — `compare_against_synthbench(result_id, dataset, question_key)` tool in MCP server.
 
 Only current seam is `load_synthbench_baseline()`; no reverse direction needed beyond the optional `convergence` extra already declared.

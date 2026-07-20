@@ -1,4 +1,4 @@
-"""Unit tests for ``synth_panel.fetch.lower`` (URLBlock frame-stage lowering, hq-8iz3).
+"""Unit tests for ``althing.fetch.lower`` (URLBlock frame-stage lowering, hq-8iz3).
 
 Covers the AC from the bead:
 
@@ -25,16 +25,16 @@ import time
 
 import pytest
 
-from synth_panel.fetch import lower as lower_mod
-from synth_panel.fetch.cache import CacheEntry, CacheHit, CacheL1
-from synth_panel.fetch.ladder import (
+from althing.fetch import lower as lower_mod
+from althing.fetch.cache import CacheEntry, CacheHit, CacheL1
+from althing.fetch.ladder import (
     AttachmentIntent,
     ExtractionFailed,
     LadderResult,
 )
-from synth_panel.fetch.lower import AttachmentFetchError
-from synth_panel.fetch.perimeter import PerimeterDeny
-from synth_panel.llm.models import (
+from althing.fetch.lower import AttachmentFetchError
+from althing.fetch.perimeter import PerimeterDeny
+from althing.llm.models import (
     ImageBlock,
     InlineSource,
     TextBlock,
@@ -170,7 +170,7 @@ def test_l1_hit_short_circuits_extract(monkeypatch) -> None:
 
     We pre-seed the L1 and assert that ``safe_fetch`` is never called.
     """
-    import synth_panel.fetch.ladder as ladder_mod
+    import althing.fetch.ladder as ladder_mod
 
     l1 = CacheL1()
     url = "https://example.com/cached-page"

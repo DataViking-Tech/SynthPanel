@@ -38,7 +38,7 @@
 | pricing-discovery | — | **none** | SynthBench is opinion-focused; no willingness-to-pay questions |
 | feature-prioritization | pewtech, opinionsqa | LOW | SynthBench rarely asks feature ranking |
 | churn-diagnosis | pewtech, globalopinionqa, michigan | MED | michigan "switch" proxy; pewtech tech satisfaction |
-| landing-page-comprehension | — | **none** | SynthBench is pure opinion; synthpanel targets comprehension |
+| landing-page-comprehension | — | **none** | SynthBench is pure opinion; althing targets comprehension |
 | name-test | globalopinionqa, opinionsqa | very weak | Opinions not brand perception |
 | general-survey | pewtech, opinionsqa, globalopinionqa, michigan | **STRONG** | Tech attitudes, business/economic outlook, broad opinion |
 
@@ -55,12 +55,12 @@
 
 ### Easy (no transformation)
 
-1. **general-survey ↔ pewtech / opinionsqa / globalopinionqa.** Both have open-opinion questions. Extraction schema can categorize synthpanel free responses: `pick_one`, `ranking`, or `likert`. Example: "What trend are you most optimistic about?" → extract enum (technology / economy / health / none) → compare to WVS/OpinionsQA political-economic outlook distributions.
+1. **general-survey ↔ pewtech / opinionsqa / globalopinionqa.** Both have open-opinion questions. Extraction schema can categorize althing free responses: `pick_one`, `ranking`, or `likert`. Example: "What trend are you most optimistic about?" → extract enum (technology / economy / health / none) → compare to WVS/OpinionsQA political-economic outlook distributions.
 2. **product-feedback NPS ↔ pewtech / globalopinionqa.** Extract NPS score 0-10 from "On a scale of 0-10" text → Likert. Compare directly to globalopinionqa 0-10 scales. JSD on {0-3: dissatisfied, 4-6: neutral, 7-8: satisfied, 9-10: promoters}.
 
 ### Moderate (light transformation)
 
-1. **churn-diagnosis ↔ michigan.** Synthpanel "What was broken?" → extract as problem category. Michigan "Good time to buy?" → {Good, Pro-Con, Bad}. Map synthpanel categories to michigan sentiment.
+1. **churn-diagnosis ↔ michigan.** Synthpanel "What was broken?" → extract as problem category. Michigan "Good time to buy?" → {Good, Pro-Con, Bad}. Map althing categories to michigan sentiment.
 2. **product-feedback feature-satisfaction ↔ pewtech.** Synthpanel "How satisfied with core functionality?" → extract satisfaction level or feature category. PewTech "Adopt this technology?" → enum. Binary/ternary satisfaction bridge.
 
 ### Difficult (heavy extraction required)
@@ -75,10 +75,10 @@
 All 8 instruments declare `response_schema` on every question — but every one is `type: text`. No enum/Likert/yes-no schema defined anywhere in bundled instruments.
 
 **Implications:**
-- Distributional comparison requires **post-hoc extraction** via synthpanel's `structured/` module
+- Distributional comparison requires **post-hoc extraction** via althing's `structured/` module
 - `--extract-schema` or inline `StructuredOutputConfig(schema=LIKERT_SCHEMA)` converts free text → bounded distribution
 - Ground-truth key: `Question.human_distribution` in SynthBench
-- Synthetic key: extracted enum/likert distribution from synthpanel response
+- Synthetic key: extracted enum/likert distribution from althing response
 
 ## 7. Coverage Matrix
 

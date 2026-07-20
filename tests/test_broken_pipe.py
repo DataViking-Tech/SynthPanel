@@ -1,9 +1,9 @@
 """sy-4bs: piping CLI output into a short-circuiting consumer is silent.
 
-Before this fix, ``synthpanel … --help | head`` printed
+Before this fix, ``althing … --help | head`` printed
 ``Exception ignored while flushing sys.stdout: BrokenPipeError`` to
 stderr because Python's interpreter shutdown flush hit the closed pipe.
-Agents that introspect SynthPanel by grepping ``--help`` (the documented
+Agents that introspect Althing by grepping ``--help`` (the documented
 pattern in README's Human Operator Quick Start) saw the traceback in
 their tool-output streams and treated it as a tool failure.
 
@@ -38,7 +38,7 @@ def test_quiet_broken_pipe_restores_sigpipe_default() -> None:
     if not hasattr(signal, "SIGPIPE"):
         pytest.skip("SIGPIPE not available on this platform (Windows)")
 
-    from synth_panel.main import _quiet_broken_pipe
+    from althing.main import _quiet_broken_pipe
 
     prior = signal.signal(signal.SIGPIPE, signal.SIG_IGN)
     try:
@@ -52,7 +52,7 @@ def test_quiet_broken_pipe_redirects_stdout_when_flush_fails() -> None:
     """If flushing stdout raises BrokenPipeError, the helper must dup2
     /dev/null onto stdout's fd. Verified at the syscall layer via mocks so
     the test doesn't fight pytest's stdout capture."""
-    from synth_panel.main import _quiet_broken_pipe
+    from althing.main import _quiet_broken_pipe
 
     fake_stdout = mock.Mock()
     fake_stdout.flush.side_effect = BrokenPipeError(32, "Broken pipe")
@@ -74,7 +74,7 @@ def test_quiet_broken_pipe_swallows_secondary_oserror() -> None:
     """If the recovery path itself fails (eg detached stdout), the helper
     must not raise — that would leak a traceback back to the caller and
     re-create the original problem."""
-    from synth_panel.main import _quiet_broken_pipe
+    from althing.main import _quiet_broken_pipe
 
     fake_stdout = mock.Mock()
     fake_stdout.flush.side_effect = BrokenPipeError(32, "Broken pipe")
@@ -89,11 +89,11 @@ def test_quiet_broken_pipe_swallows_secondary_oserror() -> None:
 
 
 def _run_piped(args: list[str], head_lines: int = 3) -> tuple[int, bytes, bytes]:
-    """Run ``python -m synth_panel <args> | head -N`` and return the pipeline
-    exit code, head's stdout, and synthpanel's stderr."""
+    """Run ``python -m althing <args> | head -N`` and return the pipeline
+    exit code, head's stdout, and althing's stderr."""
     env = {**os.environ, "PYTHONPATH": str(REPO_ROOT / "src")}
     sp = subprocess.Popen(
-        [sys.executable, "-m", "synth_panel", *args],
+        [sys.executable, "-m", "althing", *args],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         env=env,
@@ -113,20 +113,20 @@ def _run_piped(args: list[str], head_lines: int = 3) -> tuple[int, bytes, bytes]
     return sp.returncode, head_out, sp_err
 
 
-def _synthpanel_importable() -> bool:
-    """Skip integration tests when synthpanel can't be imported (missing
+def _althing_importable() -> bool:
+    """Skip integration tests when althing can't be imported (missing
     optional deps in the test environment). The unit tests above still
     cover the fix's contract."""
     try:
-        import synth_panel  # noqa: F401
-        from synth_panel.cli import parser  # noqa: F401
+        import althing  # noqa: F401
+        from althing.cli import parser  # noqa: F401
 
         return True
     except Exception:
         return False
 
 
-needs_cli = pytest.mark.skipif(not _synthpanel_importable(), reason="synthpanel CLI not importable in this environment")
+needs_cli = pytest.mark.skipif(not _althing_importable(), reason="althing CLI not importable in this environment")
 
 
 @needs_cli

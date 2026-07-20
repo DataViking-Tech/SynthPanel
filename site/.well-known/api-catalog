@@ -1,29 +1,29 @@
 {
   "linkset": [
     {
-      "anchor": "https://synthpanel.dev/",
+      "anchor": "https://althing.dev/",
       "links": [
         {
           "rel": "service-desc",
-          "href": "https://raw.githubusercontent.com/DataViking-Tech/SynthPanel/main/server.json",
+          "href": "https://raw.githubusercontent.com/DataViking-Tech/Althing/main/server.json",
           "type": "application/json",
-          "title": "synthpanel MCP server descriptor (modelcontextprotocol.io schema)"
+          "title": "althing MCP server descriptor (modelcontextprotocol.io schema)"
         },
         {
           "rel": "service-doc",
-          "href": "https://synthpanel.dev/mcp",
+          "href": "https://althing.dev/mcp",
           "type": "text/html",
           "title": "MCP server install + tool reference"
         },
         {
           "rel": "service-doc",
-          "href": "https://synthpanel.dev/docs/panel-run",
+          "href": "https://althing.dev/docs/panel-run",
           "type": "text/html",
-          "title": "synthpanel CLI — panel run reference"
+          "title": "althing CLI — panel run reference"
         },
         {
           "rel": "status",
-          "href": "https://github.com/DataViking-Tech/SynthPanel/issues",
+          "href": "https://github.com/DataViking-Tech/Althing/issues",
           "type": "text/html",
           "title": "Project status, open issues, releases"
         }

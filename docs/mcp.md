@@ -1,11 +1,11 @@
 # MCP Server Reference
 
-synthpanel ships an [MCP](https://modelcontextprotocol.io/) server so AI agents can run synthetic focus groups as tool calls. The server uses stdio transport and defaults to the `haiku` model for cheap, fast iterative use.
+althing ships an [MCP](https://modelcontextprotocol.io/) server so AI agents can run synthetic focus groups as tool calls. The server uses stdio transport and defaults to the `haiku` model for cheap, fast iterative use.
 
 ## Starting the Server
 
 ```bash
-synthpanel mcp-serve
+althing mcp-serve
 ```
 
 The server communicates over stdin/stdout using JSON-RPC (the MCP protocol). It is designed to be launched by an MCP-aware editor or agent framework.
@@ -17,16 +17,16 @@ The server communicates over stdin/stdout using JSON-RPC (the MCP protocol). It 
 The fastest path is the bundled installer (sy-skf, synthbench#262):
 
 ```bash
-synthpanel mcp install                                 # writes ~/.claude.json (Claude Code)
-synthpanel mcp install --scope project                 # writes ./.mcp.json (checked in)
-synthpanel mcp install --host claude-desktop           # platform-specific Claude Desktop config
-synthpanel mcp install --host cursor                   # ~/.cursor/mcp.json (--scope project → ./.cursor/mcp.json)
-synthpanel mcp install --host windsurf                 # ~/.codeium/windsurf/mcp_config.json
-synthpanel mcp install --host zed                      # ~/.config/zed/settings.json (context_servers schema)
-synthpanel mcp install --host auto                     # detect installed hosts, confirm each (--yes accepts all)
-synthpanel mcp install --target /path/to/mcp.json      # any other host with an mcpServers map
-synthpanel mcp install --env ANTHROPIC_API_KEY=sk-...  # bake credentials into the entry (optional)
-synthpanel mcp uninstall --host zed                    # remove exactly the entry the installer manages
+althing mcp install                                 # writes ~/.claude.json (Claude Code)
+althing mcp install --scope project                 # writes ./.mcp.json (checked in)
+althing mcp install --host claude-desktop           # platform-specific Claude Desktop config
+althing mcp install --host cursor                   # ~/.cursor/mcp.json (--scope project → ./.cursor/mcp.json)
+althing mcp install --host windsurf                 # ~/.codeium/windsurf/mcp_config.json
+althing mcp install --host zed                      # ~/.config/zed/settings.json (context_servers schema)
+althing mcp install --host auto                     # detect installed hosts, confirm each (--yes accepts all)
+althing mcp install --target /path/to/mcp.json      # any other host with an mcpServers map
+althing mcp install --env ANTHROPIC_API_KEY=sk-...  # bake credentials into the entry (optional)
+althing mcp uninstall --host zed                    # remove exactly the entry the installer manages
 ```
 
 The command merges into the host's existing servers map (`mcpServers`,
@@ -40,14 +40,14 @@ config for an editor that isn't installed. After a real write it prints
 
 No secret is written unless you pass `--env` explicitly: by default the
 entry has no `env` block and the installer prints a note pointing at
-`synthpanel login` / provider env vars (sampling-capable hosts need no
+`althing login` / provider env vars (sampling-capable hosts need no
 key at all — see [Sampling Mode](#sampling-mode)).
 
 The installer also refuses by default when the `mcp` optional extra
 isn't installed in the current Python env — without it,
-`synthpanel mcp-serve` would crash at launch time and the host would
+`althing mcp-serve` would crash at launch time and the host would
 report a generic "server failed to start" with no actionable hint. The
-refusal points at the one-line fix (`pip install 'synthpanel[mcp]'`) and
+refusal points at the one-line fix (`pip install 'althing[mcp]'`) and
 mentions the `--allow-missing-extra` escape hatch for cross-machine
 setups where the editor and the server live in different envs (sy-xyn).
 Equivalent guard runs at `mcp-serve` start so a stale host config that
@@ -60,12 +60,12 @@ so you can pipe the preview through `jq`, redirect it to a file, or feed
 it back into the installer:
 
 ```bash
-synthpanel mcp install --target ~/.cursor/mcp.json --dry-run
-# stderr: Would install MCP server 'synth_panel' in /Users/you/.cursor/mcp.json.
-# stdout: { "mcpServers": { "synth_panel": { ... } } }
+althing mcp install --target ~/.cursor/mcp.json --dry-run
+# stderr: Would install MCP server 'althing' in /Users/you/.cursor/mcp.json.
+# stdout: { "mcpServers": { "althing": { ... } } }
 
-synthpanel mcp install --target ~/.cursor/mcp.json --dry-run 2>/dev/null \
-  | jq '.mcpServers.synth_panel'
+althing mcp install --target ~/.cursor/mcp.json --dry-run 2>/dev/null \
+  | jq '.mcpServers.althing'
 ```
 
 In `--output-format json` mode the entire payload (action, entry, and
@@ -77,8 +77,8 @@ If you'd rather hand-edit, the entry it produces is:
 ```json
 {
   "mcpServers": {
-    "synth_panel": {
-      "command": "synthpanel",
+    "althing": {
+      "command": "althing",
       "args": ["mcp-serve"],
       "env": { "ANTHROPIC_API_KEY": "sk-..." }
     }
@@ -94,10 +94,10 @@ Prefer a zero-config first run? Skip the `env` block entirely — see
 ### Claude Code Plugin
 
 ```
-/plugin install synthpanel
+/plugin install althing
 ```
 
-This adds the `/focus-group` skill plus the `/synthpanel-poll` slash command to your Claude Code session. The plugin auto-discovers the bundled `commands/` and `skills/` directories.
+This adds the `/focus-group` skill plus the `/althing-poll` slash command to your Claude Code session. The plugin auto-discovers the bundled `commands/` and `skills/` directories.
 
 Prefer to install without the plugin, or use a different host? See
 [Agent Skills & Slash Commands](agent-skills.md) for manual copy
@@ -111,8 +111,8 @@ fields. Add this block to your Hermes config:
 
 ```yaml
 mcp_servers:
-  synthpanel:
-    command: "synthpanel"
+  althing:
+    command: "althing"
     args: ["mcp-serve"]
     timeout: 180
     connect_timeout: 60
@@ -120,14 +120,14 @@ mcp_servers:
       ANTHROPIC_API_KEY: "sk-..."
 ```
 
-If you don't want to install the `synthpanel` binary globally, use
+If you don't want to install the `althing` binary globally, use
 [`uvx`](https://docs.astral.sh/uv/) to fetch and run it on demand:
 
 ```yaml
 mcp_servers:
-  synthpanel:
+  althing:
     command: "uvx"
-    args: ["--from", "synthpanel[mcp]", "synthpanel", "mcp-serve"]
+    args: ["--from", "althing[mcp]", "althing", "mcp-serve"]
     timeout: 180
     connect_timeout: 60
     env:
@@ -148,7 +148,7 @@ picked up.
 ### Other MCP hosts
 
 Any host that speaks the MCP stdio transport works the same way: launch
-`synthpanel mcp-serve` as a subprocess and pass provider keys through
+`althing mcp-serve` as a subprocess and pass provider keys through
 the environment. The Hermes block above is the canonical shape — most
 hosts map onto either that YAML form or the JSON form used by Claude
 Code / Cursor / Windsurf. If your host needs an explicit transport
@@ -159,14 +159,14 @@ field, set it to `stdio`.
 If you configured the MCP server manually (without `/plugin install`) you can still get all commands and skills by running:
 
 ```bash
-synthpanel install-skills
+althing install-skills
 ```
 
 This copies the bundled slash commands and skills into `~/.claude/`:
 
 | Type | Name | Installs to |
 |------|------|-------------|
-| Slash command | `/synthpanel-poll` | `~/.claude/commands/synthpanel-poll.md` |
+| Slash command | `/althing-poll` | `~/.claude/commands/althing-poll.md` |
 | Skill | `concept-test` | `~/.claude/skills/concept-test/SKILL.md` |
 | Skill | `focus-group` | `~/.claude/skills/focus-group/SKILL.md` |
 | Skill | `name-test` | `~/.claude/skills/name-test/SKILL.md` |
@@ -176,7 +176,7 @@ This copies the bundled slash commands and skills into `~/.claude/`:
 For a project-scoped install (places files in `.claude/` relative to the current directory instead of `~/.claude/`):
 
 ```bash
-synthpanel install-skills --target .claude
+althing install-skills --target .claude
 ```
 
 The command is idempotent — running it again overwrites existing files with the current bundled versions.
@@ -190,7 +190,7 @@ Every panel-running tool call (`run_panel`, `run_quick_poll`, `extend_panel`)
 - Echoed verbatim into `panel_verdict.meta.decision_being_informed`.
 - *Omitted* → v1.0.x grace: the server synthesizes
   `"unspecified-legacy-call"`, returns a `W_DECISION_MISSING` nudge in
-  `warnings[]`, and proceeds; under `SYNTHPANEL_SCHEMA_MIN>=1.1.0` omission
+  `warnings[]`, and proceeds; under `ALTHING_SCHEMA_MIN>=1.1.0` omission
   is a hard typed `MISSING_DECISION` reject.
 - Provided but empty after trim → `MISSING_DECISION`. `<12` chars →
   `INVALID_TOOL_ARG`. `>280` → `DECISION_TOO_LONG`. No silent truncation.
@@ -412,7 +412,7 @@ is not retrievable later — sampling always returns full transcripts regardless
 `run_panel`, `run_quick_poll`, and `extend_panel` accept an optional
 **`max_cost`** argument — a hard ceiling on the run's total spend, in USD. It
 is the MCP analog of the CLI's `--max-cost` and wires into the same `CostGate`
-machinery (`src/synth_panel/cost.py`): after each panelist completes,
+machinery (`src/althing/cost.py`): after each panelist completes,
 `running_cost / completed_n * total_n` is compared against the ceiling.
 
 ```jsonc
@@ -505,8 +505,8 @@ execution mode** (sampling vs BYOK) and, in BYOK, **which default
 model**. Both are deterministic and observable from the response payload
 (`mode` and `model` fields).
 
-Source of truth: `decide_mode()` in `src/synth_panel/mcp/sampling.py`
-and `_resolve_mcp_default_model()` in `src/synth_panel/mcp/server.py`.
+Source of truth: `decide_mode()` in `src/althing/mcp/sampling.py`
+and `_resolve_mcp_default_model()` in `src/althing/mcp/server.py`.
 
 ### Stage 1 — execution mode
 
@@ -524,7 +524,7 @@ and `_resolve_mcp_default_model()` in `src/synth_panel/mcp/server.py`.
 "Provider key available" means any of `ANTHROPIC_API_KEY`,
 `OPENAI_API_KEY`, `XAI_API_KEY`, `GOOGLE_API_KEY`, `GEMINI_API_KEY`, or
 `OPENROUTER_API_KEY` — checked first against the process environment,
-then against the on-disk credential store written by `synthpanel login`
+then against the on-disk credential store written by `althing login`
 (so MCP-launched subprocesses recognise keys the CLI can see).
 
 The auto rule "local key wins over sampling" exists so users who *have*
@@ -556,7 +556,7 @@ equivalent — today that means `openrouter/auto` →
 `openrouter/anthropic/claude-haiku-4.5` (OpenRouter's auto-router can
 pick a slow reasoning model, turning a 20-persona panel into a
 15-minute stall). The same policy applies on all three surfaces (MCP,
-SDK, `panel run`) via the shared `synth_panel.llm.fast_default` module,
+SDK, `panel run`) via the shared `althing.llm.fast_default` module,
 and each surface emits a one-line note when the swap fires. An explicit
 `model="openrouter/auto"` is always honored — the swap only touches the
 implicit default.
@@ -580,7 +580,7 @@ benefit from direct provider access and structured outputs.
 MCP has a spec-level feature called
 [**sampling**](https://modelcontextprotocol.io/specification/2025-03-26/client/sampling)
 where the server can ask the invoking client to run an LLM completion
-on its behalf. synthpanel uses this to deliver a zero-configuration
+on its behalf. althing uses this to deliver a zero-configuration
 first-run UX: if you haven't set a provider API key and your client
 advertises `sampling`, the `run_prompt` and `run_quick_poll` tools
 borrow the client's own LLM access instead of failing.
@@ -596,7 +596,7 @@ Sampling mode is intentionally less capable than BYOK:
   Claude; other clients may route through whichever provider they have
   configured). Cross-provider ensembles require BYOK.
 - **No cost accounting.** Token usage is charged to the host agent's
-  subscription; synthpanel returns `"usage": null` and `"cost": null`.
+  subscription; althing returns `"usage": null` and `"cost": null`.
 - **Capped panel size.** `run_quick_poll` is limited to 3 personas in
   sampling mode to protect the host agent's context window. Larger
   runs require BYOK.
@@ -633,7 +633,7 @@ provider access and structured outputs.
 
 ## Host Integration Flags
 
-### `SYNTHPANEL_DRIFT_DEGRADE`
+### `ALTHING_DRIFT_DEGRADE`
 
 Controls what the server returns when the structured-output engine's 3-strike
 retry budget exhausts (see the `sp-d1x0` retry policy).
@@ -662,12 +662,12 @@ Set in your MCP `env` block alongside provider keys:
 ```json
 {
   "mcpServers": {
-    "synth_panel": {
-      "command": "synthpanel",
+    "althing": {
+      "command": "althing",
       "args": ["mcp-serve"],
       "env": {
         "ANTHROPIC_API_KEY": "sk-...",
-        "SYNTHPANEL_DRIFT_DEGRADE": "1"
+        "ALTHING_DRIFT_DEGRADE": "1"
       }
     }
   }
@@ -680,10 +680,10 @@ diagram.
 
 ## Data Storage
 
-Panel results, persona packs, and instrument packs are stored under `~/.synthpanel/` (configurable via `SYNTH_PANEL_DATA_DIR`):
+Panel results, persona packs, and instrument packs are stored under `~/.althing/` (configurable via `SYNTH_PANEL_DATA_DIR`):
 
 ```
-~/.synthpanel/
+~/.althing/
 ├── persona_packs/          # Saved persona packs (YAML)
 ├── packs/instruments/      # Installed instrument packs (YAML)
 └── results/                # Panel results (JSON) + session data
@@ -691,9 +691,9 @@ Panel results, persona packs, and instrument packs are stored under `~/.synthpan
 
 ## Troubleshooting
 
-### `command not found: synthpanel`
+### `command not found: althing`
 
-The MCP host can't see the `synthpanel` binary on its `PATH`. This is
+The MCP host can't see the `althing` binary on its `PATH`. This is
 the single most common failure mode, because MCP subprocesses inherit
 the host's PATH — not your shell's.
 
@@ -701,17 +701,17 @@ the host's PATH — not your shell's.
 
 1. Install globally so any host can find it:
    ```bash
-   pip install "synthpanel[mcp]"      # or pipx install "synthpanel[mcp]"
-   which synthpanel                    # confirm the binary is on PATH
+   pip install "althing[mcp]"      # or pipx install "althing[mcp]"
+   which althing                    # confirm the binary is on PATH
    ```
 2. Or point `command` at the absolute binary path:
    ```jsonc
-   "command": "/Users/you/.venv/bin/synthpanel"
+   "command": "/Users/you/.venv/bin/althing"
    ```
 3. Or run it through `uvx` so the host fetches it on demand:
    ```jsonc
    "command": "uvx",
-   "args": ["--from", "synthpanel[mcp]", "synthpanel", "mcp-serve"]
+   "args": ["--from", "althing[mcp]", "althing", "mcp-serve"]
    ```
 
 Claude Desktop on macOS is particularly strict about PATH — it runs
@@ -723,15 +723,15 @@ absolute path or `uvx` for that host.
 The server launched but the host isn't seeing `run_panel`,
 `run_quick_poll`, etc. in the tool picker.
 
-- **MCP extra missing.** `pip install synthpanel` alone is not enough —
+- **MCP extra missing.** `pip install althing` alone is not enough —
   the MCP server requires the SDK from the `[mcp]` extra:
   ```bash
-  pip install "synthpanel[mcp]"
+  pip install "althing[mcp]"
   ```
 - **Stale host cache.** Some hosts cache the tool list per server entry.
   Restart the host (full quit, not just window close) after editing
   config or upgrading the package.
-- **Server logs.** Run `synthpanel mcp-serve` in a terminal to confirm
+- **Server logs.** Run `althing mcp-serve` in a terminal to confirm
   it boots and produces no errors before the host launches it.
 
 ### Missing or invalid API key
@@ -743,11 +743,11 @@ Symptom: tool calls return `MISSING_CREDS` or a provider-specific
   the host's inherited environment). Setting `ANTHROPIC_API_KEY` in
   your shell profile does **not** automatically propagate — put it in
   the `env` block of the MCP server entry.
-- Run `synthpanel login` to seed the on-disk credential store; the MCP
+- Run `althing login` to seed the on-disk credential store; the MCP
   server reads from there as a fallback when the env is empty (see
   [Model Resolution Order](#model-resolution-order)).
 - If your host advertises MCP `sampling` (Claude Desktop, Claude Code,
-  Cursor, Windsurf), you can omit the key entirely and synthpanel will
+  Cursor, Windsurf), you can omit the key entirely and althing will
   borrow the host's LLM access — see [Sampling Mode](#sampling-mode).
 
 ### Timeouts on long panel runs
@@ -759,7 +759,7 @@ Symptom: the host kills the subprocess mid-panel with a timeout error.
 - Raise the host's per-tool timeout. For Hermes:
   ```yaml
   mcp_servers:
-    synthpanel:
+    althing:
       timeout: 300         # 5 min for heavy panels
       connect_timeout: 60
   ```
@@ -780,6 +780,6 @@ envelope. `run_prompt` does not require it.
 
 The structured-output engine's 3-strike retry budget was exhausted.
 Either re-run the tool (transient model output drift is recoverable),
-or set `SYNTHPANEL_DRIFT_DEGRADE=1` in the MCP `env` block to get a
+or set `ALTHING_DRIFT_DEGRADE=1` in the MCP `env` block to get a
 degraded result with a `schema_drift` flag instead of an error — see
 [Host Integration Flags](#host-integration-flags).

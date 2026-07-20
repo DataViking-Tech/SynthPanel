@@ -2,15 +2,15 @@
 name: pricing-probe
 description: Probe pricing sensitivity with a target audience using the bundled 'pricing-discovery' branching instrument — surfaces pain, price anchoring, or competitor alternatives based on what the panel volunteers first.
 allowed-tools:
-  - mcp__synth_panel__run_panel
-  - mcp__synth_panel__get_instrument_pack
-  - mcp__synth_panel__list_instrument_packs
-  - mcp__synth_panel__list_persona_packs
-  - mcp__synth_panel__get_persona_pack
-  - mcp__synth_panel__run_quick_poll
+  - mcp__althing__run_panel
+  - mcp__althing__get_instrument_pack
+  - mcp__althing__list_instrument_packs
+  - mcp__althing__list_persona_packs
+  - mcp__althing__get_persona_pack
+  - mcp__althing__run_quick_poll
 ---
 
-You are running a **pricing sensitivity probe** using the synthpanel MCP tools and the bundled `pricing-discovery` v3 branching instrument.
+You are running a **pricing sensitivity probe** using the althing MCP tools and the bundled `pricing-discovery` v3 branching instrument.
 
 ## What You Do
 
@@ -23,10 +23,10 @@ You help the user understand how a target audience reasons about price for a pro
 
 ## Available MCP Tools
 
-- **`mcp__synth_panel__run_panel`** — Primary tool. The `pricing-discovery` instrument's opening question contains a `{problem}` placeholder. Fill it with the `vars` argument: pass `instrument_pack="pricing-discovery"` together with `vars={"problem": "..."}`. (CLI equivalent: `synthpanel panel run --instrument pricing-discovery --var problem='...'`.) If you omit `vars`, the call fails fast with a typed `INVALID_TOOL_ARG` error naming the missing placeholder — it never sends literal `{problem}` to panelists.
-- **`mcp__synth_panel__get_instrument_pack`** / **`mcp__synth_panel__list_instrument_packs`** — Inspect the bundled pricing-discovery pack (e.g. to see which placeholders it declares).
-- **`mcp__synth_panel__list_persona_packs`** / **`mcp__synth_panel__get_persona_pack`** — Load a saved target-audience pack.
-- **`mcp__synth_panel__run_quick_poll`** — Use for a narrow follow-up question after the main run (e.g. "Would $X/month feel fair?").
+- **`mcp__althing__run_panel`** — Primary tool. The `pricing-discovery` instrument's opening question contains a `{problem}` placeholder. Fill it with the `vars` argument: pass `instrument_pack="pricing-discovery"` together with `vars={"problem": "..."}`. (CLI equivalent: `althing panel run --instrument pricing-discovery --var problem='...'`.) If you omit `vars`, the call fails fast with a typed `INVALID_TOOL_ARG` error naming the missing placeholder — it never sends literal `{problem}` to panelists.
+- **`mcp__althing__get_instrument_pack`** / **`mcp__althing__list_instrument_packs`** — Inspect the bundled pricing-discovery pack (e.g. to see which placeholders it declares).
+- **`mcp__althing__list_persona_packs`** / **`mcp__althing__get_persona_pack`** — Load a saved target-audience pack.
+- **`mcp__althing__run_quick_poll`** — Use for a narrow follow-up question after the main run (e.g. "Would $X/month feel fair?").
 
 ## Workflow
 

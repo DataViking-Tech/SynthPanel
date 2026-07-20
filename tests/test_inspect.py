@@ -6,9 +6,9 @@ import json
 import tempfile
 from pathlib import Path
 
-from synth_panel.analysis.inspect import build_inspect_report, format_inspect_text
-from synth_panel.llm.aliases import resolve_alias
-from synth_panel.main import main
+from althing.analysis.inspect import build_inspect_report, format_inspect_text
+from althing.llm.aliases import resolve_alias
+from althing.main import main
 
 
 def _flat_result(n_errors: int = 0) -> dict:
@@ -192,12 +192,12 @@ def test_inspect_model_rollup_merges_alias_and_canonical(monkeypatch):
     """Regression for sp-f9jg: panelist keyed by alias must bucket with
     metadata.cost.per_model keyed by canonical id (no duplicate rows)."""
     # Pin a deterministic alias map so the test doesn't depend on the
-    # user's ~/.synthpanel/aliases.yaml or env overrides.
+    # user's ~/.althing/aliases.yaml or env overrides.
     monkeypatch.setenv(
-        "SYNTHPANEL_MODEL_ALIASES",
+        "ALTHING_MODEL_ALIASES",
         json.dumps({"haiku": "claude-haiku-4-5-20251001"}),
     )
-    from synth_panel.llm import aliases as aliases_mod
+    from althing.llm import aliases as aliases_mod
 
     aliases_mod._reset_cache()
     try:
@@ -262,7 +262,7 @@ def test_per_persona_summary_aligns_non_ascii_names():
     Regression: SP#298 — naive ``f"{name:<30}"`` counted code points, so
     a row with ``"王芳"`` shifted ``model=...`` left of an ASCII row.
     """
-    from synth_panel.text_width import display_width
+    from althing.text_width import display_width
 
     data = _flat_result(n_errors=0)
     data["results"][0]["persona"] = "Naoko 🌸"

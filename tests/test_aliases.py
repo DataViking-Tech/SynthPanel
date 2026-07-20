@@ -8,7 +8,7 @@ import textwrap
 
 import pytest
 
-from synth_panel.llm.aliases import (
+from althing.llm.aliases import (
     _reset_cache,
     get_base_url_override,
     resolve_alias,
@@ -20,13 +20,13 @@ def _clean_alias_cache(monkeypatch, tmp_path_factory):
     """Isolate alias resolution from the developer's real config.
 
     Without this, tier-3 (hardcoded) tests pick up the user's
-    ~/.synthpanel/aliases.yaml or SYNTHPANEL_MODEL_ALIASES env var and
+    ~/.althing/aliases.yaml or ALTHING_MODEL_ALIASES env var and
     silently fail (see sp-rmtj). Tests that exercise the file/env tiers
     monkeypatch these on top of the isolated baseline.
     """
-    monkeypatch.delenv("SYNTHPANEL_MODEL_ALIASES", raising=False)
+    monkeypatch.delenv("ALTHING_MODEL_ALIASES", raising=False)
     monkeypatch.setattr(
-        "synth_panel.llm.aliases._ALIASES_FILE",
+        "althing.llm.aliases._ALIASES_FILE",
         tmp_path_factory.mktemp("alias-iso") / "nope.yaml",
     )
     _reset_cache()
@@ -62,7 +62,7 @@ def test_updated_opus_alias_prices_at_current_tier():
     table prices at the current $5/$25 tier — the join point of the P1-7 fix.
     Before the fix, resolving ``opus`` and pricing it yielded the $15/$75
     Opus-3 tier, 3x too high."""
-    from synth_panel.cost import OPUS_PRICING, SONNET_PRICING, lookup_pricing
+    from althing.cost import OPUS_PRICING, SONNET_PRICING, lookup_pricing
 
     pricing, is_estimated = lookup_pricing(resolve_alias("opus"))
     assert pricing is OPUS_PRICING
@@ -107,27 +107,27 @@ def test_get_base_url_override_none():
 
 
 def test_env_var_overrides_hardcoded(monkeypatch):
-    monkeypatch.setenv("SYNTHPANEL_MODEL_ALIASES", json.dumps({"sonnet": "my-sonnet"}))
+    monkeypatch.setenv("ALTHING_MODEL_ALIASES", json.dumps({"sonnet": "my-sonnet"}))
     assert resolve_alias("sonnet") == "my-sonnet"
 
 
 def test_env_var_adds_new_alias(monkeypatch):
-    monkeypatch.setenv("SYNTHPANEL_MODEL_ALIASES", json.dumps({"fast": "claude-haiku-4-5-20251001"}))
+    monkeypatch.setenv("ALTHING_MODEL_ALIASES", json.dumps({"fast": "claude-haiku-4-5-20251001"}))
     assert resolve_alias("fast") == "claude-haiku-4-5-20251001"
     # hardcoded still works
     assert resolve_alias("opus").startswith("claude-opus")
 
 
 def test_env_var_invalid_json_ignored(monkeypatch, caplog):
-    monkeypatch.setenv("SYNTHPANEL_MODEL_ALIASES", "not json{")
-    with caplog.at_level(logging.WARNING, logger="synth_panel.llm.aliases"):
+    monkeypatch.setenv("ALTHING_MODEL_ALIASES", "not json{")
+    with caplog.at_level(logging.WARNING, logger="althing.llm.aliases"):
         # falls back to hardcoded
         assert resolve_alias("sonnet").startswith("claude-sonnet")
-    assert any("SYNTHPANEL_MODEL_ALIASES" in rec.getMessage() and "JSON" in rec.getMessage() for rec in caplog.records)
+    assert any("ALTHING_MODEL_ALIASES" in rec.getMessage() and "JSON" in rec.getMessage() for rec in caplog.records)
 
 
 def test_env_var_non_dict_ignored(monkeypatch):
-    monkeypatch.setenv("SYNTHPANEL_MODEL_ALIASES", json.dumps(["a", "b"]))
+    monkeypatch.setenv("ALTHING_MODEL_ALIASES", json.dumps(["a", "b"]))
     assert resolve_alias("sonnet").startswith("claude-sonnet")
 
 
@@ -142,7 +142,7 @@ def test_file_overrides_hardcoded(monkeypatch, tmp_path):
           sonnet: custom-sonnet-model
         """)
     )
-    monkeypatch.setattr("synth_panel.llm.aliases._ALIASES_FILE", aliases_file)
+    monkeypatch.setattr("althing.llm.aliases._ALIASES_FILE", aliases_file)
     assert resolve_alias("sonnet") == "custom-sonnet-model"
 
 
@@ -154,21 +154,21 @@ def test_file_adds_new_alias(monkeypatch, tmp_path):
           smart: claude-opus-4-6
         """)
     )
-    monkeypatch.setattr("synth_panel.llm.aliases._ALIASES_FILE", aliases_file)
+    monkeypatch.setattr("althing.llm.aliases._ALIASES_FILE", aliases_file)
     assert resolve_alias("smart") == "claude-opus-4-6"
     assert resolve_alias("sonnet").startswith("claude-sonnet")
 
 
 def test_file_missing_is_fine(monkeypatch, tmp_path):
-    monkeypatch.setattr("synth_panel.llm.aliases._ALIASES_FILE", tmp_path / "nope.yaml")
+    monkeypatch.setattr("althing.llm.aliases._ALIASES_FILE", tmp_path / "nope.yaml")
     assert resolve_alias("sonnet").startswith("claude-sonnet")
 
 
 def test_file_invalid_yaml_ignored(monkeypatch, tmp_path, caplog):
     aliases_file = tmp_path / "aliases.yaml"
     aliases_file.write_text(": : : not valid yaml [")
-    monkeypatch.setattr("synth_panel.llm.aliases._ALIASES_FILE", aliases_file)
-    with caplog.at_level(logging.WARNING, logger="synth_panel.llm.aliases"):
+    monkeypatch.setattr("althing.llm.aliases._ALIASES_FILE", aliases_file)
+    with caplog.at_level(logging.WARNING, logger="althing.llm.aliases"):
         assert resolve_alias("sonnet").startswith("claude-sonnet")
     assert any(
         str(aliases_file) in rec.getMessage() and "failed to parse" in rec.getMessage() for rec in caplog.records
@@ -184,7 +184,7 @@ def test_file_flat_format(monkeypatch, tmp_path):
         smart: claude-opus-4-6
         """)
     )
-    monkeypatch.setattr("synth_panel.llm.aliases._ALIASES_FILE", aliases_file)
+    monkeypatch.setattr("althing.llm.aliases._ALIASES_FILE", aliases_file)
     assert resolve_alias("fast") == "claude-haiku-4-5-20251001"
     assert resolve_alias("smart") == "claude-opus-4-6"
 
@@ -200,8 +200,8 @@ def test_env_beats_file(monkeypatch, tmp_path):
           sonnet: from-file
         """)
     )
-    monkeypatch.setattr("synth_panel.llm.aliases._ALIASES_FILE", aliases_file)
-    monkeypatch.setenv("SYNTHPANEL_MODEL_ALIASES", json.dumps({"sonnet": "from-env"}))
+    monkeypatch.setattr("althing.llm.aliases._ALIASES_FILE", aliases_file)
+    monkeypatch.setenv("ALTHING_MODEL_ALIASES", json.dumps({"sonnet": "from-env"}))
     assert resolve_alias("sonnet") == "from-env"
 
 
@@ -213,7 +213,7 @@ def test_file_beats_hardcoded(monkeypatch, tmp_path):
           sonnet: from-file
         """)
     )
-    monkeypatch.setattr("synth_panel.llm.aliases._ALIASES_FILE", aliases_file)
+    monkeypatch.setattr("althing.llm.aliases._ALIASES_FILE", aliases_file)
     assert resolve_alias("sonnet") == "from-file"
 
 
@@ -227,9 +227,9 @@ def test_all_three_tiers_merge(monkeypatch, tmp_path):
           shared: from-file
         """)
     )
-    monkeypatch.setattr("synth_panel.llm.aliases._ALIASES_FILE", aliases_file)
+    monkeypatch.setattr("althing.llm.aliases._ALIASES_FILE", aliases_file)
     monkeypatch.setenv(
-        "SYNTHPANEL_MODEL_ALIASES",
+        "ALTHING_MODEL_ALIASES",
         json.dumps({"env-only": "from-env", "shared": "from-env"}),
     )
     assert resolve_alias("opus").startswith("claude-opus")  # hardcoded

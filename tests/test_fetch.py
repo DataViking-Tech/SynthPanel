@@ -1,4 +1,4 @@
-"""Unit tests for ``synth_panel.fetch`` (perimeter, cache, ladder).
+"""Unit tests for ``althing.fetch`` (perimeter, cache, ladder).
 
 The full integration test suite — including a stub HTTP server, redirect
 chain fixtures, and DNS-rebinding harness — lives in hq-3o1r. This file
@@ -13,15 +13,15 @@ from pathlib import Path
 
 import pytest
 
-from synth_panel.fetch.cache import CacheEntry, CacheHit, CacheL1, UrlCache
-from synth_panel.fetch.ladder import (
+from althing.fetch.cache import CacheEntry, CacheHit, CacheL1, UrlCache
+from althing.fetch.ladder import (
     AttachmentIntent,
     ExtractionFailed,
     LadderConfig,
     OnFailure,
     extract,
 )
-from synth_panel.fetch.perimeter import (
+from althing.fetch.perimeter import (
     ALLOWED_CONTENT_TYPES,
     PerimeterDeny,
     ResolvedTarget,
@@ -251,7 +251,7 @@ def test_ladder_extract_visual_without_playwright_raises(monkeypatch, tmp_path: 
     ExtractionFailed before we touch the network."""
 
     # Force the screenshot step to act as if Playwright isn't installed.
-    import synth_panel.fetch.ladder as ladder_mod
+    import althing.fetch.ladder as ladder_mod
 
     monkeypatch.setattr(ladder_mod, "_step_screenshot", lambda url, cfg: None)
 

@@ -17,12 +17,12 @@ from __future__ import annotations
 
 import pytest
 
-from synth_panel.llm.capabilities import (
+from althing.llm.capabilities import (
     assert_supports_attachments,
     model_supports_vision,
 )
-from synth_panel.llm.errors import LLMError, LLMErrorCategory
-from synth_panel.llm.models import (
+from althing.llm.errors import LLMError, LLMErrorCategory
+from althing.llm.models import (
     CompletionRequest,
     DocumentBlock,
     ImageBlock,

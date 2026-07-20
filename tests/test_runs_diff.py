@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from synth_panel.diff import compute_diff, load_result
-from synth_panel.main import main
+from althing.diff import compute_diff, load_result
+from althing.main import main
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -1,6 +1,6 @@
 """Tests for the shared large-panel fast-default swap (synthbench#261).
 
-The policy lives in :mod:`synth_panel.llm.fast_default` and is consumed
+The policy lives in :mod:`althing.llm.fast_default` and is consumed
 by all three entry points: MCP (``_resolve_mcp_default_model_for_panel``,
 covered in tests/test_mcp_server.py), SDK (``sdk._default_model_for_panel``),
 and CLI (``panel run`` when ``--model`` is omitted).
@@ -12,8 +12,8 @@ import json
 
 import pytest
 
-from synth_panel.llm import fast_default
-from synth_panel.main import main
+from althing.llm import fast_default
+from althing.main import main
 
 _ALL_KEY_VARS = (
     "ANTHROPIC_API_KEY",
@@ -72,7 +72,7 @@ class TestSharedPolicy:
     def test_mcp_reexports_shared_values(self):
         """server.py must consume the shared policy, not a private copy."""
         pytest.importorskip("mcp")
-        from synth_panel.mcp import server
+        from althing.mcp import server
 
         assert server.LARGE_PANEL_PERSONA_THRESHOLD is fast_default.LARGE_PANEL_PERSONA_THRESHOLD
         assert server._LARGE_PANEL_FAST_MODEL_SWAP is fast_default.FAST_MODEL_SWAP
@@ -80,22 +80,22 @@ class TestSharedPolicy:
 
 class TestSdkDefault:
     def test_openrouter_only_env_swaps_for_large_panel(self, monkeypatch, caplog):
-        from synth_panel import sdk
+        from althing import sdk
 
         monkeypatch.setenv("OPENROUTER_API_KEY", "sk-x")
-        with caplog.at_level("WARNING", logger="synth_panel.sdk"):
+        with caplog.at_level("WARNING", logger="althing.sdk"):
             model = sdk._default_model_for_panel(20)
         assert model == "openrouter/anthropic/claude-haiku-4.5"
         assert any("auto-selected" in r.getMessage() for r in caplog.records)
 
     def test_openrouter_only_env_keeps_auto_for_small_panel(self, monkeypatch):
-        from synth_panel import sdk
+        from althing import sdk
 
         monkeypatch.setenv("OPENROUTER_API_KEY", "sk-x")
         assert sdk._default_model_for_panel(3) == "openrouter/auto"
 
     def test_anthropic_default_untouched(self, monkeypatch):
-        from synth_panel import sdk
+        from althing import sdk
 
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-x")
         assert sdk._default_model_for_panel(50) == "sonnet"

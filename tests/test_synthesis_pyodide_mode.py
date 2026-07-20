@@ -10,7 +10,7 @@ Three paths are covered:
 2. **Async-DI path** — passing an ``llm_client`` that conforms to
    :class:`AsyncLLMClient` turns the function into an awaitable that
    uses the consumer's async client end-to-end. The internal
-   synthpanel ``LLMClient`` (which uses ``threading.Lock`` + Semaphore)
+   althing ``LLMClient`` (which uses ``threading.Lock`` + Semaphore)
    is never instantiated.
 3. **Pyodide guard** — ``pyodide_safe_mode=True`` without an opt-out
    raises a clear ValueError rather than silently spawning a thread
@@ -25,14 +25,14 @@ import threading
 
 import pytest
 
-from synth_panel.cost import ZERO_USAGE, TokenUsage
-from synth_panel.ensemble import (
+from althing.cost import ZERO_USAGE, TokenUsage
+from althing.ensemble import (
     AsyncCompletion,
     AsyncLLMClient,
     SynthesisResult,
     synthesize_panel,
 )
-from synth_panel.orchestrator import PanelistResult
+from althing.orchestrator import PanelistResult
 
 _QUESTIONS = [
     {"text": "What do you think of the product?"},
@@ -198,7 +198,7 @@ class TestAsyncDI:
 
     def test_async_client_is_called(self) -> None:
         """The injected async client must be invoked end-to-end —
-        synthpanel must not fall back to its internal threading-based
+        althing must not fall back to its internal threading-based
         LLMClient when an async DI client is provided."""
         fake = _FakeAsyncClient()
         coro = synthesize_panel(
@@ -267,7 +267,7 @@ class TestAsyncDI:
         assert result.error == "async_client_returned_unparseable_output"
 
     def test_async_path_records_usage_when_provided(self) -> None:
-        """When the async client populates usage, synthpanel propagates
+        """When the async client populates usage, althing propagates
         it onto the result so cost dashboards stay accurate."""
         usage = TokenUsage(input_tokens=1000, output_tokens=400)
         fake = _FakeAsyncClient(usage=usage)
@@ -337,8 +337,8 @@ def test_v1_1_0_default_signature_unchanged() -> None:
     additive-only release."""
     from unittest.mock import MagicMock
 
-    from synth_panel.llm.models import CompletionResponse, ToolInvocationBlock
-    from synth_panel.llm.models import TokenUsage as LLMTokenUsage
+    from althing.llm.models import CompletionResponse, ToolInvocationBlock
+    from althing.llm.models import TokenUsage as LLMTokenUsage
 
     response_data = {
         "summary": "x",

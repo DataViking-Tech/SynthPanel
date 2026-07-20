@@ -1,4 +1,4 @@
-"""Tests for `synthpanel pack diff` (GH-308)."""
+"""Tests for `althing pack diff` (GH-308)."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from synth_panel.main import main
-from synth_panel.pack_diff import (
+from althing.main import main
+from althing.pack_diff import (
     _normalize_traits,
     _role_bucket,
     compute_pack_diff,

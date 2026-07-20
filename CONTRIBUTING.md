@@ -1,4 +1,4 @@
-# Contributing to synthpanel
+# Contributing to althing
 
 ## Development Setup
 
@@ -8,12 +8,12 @@ access, which is granted on request (see [Submitting Changes](#submitting-change
 
 ```bash
 # Standard contributor flow — fork, then clone your fork:
-gh repo fork DataViking-Tech/SynthPanel --clone
-cd SynthPanel
+gh repo fork DataViking-Tech/Althing --clone
+cd Althing
 
 # (Maintainers and granted collaborators only — direct clone of upstream)
-# git clone https://github.com/DataViking-Tech/SynthPanel.git
-# cd SynthPanel
+# git clone https://github.com/DataViking-Tech/Althing.git
+# cd Althing
 
 # Create a virtual environment (using uv or standard venv)
 uv venv .venv && source .venv/bin/activate
@@ -58,7 +58,7 @@ ruff check --fix src/ tests/
 ## Type Checking
 
 ```bash
-mypy src/synth_panel/
+mypy src/althing/
 ```
 
 ## Running the MCP Server Locally
@@ -66,7 +66,7 @@ mypy src/synth_panel/
 The MCP server uses stdio transport and is designed to be launched by an MCP-aware editor (Claude Code, Cursor, Windsurf, etc.):
 
 ```bash
-synthpanel mcp-serve
+althing mcp-serve
 ```
 
 For testing outside an editor, you can pipe JSON-RPC messages to stdin. See [docs/mcp.md](docs/mcp.md) for the full tool/resource/prompt reference.
@@ -74,13 +74,13 @@ For testing outside an editor, you can pipe JSON-RPC messages to stdin. See [doc
 ## Running Without Installing
 
 ```bash
-PYTHONPATH=src python3 -m synth_panel prompt "Hello"
+PYTHONPATH=src python3 -m althing prompt "Hello"
 ```
 
 ## Project Structure
 
 ```
-src/synth_panel/
+src/althing/
 ├── llm/              # Provider-agnostic LLM client
 │   ├── client.py     # Unified send/stream interface
 │   ├── aliases.py    # Model alias resolution
@@ -101,16 +101,16 @@ src/synth_panel/
 
 ## Adding a New LLM Provider
 
-Adapters are the highest-leverage contribution — one adapter brings every synthpanel feature to a new backend. See [docs/adapter-guide.md](docs/adapter-guide.md) for a step-by-step walkthrough, including a worked Mistral example, required tests, and PR checklist.
+Adapters are the highest-leverage contribution — one adapter brings every althing feature to a new backend. See [docs/adapter-guide.md](docs/adapter-guide.md) for a step-by-step walkthrough, including a worked Mistral example, required tests, and PR checklist.
 
 ## Submitting Changes
 
-1. Fork the repository (`gh repo fork DataViking-Tech/SynthPanel --clone`).
+1. Fork the repository (`gh repo fork DataViking-Tech/Althing --clone`).
 2. Create a feature branch from `main` on your fork: `git checkout -b feat/my-change`.
 3. Make your changes. Add tests for new functionality.
 4. Run the test suite: `pytest tests/`
 5. Run lint: `ruff check src/ tests/`
-6. Push to your fork and open a pull request against `DataViking-Tech/SynthPanel:main`.
+6. Push to your fork and open a pull request against `DataViking-Tech/Althing:main`.
 
 If you're contributing regularly and want to push branches directly to upstream
 instead of working from a fork, open a regular issue requesting collaborator

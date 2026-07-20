@@ -18,25 +18,25 @@ from pathlib import Path
 
 import pytest
 
-from synth_panel.cost import (
+from althing.cost import (
     BudgetError,
     BudgetGate,
     estimate_cost,
     lookup_pricing,
 )
-from synth_panel.llm.aliases import resolve_alias
-from synth_panel.llm.client import LLMClient
-from synth_panel.llm.errors import LLMError, LLMErrorCategory
-from synth_panel.llm.models import (
+from althing.llm.aliases import resolve_alias
+from althing.llm.client import LLMClient
+from althing.llm.errors import LLMError, LLMErrorCategory
+from althing.llm.models import (
     CompletionRequest,
     CompletionResponse,
     InputMessage,
     StreamEventType,
     TextBlock,
 )
-from synth_panel.persistence import Session, load_session, save_session
-from synth_panel.runtime import AgentRuntime
-from synth_panel.structured import StructuredOutputConfig, StructuredOutputEngine
+from althing.persistence import Session, load_session, save_session
+from althing.runtime import AgentRuntime
+from althing.structured import StructuredOutputConfig, StructuredOutputEngine
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -287,7 +287,7 @@ class TestCostTracking:
         response = client.send(_hello_request())
 
         # Convert LLM TokenUsage to cost-layer TokenUsage
-        from synth_panel.cost import TokenUsage as CostTokenUsage
+        from althing.cost import TokenUsage as CostTokenUsage
 
         cost_usage = CostTokenUsage(
             input_tokens=response.usage.input_tokens,
@@ -307,7 +307,7 @@ class TestCostTracking:
         client = LLMClient()
         response = client.send(_hello_request())
 
-        from synth_panel.cost import TokenUsage as CostTokenUsage
+        from althing.cost import TokenUsage as CostTokenUsage
 
         cost_usage = CostTokenUsage(
             input_tokens=response.usage.input_tokens,
@@ -454,7 +454,7 @@ class TestCLI:
 
     def _run(self, *args: str, expect_rc: int = 0) -> subprocess.CompletedProcess:
         result = subprocess.run(
-            [sys.executable, "-m", "synth_panel", *args],
+            [sys.executable, "-m", "althing", *args],
             capture_output=True,
             text=True,
             timeout=120,
@@ -553,7 +553,7 @@ class TestEndToEnd:
             [
                 sys.executable,
                 "-m",
-                "synth_panel",
+                "althing",
                 "panel",
                 "run",
                 "--personas",
@@ -588,7 +588,7 @@ class TestEndToEnd:
             [
                 sys.executable,
                 "-m",
-                "synth_panel",
+                "althing",
                 "panel",
                 "run",
                 "--personas",

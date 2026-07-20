@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import tempfile
 
-from synth_panel.analyze import (
+from althing.analyze import (
     DEFAULT_RESPONSE_CSV_COLUMNS,
     AnalysisResult,
     analysis_to_dict,
@@ -15,7 +15,7 @@ from synth_panel.analyze import (
     format_text,
     parse_response_csv_columns,
 )
-from synth_panel.main import main
+from althing.main import main
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -271,7 +271,7 @@ class TestTextFormat:
         """
         import re
 
-        from synth_panel.text_width import display_width
+        from althing.text_width import display_width
 
         data = _make_panel_result(n_personas=6)
         non_ascii_choices = ["José", "王芳", "Naoko 🌸", "agree"]
@@ -348,7 +348,7 @@ class TestCSVFormat:
 
 class TestCLI:
     def test_parser_accepts_analyze(self):
-        from synth_panel.cli.parser import build_parser
+        from althing.cli.parser import build_parser
 
         parser = build_parser()
         args = parser.parse_args(["analyze", "result-123"])
@@ -357,14 +357,14 @@ class TestCLI:
         assert args.output == "text"
 
     def test_parser_analyze_json(self):
-        from synth_panel.cli.parser import build_parser
+        from althing.cli.parser import build_parser
 
         parser = build_parser()
         args = parser.parse_args(["analyze", "result-123", "--output", "json"])
         assert args.output == "json"
 
     def test_parser_analyze_csv(self):
-        from synth_panel.cli.parser import build_parser
+        from althing.cli.parser import build_parser
 
         parser = build_parser()
         args = parser.parse_args(["analyze", "result-123", "--output", "csv"])
@@ -706,7 +706,7 @@ class TestResponsesCSV:
 
 class TestResponsesCSVCli:
     def test_parser_accepts_responses_csv(self):
-        from synth_panel.cli.parser import build_parser
+        from althing.cli.parser import build_parser
 
         parser = build_parser()
         args = parser.parse_args(

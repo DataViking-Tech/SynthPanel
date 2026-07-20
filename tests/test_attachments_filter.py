@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from synth_panel.attachments.filter import count_strata, filter_attachments
-from synth_panel.routing import _evaluate_predicate
+from althing.attachments.filter import count_strata, filter_attachments
+from althing.routing import _evaluate_predicate
 
 
 class TestEvaluatePredicateOpenFields:
@@ -194,7 +194,7 @@ class TestInstrumentValidatesAttachmentFilter:
     """The instrument parser must reject typo'd predicate ops at parse time."""
 
     def test_unknown_op_rejected(self):
-        from synth_panel.instrument import InstrumentError, parse_instrument
+        from althing.instrument import InstrumentError, parse_instrument
 
         instrument = {
             "version": 1,
@@ -214,7 +214,7 @@ class TestInstrumentValidatesAttachmentFilter:
             parse_instrument(instrument)
 
     def test_in_requires_list_value_at_parse(self):
-        from synth_panel.instrument import InstrumentError, parse_instrument
+        from althing.instrument import InstrumentError, parse_instrument
 
         instrument = {
             "version": 1,
@@ -234,7 +234,7 @@ class TestInstrumentValidatesAttachmentFilter:
         # ``attachments`` bank; the bank entry carries the per-persona
         # ``filter`` clause. Inline dict-shaped refs go in
         # ``inline_attachments`` instead.
-        from synth_panel.instrument import parse_instrument
+        from althing.instrument import parse_instrument
 
         instrument = {
             "version": 1,

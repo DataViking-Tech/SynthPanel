@@ -1,7 +1,7 @@
 """sy-547: post-hoc coercion of free-text answers to a typed response_schema.
 
 Covers the enum/scale mapping rules in
-:mod:`synth_panel.response_coercion`:
+:mod:`althing.response_coercion`:
 
 * ``"Blue."`` → ``"blue"`` (case + trailing punctuation normalized).
 * Unmappable / ambiguous answers report ``mapped=False`` (no fabrication).
@@ -11,7 +11,7 @@ Covers the enum/scale mapping rules in
 
 from __future__ import annotations
 
-from synth_panel.response_coercion import (
+from althing.response_coercion import (
     CoercionResult,
     coerce_enum,
     coerce_response,

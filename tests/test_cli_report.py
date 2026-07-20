@@ -1,4 +1,4 @@
-"""CLI integration tests for ``synthpanel report`` (sp-viz-layer T4).
+"""CLI integration tests for ``althing report`` (sp-viz-layer T4).
 
 Covers the five cases listed in ``specs/sp-viz-layer/structure.md`` §6:
 stdout-happy-path, file-output, not-found in TEXT and JSON modes, and
@@ -11,14 +11,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from synth_panel.main import main
-from synth_panel.reporting.markdown import BANNER, FOOTER
+from althing.main import main
+from althing.reporting.markdown import BANNER, FOOTER
 
 FIXTURES = Path(__file__).parent / "fixtures" / "reporting"
 
 
 def test_report_to_stdout(capsys):
-    """``synthpanel report <fixture.json>`` writes Markdown to stdout."""
+    """``althing report <fixture.json>`` writes Markdown to stdout."""
     fixture = FIXTURES / "flat_shape.json"
 
     code = main(["report", str(fixture)])
@@ -33,7 +33,7 @@ def test_report_to_stdout(capsys):
 
 
 def test_report_to_file(tmp_path, capsys):
-    """``synthpanel report <fixture.json> -o FILE`` writes Markdown to FILE."""
+    """``althing report <fixture.json> -o FILE`` writes Markdown to FILE."""
     fixture = FIXTURES / "flat_shape.json"
     out_file = tmp_path / "report.md"
 

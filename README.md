@@ -1,16 +1,16 @@
-# synthpanel
+# althing
 
-[![PyPI](https://img.shields.io/pypi/v/synthpanel.svg)](https://pypi.org/project/synthpanel/)
-[![CI](https://github.com/DataViking-Tech/SynthPanel/actions/workflows/ci.yml/badge.svg)](https://github.com/DataViking-Tech/SynthPanel/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/althing.svg)](https://pypi.org/project/althing/)
+[![CI](https://github.com/DataViking-Tech/Althing/actions/workflows/ci.yml/badge.svg)](https://github.com/DataViking-Tech/Althing/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Python versions](https://img.shields.io/pypi/pyversions/synthpanel.svg)](https://pypi.org/project/synthpanel/)
-[![MCP](https://img.shields.io/badge/MCP-enabled-brightgreen.svg)](https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/mcp.md)
-[![GHCR](https://img.shields.io/badge/ghcr.io-dataviking--tech%2Fsynthpanel-2496ED?logo=docker&logoColor=white)](https://github.com/DataViking-Tech/SynthPanel/pkgs/container/synthpanel)
+[![Python versions](https://img.shields.io/pypi/pyversions/althing.svg)](https://pypi.org/project/althing/)
+[![MCP](https://img.shields.io/badge/MCP-enabled-brightgreen.svg)](https://github.com/DataViking-Tech/Althing/blob/main/docs/mcp.md)
+[![GHCR](https://img.shields.io/badge/ghcr.io-dataviking--tech%2Falthing-2496ED?logo=docker&logoColor=white)](https://github.com/DataViking-Tech/Althing/pkgs/container/althing)
 [![Ko-fi](https://img.shields.io/badge/Support-Ko--fi-FF5E5B?logo=ko-fi)](https://ko-fi.com/dataviking)
 
-Site: <https://synthpanel.dev> · Benchmark: <https://synthbench.org>
+Site: <https://althing.dev> · Benchmark: <https://synthbench.org>
 
-**SynthPanel is the synthetic-population MCP server for AI agents.**
+**Althing is the synthetic-population MCP server for AI agents.**
 
 When your agent needs to know what a representative slice of humans would say
 about a decision — pricing, naming, friction points, copy — it makes one tool
@@ -57,7 +57,7 @@ SDK.
 
 > **Note (v1.0.6):** the v1.0.0 `panel_verdict` artifact (`headline`,
 > `convergence`, `dissent_count`, `flags[]`, `schema_version`) defined in
-> [`schemas/v1.0.0.json`](src/synth_panel/schemas/v1.0.0.json) is now **emitted
+> [`schemas/v1.0.0.json`](src/althing/schemas/v1.0.0.json) is now **emitted
 > on the success path** of the MCP panel tools (`run_panel`, `run_quick_poll`,
 > `extend_panel` in BYOK mode): it rides under the envelope's `panel_verdict`
 > key alongside the `synthesis` block above, and the response gate validates it
@@ -67,11 +67,11 @@ SDK.
 > the typed envelope (`error_code`, `schema_version`, `retry_safe`).
 
 ```bash
-pip install synthpanel
+pip install althing
 ```
 
 **Frozen contract:** the v1.0.0 schema lives in the package at
-[`synthpanel/schemas/v1.0.0.json`](src/synth_panel/schemas/v1.0.0.json) and is
+[`althing/schemas/v1.0.0.json`](src/althing/schemas/v1.0.0.json) and is
 echoed on every persisted-panel success envelope and every typed error
 (`schema_version: "1.0.0"`). Field-by-field reference:
 [docs/response-contract.md](docs/response-contract.md). Migrating from v0.12?
@@ -160,43 +160,43 @@ matches how you use Python tools:
 
 | Path | When | Command |
 |------|------|---------|
-| **pip** (in your project venv) | You're integrating SynthPanel as a library | `pip install synthpanel` |
-| **pip + MCP** (in your project venv) | You also want the MCP server for agent integration | `pip install 'synthpanel[mcp]'` |
-| **pipx** (global, isolated) | You want `synthpanel` on your PATH without polluting any project | `pipx install synthpanel` |
-| **uvx** (zero-install) | You just want to run it once — no install at all | `uvx --from synthpanel synthpanel --help` |
-| **source** (latest unreleased) | You want main-branch fixes ahead of the next PyPI cut | `pip install git+https://github.com/DataViking-Tech/SynthPanel.git@main` |
+| **pip** (in your project venv) | You're integrating Althing as a library | `pip install althing` |
+| **pip + MCP** (in your project venv) | You also want the MCP server for agent integration | `pip install 'althing[mcp]'` |
+| **pipx** (global, isolated) | You want `althing` on your PATH without polluting any project | `pipx install althing` |
+| **uvx** (zero-install) | You just want to run it once — no install at all | `uvx --from althing althing --help` |
+| **source** (latest unreleased) | You want main-branch fixes ahead of the next PyPI cut | `pip install git+https://github.com/DataViking-Tech/Althing.git@main` |
 
 After installing, verify the CLI is on your PATH and the runtime is sane
 *before* configuring providers:
 
 ```bash
-synthpanel --version              # smoke: package metadata + entry point dispatch
-synthpanel doctor --install-only  # install health only — no credentials needed
-synthpanel doctor                 # full preflight (install + credentials)
-synthpanel whoami                 # which providers (if any) have credentials
+althing --version              # smoke: package metadata + entry point dispatch
+althing doctor --install-only  # install health only — no credentials needed
+althing doctor                 # full preflight (install + credentials)
+althing whoami                 # which providers (if any) have credentials
 ```
 
 ### Package vs. module name
 
-The PyPI distribution and CLI entry point are spelled **`synthpanel`** (one
+The PyPI distribution and CLI entry point are spelled **`althing`** (one
 word). The importable Python module — the historical PEP 8 spelling — is
-**`synth_panel`** (two words, snake_case):
+**`althing`** (two words, snake_case):
 
 ```python
-import synth_panel                       # canonical
-from synth_panel import run_panel, sdk   # library use
+import althing                       # canonical
+from althing import run_panel, sdk   # library use
 ```
 
 ```bash
-synthpanel --version          # CLI
-python -m synth_panel --version  # canonical module form
-python -m synthpanel --version   # one-word alias also works (sy-het)
+althing --version          # CLI
+python -m althing --version  # canonical module form
+python -m althing --version   # one-word alias also works (sy-het)
 ```
 
-Both spellings resolve to the same code. The one-word `synthpanel` module
+Both spellings resolve to the same code. The one-word `althing` module
 is a thin shim (`__path__` redirect + ``__main__.py``) shipped so agents
 that guess `python -m <pypi-name>` don't hit a wall. New code should still
-prefer `import synth_panel` — it's what `__all__`, the docs, and the
+prefer `import althing` — it's what `__all__`, the docs, and the
 schemas refer to.
 
 `doctor` exits non-zero with actionable guidance when something's
@@ -206,8 +206,8 @@ it's the canonical "did the install land cleanly?" check, and
 wheel on every push, so all three commands are part of the supported
 contract.
 
-Use `synthpanel doctor --install-only` immediately after `pip install
-synthpanel` to validate the package, dependencies, and bundled packs
+Use `althing doctor --install-only` immediately after `pip install
+althing` to validate the package, dependencies, and bundled packs
 without provisioning a provider key — exit 0 in that mode means the
 install is healthy, even when credentials are not yet configured. The
 JSON output (`--output-format json doctor --install-only`) separates
@@ -216,94 +216,94 @@ can branch on each surface independently.
 
 Then provide an API key (Claude, OpenAI, Gemini, xAI, or any
 OpenAI-compatible provider) — either export it in your shell or persist
-it once via `synthpanel login`:
+it once via `althing login`:
 
 ```bash
 export ANTHROPIC_API_KEY="sk-..."
 # or
-synthpanel login --provider anthropic --api-key sk-...    # stored at
-# ~/.config/synthpanel/credentials.json, mode 0600
-synthpanel whoami
+althing login --provider anthropic --api-key sk-...    # stored at
+# ~/.config/althing/credentials.json, mode 0600
+althing whoami
 
 # Run a single prompt
-synthpanel prompt "What do you think of the name Traitprint for a career app?"
+althing prompt "What do you think of the name Traitprint for a career app?"
 
 # Run a full panel
-synthpanel panel run \
+althing panel run \
   --personas examples/personas.yaml \
   --instrument examples/survey.yaml
 ```
 
 ## Works with
 
-SynthPanel is **MCP-native** — it ships an MCP server, and every major
+Althing is **MCP-native** — it ships an MCP server, and every major
 agent framework now supports MCP as a first-class tool source. That
-means SynthPanel works out of the box with any framework that speaks
+means Althing works out of the box with any framework that speaks
 MCP, with zero framework-specific wrapper packages to install. Runnable
 examples for each framework live in
 [`examples/integrations/`](examples/integrations/README.md).
 
 | Framework | Example | Bridge | One-line install |
 |-----------|---------|--------|------------------|
-| [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/mcp/) | [openai_agents.py](examples/integrations/openai_agents.py) | Built-in `MCPServerStdio` | `pip install openai-agents synthpanel[mcp]` |
-| [LlamaIndex](https://docs.llamaindex.ai/) | [llamaindex_tool.py](examples/integrations/llamaindex_tool.py) | `llama-index-tools-mcp` | `pip install llama-index-tools-mcp llama-index-llms-anthropic synthpanel[mcp]` |
-| [CrewAI](https://docs.crewai.com/) | [crewai_tool.py](examples/integrations/crewai_tool.py) | `crewai-tools[mcp]` | `pip install "crewai-tools[mcp]" crewai synthpanel[mcp]` |
-| [LangChain](https://python.langchain.com/) | [langchain_tool.py](examples/integrations/langchain_tool.py) | `langchain-mcp-adapters` | `pip install langchain-mcp-adapters langchain-anthropic synthpanel[mcp]` |
-| [LangGraph](https://langchain-ai.github.io/langgraph/) | [langchain_tool.py](examples/integrations/langchain_tool.py) | `langchain-mcp-adapters` | `pip install langchain-mcp-adapters langgraph langchain-anthropic synthpanel[mcp]` |
-| [Microsoft Agent Framework 1.0](https://learn.microsoft.com/en-us/agent-framework/) | [microsoft_agent.py](examples/integrations/microsoft_agent.py) | Built-in `MCPStdioTool` | `pip install agent-framework synthpanel[mcp]` |
-| [n8n](https://n8n.io/) | [n8n_workflow.json](examples/integrations/n8n_workflow.json) | Built-in MCP Client tool | `pip install synthpanel[mcp]` on the n8n runner |
-| [LangChain via Composio](https://composio.dev/) | [composio_langchain.py](examples/integrations/composio_langchain.py) | `synth_panel.integrations.composio` (in-process, non-MCP) | `pip install composio composio_langchain langchain langchain-anthropic synthpanel` |
-| [CrewAI via Composio](https://composio.dev/) | [composio_crewai.py](examples/integrations/composio_crewai.py) | `synth_panel.integrations.composio` (in-process, non-MCP) | `pip install composio composio_crewai crewai synthpanel` |
+| [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/mcp/) | [openai_agents.py](examples/integrations/openai_agents.py) | Built-in `MCPServerStdio` | `pip install openai-agents althing[mcp]` |
+| [LlamaIndex](https://docs.llamaindex.ai/) | [llamaindex_tool.py](examples/integrations/llamaindex_tool.py) | `llama-index-tools-mcp` | `pip install llama-index-tools-mcp llama-index-llms-anthropic althing[mcp]` |
+| [CrewAI](https://docs.crewai.com/) | [crewai_tool.py](examples/integrations/crewai_tool.py) | `crewai-tools[mcp]` | `pip install "crewai-tools[mcp]" crewai althing[mcp]` |
+| [LangChain](https://python.langchain.com/) | [langchain_tool.py](examples/integrations/langchain_tool.py) | `langchain-mcp-adapters` | `pip install langchain-mcp-adapters langchain-anthropic althing[mcp]` |
+| [LangGraph](https://langchain-ai.github.io/langgraph/) | [langchain_tool.py](examples/integrations/langchain_tool.py) | `langchain-mcp-adapters` | `pip install langchain-mcp-adapters langgraph langchain-anthropic althing[mcp]` |
+| [Microsoft Agent Framework 1.0](https://learn.microsoft.com/en-us/agent-framework/) | [microsoft_agent.py](examples/integrations/microsoft_agent.py) | Built-in `MCPStdioTool` | `pip install agent-framework althing[mcp]` |
+| [n8n](https://n8n.io/) | [n8n_workflow.json](examples/integrations/n8n_workflow.json) | Built-in MCP Client tool | `pip install althing[mcp]` on the n8n runner |
+| [LangChain via Composio](https://composio.dev/) | [composio_langchain.py](examples/integrations/composio_langchain.py) | `althing.integrations.composio` (in-process, non-MCP) | `pip install composio composio_langchain langchain langchain-anthropic althing` |
+| [CrewAI via Composio](https://composio.dev/) | [composio_crewai.py](examples/integrations/composio_crewai.py) | `althing.integrations.composio` (in-process, non-MCP) | `pip install composio composio_crewai crewai althing` |
 
 Also reaches [Zapier MCP](https://zapier.com/mcp) (30K+ actions), the
 [VS Code AI Toolkit](https://code.visualstudio.com/api/extension-guides/ai/mcp),
 Windsurf, Cursor, Zed, Claude Code, and Claude Desktop via the same MCP
-server — all clients in that list install SynthPanel with
-`pip install synthpanel[mcp]` and a one-line MCP config entry (see
+server — all clients in that list install Althing with
+`pip install althing[mcp]` and a one-line MCP config entry (see
 [Use with Claude Code / Cursor / Windsurf / Zed](#use-with-claude-code--cursor--windsurf--zed)).
 
 > **Don't see your framework?** MCP bridges are available for nearly
 > every major agent framework. Start from
 > [`examples/integrations/README.md`](examples/integrations/README.md)
 > — the pattern is identical in each case (point the client at
-> `synthpanel mcp-serve` over stdio) — or
-> [file an issue](https://github.com/DataViking-Tech/SynthPanel/issues)
+> `althing mcp-serve` over stdio) — or
+> [file an issue](https://github.com/DataViking-Tech/Althing/issues)
 > so we can add a sibling example.
 
 ## Run via Docker
 
 A pre-built image is published to both
-[GitHub Container Registry](https://github.com/DataViking-Tech/SynthPanel/pkgs/container/synthpanel)
+[GitHub Container Registry](https://github.com/DataViking-Tech/Althing/pkgs/container/althing)
 and Docker Hub on every tagged release. Use it for ephemeral or serverless
 invocation (Lambda, Cloud Run, GitHub Actions, n8n) where you'd rather
 spin up a container than pip-install.
 
 ```bash
 # Pull (either registry works — same image, multi-arch: amd64 + arm64)
-docker pull ghcr.io/dataviking-tech/synthpanel:latest
-docker pull synthpanel/synthpanel:latest
+docker pull ghcr.io/dataviking-tech/althing:latest
+docker pull althing/althing:latest
 
 # One-off prompt
 docker run --rm \
   -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
-  synthpanel/synthpanel \
+  althing/althing \
   prompt "What makes a name feel trustworthy?"
 
 # MCP server on stdio (default CMD — wire this into an agent's MCP config)
 docker run --rm -i \
   -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
-  synthpanel/synthpanel
+  althing/althing
 
 # Panel run with a mounted instrument file
 docker run --rm \
   -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
   -v "$PWD":/work -w /work \
-  synthpanel/synthpanel \
+  althing/althing \
   panel run --personas personas.yaml --instrument survey.yaml
 ```
 
 The image's default `CMD` is `mcp-serve`, so omitting the command starts
-the MCP stdio server. Any `synthpanel` subcommand can be passed as
+the MCP stdio server. Any `althing` subcommand can be passed as
 arguments to override. Provider keys are read from environment variables
 (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`/`GEMINI_API_KEY`,
 `XAI_API_KEY`) — pass whichever your model requires.
@@ -318,7 +318,7 @@ Everything the CLI and MCP server can do is also callable from Python.
 No subprocess, no extra install — just import and go.
 
 ```python
-from synth_panel import quick_poll, run_panel, run_prompt
+from althing import quick_poll, run_panel, run_prompt
 
 # One-shot LLM call
 reply = run_prompt("What makes a name feel trustworthy?")
@@ -355,14 +355,14 @@ consume the MCP JSON payload works unchanged.
 | `list_panel_results()` / `get_panel_result(id)` | Reload saved results |
 
 Use this path when subprocess overhead hurts (Jupyter, serverless, CI)
-or when you want to wrap SynthPanel in a LangChain / LlamaIndex tool
+or when you want to wrap Althing in a LangChain / LlamaIndex tool
 in three lines. See [`examples/sdk_usage.py`](examples/sdk_usage.py)
 for a runnable end-to-end walkthrough.
 
 ### Typed extraction with Pydantic (1.0.4)
 
 `run_panel` accepts a `pydantic.BaseModel` subclass directly as
-`extract_schema=`. SynthPanel generates the wire JSON Schema via
+`extract_schema=`. Althing generates the wire JSON Schema via
 `model_json_schema()` and runs `model_validate` on each panelist's
 extracted payload — validation failures surface per-response as
 `extraction_validation_error` (the panel still produces a usable result
@@ -371,7 +371,7 @@ constraint, e.g. `rating: 7` against a 1..5 `Likert`).
 
 ```python
 from pydantic import BaseModel, Field
-from synth_panel import run_panel
+from althing import run_panel
 
 class FeatureChoice(BaseModel):
     feature: str = Field(..., min_length=1)
@@ -396,11 +396,11 @@ classes are an additional dispatch, not a replacement.
 
 ## MCP Server (Agent Integration)
 
-synthpanel ships an MCP server so AI agents can run synthetic focus groups as tool calls.
+althing ships an MCP server so AI agents can run synthetic focus groups as tool calls.
 
 ```bash
-pip install synthpanel[mcp]
-synthpanel mcp-serve
+pip install althing[mcp]
+althing mcp-serve
 ```
 
 Add to your editor's MCP config (Claude Code, Cursor, Windsurf):
@@ -408,8 +408,8 @@ Add to your editor's MCP config (Claude Code, Cursor, Windsurf):
 ```json
 {
   "mcpServers": {
-    "synth_panel": {
-      "command": "synthpanel",
+    "althing": {
+      "command": "althing",
       "args": ["mcp-serve"],
       "env": { "ANTHROPIC_API_KEY": "sk-..." }
     }
@@ -421,7 +421,7 @@ Add to your editor's MCP config (Claude Code, Cursor, Windsurf):
 
 No API key? No problem. When the invoking MCP client (Claude Desktop,
 Claude Code, Cursor, Windsurf) advertises the `sampling` capability,
-synthpanel falls back to asking the client to run the LLM completion on
+althing falls back to asking the client to run the LLM completion on
 its behalf — using the client's own subscription. That means `run_prompt`
 and small `run_quick_poll` calls (up to 3 personas) work with zero env
 setup:
@@ -429,8 +429,8 @@ setup:
 ```json
 {
   "mcpServers": {
-    "synth_panel": {
-      "command": "synthpanel",
+    "althing": {
+      "command": "althing",
       "args": ["mcp-serve"]
     }
   }
@@ -469,25 +469,25 @@ One-liner for any supported editor (writes exactly the JSON shown in the
 sections below, merging non-destructively into your existing config):
 
 ```bash
-synthpanel mcp install --host auto   # detect installed editors and confirm each
+althing mcp install --host auto   # detect installed editors and confirm each
 ```
 
 Or pick a host explicitly: `--host claude-code | claude-desktop | cursor |
-windsurf | zed`. `--dry-run` previews the change; `synthpanel mcp uninstall`
+windsurf | zed`. `--dry-run` previews the change; `althing mcp uninstall`
 removes exactly the entry it manages. No API key is written unless you pass
-`--env` — set a provider key in your environment or run `synthpanel login`
+`--env` — set a provider key in your environment or run `althing login`
 (sampling-capable hosts need no key at all).
 
 Prefer to hand-edit? Copy the JSON snippet for your editor into the listed
-config file, set your API key, and restart the editor. `synthpanel mcp-serve`
+config file, set your API key, and restart the editor. `althing mcp-serve`
 is launched on demand over stdio — no long-running process to manage.
 
 <details>
 <summary><b>Claude Code</b></summary>
 
 ```bash
-synthpanel mcp install                  # ~/.claude.json (all projects)
-synthpanel mcp install --scope project  # ./.mcp.json (checked in)
+althing mcp install                  # ~/.claude.json (all projects)
+althing mcp install --scope project  # ./.mcp.json (checked in)
 ```
 
 Or add to `.mcp.json` at your project root (or `~/.claude.json` for all projects):
@@ -495,8 +495,8 @@ Or add to `.mcp.json` at your project root (or `~/.claude.json` for all projects
 ```json
 {
   "mcpServers": {
-    "synth_panel": {
-      "command": "synthpanel",
+    "althing": {
+      "command": "althing",
       "args": ["mcp-serve"],
       "env": { "ANTHROPIC_API_KEY": "sk-..." }
     }
@@ -504,12 +504,12 @@ Or add to `.mcp.json` at your project root (or `~/.claude.json` for all projects
 }
 ```
 
-Or install the bundled plugin (adds the `/synthpanel-poll <question>`
+Or install the bundled plugin (adds the `/althing-poll <question>`
 slash command plus five skills — `focus-group`, `name-test`,
 `concept-test`, `survey-prescreen`, `pricing-probe`):
 
 ```
-/plugin install synthpanel
+/plugin install althing
 ```
 
 Not using Claude Code, or prefer manual install? See
@@ -522,8 +522,8 @@ steps and per-host guidance.
 <summary><b>Cursor</b></summary>
 
 ```bash
-synthpanel mcp install --host cursor                  # ~/.cursor/mcp.json (all projects)
-synthpanel mcp install --host cursor --scope project  # ./.cursor/mcp.json
+althing mcp install --host cursor                  # ~/.cursor/mcp.json (all projects)
+althing mcp install --host cursor --scope project  # ./.cursor/mcp.json
 ```
 
 Or add to `.cursor/mcp.json` at your project root (or `~/.cursor/mcp.json` for all projects):
@@ -531,8 +531,8 @@ Or add to `.cursor/mcp.json` at your project root (or `~/.cursor/mcp.json` for a
 ```json
 {
   "mcpServers": {
-    "synth_panel": {
-      "command": "synthpanel",
+    "althing": {
+      "command": "althing",
       "args": ["mcp-serve"],
       "env": { "ANTHROPIC_API_KEY": "sk-..." }
     }
@@ -546,7 +546,7 @@ Or add to `.cursor/mcp.json` at your project root (or `~/.cursor/mcp.json` for a
 <summary><b>Windsurf</b></summary>
 
 ```bash
-synthpanel mcp install --host windsurf   # ~/.codeium/windsurf/mcp_config.json
+althing mcp install --host windsurf   # ~/.codeium/windsurf/mcp_config.json
 ```
 
 Or add to `~/.codeium/windsurf/mcp_config.json` (or open
@@ -555,8 +555,8 @@ Or add to `~/.codeium/windsurf/mcp_config.json` (or open
 ```json
 {
   "mcpServers": {
-    "synth_panel": {
-      "command": "synthpanel",
+    "althing": {
+      "command": "althing",
       "args": ["mcp-serve"],
       "env": { "ANTHROPIC_API_KEY": "sk-..." }
     }
@@ -570,7 +570,7 @@ Or add to `~/.codeium/windsurf/mcp_config.json` (or open
 <summary><b>Zed</b></summary>
 
 ```bash
-synthpanel mcp install --host zed   # ~/.config/zed/settings.json (context_servers schema)
+althing mcp install --host zed   # ~/.config/zed/settings.json (context_servers schema)
 ```
 
 Or hand-edit — Zed uses `context_servers` (not `mcpServers`). Add to `~/.config/zed/settings.json`:
@@ -578,9 +578,9 @@ Or hand-edit — Zed uses `context_servers` (not `mcpServers`). Add to `~/.confi
 ```json
 {
   "context_servers": {
-    "synth_panel": {
+    "althing": {
       "source": "custom",
-      "command": "synthpanel",
+      "command": "althing",
       "args": ["mcp-serve"],
       "env": { "ANTHROPIC_API_KEY": "sk-..." }
     }
@@ -597,8 +597,8 @@ Hermes uses a YAML config with `mcp_servers` and explicit timeout fields. Add th
 
 ```yaml
 mcp_servers:
-  synthpanel:
-    command: "synthpanel"
+  althing:
+    command: "althing"
     args: ["mcp-serve"]
     timeout: 180
     connect_timeout: 60
@@ -610,9 +610,9 @@ Or run on demand via `uvx` without a global install:
 
 ```yaml
 mcp_servers:
-  synthpanel:
+  althing:
     command: "uvx"
-    args: ["--from", "synthpanel[mcp]", "synthpanel", "mcp-serve"]
+    args: ["--from", "althing[mcp]", "althing", "mcp-serve"]
     timeout: 180
     connect_timeout: 60
     env:
@@ -628,7 +628,7 @@ gives the subprocess room to import the MCP SDK on first launch.
 <summary><b>Claude Desktop</b></summary>
 
 ```bash
-synthpanel mcp install --host claude-desktop   # platform-specific config path
+althing mcp install --host claude-desktop   # platform-specific config path
 ```
 
 Or open **Settings → Developer → Edit Config** (or edit the file directly):
@@ -639,8 +639,8 @@ Or open **Settings → Developer → Edit Config** (or edit the file directly):
 ```json
 {
   "mcpServers": {
-    "synth_panel": {
-      "command": "synthpanel",
+    "althing": {
+      "command": "althing",
       "args": ["mcp-serve"],
       "env": { "ANTHROPIC_API_KEY": "sk-..." }
     }
@@ -655,9 +655,9 @@ Restart Claude Desktop after editing.
 > **Using a non-Anthropic provider?** Swap `ANTHROPIC_API_KEY` for
 > `OPENAI_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY`, or
 > `OPENROUTER_API_KEY` — see [LLM Provider Support](#llm-provider-support).
-> The `synthpanel` binary must be on the editor's `PATH`; if you installed
+> The `althing` binary must be on the editor's `PATH`; if you installed
 > into a virtualenv, point `command` at its absolute path
-> (e.g. `/path/to/.venv/bin/synthpanel`).
+> (e.g. `/path/to/.venv/bin/althing`).
 
 ## What You Get
 
@@ -685,7 +685,7 @@ Total: estimated_cost=$0.2360
 
 Each persona responds in character with distinct voice, concerns, and perspective. Cost is tracked and printed per-panelist and in aggregate.
 
-### Post-hoc Markdown report (`synthpanel report`)
+### Post-hoc Markdown report (`althing report`)
 
 Already have a saved panel result and want a readable share-out? Render
 the result to Markdown:
@@ -694,17 +694,17 @@ the result to Markdown:
 # Save a run first. --save prints the result ID plus the exact follow-up
 # commands (report / results show / results list) so there's no need to
 # scrape prose or search the filesystem for the artifact.
-synthpanel panel run \
+althing panel run \
   --personas examples/personas.yaml \
   --instrument examples/survey.yaml \
   --save
 
 # Render to stdout, either by result ID or path to a result JSON
-synthpanel report <result-id>
-synthpanel report path/to/result.json
+althing report <result-id>
+althing report path/to/result.json
 
 # Write to a file
-synthpanel report <result-id> -o report.md
+althing report <result-id> -o report.md
 ```
 
 **Machine-readable handle (agents):** pairing `--save` with
@@ -716,18 +716,18 @@ location. The keys are present **only** when `--save` is active; a checkpointed
 run additionally surfaces its checkpoint `run_id`. The human-facing
 `Result saved:` hint still goes to stderr, keeping stdout pure JSON.
 
-#### Discovering saved results (`synthpanel results`)
+#### Discovering saved results (`althing results`)
 
-`--save` writes to the results store (`~/.synthpanel/results`), which is
-**distinct** from the checkpoint store that `synthpanel runs list` shows.
+`--save` writes to the results store (`~/.althing/results`), which is
+**distinct** from the checkpoint store that `althing runs list` shows.
 To rediscover a saved run by its stable ID:
 
 ```bash
-synthpanel results list             # all saved results, newest first
-synthpanel results show <result-id> # provenance + canonical saved_path
+althing results list             # all saved results, newest first
+althing results show <result-id> # provenance + canonical saved_path
 ```
 
-`results show` prints the recorded provenance (synthpanel/Python version,
+`results show` prints the recorded provenance (althing/Python version,
 config hash, pricing snapshot date) and the canonical `saved_path`; in
 `--output-format json` it emits the full result envelope plus `saved_path`.
 Saved results now embed a `metadata` block, so `report` provenance for
@@ -745,13 +745,13 @@ real-user research:
 
 ...
 
-_Generated by synthpanel report. Synthetic panel — AI-generated responses, not human data._
+_Generated by althing report. Synthetic panel — AI-generated responses, not human data._
 ```
 
 `report` is scoped to Markdown v1 — provenance, per-model rollup, persona
 summary, synthesis, and failure stats. HTML and chart rendering are
 deferred to v2. A `report` optional-deps extra exists (`pip install
-synthpanel[report]`) and installs cleanly, but is **currently empty** —
+althing[report]`) and installs cleanly, but is **currently empty** —
 it is a forward-compat slot for v2 HTML dependencies and adds nothing
 today.
 
@@ -759,17 +759,17 @@ Full spec: [`specs/sp-viz-layer/`](specs/sp-viz-layer/).
 
 ## Packs: Builtin vs Registry
 
-synthpanel has two kinds of packs, and the distinction matters when you're
+althing has two kinds of packs, and the distinction matters when you're
 searching for one:
 
-- **Builtin packs** ship inside the `synthpanel` wheel. After `pip install
-  synthpanel` they are immediately resolvable by name — no `pack import`, no
+- **Builtin packs** ship inside the `althing` wheel. After `pip install
+  althing` they are immediately resolvable by name — no `pack import`, no
   network. Reference them anywhere a `--personas` or `--instrument` argument
   takes a *name* (the unified resolver also accepts a YAML path).
 - **Registry packs** are community-authored. They live in third-party GitHub
   repos and are listed in
-  [`DataViking-Tech/synthpanel-registry`](https://github.com/DataViking-Tech/synthpanel-registry).
-  You pull them with `synthpanel pack import gh:user/repo`; once imported they
+  [`DataViking-Tech/althing-registry`](https://github.com/DataViking-Tech/althing-registry).
+  You pull them with `althing pack import gh:user/repo`; once imported they
   become resolvable by name like a builtin. See [docs/registry.md](docs/registry.md)
   for URI forms, verification, offline cache, and the submission flow.
 
@@ -792,7 +792,7 @@ searching for one:
 | `startup-founder` | 15 |
 | `students` | 15 |
 
-`synthpanel pack list` (or MCP `list_persona_packs`) enumerates these plus any
+`althing pack list` (or MCP `list_persona_packs`) enumerates these plus any
 user-saved packs. Picking the right pack for your task?
 See [docs/task-recommendations.md](docs/task-recommendations.md) for the
 task → pack → model-config matrix with copy/paste commands.
@@ -803,7 +803,7 @@ task → pack → model-config matrix with copy/paste commands.
 `landing-page-comprehension`, `market-research`, `name-test`,
 `pricing-discovery`, `product-feedback`.
 
-`synthpanel instruments list` enumerates these plus any installed packs.
+`althing instruments list` enumerates these plus any installed packs.
 
 If you searched the registry for one of the names above and came up empty,
 that's expected — they're SDK builtins, not registry entries. Use the name
@@ -844,7 +844,7 @@ the original. `--personas-merge` is repeatable and appends in order; a
 later persona whose `name` matches an earlier one replaces it in place:
 
 ```bash
-synthpanel panel run \
+althing panel run \
   --personas developer.yaml \
   --personas-merge contrarian.yaml \
   --personas-merge intern.yaml \
@@ -857,15 +857,15 @@ synthpanel panel run \
 You can import persona packs straight from GitHub:
 
 ```bash
-# Listed in the synthpanel registry — import by gh: URI
-synthpanel pack import gh:dataviking-tech/example-pack
+# Listed in the althing registry — import by gh: URI
+althing pack import gh:dataviking-tech/example-pack
 
 # Not yet in the registry — opt in explicitly
-synthpanel pack import gh:alice/my-pack --unverified
+althing pack import gh:alice/my-pack --unverified
 ```
 
 The registry itself is an open, PR-based index at
-[`DataViking-Tech/synthpanel-registry`](https://github.com/DataViking-Tech/synthpanel-registry).
+[`DataViking-Tech/althing-registry`](https://github.com/DataViking-Tech/althing-registry).
 See [docs/registry.md](docs/registry.md) for the full reference — supported URL
 forms, cache + offline behavior, collision rules, and the flow for publishing
 your own pack.
@@ -924,7 +924,7 @@ instrument:
 > - **`image` / `screenshot` attachments need a vision-capable model.** Text-only
 >   models (e.g. `claude-3.5-haiku`) are rejected fast with a clear error — use a
 >   multimodal model such as `claude-haiku-4.5`, `gpt-4o-mini`, or `gemini-2.0-flash`.
-> - **`fetch_mode: screenshot` requires the visual extra:** `pip install 'synthpanel[visual]'`
+> - **`fetch_mode: screenshot` requires the visual extra:** `pip install 'althing[visual]'`
 >   (installs Playwright; then `python -m playwright install chromium`). Text modes
 >   (`markdown` / `html_text`) don't need it.
 
@@ -940,7 +940,7 @@ loop, no hand-coded conditional flows.
 ```bash
 # The Show HN demo: ~$0.20, one command, the panel decides
 # whether to dig into pain, pricing, or alternatives.
-synthpanel panel run \
+althing panel run \
   --personas examples/personas.yaml \
   --instrument pricing-discovery \
   --var problem="choosing a project management tool"
@@ -948,7 +948,7 @@ synthpanel panel run \
 
 `pricing-discovery` is one of eight bundled v3 instrument packs (see
 [Builtin instrument packs](#builtin-instrument-packs-8-all-v3-branching)
-above). List them with `synthpanel instruments list`.
+above). List them with `althing instruments list`.
 
 The output now carries a `path` array recording the routing decisions
 that actually fired:
@@ -960,7 +960,7 @@ discovery -> probe[themes contains price] -> probe_pricing -> validation
 Render the DAG of any instrument:
 
 ```bash
-synthpanel instruments graph pricing-discovery --format mermaid
+althing instruments graph pricing-discovery --format mermaid
 ```
 
 ### CLI Flag Support for Multi-Round Runs
@@ -1050,11 +1050,11 @@ also match `pricing`, `priced`, etc.
 ### `instruments` Subcommand
 
 ```bash
-synthpanel instruments list                       # bundled + installed packs
-synthpanel instruments show pricing-discovery     # full YAML body
-synthpanel instruments install ./my-pack.yaml     # add a local pack
-synthpanel instruments graph pricing-discovery    # text DAG
-synthpanel instruments graph pricing-discovery \
+althing instruments list                       # bundled + installed packs
+althing instruments show pricing-discovery     # full YAML body
+althing instruments install ./my-pack.yaml     # add a local pack
+althing instruments graph pricing-discovery    # text DAG
+althing instruments graph pricing-discovery \
   --format mermaid                                 # mermaid flowchart
 ```
 
@@ -1073,7 +1073,7 @@ your own studies.
 
 ## LLM Provider Support
 
-synthpanel works with any LLM provider. Set the appropriate environment variable:
+althing works with any LLM provider. Set the appropriate environment variable:
 
 | Provider | Environment Variable | Model Flag |
 |----------|---------------------|------------|
@@ -1086,14 +1086,14 @@ synthpanel works with any LLM provider. Set the appropriate environment variable
 
 ```bash
 # Use Claude (default)
-synthpanel panel run --personas p.yaml --instrument s.yaml
+althing panel run --personas p.yaml --instrument s.yaml
 
 # Use GPT-4o
-synthpanel panel run --personas p.yaml --instrument s.yaml --model gpt-4o
+althing panel run --personas p.yaml --instrument s.yaml --model gpt-4o
 
 # Use a local model via Ollama
 OPENAI_BASE_URL=http://localhost:11434/v1 \
-synthpanel panel run --personas p.yaml --instrument s.yaml --model llama3
+althing panel run --personas p.yaml --instrument s.yaml --model llama3
 ```
 
 > **Large panels and the OpenRouter default (synthbench#261):** when
@@ -1101,7 +1101,7 @@ synthpanel panel run --personas p.yaml --instrument s.yaml --model llama3
 > present — for an OpenRouter-only environment that's `openrouter/auto`,
 > whose auto-router can pick a slow reasoning model and stall a
 > 20-persona panel for 15+ minutes. So for runs with **≥ 10 personas**
-> and no explicit model, synthpanel auto-selects a fast equivalent
+> and no explicit model, althing auto-selects a fast equivalent
 > (`openrouter/anthropic/claude-haiku-4.5`) and prints a one-line note.
 > This applies identically on the CLI, SDK, and MCP surfaces. Pass
 > `--model openrouter/auto` (or `model="openrouter/auto"`) explicitly to
@@ -1111,24 +1111,24 @@ synthpanel panel run --personas p.yaml --instrument s.yaml --model llama3
 
 ### Model Aliases
 
-synthpanel ships with short aliases (`sonnet`, `opus`, `haiku`, `grok`,
+althing ships with short aliases (`sonnet`, `opus`, `haiku`, `grok`,
 `gemini`, `gemini-pro`) that map to canonical model identifiers. You can
 override or extend these without changing code:
 
 **Resolution order (highest priority wins):**
 
-1. **`SYNTHPANEL_MODEL_ALIASES` env var** — JSON string of alias→model pairs
-2. **`~/.synthpanel/aliases.yaml`** — YAML file
+1. **`ALTHING_MODEL_ALIASES` env var** — JSON string of alias→model pairs
+2. **`~/.althing/aliases.yaml`** — YAML file
 3. **Hardcoded defaults** — built into the package
 
 ```bash
 # Override via env var (JSON)
-export SYNTHPANEL_MODEL_ALIASES='{"sonnet": "claude-sonnet-4-6-20250414", "fast": "claude-haiku-4-5-20251001"}'
-synthpanel prompt "Hello" --model fast
+export ALTHING_MODEL_ALIASES='{"sonnet": "claude-sonnet-4-6-20250414", "fast": "claude-haiku-4-5-20251001"}'
+althing prompt "Hello" --model fast
 ```
 
 ```yaml
-# ~/.synthpanel/aliases.yaml
+# ~/.althing/aliases.yaml
 aliases:
   fast: claude-haiku-4-5-20251001
   smart: claude-opus-4-6
@@ -1145,16 +1145,16 @@ want to add or change.
 leaderboard and uses the top-ranked model for a topic or dataset:
 
 ```bash
-synthpanel panel run --personas p.yaml --instrument s.yaml \
+althing panel run --personas p.yaml --instrument s.yaml \
     --best-model-for "Economy & Work"
 ```
 
 The leaderboard is cached for 24 hours at
-`~/.synthpanel/synthbench-cache.json`. See
+`~/.althing/synthbench-cache.json`. See
 [docs/recommended-models.md](docs/recommended-models.md) for the full
 rules, offline behaviour, and a use-case → top-model table.
 
-If the top-ranked entry exposes a display label (e.g. `SynthPanel (Gemini
+If the top-ranked entry exposes a display label (e.g. `Althing (Gemini
 Flash Lite)`) rather than a runnable provider model id in its `model`
 field, `--best-model-for` substitutes the runnable `model_id` the
 leaderboard publishes alongside it (e.g. `google/gemini-2.5-flash-lite`),
@@ -1178,7 +1178,7 @@ cheap models, and a checklist for agents on matching pack to claim strength.
 
 ## Architecture
 
-synthpanel is a research harness, not an LLM wrapper. It orchestrates the research workflow:
+althing is a research harness, not an LLM wrapper. It orchestrates the research workflow:
 
 ```
 personas.yaml ──┐
@@ -1216,20 +1216,20 @@ instrument.yaml ─┘                 ├──> Panelist 2 ──> LLM ──>
 
 ```bash
 # Human-readable (default)
-synthpanel panel run --personas p.yaml --instrument s.yaml
+althing panel run --personas p.yaml --instrument s.yaml
 
 # JSON (pipe to jq, store in database)
-synthpanel panel run --personas p.yaml --instrument s.yaml --output-format json
+althing panel run --personas p.yaml --instrument s.yaml --output-format json
 
 # NDJSON (streaming, one event per line)
-synthpanel panel run --personas p.yaml --instrument s.yaml --output-format ndjson
+althing panel run --personas p.yaml --instrument s.yaml --output-format ndjson
 ```
 
 ## Budget Control
 
 ```bash
 # Set a dollar budget for the panel
-synthpanel panel run --personas p.yaml --instrument s.yaml --config budget.yaml
+althing panel run --personas p.yaml --instrument s.yaml --config budget.yaml
 ```
 
 The cost tracker enforces soft budget limits — the current panelist completes, but no new panelists start if the budget is exceeded.
@@ -1248,7 +1248,7 @@ The `templates/` directory contains four prompt template variants for benchmarki
 Usage:
 
 ```bash
-synthpanel panel run --personas personas.yaml --instrument survey.yaml --prompt-template templates/demo.txt
+althing panel run --personas personas.yaml --instrument survey.yaml --prompt-template templates/demo.txt
 ```
 
 Templates use Python format-string syntax (`{field_name}`). Missing persona fields are left as literal `{field_name}` in the output.
@@ -1259,20 +1259,20 @@ Pass `--seed N` to `panel run` for reproducible sampling on providers that
 honor the seed parameter (OpenAI, Gemini, xAI, OpenRouter):
 
 ```bash
-synthpanel panel run --seed 42 --personas p.yaml --instrument s.yaml
+althing panel run --seed 42 --personas p.yaml --instrument s.yaml
 ```
 
-What synthpanel **can** promise:
+What althing **can** promise:
 
 - Forwards the seed to providers that support it.
 - Records the seed in the run's `metadata.parameters.seed` and in the
   checkpoint fingerprint, so a `--resume` run with a different seed
   fails loudly instead of silently mixing samples.
 
-What synthpanel **cannot** promise:
+What althing **cannot** promise:
 
 - Anthropic's Messages API has no `seed` parameter. When `--seed` is set
-  on a Claude model, synthpanel logs a single warning per provider and
+  on a Claude model, althing logs a single warning per provider and
   proceeds without determinism. Use `--temperature 0` for closer-to-
   deterministic Claude output, but expect drift across model versions.
 - Even on supporting providers, "seeded" sampling is best-effort: model
@@ -1280,7 +1280,7 @@ What synthpanel **cannot** promise:
   outputs between runs.
 
 `--seed` is for *new* runs you want to be reproducible. To replay a
-previously-cached run exactly, use `synthpanel panel run --resume <run-id>`
+previously-cached run exactly, use `althing panel run --resume <run-id>`
 — that path serves cached responses verbatim and is independent of
 `--seed`. See [docs/reproducibility.md](docs/reproducibility.md) for
 the full picture.
@@ -1295,7 +1295,7 @@ Known limitations:
 - Cultural and demographic representation has blind spots
 - Higher-order correlations between variables are poorly replicated
 
-Use synthpanel to pre-screen and iterate, then validate with real participants.
+Use althing to pre-screen and iterate, then validate with real participants.
 
 ## Multi-Model Ensemble (0.7.0)
 
@@ -1303,7 +1303,7 @@ Run the same panel through multiple models and blend their response distribution
 
 ```bash
 # Run 3 models with equal weights and blend distributions
-synthpanel panel run \
+althing panel run \
   --models haiku:0.33,gemini:0.33,gpt-4o-mini:0.34 \
   --blend \
   --personas personas.yaml \
@@ -1318,10 +1318,10 @@ The blended output includes per-model distributions and the weighted ensemble di
 
 ## Running at Scale
 
-For panels of 500 to 10,000+ panelists, synthpanel can track response-distribution convergence live via Jensen-Shannon divergence and optionally auto-stop once every bounded (Likert / yes-no / pick-one / enum) question has stabilized. The post-run JSON gains a top-level `convergence` section showing the smallest `n` at which each question converged, so you can confidently run smaller next time.
+For panels of 500 to 10,000+ panelists, althing can track response-distribution convergence live via Jensen-Shannon divergence and optionally auto-stop once every bounded (Likert / yes-no / pick-one / enum) question has stabilized. The post-run JSON gains a top-level `convergence` section showing the smallest `n` at which each question converged, so you can confidently run smaller next time.
 
 ```bash
-synthpanel panel run \
+althing panel run \
   --personas large-panel.yaml \
   --instrument pricing-discovery \
   --var problem="choosing a project management tool" \
@@ -1336,7 +1336,7 @@ jq '.convergence.overall_converged_at, .convergence.auto_stopped' result.json
 
 See [docs/convergence.md](docs/convergence.md) for methodology, tuning, and the
 optional `--convergence-baseline` flag that compares your run against a real-human
-baseline from [SynthBench](https://github.com/DataViking-Tech/synthbench) (install via `pip install 'synthpanel[convergence]'`).
+baseline from [SynthBench](https://github.com/DataViking-Tech/synthbench) (install via `pip install 'althing[convergence]'`).
 
 ### Submitting calibrated runs to SynthBench
 
@@ -1348,7 +1348,7 @@ completes:
 
 ```bash
 export SYNTHBENCH_API_KEY=sk_synthbench_...    # mint at synthbench.org/account
-synthpanel panel run \
+althing panel run \
   --personas examples/personas.yaml \
   --instrument happiness-probe \
   --calibrate-against gss:HAPPY \
@@ -1357,7 +1357,7 @@ synthpanel panel run \
 ```
 
 First use shows a one-screen privacy notice (recorded at
-`~/.synthpanel/synthbench-consent.json` so subsequent runs don't re-prompt;
+`~/.althing/synthbench-consent.json` so subsequent runs don't re-prompt;
 pass `--yes` for CI). Submission failures are warned-but-non-fatal so a
 slow SynthBench cannot fail your panel run. See
 [docs/synthbench-integration.md](docs/synthbench-integration.md) for the
@@ -1368,22 +1368,22 @@ modes.
 
 | Version | Highlights |
 |---------|-----------|
-| 1.5.x *(current)* | `synthpanel mcp install --host auto` one-liner host registration; four canonical persona packs; deterministic `poll-summary` rollups; MCP auto-picks a fast model for ≥10-persona panels; `results list`/`results show` for the saved-results store; `python -m synthpanel` alias; fail-loud empty attachments and typed `response_schema` enforcement; synthesis routing follows the panel's provider; PyPI Trusted Publishing + auto-tag version-drift guard |
+| 1.5.x *(current)* | `althing mcp install --host auto` one-liner host registration; four canonical persona packs; deterministic `poll-summary` rollups; MCP auto-picks a fast model for ≥10-persona panels; `results list`/`results show` for the saved-results store; `python -m althing` alias; fail-loud empty attachments and typed `response_schema` enforcement; synthesis routing follows the panel's provider; PyPI Trusted Publishing + auto-tag version-drift guard |
 | 1.4.0 | Explicit `cost_estimated_usd` / `cost_actual_usd` (+ `per_model_breakdown`) on `EnsembleResult`, `ModelRunResult`, and `SynthesisResult` — estimate-vs-bill reconciliation without inspecting raw usage |
-| 1.3.0 | `trafilatura` moved to the `[full]` extra so bare `pip install synthpanel` works on pyodide/Cloudflare Python Workers (no `lxml` C extension required) |
-| 1.2.0 | Pyodide-safe / async-DI surface for `synth_panel.ensemble.synthesize_panel` — drive the judge call through your own async LLM client |
-| 1.1.0 | `synth_panel.ensemble` frozen as the supported public API for the ensemble/deliberation core |
+| 1.3.0 | `trafilatura` moved to the `[full]` extra so bare `pip install althing` works on pyodide/Cloudflare Python Workers (no `lxml` C extension required) |
+| 1.2.0 | Pyodide-safe / async-DI surface for `althing.ensemble.synthesize_panel` — drive the judge call through your own async LLM client |
+| 1.1.0 | `althing.ensemble` frozen as the supported public API for the ensemble/deliberation core |
 | 1.0.6 | Cross-town dogfood friction sweep on the v1.0.x line; `panel_verdict` emitted on the MCP success path; release-dogfood protocol codified |
 | 1.0.0 | Frozen MCP contract (`schemas/v1.0.0.json`, `schema_version` echoed on every response and typed error); multimodal attachments (images, URLs, PDFs, inline HTML) with stratified delivery and a URL-fetch security perimeter |
-| 0.12.0 | `--best-model-for TOPIC[:DATASET]` SynthBench-driven model picker, `--submit-to-synthbench`, `synthpanel pack calibrate`, six bundled packs deepened 5 → 15 personas |
+| 0.12.0 | `--best-model-for TOPIC[:DATASET]` SynthBench-driven model picker, `--submit-to-synthbench`, `althing pack calibrate`, six bundled packs deepened 5 → 15 personas |
 | 0.11.0 | `sp-i2ub` scaled-orchestration epic: panelist-level checkpointing with `--resume <run-id>` and auto-checkpoint on SIGINT/SIGTERM (every K=25 panelists), `--max-cost <USD>` mid-run projected-total cost gate that halts gracefully with valid partial JSON, and valid-partial-JSON discipline on every abort path (rate-exhaustion, SIGINT, cost-gate, panelist failure) with `run_invalid: true` + specific `abort_reason` and exit code 2; 6-bug loudness sweep turning silent failures loud across alias parse, synthesis partial payload, MCP `extend_panel`, condition evaluator, orchestrator follow-up exceptions, and the `test_aliases` fixture; auto-tag now fails loudly on unlabeled release PRs; `pip-audit` ignores CVE-2026-3219 in pip 26.0.1 |
-| 0.10.0 | `synthpanel report` post-hoc Markdown renderer for saved panel results (behind `[report]` extra); inline SynthBench calibration via `panel run --calibrate-against DATASET:QUESTION` with auto-derived `pick_one` schema and `per_question[key].calibration` sub-object wire format; decentralized pack registry — `pack import gh:<user>/<repo>` with `--unverified`, `pack search`, `pack list --registry`, 24h cache + offline fallback; optional `version:` field on persona packs with opt-in shadow warning |
-| 0.9.9 | `--synthesis-strategy=auto` now routes to map-reduce on context overflow instead of hard-failing; OpenRouter alias resolution tightened for sub-1¢ local-table sanity checks; `--personas-merge` warns (or errors via `--personas-merge-on-collision`) on name collisions with bundled packs; version single-sourced from `src/synth_panel/__version__.py` with templated site render |
-| 0.9.8 | Fail-loud synthesis (context-overflow pre-flight + structured `synthesis_error`), per-question map-reduce synthesis (`--synthesis-strategy=single\|map-reduce\|auto`), response-schema validation with deterministic distributions for bounded question types, rate-limit-aware client (`--max-concurrent`, `--rate-limit-rps`), live convergence telemetry + `--auto-stop`, 4 new bundled persona packs (`job-seekers`, `recruiters-talent`, `product-research`, `ai-eval-buyers`) raising shipped personas 24 → 84, `/synthpanel-poll` slash command |
+| 0.10.0 | `althing report` post-hoc Markdown renderer for saved panel results (behind `[report]` extra); inline SynthBench calibration via `panel run --calibrate-against DATASET:QUESTION` with auto-derived `pick_one` schema and `per_question[key].calibration` sub-object wire format; decentralized pack registry — `pack import gh:<user>/<repo>` with `--unverified`, `pack search`, `pack list --registry`, 24h cache + offline fallback; optional `version:` field on persona packs with opt-in shadow warning |
+| 0.9.9 | `--synthesis-strategy=auto` now routes to map-reduce on context overflow instead of hard-failing; OpenRouter alias resolution tightened for sub-1¢ local-table sanity checks; `--personas-merge` warns (or errors via `--personas-merge-on-collision`) on name collisions with bundled packs; version single-sourced from `src/althing/__version__.py` with templated site render |
+| 0.9.8 | Fail-loud synthesis (context-overflow pre-flight + structured `synthesis_error`), per-question map-reduce synthesis (`--synthesis-strategy=single\|map-reduce\|auto`), response-schema validation with deterministic distributions for bounded question types, rate-limit-aware client (`--max-concurrent`, `--rate-limit-rps`), live convergence telemetry + `--auto-stop`, 4 new bundled persona packs (`job-seekers`, `recruiters-talent`, `product-research`, `ai-eval-buyers`) raising shipped personas 24 → 84, `/althing-poll` slash command |
 | 0.9.7 | Provider-reported cost is authoritative — when a provider returns `usage.cost` (e.g. OpenRouter), that value is recorded verbatim instead of being recomputed from a local pricing table; `pricing_fallback` warning surfaced when a model falls through to `DEFAULT_PRICING`; ensemble rounding no longer silently drops low-weight models |
 | 0.9.5 | Fail-fast on unsubstituted `{placeholder}` variables in instruments/personas, `--personas-merge PATH` for layered persona packs, `--dry-run` pre-run preview, `run_invalid` flag on degenerate runs, MCP BYOK detection routes through the credentials store |
-| 0.9.4 | `synthpanel login` / `logout` / `whoami` credential-store CLI; MCP recognises `OPENROUTER_API_KEY` as BYOK and picks a sensible default; Docker images on GHCR + Docker Hub multi-arch; MCP sampling fallback for `run_prompt` and `run_quick_poll` |
-| 0.9.0 | First release post-public-flip. Repo renamed to `SynthPanel` (PyPI name `synthpanel` unchanged) |
+| 0.9.4 | `althing login` / `logout` / `whoami` credential-store CLI; MCP recognises `OPENROUTER_API_KEY` as BYOK and picks a sensible default; Docker images on GHCR + Docker Hub multi-arch; MCP sampling fallback for `run_prompt` and `run_quick_poll` |
+| 0.9.0 | First release post-public-flip. Repo renamed to `Althing` (PyPI name `althing` unchanged) |
 | 0.8.0 | `lookup_pricing_by_provider` public helper for synthbench-format provider strings; multi-question CLI cost shape symmetry (`total_cost` / `panelist_cost` / `total_usage` / `panelist_usage`) |
 | 0.7.0 | Multi-model ensemble blending (`--blend`), OpenRouter provider support, temperature/top_p controls, prompt template customization |
 | 0.6.0 | `--models` weighted model spec, `--temperature`/`--top_p` flags, persona prompt templates, pack generation, domain templates, MCP improvements |
@@ -1399,7 +1399,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, and how t
 
 ## Benchmarked on SynthBench
 
-synthpanel's ability to produce representative synthetic respondents is measured by [SynthBench](https://synthbench.org), an open benchmark for synthetic survey quality (a sibling DataViking project, operated by the SynthPanel maintainers).
+althing's ability to produce representative synthetic respondents is measured by [SynthBench](https://synthbench.org), an open benchmark for synthetic survey quality (a sibling DataViking project, operated by the Althing maintainers).
 
 - **Want proof it works?** Browse the [leaderboard](https://synthbench.org) — the 3-model ensemble blend scores SPS 0.877 on opinionsqa, 0.858 on subpop, and 0.813 on globalopinionqa (leaderboard generated 2026-07-17; numbers move as the board recomputes).
 - **Got a great configuration?** [Submit your scores](https://synthbench.org) and compare against baselines.

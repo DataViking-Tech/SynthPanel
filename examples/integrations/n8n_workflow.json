@@ -1,5 +1,5 @@
 {
-  "name": "SynthPanel Quick Poll",
+  "name": "Althing Quick Poll",
   "nodes": [
     {
       "parameters": {},
@@ -38,12 +38,12 @@
     {
       "parameters": {
         "connectionType": "stdio",
-        "command": "synthpanel",
+        "command": "althing",
         "arguments": "mcp-serve",
         "environmentVariables": "ANTHROPIC_API_KEY={{ $env.ANTHROPIC_API_KEY }}"
       },
       "id": "d4e5f6g7-mcp",
-      "name": "SynthPanel MCP",
+      "name": "Althing MCP",
       "type": "@n8n/n8n-nodes-langchain.mcpClientTool",
       "typeVersion": 1,
       "position": [620, 520]
@@ -58,7 +58,7 @@
         [{ "node": "Research Agent", "type": "ai_languageModel", "index": 0 }]
       ]
     },
-    "SynthPanel MCP": {
+    "Althing MCP": {
       "ai_tool": [
         [{ "node": "Research Agent", "type": "ai_tool", "index": 0 }]
       ]
@@ -66,6 +66,6 @@
   },
   "settings": { "executionOrder": "v1" },
   "meta": {
-    "description": "Import into n8n via Workflows -> Import from File. Requires an Anthropic credential and the synthpanel CLI on n8n's PATH. See examples/integrations/README.md."
+    "description": "Import into n8n via Workflows -> Import from File. Requires an Anthropic credential and the althing CLI on n8n's PATH. See examples/integrations/README.md."
   }
 }

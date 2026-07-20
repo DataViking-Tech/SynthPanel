@@ -1,8 +1,8 @@
 # External Contributor Safety + CI/CD Threat-Model Audit
 
 **Date:** 2026-04-15
-**Repo:** `DataViking-Tech/SynthPanel` (now **public**)
-**Auditor:** polecat `synthpanel/polecats/dag` (sp-273)
+**Repo:** `DataViking-Tech/Althing` (now **public**)
+**Auditor:** polecat `althing/polecats/dag` (sp-273)
 **Trigger:** Public-flip + active PyPI Trusted Publishing → real external attack surface.
 
 ---
@@ -51,8 +51,8 @@ These require repo-admin / founder action. None are blocking, but (1) and (2) ar
    for patch, OR require ≥ 1 approval (see #3) which Renovate cannot
    self-provide.
 8. **LOW — Verify PyPI Trusted Publisher binding matches post-rename repo.**
-   Repo was renamed; confirm at pypi.org/manage/project/synthpanel/settings/publishing/
-   that owner=`DataViking-Tech`, repo=`SynthPanel`, workflow=`publish.yml`,
+   Repo was renamed; confirm at pypi.org/manage/project/althing/settings/publishing/
+   that owner=`DataViking-Tech`, repo=`Althing`, workflow=`publish.yml`,
    environment=`pypi`. Ditto test.pypi.org for `publish-test.yml` /
    `pypi-test`. Trusted Publishing fails closed if mismatched, so this is
    a correctness check, not a security hole.
@@ -153,7 +153,7 @@ depth. Regex validation still occurs after the assignment.
   `https://test.pypi.org/legacy/`.
 - Both environments exist on the repo (verified via `gh api`).
 - **Cannot verify from a polecat:** whether the PyPI / TestPyPI side of
-  the binding correctly references the post-rename repo (`SynthPanel`, not
+  the binding correctly references the post-rename repo (`Althing`, not
   `synth-panel`) and the right workflow filenames. **Operator: confirm
   via pypi.org + test.pypi.org management console.** (Operator follow-up #8 above.)
 
@@ -196,14 +196,14 @@ Cannot fix from a polecat (ruleset edit requires admin). See operator #3.
 `.github/CODEOWNERS` is present:
 
 ```
-* @DataViking-Tech/synthpanel
-renovate.json @DataViking-Tech/synthpanel
+* @DataViking-Tech/althing
+renovate.json @DataViking-Tech/althing
 ```
 
 Coverage check:
 - `*` covers everything (workflows, `pyproject.toml`, `src/`, secrets-touching code). ✓
 - `renovate.json` is explicitly scoped — redundant given `*` but harmless.
-- **Team validity** (whether `@DataViking-Tech/synthpanel` exists and has
+- **Team validity** (whether `@DataViking-Tech/althing` exists and has
   write access): cannot verify from a polecat's token. Operator should
   confirm from org settings. (Folded into follow-up #3.)
 - **Not enforced** by branch ruleset (see §5 above).
@@ -323,15 +323,15 @@ individual beads.
 
 ```bash
 gh repo view --json name,nameWithOwner,visibility,url,defaultBranchRef
-gh api repos/DataViking-Tech/SynthPanel/rulesets
-gh api repos/DataViking-Tech/SynthPanel/rulesets/14896580
-gh api repos/DataViking-Tech/SynthPanel/branches/main/protection   # returns 404: uses ruleset, not legacy protection
-gh secret list --repo DataViking-Tech/SynthPanel
-gh api repos/DataViking-Tech/SynthPanel/environments
-gh api repos/DataViking-Tech/SynthPanel/code-scanning/default-setup
-gh api repos/DataViking-Tech/SynthPanel/vulnerability-alerts
-gh api repos/DataViking-Tech/SynthPanel/automated-security-fixes
-gh api repos/DataViking-Tech/SynthPanel \
+gh api repos/DataViking-Tech/Althing/rulesets
+gh api repos/DataViking-Tech/Althing/rulesets/14896580
+gh api repos/DataViking-Tech/Althing/branches/main/protection   # returns 404: uses ruleset, not legacy protection
+gh secret list --repo DataViking-Tech/Althing
+gh api repos/DataViking-Tech/Althing/environments
+gh api repos/DataViking-Tech/Althing/code-scanning/default-setup
+gh api repos/DataViking-Tech/Althing/vulnerability-alerts
+gh api repos/DataViking-Tech/Althing/automated-security-fixes
+gh api repos/DataViking-Tech/Althing \
   --jq '{allow_auto_merge,allow_merge_commit,allow_squash_merge,allow_rebase_merge,
          delete_branch_on_merge,allow_update_branch,
          squash_merge_commit_title,squash_merge_commit_message,

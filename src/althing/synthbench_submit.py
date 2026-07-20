@@ -1,0 +1,582 @@
+"""Opt-in submission of calibrated panel runs to SynthBench (sp-ezz).
+
+SynthBench's submission API (``POST {SYNTHBENCH_API_URL}/submit``) expects a
+benchmark-shaped payload: ``{benchmark, config, aggregate, per_question, ...}``.
+A bare Althing run does not produce this shape — it is qualitative output.
+A run made with ``--calibrate-against gss:HAPPY`` (sp-inline-calibration) DOES
+produce per-question JSD against a known human baseline, which is the
+SynthBench currency. So the submission flow is gated on that flag.
+
+This module is responsible for three things:
+
+1.  **Consent** — first time a user opts in we print a one-screen privacy
+    notice and record acceptance at ``~/.althing/synthbench-consent.json``
+    so subsequent runs do not re-prompt. ``--yes`` bypasses the prompt for
+    CI / non-interactive use.
+2.  **Payload transformation** — turn the Althing ``convergence`` report
+    plus the loaded baseline payload into a SynthBench-shaped JSON dict.
+3.  **HTTP POST** — bearer-auth POST to ``/submit`` with a bounded timeout,
+    returning a structured :class:`SubmissionResult`. The panel run itself
+    never fails on submission errors; the submitter logs a warning instead.
+
+The module deliberately does not import from :mod:`althing.convergence`
+beyond the public ``ConvergenceTracker.cumulative_distributions()`` helper
+so a future refactor of the tracker's internals does not ripple here.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import os
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+import httpx
+
+from althing.__version__ import __version__
+
+DEFAULT_API_URL = "https://api.synthbench.org"
+API_URL_ENV = "SYNTHBENCH_API_URL"
+API_KEY_ENV_NAME = "SYNTHBENCH_API_KEY"
+ACCOUNT_URL = "https://synthbench.org/account"
+SUBMIT_TIMEOUT = 30.0
+
+CONSENT_DIR = Path("~/.althing").expanduser()
+CONSENT_PATH = CONSENT_DIR / "synthbench-consent.json"
+CONSENT_VERSION = 1
+
+CONSENT_NOTICE = """
+SynthBench submission consent
+─────────────────────────────
+You opted in to upload this calibrated panel run to SynthBench's public
+benchmark leaderboard.
+
+What gets uploaded:
+  • Per-question categorical response distributions (the model_distribution
+    used to compute calibration JSD), the published human baseline they are
+    scored against, and the derived parity metrics (JSD, Kendall's tau).
+  • The calibration spec (e.g. 'gss:HAPPY'), extractor label, and panel
+    sample size n.
+  • Run config: model identifier(s), persona pack name, instrument name.
+  • The Althing client version.
+
+What does NOT get uploaded:
+  • Free-text panelist responses or follow-ups.
+  • Persona definitions, system prompts, or any persona attributes.
+  • API keys, file paths, or local environment data.
+
+Do not use --submit-to-synthbench with confidential personas, proprietary
+instruments, or topics you would not publish on a public leaderboard.
+
+This consent is recorded at ~/.althing/synthbench-consent.json so you
+will not be re-prompted. Pass --yes to bypass this prompt in CI.
+"""
+
+
+# ---------------------------------------------------------------------------
+# Errors and result types
+# ---------------------------------------------------------------------------
+
+
+class SynthBenchSubmissionError(Exception):
+    """Raised for terminal submission failures the CLI should surface."""
+
+
+@dataclass
+class SubmissionResult:
+    """Outcome of a single ``/submit`` POST.
+
+    ``submission_id`` and ``leaderboard_url`` are populated only on success.
+    ``status`` mirrors what the server returned (``accepted``, ``validating``,
+    ``rejected``, etc.); on a transport failure it is ``"error"``.
+    """
+
+    accepted: bool
+    status: str
+    submission_id: str | None = None
+    leaderboard_url: str | None = None
+    error: str | None = None
+    raw_response: dict[str, Any] = field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# Consent handling
+# ---------------------------------------------------------------------------
+
+
+def _load_consent() -> dict[str, Any] | None:
+    """Return the recorded consent dict, or ``None`` if no record exists."""
+    try:
+        with CONSENT_PATH.open("r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError):
+        # A corrupted consent file is treated as absent so the user is
+        # re-prompted rather than silently submitting on stale state.
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data
+
+
+def consent_recorded() -> bool:
+    """``True`` when a valid consent record (matching ``CONSENT_VERSION``) exists."""
+    data = _load_consent()
+    if data is None:
+        return False
+    return data.get("version") == CONSENT_VERSION and data.get("accepted") is True
+
+
+def record_consent() -> None:
+    """Persist a positive consent record at ``CONSENT_PATH``."""
+    CONSENT_DIR.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "version": CONSENT_VERSION,
+        "accepted": True,
+        "client_version": __version__,
+    }
+    with CONSENT_PATH.open("w", encoding="utf-8") as fh:
+        json.dump(payload, fh, indent=2)
+
+
+def prompt_consent(*, stream: Any = None, input_fn: Any = None) -> bool:
+    """Show the consent notice and read ``y/N`` from stdin.
+
+    ``stream`` and ``input_fn`` are injection points for tests. Default
+    ``stream`` is stderr (so the prompt does not pollute JSON stdout) and
+    default ``input_fn`` is the builtin :func:`input`.
+    """
+    out = stream if stream is not None else sys.stderr
+    reader = input_fn if input_fn is not None else input
+    print(CONSENT_NOTICE, file=out)
+    print("Continue? [y/N] ", end="", file=out, flush=True)
+    try:
+        answer = reader("")
+    except EOFError:
+        return False
+    return answer.strip().lower() in {"y", "yes"}
+
+
+# ---------------------------------------------------------------------------
+# Payload transformation
+# ---------------------------------------------------------------------------
+
+
+def _normalize_distribution(dist: dict[str, Any]) -> dict[str, float]:
+    """Coerce + renormalize a distribution to floats summing to 1.0.
+
+    Returns an empty dict when the input has no positive mass — callers
+    should treat that as "no usable distribution" rather than divide-by-zero.
+    """
+    coerced = {str(k): float(v) for k, v in dist.items() if v is not None}
+    total = sum(v for v in coerced.values() if v > 0)
+    if total <= 0:
+        return {}
+    return {k: v / total for k, v in coerced.items() if v > 0}
+
+
+def _mean(values: list[float]) -> float | None:
+    """Arithmetic mean; ``None`` when the list is empty so we can omit the field."""
+    if not values:
+        return None
+    return sum(values) / len(values)
+
+
+# The SynthBench harness version whose submission contract this module
+# targets. ``synthbench run`` stamps its own ``__version__`` as the
+# top-level ``version`` field of every result file; we mirror that when
+# the real synthbench package is importable and fall back to this pin
+# when only the vendored metric implementations are available.
+SYNTHBENCH_CONTRACT_VERSION = "0.1.0"
+
+
+def _vendored_jsd(p: dict[str, float], q: dict[str, float]) -> float:
+    """Jensen-Shannon divergence, replicating synthbench's convention.
+
+    Mirrors ``synthbench.metrics.distributional.jensen_shannon_divergence``:
+    base-2 log (so the result is bounded in ``[0, 1]``), computed over the
+    union of both supports, negatives clamped to zero, and ``1.0`` returned
+    when either distribution carries no mass. Parity-tested against
+    synthbench's scipy-backed implementation in
+    ``tests/test_synthbench_contract.py``.
+    """
+    keys = sorted(set(p) | set(q))
+    p_vec = [max(float(p.get(k, 0.0)), 0.0) for k in keys]
+    q_vec = [max(float(q.get(k, 0.0)), 0.0) for k in keys]
+    p_sum = sum(p_vec)
+    q_sum = sum(q_vec)
+    if p_sum == 0 or q_sum == 0:
+        return 1.0
+    p_vec = [v / p_sum for v in p_vec]
+    q_vec = [v / q_sum for v in q_vec]
+    jsd = 0.0
+    for a, b in zip(p_vec, q_vec):
+        m = 0.5 * (a + b)
+        if a > 0.0:
+            jsd += 0.5 * a * math.log2(a / m)
+        if b > 0.0:
+            jsd += 0.5 * b * math.log2(b / m)
+    return max(0.0, min(1.0, float(jsd)))
+
+
+def _vendored_kendall_tau_b(p: dict[str, float], q: dict[str, float]) -> float:
+    """Kendall's tau-b, replicating synthbench's convention.
+
+    Mirrors ``synthbench.metrics.ranking.kendall_tau_b`` (which wraps
+    ``scipy.stats.kendalltau(variant="b")``): both distributions are read
+    over the sorted union of their supports, ties are corrected in the
+    denominator, and degenerate inputs (fewer than 2 options, or a constant
+    vector) return ``0.0``.
+    """
+    keys = sorted(set(p) | set(q))
+    n = len(keys)
+    if n < 2:
+        return 0.0
+    x = [float(p.get(k, 0.0)) for k in keys]
+    y = [float(q.get(k, 0.0)) for k in keys]
+    concordant_minus_discordant = 0
+    ties_x = 0  # pairs tied in x (including pairs tied in both)
+    ties_y = 0  # pairs tied in y (including pairs tied in both)
+    for i in range(n):
+        for j in range(i + 1, n):
+            dx = x[i] - x[j]
+            dy = y[i] - y[j]
+            if dx == 0.0:
+                ties_x += 1
+            if dy == 0.0:
+                ties_y += 1
+            if dx != 0.0 and dy != 0.0:
+                concordant_minus_discordant += 1 if dx * dy > 0 else -1
+    n0 = n * (n - 1) // 2
+    denominator = math.sqrt((n0 - ties_x) * (n0 - ties_y))
+    if denominator == 0.0:
+        return 0.0
+    return float(concordant_minus_discordant / denominator)
+
+
+def _synthbench_metrics() -> tuple[Any, Any, str]:
+    """Resolve ``(jsd_fn, kendall_tau_fn, version)`` for payload metrics.
+
+    SynthBench's Tier-2 validation *recomputes* ``jsd`` and ``kendall_tau``
+    from the submitted distributions with its own implementations and
+    rejects on mismatch, so when the real harness is importable we call its
+    metric functions directly and stamp its ``__version__``. Otherwise we
+    fall back to the vendored pure-Python implementations above (no
+    numpy/scipy needed) and :data:`SYNTHBENCH_CONTRACT_VERSION`.
+
+    NOTE: the package named ``synthbench`` on PyPI is an unrelated project;
+    the real harness lives at github.com/DataViking-Tech/SynthBench. The
+    broad ``except`` therefore guards both "not installed" and "a different
+    distribution shadowing the name" (no ``metrics`` subpackage).
+    """
+    try:
+        from synthbench import __version__ as sb_version  # type: ignore[import-not-found]
+        from synthbench.metrics.distributional import (  # type: ignore[import-not-found]
+            jensen_shannon_divergence as sb_jsd,
+        )
+        from synthbench.metrics.ranking import kendall_tau_b as sb_tau  # type: ignore[import-not-found]
+    except Exception:
+        return _vendored_jsd, _vendored_kendall_tau_b, SYNTHBENCH_CONTRACT_VERSION
+    return sb_jsd, sb_tau, str(sb_version)
+
+
+def build_submission_payload(
+    *,
+    panel_extra: dict[str, Any],
+    calibration_spec: str,
+    baseline_payload: dict[str, Any] | None,
+    model_distributions: dict[str, dict[str, float]],
+    panelist_model: str | None,
+    instrument_name: str | None,
+    persona_pack_name: str | None,
+) -> dict[str, Any]:
+    """Assemble a SynthBench ``/submit`` payload from a calibrated panel run.
+
+    The shape matches the contract enforced by SynthBench's validator
+    (``synthbench.validation``, Tier 1 + Tier 2) and its edge Worker
+    (``workers/data-proxy``):
+
+    * top level: ``benchmark``, ``version``, ``config``, ``aggregate`` and a
+      **list**-shaped ``per_question``;
+    * ``config`` carries ``dataset`` (the ``DATASET`` half of the calibration
+      spec) and ``provider`` (``althing/<model>``, the provider format
+      SynthBench's leaderboard taxonomy uses to classify Althing rows as
+      ``product`` framework) plus the althing provenance extras;
+    * every ``per_question`` row carries ``key``, ``human_distribution``,
+      ``model_distribution``, ``jsd`` and ``kendall_tau``;
+    * ``aggregate`` carries ``mean_jsd``, ``mean_kendall_tau``,
+      ``composite_parity`` (SynthBench's accepted 2-metric blend:
+      ``0.5*(1-mean_jsd) + 0.5*(1+mean_tau)/2``) and ``n_questions``
+      (== ``len(per_question)``).
+
+    ``jsd`` and ``kendall_tau`` are computed here from the *exact*
+    distributions serialized into the payload — with synthbench's own metric
+    functions when importable — so the server's Tier-2 recompute is an
+    identity check. The convergence report's calibration ``jsd`` is not
+    reused verbatim because it is computed pre-normalization.
+
+    The whole payload is verified against SynthBench's real ``validate()``
+    in ``tests/test_synthbench_contract.py``.
+    """
+    convergence = panel_extra.get("convergence") or {}
+    per_question_in = convergence.get("per_question") or {}
+    final_n = convergence.get("final_n", 0)
+
+    jsd_fn, tau_fn, contract_version = _synthbench_metrics()
+
+    # Human baselines. Supported shapes:
+    #   {"human_distribution": {...}}                          (single-question)
+    #   {"per_question": {key: {"human_distribution": ...}}}   (multi-question)
+    # The single-question shape applies only to rows that carry a
+    # ``calibration`` block: build_report binds calibration to the one
+    # tracked question matching the baseline's question key, so this no
+    # longer stamps one human distribution onto every tracked question.
+    single_human: dict[str, float] | None = None
+    multi_human: dict[str, dict[str, float]] = {}
+    if isinstance(baseline_payload, dict):
+        if isinstance(baseline_payload.get("human_distribution"), dict):
+            single_human = _normalize_distribution(baseline_payload["human_distribution"]) or None
+        elif isinstance(baseline_payload.get("per_question"), dict):
+            for key, sub in baseline_payload["per_question"].items():
+                if isinstance(sub, dict) and isinstance(sub.get("human_distribution"), dict):
+                    multi_human[key] = _normalize_distribution(sub["human_distribution"])
+
+    per_question_out: list[dict[str, Any]] = []
+    jsd_values: list[float] = []
+    tau_values: list[float] = []
+    for key, q_data in per_question_in.items():
+        calib = q_data.get("calibration") if isinstance(q_data, dict) else None
+        if not isinstance(calib, dict):
+            # The question was not on the calibration path at all (free
+            # text, or excluded by the single-question baseline binding).
+            # Disjoint-support questions surfaced via alignment_error ARE
+            # included, since their calib block exists with jsd=1.0.
+            continue
+        model_dist = _normalize_distribution(model_distributions.get(key, {}))
+        human_dist = multi_human.get(key) if multi_human else single_human
+        if not model_dist or not human_dist:
+            continue
+        jsd_value = round(float(jsd_fn(human_dist, model_dist)), 6)
+        tau_value = round(float(tau_fn(human_dist, model_dist)), 6)
+        row: dict[str, Any] = {
+            "key": str(key),
+            "human_distribution": human_dist,
+            "model_distribution": model_dist,
+            "jsd": jsd_value,
+            "kendall_tau": tau_value,
+            "n": final_n,
+            "n_samples": final_n,
+            "extractor": calib.get("extractor"),
+            "auto_derived": bool(calib.get("auto_derived", False)),
+        }
+        if "alignment_error" in calib:
+            row["alignment_error"] = calib["alignment_error"]
+        per_question_out.append(row)
+        jsd_values.append(jsd_value)
+        tau_values.append(tau_value)
+
+    aggregate: dict[str, Any] = {
+        "n": final_n,
+        "n_questions": len(per_question_out),
+    }
+    mean_jsd = _mean(jsd_values)
+    mean_tau = _mean(tau_values)
+    if mean_jsd is not None and mean_tau is not None:
+        aggregate["mean_jsd"] = round(mean_jsd, 6)
+        aggregate["mean_kendall_tau"] = round(mean_tau, 6)
+        # SynthBench accepts composite_parity as either the 2-metric blend
+        # or the full SPS mean; we report the blend since JSD + tau are the
+        # only components a calibrated panel run produces.
+        aggregate["composite_parity"] = round(0.5 * (1.0 - mean_jsd) + 0.5 * (1.0 + mean_tau) / 2.0, 6)
+
+    dataset = calibration_spec.partition(":")[0].strip()
+    config: dict[str, Any] = {
+        "dataset": dataset,
+        "provider": f"althing/{panelist_model}" if panelist_model else "althing",
+        "framework": "althing",
+        "calibration_spec": calibration_spec,
+        "n": final_n,
+        "client": "althing",
+        "client_version": __version__,
+    }
+    if panelist_model:
+        config["panelist_model"] = panelist_model
+    if instrument_name:
+        config["instrument"] = instrument_name
+    if persona_pack_name:
+        config["persona_pack"] = persona_pack_name
+
+    return {
+        "benchmark": "synthbench",
+        "version": contract_version,
+        "config": config,
+        "aggregate": aggregate,
+        "per_question": per_question_out,
+    }
+
+
+def is_submittable(panel_extra: dict[str, Any]) -> tuple[bool, str | None]:
+    """Return ``(ok, reason)`` describing whether ``panel_extra`` is submittable.
+
+    A panel run is submittable only when convergence ran, the calibration
+    block carried a baseline_spec, and at least one per-question entry has
+    a calibration JSD (otherwise SynthBench has nothing to score).
+    """
+    if panel_extra.get("run_invalid"):
+        return False, "panel run was marked invalid; refusing to submit"
+    convergence = panel_extra.get("convergence")
+    if not isinstance(convergence, dict):
+        return False, "no convergence report attached (run with --calibrate-against)"
+    per_q = convergence.get("per_question") or {}
+    has_calibration = any(isinstance(q, dict) and isinstance(q.get("calibration"), dict) for q in per_q.values())
+    if not has_calibration:
+        return False, "no per-question calibration data (no JSD computed)"
+    return True, None
+
+
+# ---------------------------------------------------------------------------
+# HTTP transport
+# ---------------------------------------------------------------------------
+
+
+def _api_base() -> str:
+    return os.environ.get(API_URL_ENV, DEFAULT_API_URL).rstrip("/")
+
+
+def submit(
+    payload: dict[str, Any],
+    *,
+    api_key: str,
+    api_url: str | None = None,
+    client: httpx.Client | None = None,
+) -> SubmissionResult:
+    """POST ``payload`` to ``{api_url}/submit`` with bearer auth.
+
+    On 2xx the server response is parsed as JSON and an accepted result is
+    returned. On any other status the body is captured into ``error`` so
+    the user sees the server's specific Tier-2 validation error rather than
+    a generic HTTP code. Network errors surface as ``status="error"``.
+
+    ``client`` is an injection point for tests (use ``httpx.MockTransport``).
+    """
+    base = (api_url or _api_base()).rstrip("/")
+    url = f"{base}/submit"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "User-Agent": f"althing/{__version__}",
+    }
+    owns_client = client is None
+    client = client or httpx.Client(timeout=SUBMIT_TIMEOUT)
+    try:
+        try:
+            resp = client.post(url, json=payload, headers=headers)
+        except httpx.HTTPError as exc:
+            return SubmissionResult(accepted=False, status="error", error=str(exc))
+
+        body: dict[str, Any]
+        try:
+            parsed = resp.json()
+            body = parsed if isinstance(parsed, dict) else {"raw": parsed}
+        except ValueError:
+            body = {"raw": resp.text}
+
+        if 200 <= resp.status_code < 300:
+            submission_id = body.get("id") or body.get("submission_id")
+            status = str(body.get("status", "accepted"))
+            leaderboard_url = body.get("leaderboard_url") or body.get("url")
+            if leaderboard_url is None and submission_id:
+                # Conventional public URL when the server does not echo one.
+                leaderboard_url = f"https://synthbench.org/submit/{submission_id}"
+            return SubmissionResult(
+                accepted=True,
+                status=status,
+                submission_id=str(submission_id) if submission_id else None,
+                leaderboard_url=leaderboard_url,
+                raw_response=body,
+            )
+
+        # Surface the server's validation error verbatim so the user can act
+        # on it. Common cases: 401 (bad key), 422 (Tier-2 schema mismatch).
+        err_msg = body.get("error") or body.get("detail") or body.get("message")
+        return SubmissionResult(
+            accepted=False,
+            status=f"http_{resp.status_code}",
+            error=str(err_msg) if err_msg else f"HTTP {resp.status_code}: {resp.text[:200]}",
+            raw_response=body,
+        )
+    finally:
+        if owns_client:
+            client.close()
+
+
+# ---------------------------------------------------------------------------
+# Top-level CLI entrypoint
+# ---------------------------------------------------------------------------
+
+
+def submit_panel_result(
+    *,
+    panel_extra: dict[str, Any],
+    calibration_spec: str,
+    baseline_payload: dict[str, Any] | None,
+    model_distributions: dict[str, dict[str, float]],
+    panelist_model: str | None = None,
+    instrument_name: str | None = None,
+    persona_pack_name: str | None = None,
+    api_key: str | None = None,
+    api_url: str | None = None,
+    skip_consent: bool = False,
+    client: httpx.Client | None = None,
+    stderr: Any = None,
+) -> SubmissionResult:
+    """Top-level entry called from the CLI after a panel run completes.
+
+    Returns a :class:`SubmissionResult`. The caller is responsible for the
+    "warn-but-don't-fail" semantic — this function never raises on a
+    submission error so a slow SynthBench cannot turn a successful panel
+    run into a failed CLI exit.
+    """
+    out = stderr if stderr is not None else sys.stderr
+
+    ok, reason = is_submittable(panel_extra)
+    if not ok:
+        return SubmissionResult(accepted=False, status="not_submittable", error=reason)
+
+    key = api_key or os.environ.get(API_KEY_ENV_NAME)
+    if not key:
+        return SubmissionResult(
+            accepted=False,
+            status="missing_api_key",
+            error=f"{API_KEY_ENV_NAME} not set; mint a key at {ACCOUNT_URL}",
+        )
+
+    if not skip_consent and not consent_recorded():
+        if not prompt_consent(stream=out):
+            return SubmissionResult(
+                accepted=False,
+                status="consent_declined",
+                error="user declined SynthBench upload consent",
+            )
+        record_consent()
+
+    payload = build_submission_payload(
+        panel_extra=panel_extra,
+        calibration_spec=calibration_spec,
+        baseline_payload=baseline_payload,
+        model_distributions=model_distributions,
+        panelist_model=panelist_model,
+        instrument_name=instrument_name,
+        persona_pack_name=persona_pack_name,
+    )
+    if not payload["per_question"]:
+        return SubmissionResult(
+            accepted=False,
+            status="empty_payload",
+            error="no per-question calibration entries had both a model and human distribution",
+        )
+    return submit(payload, api_key=key, api_url=api_url, client=client)

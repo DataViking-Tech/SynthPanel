@@ -7,18 +7,18 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from synth_panel.llm.models import (
+from althing.llm.models import (
     CompletionResponse,
     StopReason,
     TextBlock,
     ToolDefinition,
     ToolInvocationBlock,
 )
-from synth_panel.llm.models import (
+from althing.llm.models import (
     TokenUsage as LLMTokenUsage,
 )
-from synth_panel.persistence import ConversationMessage, Session
-from synth_panel.runtime import (
+from althing.persistence import ConversationMessage, Session
+from althing.runtime import (
     AgentRuntime,
     AllowAllPolicy,
     HookResult,

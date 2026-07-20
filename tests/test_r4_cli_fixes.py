@@ -7,7 +7,7 @@ Covers:
   silently skips synthesis and exits 0 with a bare "Ensemble complete".
 * Cost — a provider-reported cost of exactly $0 for a run that consumed
   tokens (OpenRouter BYOK) must not zero out the recorded run cost or
-  starve :class:`~synth_panel.cost.CostGate`; the local pricing-table
+  starve :class:`~althing.cost.CostGate`; the local pricing-table
   estimate is used instead.
 * Ensemble stdout — genuine (>=2 model) ensemble runs now state on stdout
   that synthesis was skipped and print the exact follow-up command.
@@ -25,10 +25,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from synth_panel.cost import CostGate, TokenUsage, resolve_cost
-from synth_panel.main import main
-from synth_panel.persistence import ConversationMessage
-from synth_panel.runtime import TurnSummary
+from althing.cost import CostGate, TokenUsage, resolve_cost
+from althing.main import main
+from althing.persistence import ConversationMessage
+from althing.runtime import TurnSummary
 
 
 def _mock_turn_summary(text: str = "I think so.") -> TurnSummary:
@@ -42,8 +42,8 @@ def _mock_turn_summary(text: str = "I think so.") -> TurnSummary:
 
 
 def _mock_synthesis_result():
-    from synth_panel.cost import CostEstimate
-    from synth_panel.synthesis import SynthesisResult
+    from althing.cost import CostEstimate
+    from althing.synthesis import SynthesisResult
 
     return SynthesisResult(
         summary="Test synthesis summary",
@@ -70,9 +70,9 @@ def panel_files(tmp_path):
 class TestSingleModelsSpecRouting:
     """A one-entry ``--models`` spec must take the standard single-model path."""
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_single_entry_models_runs_synthesis(
         self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, panel_files
     ):
@@ -109,9 +109,9 @@ class TestSingleModelsSpecRouting:
         assert "Synthesis: completed" in captured.out
         assert "not saved" in captured.out
 
-    @patch("synth_panel.cli.commands.synthesize_panel")
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.cli.commands.synthesize_panel")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_single_entry_models_json_matches_single_model_shape(
         self, mock_client_cls, mock_runtime_cls, mock_synth, capsys, panel_files
     ):
@@ -143,8 +143,8 @@ class TestSingleModelsSpecRouting:
         # Nonzero recorded cost with token usage (regression for gh-r4 #2).
         assert data["panelist_cost"] not in (None, "$0.0000")
 
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_two_model_ensemble_states_synthesis_skipped(self, mock_client_cls, mock_runtime_cls, capsys, panel_files):
         mock_runtime = MagicMock()
         mock_runtime.run_turn.return_value = _mock_turn_summary()
@@ -173,8 +173,8 @@ class TestSingleModelsSpecRouting:
         assert "Cost:" in out
         assert "2 model(s)" in out
 
-    @patch("synth_panel.orchestrator.AgentRuntime")
-    @patch("synth_panel.cli.commands.LLMClient")
+    @patch("althing.orchestrator.AgentRuntime")
+    @patch("althing.cli.commands.LLMClient")
     def test_two_model_ensemble_json_carries_synthesis_status(
         self, mock_client_cls, mock_runtime_cls, capsys, panel_files
     ):
@@ -226,7 +226,7 @@ class TestZeroProviderCostFallback:
 
     def test_cost_gate_sees_accrued_cost_despite_zero_provider_cost(self):
         """CostGate must accrue nonzero spend so --max-cost can trip."""
-        from synth_panel.orchestrator import run_panel_parallel
+        from althing.orchestrator import run_panel_parallel
 
         personas = [{"name": f"P{i}"} for i in range(4)]
         questions = [{"text": "Q?"}]
@@ -236,7 +236,7 @@ class TestZeroProviderCostFallback:
         summary = TurnSummary(assistant_messages=[msg], iterations=1, usage=usage)
 
         gate = CostGate(max_cost_usd=0.001, total_panelists=len(personas))
-        with patch("synth_panel.orchestrator.AgentRuntime") as mock_runtime_cls:
+        with patch("althing.orchestrator.AgentRuntime") as mock_runtime_cls:
             mock_runtime = MagicMock()
             mock_runtime.run_turn.return_value = summary
             mock_runtime_cls.return_value = mock_runtime
@@ -306,7 +306,7 @@ class TestCostShow:
 
 class TestHelpText:
     def test_personas_help_mentions_bundled_packs(self):
-        from synth_panel.cli.parser import build_parser
+        from althing.cli.parser import build_parser
 
         parser = build_parser()
         # Find the panel run subparser's help text.

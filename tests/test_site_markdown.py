@@ -108,10 +108,10 @@ def test_converter_strips_chrome() -> None:
 
 def test_converter_preserves_code_blocks() -> None:
     renderer = _load_renderer()
-    html = "<main><pre><code>pip install synthpanel</code></pre></main>"
+    html = "<main><pre><code>pip install althing</code></pre></main>"
     md = renderer.html_to_markdown(html)
     assert "```" in md
-    assert "pip install synthpanel" in md
+    assert "pip install althing" in md
 
 
 def test_converter_renders_tables() -> None:
@@ -156,8 +156,8 @@ def test_converter_attaches_link_to_card_heading() -> None:
 def test_landing_page_markdown_has_install_command() -> None:
     """Smoke check: the most important content survives conversion."""
     md = (SITE_ROOT / "index.md").read_text(encoding="utf-8")
-    assert "pip install synthpanel" in md
-    assert "synthpanel" in md
+    assert "pip install althing" in md
+    assert "althing" in md
     assert "MCP" in md or "mcp" in md
 
 

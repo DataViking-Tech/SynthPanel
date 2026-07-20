@@ -15,16 +15,16 @@ from typing import Any
 import httpx
 import pytest
 
-from synth_panel.cost import ZERO_USAGE
-from synth_panel.llm.errors import LLMError, LLMErrorCategory
-from synth_panel.llm.models import CompletionRequest, InputMessage, TextBlock
-from synth_panel.llm.providers.openrouter import (
+from althing.cost import ZERO_USAGE
+from althing.llm.errors import LLMError, LLMErrorCategory
+from althing.llm.models import CompletionRequest, InputMessage, TextBlock
+from althing.llm.providers.openrouter import (
     OpenRouterProvider,
     _openrouter_error_from_response,
 )
-from synth_panel.orchestrator import PanelistResult
-from synth_panel.synthesis import STRATEGY_MAP_REDUCE, SynthesisResult
-from synth_panel.synthesis_recovery import (
+from althing.orchestrator import PanelistResult
+from althing.synthesis import STRATEGY_MAP_REDUCE, SynthesisResult
+from althing.synthesis_recovery import (
     RecoveryContext,
     SynthesisFailureClass,
     SynthesisRecoveryError,
@@ -70,7 +70,7 @@ def _ok_result(**kwargs: Any) -> SynthesisResult:
 
 def _ctx(monkeypatch: pytest.MonkeyPatch, **kwargs: Any) -> RecoveryContext:
     # No rung should ever sleep for real in tests.
-    monkeypatch.setattr("synth_panel.synthesis_recovery.time.sleep", lambda _s: None)
+    monkeypatch.setattr("althing.synthesis_recovery.time.sleep", lambda _s: None)
     defaults: dict[str, Any] = dict(
         client=object(),  # never touched: synthesis fns are monkeypatched
         panelist_results=_panelists(),
@@ -190,7 +190,7 @@ class TestDownstreamExtraction:
 
     def test_format_recovery_command(self) -> None:
         cmd = format_recovery_command("abc123", "openrouter/anthropic/claude-haiku-4.5")
-        assert cmd == "synthpanel panel synthesize abc123 --synthesis-model openrouter/google/gemini-2.5-flash"
+        assert cmd == "althing panel synthesize abc123 --synthesis-model openrouter/google/gemini-2.5-flash"
 
     def test_format_recovery_command_placeholder_id(self) -> None:
         assert "<result-id>" in format_recovery_command(None, "sonnet")
@@ -211,7 +211,7 @@ class TestLadderRungs:
             calls.append(kwargs)
             return _ok_result()
 
-        monkeypatch.setattr("synth_panel.synthesis_recovery.synthesize_panel", fake_single)
+        monkeypatch.setattr("althing.synthesis_recovery.synthesize_panel", fake_single)
         ctx = _ctx(monkeypatch)
         exc = LLMError("overloaded", LLMErrorCategory.SERVER_ERROR, status_code=529)
         result = recover_synthesis_failure(exc, ctx)
@@ -228,7 +228,7 @@ class TestLadderRungs:
             calls.append(kwargs)
             raise LLMError("overloaded", LLMErrorCategory.SERVER_ERROR, status_code=529)
 
-        monkeypatch.setattr("synth_panel.synthesis_recovery.synthesize_panel", always_529)
+        monkeypatch.setattr("althing.synthesis_recovery.synthesize_panel", always_529)
         ctx = _ctx(monkeypatch, synthesis_model="sonnet")
         with pytest.raises(SynthesisRecoveryError):
             recover_synthesis_failure(LLMError("overloaded", LLMErrorCategory.SERVER_ERROR, status_code=529), ctx)
@@ -244,9 +244,9 @@ class TestLadderRungs:
             mr_calls.append(kwargs)
             return _ok_result(strategy=STRATEGY_MAP_REDUCE)
 
-        monkeypatch.setattr("synth_panel.synthesis_recovery.synthesize_panel_mapreduce", fake_mapreduce)
+        monkeypatch.setattr("althing.synthesis_recovery.synthesize_panel_mapreduce", fake_mapreduce)
         monkeypatch.setattr(
-            "synth_panel.synthesis_recovery.synthesize_panel",
+            "althing.synthesis_recovery.synthesize_panel",
             lambda *a, **k: pytest.fail("single-pass call must not be retried on overflow"),
         )
         ctx = _ctx(monkeypatch)
@@ -265,7 +265,7 @@ class TestLadderRungs:
         """The production bug shape: pre-flight passed nothing, downstream 400'd,
         and the token estimate exceeds the model window — must fire map-reduce."""
         monkeypatch.setattr(
-            "synth_panel.synthesis_recovery.estimate_single_pass_tokens",
+            "althing.synthesis_recovery.estimate_single_pass_tokens",
             lambda *a, **k: 250_000,
         )
         mr_kwargs: dict[str, Any] = {}
@@ -274,7 +274,7 @@ class TestLadderRungs:
             mr_kwargs.update(kwargs)
             return _ok_result(strategy=STRATEGY_MAP_REDUCE)
 
-        monkeypatch.setattr("synth_panel.synthesis_recovery.synthesize_panel_mapreduce", fake_mapreduce)
+        monkeypatch.setattr("althing.synthesis_recovery.synthesize_panel_mapreduce", fake_mapreduce)
         ctx = _ctx(monkeypatch)  # claude-haiku → 200k window
         result = recover_synthesis_failure(_or_400("Azure"), ctx)
         assert result.strategy == STRATEGY_MAP_REDUCE
@@ -284,11 +284,11 @@ class TestLadderRungs:
 
     def test_explicit_single_strategy_skips_map_reduce_and_says_so(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
-            "synth_panel.synthesis_recovery.synthesize_panel_mapreduce",
+            "althing.synthesis_recovery.synthesize_panel_mapreduce",
             lambda *a, **k: pytest.fail("map-reduce must not run when strategy=single"),
         )
         monkeypatch.setattr(
-            "synth_panel.synthesis_recovery.estimate_single_pass_tokens",
+            "althing.synthesis_recovery.estimate_single_pass_tokens",
             lambda *a, **k: 250_000,
         )
         ctx = _ctx(monkeypatch, allow_map_reduce=False)
@@ -304,7 +304,7 @@ class TestLadderRungs:
             calls.append(kwargs)
             return _ok_result()
 
-        monkeypatch.setattr("synth_panel.synthesis_recovery.synthesize_panel", fake_single)
+        monkeypatch.setattr("althing.synthesis_recovery.synthesize_panel", fake_single)
         ctx = _ctx(monkeypatch)
         # Plain 400, small prompt: FATAL class, downstream known → reroute.
         result = recover_synthesis_failure(_or_400("Azure"), ctx)
@@ -318,7 +318,7 @@ class TestLadderRungs:
         """Reroute 400s too; a large (but pre-flight-passing) prompt then
         falls back to map-reduce as suspected downstream overflow."""
         monkeypatch.setattr(
-            "synth_panel.synthesis_recovery.estimate_single_pass_tokens",
+            "althing.synthesis_recovery.estimate_single_pass_tokens",
             lambda *a, **k: 150_000,  # under haiku's 200k documented window
         )
 
@@ -331,8 +331,8 @@ class TestLadderRungs:
             mr_kwargs.update(kwargs)
             return _ok_result(strategy=STRATEGY_MAP_REDUCE)
 
-        monkeypatch.setattr("synth_panel.synthesis_recovery.synthesize_panel", reroute_also_400s)
-        monkeypatch.setattr("synth_panel.synthesis_recovery.synthesize_panel_mapreduce", fake_mapreduce)
+        monkeypatch.setattr("althing.synthesis_recovery.synthesize_panel", reroute_also_400s)
+        monkeypatch.setattr("althing.synthesis_recovery.synthesize_panel_mapreduce", fake_mapreduce)
         ctx = _ctx(monkeypatch)
         result = recover_synthesis_failure(_or_400("Azure"), ctx)
         assert result.strategy == STRATEGY_MAP_REDUCE
@@ -346,9 +346,9 @@ class TestLadderRungs:
         def always_400(*args: Any, **kwargs: Any) -> SynthesisResult:
             raise _or_400("Azure")
 
-        monkeypatch.setattr("synth_panel.synthesis_recovery.synthesize_panel", always_400)
+        monkeypatch.setattr("althing.synthesis_recovery.synthesize_panel", always_400)
         monkeypatch.setattr(
-            "synth_panel.synthesis_recovery.synthesize_panel_mapreduce",
+            "althing.synthesis_recovery.synthesize_panel_mapreduce",
             lambda *a, **k: pytest.fail("small prompt must not trigger suspected-overflow map-reduce"),
         )
         ctx = _ctx(monkeypatch)  # tiny panel → tiny estimate
@@ -357,7 +357,7 @@ class TestLadderRungs:
 
     def test_fatal_without_downstream_goes_straight_to_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
-            "synth_panel.synthesis_recovery.synthesize_panel",
+            "althing.synthesis_recovery.synthesize_panel",
             lambda *a, **k: pytest.fail("no rung applies to a fatal non-OR error"),
         )
         ctx = _ctx(monkeypatch, synthesis_model="sonnet")
@@ -368,30 +368,30 @@ class TestLadderRungs:
 
     def test_last_resort_message_names_exact_recovery_command(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
-            "synth_panel.synthesis_recovery.synthesize_panel",
+            "althing.synthesis_recovery.synthesize_panel",
             lambda *a, **k: (_ for _ in ()).throw(_or_400("Azure")),
         )
         ctx = _ctx(monkeypatch, result_id="panel-42")
         with pytest.raises(SynthesisRecoveryError) as ei:
             recover_synthesis_failure(_or_400("Azure"), ctx)
         msg = str(ei.value)
-        assert "synthpanel panel synthesize panel-42 --synthesis-model openrouter/google/gemini-2.5-flash" in msg
+        assert "althing panel synthesize panel-42 --synthesis-model openrouter/google/gemini-2.5-flash" in msg
         assert ei.value.suggested_command.endswith("openrouter/google/gemini-2.5-flash")
 
 
 class TestDownstreamRevealedLimit:
     def test_capped_at_half_estimate_when_fits_documented_window(self) -> None:
-        from synth_panel.synthesis_recovery import _downstream_revealed_limit
+        from althing.synthesis_recovery import _downstream_revealed_limit
 
         assert _downstream_revealed_limit(150_000, 200_000) == 75_000
 
     def test_floored_at_suspected_threshold(self) -> None:
-        from synth_panel.synthesis_recovery import _downstream_revealed_limit
+        from althing.synthesis_recovery import _downstream_revealed_limit
 
         assert _downstream_revealed_limit(40_000, 200_000) == 32_000
 
     def test_none_for_true_documented_overflow(self) -> None:
-        from synth_panel.synthesis_recovery import _downstream_revealed_limit
+        from althing.synthesis_recovery import _downstream_revealed_limit
 
         assert _downstream_revealed_limit(250_000, 200_000) is None
 
@@ -400,7 +400,7 @@ class TestContextLimitOverridePlanning:
     def test_override_forces_sub_chunking(self) -> None:
         """With a small override, a question whose responses fit the documented
         window is still split into per-batch calls + inner reduce."""
-        from synth_panel.synthesis import synthesize_panel_mapreduce
+        from althing.synthesis import synthesize_panel_mapreduce
 
         long_answer = "word " * 6_400  # ~32k chars → ~8k tokens per panelist
         panelists = _panelists(2, answer=long_answer)
@@ -410,11 +410,11 @@ class TestContextLimitOverridePlanning:
                 self.call_count = 0
 
             def send(self, request: Any, **kwargs: Any) -> Any:
-                from synth_panel.llm.models import (
+                from althing.llm.models import (
                     CompletionResponse,
                     ToolInvocationBlock,
                 )
-                from synth_panel.llm.models import (
+                from althing.llm.models import (
                     TokenUsage as LLMTokenUsage,
                 )
 
@@ -524,7 +524,7 @@ class TestRerouteRequestShape:
                 },
             )
 
-        monkeypatch.setattr("synth_panel.llm.providers.openrouter.httpx.post", fake_post)
+        monkeypatch.setattr("althing.llm.providers.openrouter.httpx.post", fake_post)
         provider.send(self._request("openrouter/google/gemini-2.5-flash"))
         assert captured["json"]["provider"] == {"ignore": ["azure"]}
 
@@ -549,7 +549,7 @@ class TestRerouteRequestShape:
                 },
             )
 
-        monkeypatch.setattr("synth_panel.llm.providers.openrouter.httpx.post", fake_post)
+        monkeypatch.setattr("althing.llm.providers.openrouter.httpx.post", fake_post)
         provider.send(self._request("openrouter/anthropic/claude-haiku-4.5"))
         assert captured["url"].endswith("/v1/messages")
         assert captured["json"]["provider"] == {"ignore": ["azure"]}
@@ -569,7 +569,7 @@ class TestRerouteRequestShape:
                 },
             )
 
-        monkeypatch.setattr("synth_panel.llm.providers.openrouter.httpx.post", fake_post)
+        monkeypatch.setattr("althing.llm.providers.openrouter.httpx.post", fake_post)
         req = CompletionRequest(
             model="openrouter/google/gemini-2.5-flash",
             max_tokens=64,
@@ -612,8 +612,8 @@ class TestPanelSynthesizeCommand:
     def test_global_model_flag_warns(
         self, tmp_path: Any, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        from synth_panel.cli import commands as cmd
-        from synth_panel.cli.output import OutputFormat
+        from althing.cli import commands as cmd
+        from althing.cli.output import OutputFormat
 
         path = _write_saved_result(tmp_path)
         monkeypatch.setattr(
@@ -621,7 +621,7 @@ class TestPanelSynthesizeCommand:
             "synthesize_panel",
             lambda *a, **k: _ok_result(model="openrouter/anthropic/claude-haiku-4.5"),
         )
-        monkeypatch.setattr("synth_panel.mcp.data.save_panel_synthesis", lambda *a, **k: "sidecar.json")
+        monkeypatch.setattr("althing.mcp.data.save_panel_synthesis", lambda *a, **k: "sidecar.json")
         rc = cmd.handle_panel_synthesize(self._args(str(path), model="opus"), OutputFormat.TEXT)
         assert rc == 0
         err = capsys.readouterr().err
@@ -631,8 +631,8 @@ class TestPanelSynthesizeCommand:
     def test_no_warning_without_global_model(
         self, tmp_path: Any, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        from synth_panel.cli import commands as cmd
-        from synth_panel.cli.output import OutputFormat
+        from althing.cli import commands as cmd
+        from althing.cli.output import OutputFormat
 
         path = _write_saved_result(tmp_path)
         monkeypatch.setattr(
@@ -640,7 +640,7 @@ class TestPanelSynthesizeCommand:
             "synthesize_panel",
             lambda *a, **k: _ok_result(model="openrouter/anthropic/claude-haiku-4.5"),
         )
-        monkeypatch.setattr("synth_panel.mcp.data.save_panel_synthesis", lambda *a, **k: "sidecar.json")
+        monkeypatch.setattr("althing.mcp.data.save_panel_synthesis", lambda *a, **k: "sidecar.json")
         rc = cmd.handle_panel_synthesize(self._args(str(path)), OutputFormat.TEXT)
         assert rc == 0
         assert "ignored by 'panel synthesize'" not in capsys.readouterr().err
@@ -648,8 +648,8 @@ class TestPanelSynthesizeCommand:
     def test_failed_synthesis_runs_ladder_and_reports_guided_command(
         self, tmp_path: Any, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        from synth_panel.cli import commands as cmd
-        from synth_panel.cli.output import OutputFormat
+        from althing.cli import commands as cmd
+        from althing.cli.output import OutputFormat
 
         path = _write_saved_result(tmp_path)
 
@@ -658,23 +658,23 @@ class TestPanelSynthesizeCommand:
 
         monkeypatch.setattr(cmd, "synthesize_panel", always_400)
         # Ladder's own calls go through synthesis_recovery's import.
-        monkeypatch.setattr("synth_panel.synthesis_recovery.synthesize_panel", always_400)
-        monkeypatch.setattr("synth_panel.synthesis_recovery.time.sleep", lambda _s: None)
+        monkeypatch.setattr("althing.synthesis_recovery.synthesize_panel", always_400)
+        monkeypatch.setattr("althing.synthesis_recovery.time.sleep", lambda _s: None)
         monkeypatch.setattr(
-            "synth_panel.synthesis_recovery.synthesize_panel_mapreduce",
+            "althing.synthesis_recovery.synthesize_panel_mapreduce",
             lambda *a, **k: (_ for _ in ()).throw(_or_400("Azure")),
         )
         rc = cmd.handle_panel_synthesize(self._args(str(path)), OutputFormat.TEXT)
         assert rc == 2
         err = capsys.readouterr().err
         # Guided fallback names the exact recovery command with the saved id.
-        assert "synthpanel panel synthesize saved-1 --synthesis-model openrouter/google/gemini-2.5-flash" in err
+        assert "althing panel synthesize saved-1 --synthesis-model openrouter/google/gemini-2.5-flash" in err
 
     def test_ladder_reroute_recovers_panel_synthesize(
         self, tmp_path: Any, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        from synth_panel.cli import commands as cmd
-        from synth_panel.cli.output import OutputFormat
+        from althing.cli import commands as cmd
+        from althing.cli.output import OutputFormat
 
         path = _write_saved_result(tmp_path)
 
@@ -686,8 +686,8 @@ class TestPanelSynthesizeCommand:
             return _ok_result(model="openrouter/anthropic/claude-haiku-4.5")
 
         monkeypatch.setattr(cmd, "synthesize_panel", primary_400)
-        monkeypatch.setattr("synth_panel.synthesis_recovery.synthesize_panel", reroute_ok)
-        monkeypatch.setattr("synth_panel.mcp.data.save_panel_synthesis", lambda *a, **k: "sidecar.json")
+        monkeypatch.setattr("althing.synthesis_recovery.synthesize_panel", reroute_ok)
+        monkeypatch.setattr("althing.mcp.data.save_panel_synthesis", lambda *a, **k: "sidecar.json")
         rc = cmd.handle_panel_synthesize(self._args(str(path)), OutputFormat.TEXT)
         assert rc == 0
         assert "rung=reroute" in capsys.readouterr().err

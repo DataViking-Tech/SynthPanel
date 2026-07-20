@@ -1,4 +1,4 @@
-"""Tests for synth_panel.cost_summary aggregation (sy-kmw1)."""
+"""Tests for althing.cost_summary aggregation (sy-kmw1)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from synth_panel.cost_summary import (
+from althing.cost_summary import (
     RunInfo,
     SummaryReport,
     aggregate_runs,
@@ -233,7 +233,7 @@ def _make_run(
     is_partial: bool = False,
 ) -> RunInfo:
     """Hand-rolled RunInfo for aggregator tests."""
-    from synth_panel.cost_summary import PanelistCost
+    from althing.cost_summary import PanelistCost
 
     pl = [PanelistCost(model=m, cost_usd=c, turns=t) for m, c, t in (panelists or [])]
     return RunInfo(
@@ -500,7 +500,7 @@ class TestDefaultRunsDir:
         monkeypatch.delenv("SYNTH_PANEL_DATA_DIR", raising=False)
         d = default_runs_dir()
         assert d.name == "results"
-        assert d.parent.name == ".synthpanel"
+        assert d.parent.name == ".althing"
 
 
 # ---------------------------------------------------------------------------
@@ -514,7 +514,7 @@ class TestCliSmoke:
         if pythonpath := os.environ.get("PYTHONPATH"):
             env["PYTHONPATH"] = pythonpath
         return subprocess.run(
-            [sys.executable, "-m", "synth_panel", "cost", "summary", *args],
+            [sys.executable, "-m", "althing", "cost", "summary", *args],
             env=env,
             capture_output=True,
             text=True,

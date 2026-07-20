@@ -25,12 +25,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from synth_panel.cost import TokenUsage as CostTokenUsage
-from synth_panel.main import main
-from synth_panel.orchestrator import run_panel_parallel
-from synth_panel.persistence import ConversationMessage
-from synth_panel.question_budget import QuestionFailureBudget
-from synth_panel.runtime import TurnSummary
+from althing.cost import TokenUsage as CostTokenUsage
+from althing.main import main
+from althing.orchestrator import run_panel_parallel
+from althing.persistence import ConversationMessage
+from althing.question_budget import QuestionFailureBudget
+from althing.runtime import TurnSummary
 
 # ---------------------------------------------------------------------------
 # QuestionFailureBudget unit tests
@@ -196,7 +196,7 @@ def _ok_turn_summary(text: str = "fine") -> TurnSummary:
     )
 
 
-@patch("synth_panel.orchestrator.AgentRuntime")
+@patch("althing.orchestrator.AgentRuntime")
 def test_orchestrator_skips_disabled_question_for_later_panelists(
     mock_runtime_cls: MagicMock,
 ) -> None:
@@ -256,7 +256,7 @@ def test_orchestrator_skips_disabled_question_for_later_panelists(
         assert pr.responses[2].get("response") == "ok"
 
 
-@patch("synth_panel.orchestrator.AgentRuntime")
+@patch("althing.orchestrator.AgentRuntime")
 def test_orchestrator_no_budget_means_no_skip_marker(
     mock_runtime_cls: MagicMock,
 ) -> None:
@@ -309,8 +309,8 @@ def _selective_failure_summary(prompt: str) -> TurnSummary:
     return _ok_turn_summary("good")
 
 
-@patch("synth_panel.orchestrator.AgentRuntime")
-@patch("synth_panel.cli.commands.LLMClient")
+@patch("althing.orchestrator.AgentRuntime")
+@patch("althing.cli.commands.LLMClient")
 def test_cli_question_budget_short_circuits_and_emits_disabled_questions(
     mock_client_cls: MagicMock,
     mock_runtime_cls: MagicMock,
@@ -409,8 +409,8 @@ def test_cli_question_budget_short_circuits_and_emits_disabled_questions(
     assert "Q2" in captured.err  # 1-indexed display
 
 
-@patch("synth_panel.orchestrator.AgentRuntime")
-@patch("synth_panel.cli.commands.LLMClient")
+@patch("althing.orchestrator.AgentRuntime")
+@patch("althing.cli.commands.LLMClient")
 def test_cli_fractional_budget(
     mock_client_cls: MagicMock,
     mock_runtime_cls: MagicMock,

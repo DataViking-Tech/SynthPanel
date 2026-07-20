@@ -1,10 +1,10 @@
-"""SynthPanel + Microsoft Agent Framework 1.0.
+"""Althing + Microsoft Agent Framework 1.0.
 
-Connect the Microsoft Agent Framework's built-in MCP client to SynthPanel's
+Connect the Microsoft Agent Framework's built-in MCP client to Althing's
 stdio server. The framework shipped MCP support in version 1.0 (April 2026).
 
 Install:
-    pip install agent-framework synthpanel[mcp]
+    pip install agent-framework althing[mcp]
 
 Run:
     export OPENAI_API_KEY=sk-...
@@ -20,14 +20,14 @@ from agent_framework.openai import OpenAIChatClient
 
 async def main() -> None:
     async with MCPStdioTool(
-        name="synthpanel",
-        command="synthpanel",
+        name="althing",
+        command="althing",
         args=["mcp-serve"],
-    ) as synthpanel:
+    ) as althing:
         agent = ChatAgent(
             chat_client=OpenAIChatClient(model_id="gpt-4.1-mini"),
-            instructions="Run synthetic focus groups via the synthpanel tools.",
-            tools=synthpanel,
+            instructions="Run synthetic focus groups via the althing tools.",
+            tools=althing,
         )
         result = await agent.run(
             "Use run_quick_poll with three data-scientist personas on: "

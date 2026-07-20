@@ -1,4 +1,4 @@
-"""Tests for :mod:`synth_panel.reporting.loader` (sp-viz-layer T2).
+"""Tests for :mod:`althing.reporting.loader` (sp-viz-layer T2).
 
 Covers the five core cases from structure.md §6 plus the path-vs-ID
 disambiguation edge cases flagged in plan.md Risk #3.
@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from synth_panel.reporting.loader import ReportLoadError, load_panel_json
+from althing.reporting.loader import ReportLoadError, load_panel_json
 
 FIXTURES = Path(__file__).parent / "fixtures" / "reporting"
 
@@ -33,7 +33,7 @@ def test_load_from_id_delegates_to_mcp_data(monkeypatch):
         captured["id"] = result_id
         return sentinel
 
-    monkeypatch.setattr("synth_panel.mcp.data.get_panel_result", fake_get)
+    monkeypatch.setattr("althing.mcp.data.get_panel_result", fake_get)
 
     data = load_panel_json("result-xyz")
     assert data is sentinel
@@ -80,7 +80,7 @@ def test_id_ending_in_json_falls_through_to_mcp_data(monkeypatch):
         captured["id"] = result_id
         return {"id": result_id, "rounds": []}
 
-    monkeypatch.setattr("synth_panel.mcp.data.get_panel_result", fake_get)
+    monkeypatch.setattr("althing.mcp.data.get_panel_result", fake_get)
 
     data = load_panel_json("looks-like-a-file.json")
     assert captured["id"] == "looks-like-a-file.json"

@@ -12,7 +12,7 @@ cost on every shared bank reference — silent economics failure.
 
 from __future__ import annotations
 
-from synth_panel.orchestrator import (
+from althing.orchestrator import (
     _compute_panel_shared,
     _resolve_question_attachment_refs,
 )

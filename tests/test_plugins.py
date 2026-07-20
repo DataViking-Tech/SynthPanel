@@ -8,13 +8,13 @@ from typing import Any
 
 import pytest
 
-from synth_panel.plugins.hooks import ShellHookRunner, run_lifecycle_commands
-from synth_panel.plugins.manager import (
+from althing.plugins.hooks import ShellHookRunner, run_lifecycle_commands
+from althing.plugins.manager import (
     PluginInstallError,
     PluginManager,
     PluginNotFoundError,
 )
-from synth_panel.plugins.manifest import (
+from althing.plugins.manifest import (
     MANIFEST_FILENAME,
     PluginHooks,
     PluginKind,
@@ -22,7 +22,7 @@ from synth_panel.plugins.manifest import (
     PluginManifest,
     PluginMetadata,
 )
-from synth_panel.plugins.registry import PluginRegistry
+from althing.plugins.registry import PluginRegistry
 
 # ---------------------------------------------------------------------------
 # Helpers

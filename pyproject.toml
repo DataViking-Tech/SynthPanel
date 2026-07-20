@@ -1,5 +1,5 @@
 [project]
-name = "synthpanel"
+name = "althing"
 dynamic = ["version"]
 description = "Run synthetic focus groups using AI personas, with an MCP server for Claude Code / Cursor / Windsurf. CLI tool, Python library, any LLM."
 requires-python = ">=3.10"
@@ -31,23 +31,23 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://synthpanel.dev"
-Documentation = "https://synthpanel.dev"
-Repository = "https://github.com/DataViking-Tech/SynthPanel"
-Issues = "https://github.com/DataViking-Tech/SynthPanel/issues"
-Changelog = "https://github.com/DataViking-Tech/SynthPanel/releases"
-"MCP Reference" = "https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/mcp.md"
+Homepage = "https://althing.dev"
+Documentation = "https://althing.dev"
+Repository = "https://github.com/DataViking-Tech/Althing"
+Issues = "https://github.com/DataViking-Tech/Althing/issues"
+Changelog = "https://github.com/DataViking-Tech/Althing/releases"
+"MCP Reference" = "https://github.com/DataViking-Tech/Althing/blob/main/docs/mcp.md"
 Funding = "https://ko-fi.com/dataviking"
 
 [project.optional-dependencies]
 # `full` is the fetch/extract path. Pulls `trafilatura`, which transitively
 # requires `lxml` (C extension). Excluded from core deps so that bare
-# `pip install synthpanel` stays installable in pyodide / Cloudflare
+# `pip install althing` stays installable in pyodide / Cloudflare
 # Python Workers, where the curated CPython set doesn't include `lxml`.
 # Callers that need the URL-attachment ladder install
-# `pip install synthpanel[full]`. The fetch ladder degrades to the
+# `pip install althing[full]`. The fetch ladder degrades to the
 # screenshot path (or returns `None`) when trafilatura is missing, so
-# this is a soft optional — synth_panel.ensemble keeps working without it.
+# this is a soft optional — althing.ensemble keeps working without it.
 full = [
     "trafilatura>=1.10",
 ]
@@ -112,29 +112,31 @@ dev = [
     "pypdfium2>=4.30",
     "Pillow>=10.0",
     # Pulled in so the fetch-ladder regression tests still exercise the
-    # `trafilatura` path. Production callers opt in via `synthpanel[full]`.
+    # `trafilatura` path. Production callers opt in via `althing[full]`.
     "trafilatura>=1.10",
 ]
 
 [project.scripts]
-synthpanel = "synth_panel.main:main"
+althing = "althing.main:main"
+# Deprecated alias from the SynthPanel → Althing rename; removed next major.
+synthpanel = "althing.main:main_deprecated_synthpanel"
 
 [build-system]
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.dynamic]
-version = {attr = "synth_panel.__version__.__version__"}
+version = {attr = "althing.__version__.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-"synth_panel.packs" = ["*.yaml"]
-"synth_panel.packs.instruments" = ["*.yaml"]
-"synth_panel.schemas" = ["*.json"]
-"synth_panel.data" = ["*.json"]
-"synth_panel.agent_assets" = [
+"althing.packs" = ["*.yaml"]
+"althing.packs.instruments" = ["*.yaml"]
+"althing.schemas" = ["*.json"]
+"althing.data" = ["*.json"]
+"althing.agent_assets" = [
     "commands/*.md",
     "skills/concept-test/*.md",
     "skills/focus-group/*.md",
@@ -145,7 +147,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-m 'not acceptance and not install_smoke' --cov=synth_panel --cov-report=term-missing --cov-fail-under=80"
+addopts = "-m 'not acceptance and not install_smoke' --cov=althing --cov-report=term-missing --cov-fail-under=80"
 markers = [
     "acceptance: live API acceptance tests (require ANTHROPIC_API_KEY)",
     "install_smoke: slow fresh-venv install validation (sy-6kr); opt in with `-m install_smoke`",
@@ -183,7 +185,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["synth_panel"]
+known-first-party = ["althing"]
 
 [tool.mypy]
 python_version = "3.10"
@@ -191,7 +193,7 @@ warn_unused_configs = true
 disallow_untyped_defs = false
 check_untyped_defs = true
 ignore_missing_imports = true
-files = ["src/synth_panel"]
+files = ["src/althing"]
 disable_error_code = [
     "import-untyped",
     "no-any-return",

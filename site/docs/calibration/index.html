@@ -4,36 +4,36 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>
-      Pack Calibration — synthpanel · Run synthetic focus groups with any LLM
+      Pack Calibration — althing · Run synthetic focus groups with any LLM
     </title>
     <meta
       name="description"
-      content="How to calibrate a persona pack against a known human baseline using Jensen-Shannon divergence. CLI reference for synthpanel pack calibrate."
+      content="How to calibrate a persona pack against a known human baseline using Jensen-Shannon divergence. CLI reference for althing pack calibrate."
     />
-    <link rel="canonical" href="https://synthpanel.dev/docs/calibration" />
+    <link rel="canonical" href="https://althing.dev/docs/calibration" />
 
-    <meta name="keywords" content="persona pack calibration, Jensen-Shannon divergence, synthetic focus group baseline, GSS calibration, NTIA calibration, synthpanel calibrate" />
+    <meta name="keywords" content="persona pack calibration, Jensen-Shannon divergence, synthetic focus group baseline, GSS calibration, NTIA calibration, althing calibrate" />
 
     <meta property="og:type" content="article" />
-    <meta property="og:site_name" content="synthpanel" />
-    <meta property="og:title" content="Pack Calibration — synthpanel" />
+    <meta property="og:site_name" content="althing" />
+    <meta property="og:title" content="Pack Calibration — althing" />
     <meta
       property="og:description"
       content="Calibrate a persona pack against a known human baseline (GSS, NTIA). CLI reference, JSD interpretation table, and methodology details."
     />
-    <meta property="og:url" content="https://synthpanel.dev/docs/calibration" />
-    <meta property="og:image" content="https://synthpanel.dev/og-image.png" />
+    <meta property="og:url" content="https://althing.dev/docs/calibration" />
+    <meta property="og:image" content="https://althing.dev/og-image.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="synthpanel — Run synthetic focus groups with any LLM" />
+    <meta property="og:image:alt" content="althing — Run synthetic focus groups with any LLM" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Pack Calibration — synthpanel" />
+    <meta name="twitter:title" content="Pack Calibration — althing" />
     <meta
       name="twitter:description"
       content="Calibrate a persona pack against a known human baseline. JSD interpretation, CLI flags, and methodology."
     />
-    <meta name="twitter:image" content="https://synthpanel.dev/og-image.png" />
-    <meta name="twitter:image:alt" content="synthpanel — Run synthetic focus groups with any LLM" />
+    <meta name="twitter:image" content="https://althing.dev/og-image.png" />
+    <meta name="twitter:image:alt" content="althing — Run synthetic focus groups with any LLM" />
 
     <link rel="stylesheet" href="/assets/tailwind.css" />
 
@@ -107,7 +107,7 @@
             href="/"
             class="inline-flex items-center gap-1 text-slate-400 transition hover:text-emerald-300"
           >
-            <span aria-hidden="true">←</span> synthpanel.dev
+            <span aria-hidden="true">←</span> althing.dev
           </a>
         </nav>
       </header>
@@ -127,7 +127,7 @@
         </h1>
         <p class="mt-4 text-lg text-slate-300">
           Calibration is how a persona pack proves its fit to a known human
-          baseline. Run <code class="text-emerald-400">synthpanel pack calibrate</code>
+          baseline. Run <code class="text-emerald-400">althing pack calibrate</code>
           and the result is written back into the pack YAML so the manifest is
           self-describing.
         </p>
@@ -143,7 +143,7 @@
         <div
           class="group relative rounded-lg border border-slate-700 bg-slate-950/70 px-4 py-4 font-mono text-sm shadow-xl"
         >
-          <pre class="text-slate-300 overflow-x-auto whitespace-pre">synthpanel pack calibrate &lt;PACK_YAML&gt;
+          <pre class="text-slate-300 overflow-x-auto whitespace-pre">althing pack calibrate &lt;PACK_YAML&gt;
   --against DATASET:QUESTION   <span class="text-slate-400"># e.g. gss:HAPPY (v1 allowlist: gss, ntia)</span>
   [--n 50]                     <span class="text-slate-400"># panel size</span>
   [--models MODELS]            <span class="text-slate-400"># default: panel run default</span>
@@ -171,14 +171,14 @@
     extractor: pick_one:auto-derived
     panelist_cost_usd: 0.6451
     calibrated_at: 2026-07-16T14:23:00Z
-    synthpanel_version: 1.5.7
-    methodology_url: https://synthpanel.dev/docs/calibration</pre>
+    althing_version: 1.5.7
+    methodology_url: https://althing.dev/docs/calibration</pre>
         </div>
 
         <p class="mt-3 text-xs text-slate-400">
           The 4-model <code class="text-slate-300">models:</code> mix above is
           an example blend, <em>not</em> the SynthBench leaderboard ensemble —
-          the leaderboard&rsquo;s &ldquo;SynthPanel Ensemble (3-model)&rdquo;
+          the leaderboard&rsquo;s &ldquo;Althing Ensemble (3-model)&rdquo;
           entry is an equal-weight blend of Claude Haiku 4.5, Gemini 2.5 Flash
           Lite, and GPT-4o-mini.
         </p>
@@ -231,7 +231,7 @@
         </div>
         <p class="mt-4 text-sm text-slate-400">
           JSD is computed locally via the same metric the convergence tracker
-          uses (see <code class="text-slate-300">src/synth_panel/convergence.py</code>);
+          uses (see <code class="text-slate-300">src/althing/convergence.py</code>);
           the pack YAML is the <strong class="text-white">only</strong> durable
           artifact — calibration does not phone home and is distinct from
           <code class="text-slate-300">--submit-to-synthbench</code>.
@@ -325,12 +325,12 @@
           <span class="select-all text-slate-300">
             <span class="text-slate-400">$</span>
             <span class="text-emerald-400"> SYNTHBENCH_ALLOW_GATED=1</span>
-            <span class="text-slate-300"> synthpanel pack calibrate ... --against wvs:Q1</span>
+            <span class="text-slate-300"> althing pack calibrate ... --against wvs:Q1</span>
           </span>
           <button
             type="button"
             class="copy-btn ml-3 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:border-emerald-400/50 hover:text-emerald-300"
-            data-copy="SYNTHBENCH_ALLOW_GATED=1 synthpanel pack calibrate ... --against wvs:Q1"
+            data-copy="SYNTHBENCH_ALLOW_GATED=1 althing pack calibrate ... --against wvs:Q1"
             aria-label="Copy command"
           >
             Copy
@@ -377,7 +377,7 @@
           <li class="flex gap-4">
             <span class="flex-shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-400/10 text-xs font-bold text-emerald-400 border border-emerald-400/30">5</span>
             <span>The resulting JSD, plus provenance (extractor, models, cost,
-              timestamp, synthpanel version), is merged into the pack YAML's
+              timestamp, althing version), is merged into the pack YAML's
               <code class="text-emerald-400">calibration:</code> list.
               Re-running against the same <code class="text-slate-300">(dataset, question)</code>
               pair <strong class="text-white">replaces</strong> the prior entry rather than
@@ -438,9 +438,9 @@
           <li class="flex gap-3">
             <span class="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-slate-500"></span>
             The command requires the
-            <code class="text-emerald-400">synthpanel[convergence]</code> extra
+            <code class="text-emerald-400">althing[convergence]</code> extra
             (for the <code class="text-slate-300">synthbench</code> baseline loader).
-            Install with <code class="text-slate-300">pip install 'synthpanel[convergence]'</code>
+            Install with <code class="text-slate-300">pip install 'althing[convergence]'</code>
             if not already present.
           </li>
         </ul>
@@ -470,7 +470,7 @@
             </p>
           </a>
           <a
-            href="https://github.com/DataViking-Tech/SynthPanel/blob/main/docs/calibration.md"
+            href="https://github.com/DataViking-Tech/Althing/blob/main/docs/calibration.md"
             class="group rounded-lg border border-slate-800 bg-slate-900/40 p-5 transition hover:border-emerald-400/40 hover:bg-slate-900/70"
           >
             <div class="flex items-center justify-between">
@@ -487,7 +487,7 @@
             </p>
           </a>
           <a
-            href="https://github.com/DataViking-Tech/SynthPanel"
+            href="https://github.com/DataViking-Tech/Althing"
             class="group rounded-lg border border-slate-800 bg-slate-900/40 p-5 transition hover:border-emerald-400/40 hover:bg-slate-900/70"
           >
             <div class="flex items-center justify-between">
@@ -534,8 +534,8 @@
           </div>
 
           <!-- Synthpanel column -->
-          <nav aria-labelledby="footer-synthpanel-heading">
-            <h3 id="footer-synthpanel-heading" class="text-xs font-semibold uppercase tracking-wider text-slate-400">Synthpanel</h3>
+          <nav aria-labelledby="footer-althing-heading">
+            <h3 id="footer-althing-heading" class="text-xs font-semibold uppercase tracking-wider text-slate-400">Synthpanel</h3>
             <ul class="mt-4 space-y-2 text-sm">
               <li><a href="/" class="text-slate-300 transition-colors hover:text-emerald-300">Home</a></li>
               <li><a href="/mcp" class="text-slate-300 transition-colors hover:text-emerald-300">MCP server</a></li>
@@ -549,10 +549,10 @@
           <nav aria-labelledby="footer-resources-heading">
             <h3 id="footer-resources-heading" class="text-xs font-semibold uppercase tracking-wider text-slate-400">Resources</h3>
             <ul class="mt-4 space-y-2 text-sm">
-              <li><a href="https://pypi.org/project/synthpanel/" rel="noopener" class="text-slate-300 transition-colors hover:text-emerald-300">PyPI package</a></li>
-              <li><a href="https://github.com/DataViking-Tech/SynthPanel" rel="noopener" class="text-slate-300 transition-colors hover:text-emerald-300">GitHub</a></li>
+              <li><a href="https://pypi.org/project/althing/" rel="noopener" class="text-slate-300 transition-colors hover:text-emerald-300">PyPI package</a></li>
+              <li><a href="https://github.com/DataViking-Tech/Althing" rel="noopener" class="text-slate-300 transition-colors hover:text-emerald-300">GitHub</a></li>
               <li><a href="https://synthbench.org" rel="noopener" class="text-slate-300 transition-colors hover:text-emerald-300">SynthBench</a></li>
-              <li><a href="/blog/synthpanel-vs-commercial-alternatives.html" class="text-slate-300 transition-colors hover:text-emerald-300">Blog</a></li>
+              <li><a href="/blog/althing-vs-commercial-alternatives.html" class="text-slate-300 transition-colors hover:text-emerald-300">Blog</a></li>
             </ul>
           </nav>
 
@@ -573,15 +573,15 @@
           <span>
             &copy; 2026 DataViking · MIT-licensed ·
             <a
-              href="https://github.com/DataViking-Tech/SynthPanel"
+              href="https://github.com/DataViking-Tech/Althing"
               rel="noopener"
               class="hover:text-slate-300"
-              >DataViking-Tech/SynthPanel</a
+              >DataViking-Tech/Althing</a
             >
           </span>
           <span class="flex items-center gap-5">
             <a
-              href="https://github.com/DataViking-Tech/SynthPanel"
+              href="https://github.com/DataViking-Tech/Althing"
               target="_blank"
               rel="noopener noreferrer"
               aria-label="GitHub"

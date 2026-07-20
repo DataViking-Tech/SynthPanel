@@ -11,7 +11,7 @@ implicit — adding a new artifact meant remembering to file a new test
 
 This module is the single explicit aggregate. It enumerates every
 artifact the auto-tag workflow MUST keep in lockstep with
-``src/synth_panel/__version__.py`` and asserts each one literally
+``src/althing/__version__.py`` and asserts each one literally
 matches. Adding a future artifact = adding one entry to ``_ARTIFACTS``
 below and one matching render call in ``auto-tag.yml``.
 
@@ -29,7 +29,7 @@ from pathlib import Path
 import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-_VERSION_PATH = _REPO_ROOT / "src" / "synth_panel" / "__version__.py"
+_VERSION_PATH = _REPO_ROOT / "src" / "althing" / "__version__.py"
 _SITE_HTML = _REPO_ROOT / "site" / "index.html"
 _SITE_MD = _REPO_ROOT / "site" / "index.md"
 _SERVER_CARD = _REPO_ROOT / "site" / ".well-known" / "mcp" / "server-card.json"
@@ -80,7 +80,7 @@ def test_site_index_md_carries_version(canonical_version: str) -> None:
 
 
 def test_server_card_carries_version_in_all_three_slots(canonical_version: str) -> None:
-    """server-card.json: top, serverInfo, packages[synthpanel].
+    """server-card.json: top, serverInfo, packages[althing].
 
     These are the three slots the MCP server-card schema exposes. The
     discovery doc gets fetched by every MCP-capable host; if any slot
@@ -96,14 +96,14 @@ def test_server_card_carries_version_in_all_three_slots(canonical_version: str) 
         f"server-card.json serverInfo.version {card['serverInfo']['version']!r} != __version__ {canonical_version!r}"
     )
     for pkg in card.get("packages") or []:
-        if pkg.get("identifier") == "synthpanel" and "version" in pkg:
+        if pkg.get("identifier") == "althing" and "version" in pkg:
             assert pkg["version"] == canonical_version, (
-                f"server-card.json packages[synthpanel].version {pkg['version']!r} != __version__ {canonical_version!r}"
+                f"server-card.json packages[althing].version {pkg['version']!r} != __version__ {canonical_version!r}"
             )
 
 
 def test_server_json_carries_version_in_all_slots(canonical_version: str) -> None:
-    """server.json: top-level version + packages[synthpanel].version.
+    """server.json: top-level version + packages[althing].version.
 
     server.json is the root MCP server descriptor that
     ``site/.well-known/api-catalog`` advertises as the RFC-9727
@@ -119,9 +119,9 @@ def test_server_json_carries_version_in_all_slots(canonical_version: str) -> Non
         "Run `python scripts/render_server_card.py` to refresh."
     )
     for pkg in doc.get("packages") or []:
-        if pkg.get("identifier") == "synthpanel" and "version" in pkg:
+        if pkg.get("identifier") == "althing" and "version" in pkg:
             assert pkg["version"] == canonical_version, (
-                f"server.json packages[synthpanel].version {pkg['version']!r} != __version__ {canonical_version!r}"
+                f"server.json packages[althing].version {pkg['version']!r} != __version__ {canonical_version!r}"
             )
 
 

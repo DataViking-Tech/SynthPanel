@@ -4,16 +4,16 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from synth_panel.cost import ZERO_USAGE
-from synth_panel.llm.models import (
+from althing.cost import ZERO_USAGE
+from althing.llm.models import (
     CompletionResponse,
     TextBlock,
     TokenUsage,
     ToolInvocationBlock,
 )
-from synth_panel.orchestrator import PanelistResult
-from synth_panel.prompts import SYNTHESIS_PROMPT, SYNTHESIS_PROMPT_VERSION
-from synth_panel.synthesis import (
+from althing.orchestrator import PanelistResult
+from althing.prompts import SYNTHESIS_PROMPT, SYNTHESIS_PROMPT_VERSION
+from althing.synthesis import (
     _SYNTHESIS_SCHEMA,
     SynthesisResult,
     _format_panelist_data,
@@ -227,7 +227,7 @@ class TestSynthesizePanel:
         mock_client = MagicMock()
         mock_client.send.return_value = _make_synthesis_response({"summary": "x"})
 
-        with caplog.at_level(logging.WARNING, logger="synth_panel.structured.output"):
+        with caplog.at_level(logging.WARNING, logger="althing.structured.output"):
             synthesize_panel(mock_client, _PANELIST_RESULTS, _QUESTIONS)
 
         # sp-d1x0: warning now emitted by the structured output engine after
@@ -286,7 +286,7 @@ class TestCostEstimate:
 
     def test_cost_estimate_includes_panelist_cost(self, capsys):
         """When panelist_cost is provided, it appears in the estimate."""
-        from synth_panel.cost import CostEstimate
+        from althing.cost import CostEstimate
 
         mock_client = MagicMock()
         mock_client.send.return_value = _make_synthesis_response(_SYNTHESIS_DATA)
@@ -486,7 +486,7 @@ class TestUnstructuredOutputDetection:
         mock_client = MagicMock()
         mock_client.send.return_value = _make_synthesis_response(_UNSTRUCTURED_SYNTHESIS_DATA)
 
-        with caplog.at_level(logging.WARNING, logger="synth_panel.synthesis"):
+        with caplog.at_level(logging.WARNING, logger="althing.synthesis"):
             synthesize_panel(mock_client, _PANELIST_RESULTS, _QUESTIONS)
 
         assert any("unstructured" in rec.message for rec in caplog.records)

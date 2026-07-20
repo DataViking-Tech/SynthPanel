@@ -36,7 +36,7 @@ When you aggregate across the panel, expect to see:
 ## Run it
 
 ```bash
-synthpanel panel run \
+althing panel run \
   --personas examples/saas-onboarding-friction/personas.yaml \
   --instrument examples/saas-onboarding-friction/instrument.yaml
 ```
@@ -44,14 +44,14 @@ synthpanel panel run \
 Render the round structure:
 
 ```bash
-synthpanel instruments graph \
+althing instruments graph \
   examples/saas-onboarding-friction/instrument.yaml --format mermaid
 ```
 
 ## Pack substitution
 
 If you need to extend the panel beyond 8, the bundled
-[`enterprise-buyer`](../../src/synth_panel/packs/enterprise-buyer.yaml)
+[`enterprise-buyer`](../../src/althing/packs/enterprise-buyer.yaml)
 pack overlaps on the decision-maker personas (VPs, Directors). Layer
 it in or substitute as the persona pack to widen the panel.
 

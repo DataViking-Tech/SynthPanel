@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from synth_panel.domains import (
+from althing.domains import (
     DomainNotFoundError,
     get_domain_template,
     list_domain_templates,
@@ -251,13 +251,13 @@ class TestDeliberatelyHomogeneous:
 
 
 # ---------------------------------------------------------------------------
-# CLI surface: `synthpanel domains list` / `synthpanel domains inspect`
+# CLI surface: `althing domains list` / `althing domains inspect`
 # ---------------------------------------------------------------------------
 
 
 class TestDomainsCLI:
     def test_list_text(self, capsys):
-        from synth_panel.main import main
+        from althing.main import main
 
         code = main(["domains", "list"])
         out = capsys.readouterr().out
@@ -271,7 +271,7 @@ class TestDomainsCLI:
     def test_list_json(self, capsys):
         import json as _json
 
-        from synth_panel.main import main
+        from althing.main import main
 
         code = main(["--output-format", "json", "domains", "list"])
         assert code == 0
@@ -281,7 +281,7 @@ class TestDomainsCLI:
         assert len(names) >= 4
 
     def test_inspect_text(self, capsys):
-        from synth_panel.main import main
+        from althing.main import main
 
         code = main(["domains", "inspect", "career-tech"])
         out = capsys.readouterr().out
@@ -291,7 +291,7 @@ class TestDomainsCLI:
         assert "Generate a diverse panel" in out
 
     def test_inspect_unknown_returns_nonzero(self, capsys):
-        from synth_panel.main import main
+        from althing.main import main
 
         code = main(["domains", "inspect", "no-such-domain"])
         err = capsys.readouterr().err
@@ -301,7 +301,7 @@ class TestDomainsCLI:
     def test_inspect_json(self, capsys):
         import json as _json
 
-        from synth_panel.main import main
+        from althing.main import main
 
         code = main(["--output-format", "json", "domains", "inspect", "career-tech"])
         assert code == 0

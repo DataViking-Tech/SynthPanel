@@ -16,10 +16,10 @@ from typing import Any
 
 import pytest
 
-from synth_panel import orchestrator
-from synth_panel.cost import ZERO_USAGE, TokenUsage
-from synth_panel.instrument import parse_instrument
-from synth_panel.orchestrator import (
+from althing import orchestrator
+from althing.cost import ZERO_USAGE, TokenUsage
+from althing.instrument import parse_instrument
+from althing.orchestrator import (
     MultiRoundResult,
     PanelistResult,
     run_multi_round_panel,

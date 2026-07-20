@@ -1,8 +1,8 @@
-# Reproducibility — what synthpanel can and can't promise
+# Reproducibility — what althing can and can't promise
 
 LLM-driven research lives or dies on whether you can rerun a panel and get
 the same answers. This page lays out the two reproducibility tools in
-synthpanel, what each one actually guarantees, and where the joints are.
+althing, what each one actually guarantees, and where the joints are.
 
 ## TL;DR
 
@@ -20,7 +20,7 @@ supplementary materials, or debugging an unexpected synthesis output.
 ## `--seed` — provider-aware sampling
 
 ```bash
-synthpanel panel run --seed 42 --personas p.yaml --instrument s.yaml
+althing panel run --seed 42 --personas p.yaml --instrument s.yaml
 ```
 
 The seed is forwarded to the provider's sampling parameter on every
@@ -33,14 +33,14 @@ panelist call (and every synthesis call) for the duration of the run.
 | OpenAI / OpenRouter | Forwarded as `seed` on the chat-completions request |
 | Gemini (Google) | Forwarded as `seed` on the OpenAI-compatible endpoint |
 | xAI (Grok) | Forwarded as `seed` |
-| Anthropic (Claude) | **Not supported.** synthpanel logs a single warning per provider per run and proceeds without determinism |
+| Anthropic (Claude) | **Not supported.** althing logs a single warning per provider per run and proceeds without determinism |
 | Local / unknown OpenAI-compatible | Forwarded; whether it's honored depends on the runtime |
 
 ### Why Claude isn't reproducible via `--seed`
 
 Anthropic's Messages API has no `seed` parameter at the time of writing.
 Setting one would mislead users into thinking determinism holds. Instead,
-synthpanel:
+althing:
 
 1. Logs **one** warning per provider per run, naming the provider:
    ```
@@ -92,7 +92,7 @@ When `--seed` is set, the value lands in two places in the output JSON:
 ## `--resume` — replay an existing run
 
 ```bash
-synthpanel panel run --resume <run-id>
+althing panel run --resume <run-id>
 ```
 
 `--resume` operates on a checkpoint written by a prior `panel run` (with
@@ -102,7 +102,7 @@ remaining panelists are dispatched to the provider.
 
 This **is** byte-deterministic for the already-completed slice — the
 responses are served from the checkpoint, not regenerated. Combined with
-`--seed N` on the resumed slice, you get the closest synthpanel offers
+`--seed N` on the resumed slice, you get the closest althing offers
 to a fully deterministic run on supporting providers.
 
 ### Drift detection
