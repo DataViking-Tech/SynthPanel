@@ -8,6 +8,48 @@ For auto-generated release notes, see [GitHub Releases](https://github.com/DataV
 
 ### Changed
 
+- **MCP server upgraded to the Python SDK 2.0 / protocol revision
+  2026-07-28.** The `mcp` extra now pins `mcp>=2.0,<3` and the server
+  migrates from the removed `FastMCP` API to `MCPServer` (the
+  decorator surface is unchanged; the package version is now passed via
+  the public `version=` constructor argument instead of assigning the
+  private `_mcp_server.version`, and the custom stdio loop is replaced
+  by the SDK's public `mcp.run(transport="stdio")`). The server
+  dual-speaks both protocol eras through the SDK: legacy clients
+  negotiate via the `initialize` handshake exactly as before, while
+  2026-07-28 clients negotiate via `server/discover`.
+
+  The most consequential part of the migration is **sampling**, which
+  remains a fully supported mode on both eras. The 2026-07-28 revision
+  defines no server→client requests at all — a modern client can never
+  receive a mid-call `sampling/createMessage` — so the sampling-mode
+  tools (`run_prompt`, `run_panel`, `run_quick_poll`) now route through
+  the protocol's multi-round-trip mechanism (SEP-2322) on modern
+  connections: the tool call returns an `input_required` result
+  batching every needed `CreateMessageRequest` (one round for all
+  personas, a second for synthesis) plus sealed `request_state`
+  carrying answers across rounds; the client fulfils the requests
+  through its ordinary sampling callback and retries. SDK clients
+  drive the loop automatically, so hosts observe the same behaviour as
+  before — ask, sample, answer. On handshake-era connections the
+  classic mid-call `create_message` flow is byte-identical to previous
+  releases (the SDK deprecates it per SEP-2577 but keeps it functional;
+  althing suppresses the advisory on that path since modern clients
+  never reach it). BYOK routing, `decide_mode` semantics, and all
+  sampling-mode restrictions are unchanged.
+
+  One observable removal: the initialize response no longer advertises
+  a `sampling` key in `ServerCapabilities` (previously injected under
+  `experimental` and, off-spec, at the top level — sampling is defined
+  by the spec as a *client* capability). SDK 2.0's public runner has no
+  initialization-option hook and the modern `server/discover` flow
+  never consults initialize options, so the advertisement was dropped
+  rather than re-hacked; whether sampling is used was always decided at
+  call time by probing the client's declared capability, which works
+  identically on both eras. Inspectors that surfaced the off-spec key
+  will no longer show it. See docs/mcp.md ("Protocol eras") for the
+  full behaviour matrix.
+
 - **Renamed: synthpanel → althing.** The project is now **Althing**
   (althing.dev) — named for the Norse general assembly. Everything ships
   under the new name: PyPI distribution `althing`, canonical import

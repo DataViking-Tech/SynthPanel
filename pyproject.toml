@@ -52,7 +52,7 @@ full = [
     "trafilatura>=1.10",
 ]
 mcp = [
-    "mcp>=1.0",
+    "mcp>=2.0,<3",
 ]
 composio = [
     # Composio's experimental Toolkit API is the surface this integration

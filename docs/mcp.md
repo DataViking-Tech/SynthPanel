@@ -570,20 +570,21 @@ reported back in the response's `model` field.
 
 ### Tool coverage
 
-`run_prompt` and `run_quick_poll` go through both stages and accept
-`use_sampling`. `run_panel`, `extend_panel`, and the pack/result
+`run_prompt`, `run_panel`, and `run_quick_poll` go through both stages
+and accept `use_sampling`. `extend_panel` and the pack/result
 management tools always use BYOK and skip Stage 1 — heavier workflows
 benefit from direct provider access and structured outputs.
 
 ## Sampling Mode
 
 MCP has a spec-level feature called
-[**sampling**](https://modelcontextprotocol.io/specification/2025-03-26/client/sampling)
+[**sampling**](https://modelcontextprotocol.io/specification/2026-07-28/client/sampling)
 where the server can ask the invoking client to run an LLM completion
 on its behalf. althing uses this to deliver a zero-configuration
 first-run UX: if you haven't set a provider API key and your client
-advertises `sampling`, the `run_prompt` and `run_quick_poll` tools
-borrow the client's own LLM access instead of failing.
+advertises `sampling`, the `run_prompt`, `run_panel`, and
+`run_quick_poll` tools borrow the client's own LLM access instead of
+failing.
 
 See [Model Resolution Order](#model-resolution-order) for the full
 configuration → mode matrix.
@@ -597,9 +598,9 @@ Sampling mode is intentionally less capable than BYOK:
   configured). Cross-provider ensembles require BYOK.
 - **No cost accounting.** Token usage is charged to the host agent's
   subscription; althing returns `"usage": null` and `"cost": null`.
-- **Capped panel size.** `run_quick_poll` is limited to 3 personas in
-  sampling mode to protect the host agent's context window. Larger
-  runs require BYOK.
+- **Capped panel size.** `run_quick_poll` and `run_panel` are limited
+  to 3 personas (and `run_panel` to 5 questions) in sampling mode to
+  protect the host agent's context window. Larger runs require BYOK.
 - **No structured output extraction.** Free-text only.
 
 These limits keep sampling mode focused on what it's for: a frictionless
@@ -626,10 +627,47 @@ inside a sampling-capable client for reproducibility.
 
 - `run_prompt` — no persona/question caps, fully supported.
 - `run_quick_poll` — up to `SAMPLING_MAX_PERSONAS` (3) personas.
+- `run_panel` — up to `SAMPLING_MAX_PERSONAS` (3) personas and
+  `SAMPLING_MAX_QUESTIONS` (5) questions; no ensembles, `max_cost`,
+  persona variants, or v3 branching instruments, and results are not
+  persisted (no `result_id`).
 
-The remaining tools (`run_panel`, `extend_panel`, pack/result
-management) always use BYOK — heavier workflows benefit from direct
-provider access and structured outputs.
+The remaining tools (`extend_panel`, pack/result management) always use
+BYOK — heavier workflows benefit from direct provider access and
+structured outputs.
+
+### Protocol eras (spec 2026-07-28)
+
+althing speaks both MCP protocol eras via the Python SDK 2.0, and the
+sampling *experience* is identical on each — the wire mechanics differ:
+
+- **Handshake era (protocol ≤ 2025-11-25):** the server sends a
+  standalone `sampling/createMessage` server→client request mid-call —
+  the classic sampling flow, unchanged.
+- **Modern era (protocol 2026-07-28, negotiated via `server/discover`):**
+  the revision defines *no* server→client requests, so the tool call
+  instead returns an `input_required` result (SEP-2322) carrying the
+  batched `CreateMessageRequest`s plus sealed `request_state`. The
+  client fulfils them through its ordinary sampling callback and
+  retries the call; SDK clients (`mcp.client.client.Client`) drive this
+  loop automatically. A panel with synthesis takes two rounds: one
+  batching all persona requests, one for the synthesis call.
+
+Because the modern retry loop re-invokes the tool on the same server
+process, sealed `request_state` is bound to the server's per-process
+key: a server restart mid-round invalidates the round and the client
+simply re-asks.
+
+**Capability advertisement change (SDK 2.0):** earlier releases
+injected a `sampling` key into the initialize response's
+`ServerCapabilities` (under `experimental`, and — off-spec — at the top
+level). The MCP spec defines sampling as a *client* capability, SDK
+2.0's public stdio runner exposes no initialization-option hook, and
+the 2026-07-28 `server/discover` flow never consults initialize options
+at all, so the advertisement is gone. Whether sampling is used is
+decided per call by probing the client's declared `sampling` capability
+(from the `initialize` handshake on legacy connections, or the
+per-request `_meta` envelope on modern ones).
 
 ## Host Integration Flags
 

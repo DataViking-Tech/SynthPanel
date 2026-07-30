@@ -3,10 +3,17 @@ the sampling fallback round-trips when the server has no BYOK creds.
 
 Fills a gap left by :mod:`tests.test_mcp_sampling`, which only exercises
 the tool handlers directly against a mocked Context. Here we run the
-real :func:`althing.mcp.server.serve` subprocess, connect a
-:class:`mcp.ClientSession` that advertises the ``sampling`` capability
-(via a ``sampling_callback``), and assert the server emits
-``sampling/createMessage`` and gets a usable response back.
+real :func:`althing.mcp.server.serve` subprocess, connect a client that
+advertises the ``sampling`` capability (via a ``sampling_callback``),
+and assert the sampling flow round-trips on **both** protocol eras:
+
+* Legacy (``initialize`` handshake, ≤ 2025-11-25): the server emits a
+  mid-call ``sampling/createMessage`` server→client request.
+* Modern (``server/discover``, 2026-07-28): the protocol defines no
+  server→client requests, so the tool call returns an
+  ``InputRequiredResult`` whose embedded ``CreateMessageRequest``s the
+  client answers through the same callback before retrying (SEP-2322).
+  The high-level :class:`mcp.client.client.Client` drives that loop.
 
 The subprocess runs with every provider key unset so the decision in
 :func:`althing.mcp.sampling.decide_mode` must pick ``sampling`` —
@@ -20,14 +27,14 @@ import json
 import os
 import shutil
 import sys
-from typing import Any
 
 import pytest
 
 pytest.importorskip("mcp")
 
+from mcp.client.client import Client
+from mcp.client.session import ClientRequestContext
 from mcp.client.stdio import stdio_client
-from mcp.shared.context import RequestContext
 from mcp.types import (
     CreateMessageRequestParams,
     CreateMessageResult,
@@ -66,17 +73,19 @@ def _locate_server_entry() -> StdioServerParameters:
 
 
 async def _sampling_callback(
-    context: RequestContext[ClientSession, Any],
+    context: ClientRequestContext,
     params: CreateMessageRequestParams,
 ) -> CreateMessageResult:
     """Minimal sampling responder — echoes a canned string so the test
     asserts on known output. The real integration point is that the
-    server issued a ``sampling/createMessage`` request at all."""
+    server requested sampling at all: as a mid-call
+    ``sampling/createMessage`` on legacy connections, or embedded in an
+    ``InputRequiredResult`` on 2026-07-28 connections."""
     return CreateMessageResult(
         role="assistant",
         content=TextContent(type="text", text="host-sampled-response"),
         model="host-agent-stub",
-        stopReason="endTurn",
+        stop_reason="endTurn",
     )
 
 
@@ -139,13 +148,21 @@ async def test_stdio_quick_poll_routes_through_sampling():
 
 
 @pytest.mark.asyncio
-async def test_stdio_initialize_advertises_sampling_and_version():
-    """sp-lsc/sp-a59 regression: the server's initialize handshake must
-    declare that it uses MCP sampling — both at the top level of
-    ``capabilities`` (so inspectors enumerating top-level keys see it)
-    and under ``experimental`` (back-compat nesting) — and must report
-    the althing package version in serverInfo rather than leaking
-    the MCP SDK version through FastMCP's default behaviour."""
+async def test_stdio_initialize_reports_althing_version():
+    """sp-lsc regression, updated for MCP SDK 2.0: the initialize
+    handshake must report the althing package version in serverInfo
+    rather than leaking the MCP SDK version (the low-level server's
+    default when ``version`` is unset).
+
+    Note the pre-2.0 ``sampling`` capability advertisement (experimental
+    nesting + off-spec top-level ``ServerCapabilities`` key) is gone:
+    the MCP spec defines sampling as a *client* capability, SDK 2.0's
+    public ``MCPServer.run`` path exposes no initialization-option hook,
+    and the 2026-07-28 ``server/discover`` flow never consults
+    initialize options at all. Whether sampling is used is a runtime
+    decision made by probing the client's declared capability
+    (``decide_mode``), which the remaining tests in this module cover on
+    both protocol eras."""
     import althing
 
     params = _locate_server_entry()
@@ -160,31 +177,12 @@ async def test_stdio_initialize_advertises_sampling_and_version():
     ):
         init_result = await session.initialize()
 
-        assert init_result.serverInfo.name == "althing"
-        assert init_result.serverInfo.version == althing.__version__, (
+        assert init_result.server_info.name == "althing"
+        assert init_result.server_info.version == althing.__version__, (
             f"serverInfo.version should be the althing package version "
-            f"({althing.__version__}); got {init_result.serverInfo.version}. "
-            f"FastMCP defaults to importlib.metadata.version('mcp') when the "
-            f"underlying Server.version is unset, which leaks the SDK version."
-        )
-
-        experimental = init_result.capabilities.experimental or {}
-        assert "sampling" in experimental, (
-            f"Server must advertise the 'sampling' experimental capability "
-            f"so MCP clients can surface the dependency in their UI. "
-            f"Got capabilities.experimental = {experimental!r}"
-        )
-
-        # sp-a59: top-level advertisement too — ServerCapabilities is
-        # ``extra="allow"`` so the key round-trips even though the MCP
-        # spec defines sampling as a client capability. Many hosts and
-        # MCP inspectors enumerate top-level keys only, and will miss
-        # sampling if it's hidden under ``experimental``.
-        top_level = init_result.capabilities.model_dump(exclude_none=True)
-        assert "sampling" in top_level, (
-            f"Server must advertise 'sampling' at the top level of "
-            f"ServerCapabilities (alongside prompts/resources/tools). "
-            f"Got top-level capability keys = {sorted(top_level)!r}"
+            f"({althing.__version__}); got {init_result.server_info.version}. "
+            f"The low-level server defaults to importlib.metadata.version('mcp') "
+            f"when version is unset, which leaks the SDK version."
         )
 
 
@@ -269,3 +267,94 @@ async def test_stdio_run_panel_routes_through_sampling():
         assert payload["persona_count"] == 1
         assert payload["question_count"] == 1
         assert payload["results"][0]["responses"][0]["answer"] == "host-sampled-response"
+
+
+# ---------------------------------------------------------------------------
+# 2026-07-28 (modern era): sampling rides the InputRequiredResult loop
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_stdio_modern_protocol_quick_poll_samples_via_input_required():
+    """SDK 2.0 / spec 2026-07-28: modern connections define no
+    server→client requests, so the server must surface sampling as an
+    ``InputRequiredResult`` (SEP-2322) that the high-level client
+    resolves through the same ``sampling_callback`` before retrying.
+    This is the new-protocol equivalent of
+    ``test_stdio_quick_poll_routes_through_sampling``."""
+    params = _locate_server_entry()
+
+    async with Client(
+        stdio_client(params),
+        sampling_callback=_sampling_callback,
+    ) as client:
+        # mode='auto' probes server/discover; the SDK 2.0 server answers,
+        # locking the connection to the modern era. If this assertion
+        # fails the rest of the test would silently exercise the legacy
+        # path instead.
+        assert client.session is not None
+        assert client.session.protocol_version == "2026-07-28", client.session.protocol_version
+
+        result = await client.call_tool(
+            "run_quick_poll",
+            {
+                "question": "Is the sky blue?",
+                "personas": [{"name": "Alice"}],
+                "synthesis": False,
+            },
+        )
+
+        assert result.content, "tool returned empty content"
+        text_block = next(
+            (b for b in result.content if getattr(b, "type", None) == "text"),
+            None,
+        )
+        assert text_block is not None
+        payload = json.loads(text_block.text)
+
+        assert "error" not in payload, payload
+        assert payload["mode"] == "sampling"
+        assert payload["persona_count"] == 1
+        assert payload["results"][0]["responses"][0]["answer"] == "host-sampled-response"
+
+
+@pytest.mark.asyncio
+async def test_stdio_modern_protocol_panel_with_synthesis_multi_round():
+    """Modern-era run_panel with synthesis needs two InputRequired
+    rounds: one batching the per-persona sampling requests, then one for
+    the synthesis call (which depends on every persona answer, carried
+    across rounds in the sealed ``request_state``). The client driver
+    resolves both transparently."""
+    params = _locate_server_entry()
+
+    async with Client(
+        stdio_client(params),
+        sampling_callback=_sampling_callback,
+    ) as client:
+        assert client.session is not None
+        assert client.session.protocol_version == "2026-07-28"
+
+        result = await client.call_tool(
+            "run_panel",
+            {
+                "questions": [{"text": "What do you think?"}],
+                "personas": [{"name": "Alice"}, {"name": "Bob"}],
+                "synthesis": True,
+            },
+        )
+
+        assert result.content
+        text_block = next(
+            (b for b in result.content if getattr(b, "type", None) == "text"),
+            None,
+        )
+        assert text_block is not None
+        payload = json.loads(text_block.text)
+
+        assert "error" not in payload, payload
+        assert payload["mode"] == "sampling"
+        assert payload["persona_count"] == 2
+        for entry in payload["results"]:
+            assert entry["responses"][0]["answer"] == "host-sampled-response"
+        assert payload["synthesis"] is not None
+        assert payload["synthesis"]["summary"] == "host-sampled-response"

@@ -203,7 +203,7 @@ async def test_malformed_envelope_verdict_blocked_at_egress():
                 "decision_being_informed": _VALID_DECISION,
             },
         )
-    data = json.loads(result[0][0].text)
+    data = json.loads(result.content[0].text)
     assert data["error_code"] == "INVALID_FLAG"
     assert "panel_verdict" not in data
 
