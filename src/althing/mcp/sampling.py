@@ -12,23 +12,48 @@ Design
 
 Two routing decisions live here:
 
-1. **Can we sample?** — the client must advertise ``sampling`` capability
-   in its ``initialize`` handshake and a :class:`Context` must actually
-   be threaded through from the tool call. Exposed via
-   :func:`client_supports_sampling`.
+1. **Can we sample?** — the client must advertise the ``sampling``
+   capability (on the ``initialize`` handshake for legacy protocol
+   revisions, or in the per-request ``_meta`` envelope on 2026-07-28+)
+   and a :class:`Context` must actually be threaded through from the
+   tool call. Exposed via :func:`client_supports_sampling`.
 
 2. **Should we sample?** — we honour an explicit ``use_sampling`` flag
    on the calling tool; otherwise we fall back to sampling only when no
    BYOK credentials are present in the environment. Exposed via
    :func:`decide_mode`.
 
-Tool handlers call :func:`sample_text` once the decision is made.
+Transport (spec 2026-07-28 / SDK 2.0)
+=====================================
+
+*How* a sampling request reaches the client depends on the negotiated
+protocol revision:
+
+* **Handshake era (≤ 2025-11-25):** the server sends a standalone
+  ``sampling/createMessage`` server→client JSON-RPC request mid-call via
+  ``ctx.session.create_message``. This is the classic sampling flow.
+* **Modern era (2026-07-28+):** the protocol defines *no* server→client
+  requests at all. Instead the tool call returns an
+  ``InputRequiredResult`` carrying the batched ``CreateMessageRequest``s
+  plus opaque ``request_state``; the client fulfils them through its
+  sampling callback and retries the call (SEP-2322 multi-round-trip).
+
+:class:`SamplingBridge` abstracts over both: tool executors declare the
+samples they need via :meth:`SamplingBridge.gather` and either receive
+the results (mid-call on legacy; restored from ``input_responses`` /
+``request_state`` on a modern retry round) or a :class:`SamplingSuspend`
+propagates so the tool can surface the ``InputRequiredResult``.
+
+Tool handlers call :func:`sample_text` / :meth:`SamplingBridge.gather`
+once the decision is made.
 """
 
 from __future__ import annotations
 
+import json
 import logging
-from dataclasses import dataclass
+import warnings
+from dataclasses import dataclass, field
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -55,12 +80,16 @@ __all__ = [
     "SAMPLING_MAX_QUESTIONS",
     "SAMPLING_MAX_TOKENS_DEFAULT",
     "SAMPLING_STOP_REASON_TRUNCATED",
+    "SampleSpec",
+    "SamplingBridge",
     "SamplingDecision",
+    "SamplingSuspend",
     "build_truncation_warning",
     "client_supports_sampling",
     "decide_mode",
     "has_byok_credentials",
     "sample_text",
+    "uses_input_required",
 ]
 
 # Environment variables we treat as "BYOK present". Matches the provider
@@ -129,18 +158,21 @@ def has_byok_credentials(env: dict[str, str] | None = None) -> bool:
 def client_supports_sampling(ctx: Any) -> bool:
     """Return True when the invoking MCP client advertised sampling.
 
-    ``ctx`` is a FastMCP :class:`mcp.server.fastmcp.Context`. We go
-    through the underlying :class:`ServerSession` because
-    ``check_client_capability`` is the supported way to interrogate the
-    client's declared capabilities. Any failure (no context, no session,
-    capability object not importable) is treated as "no sampling" — we
-    never want capability detection to raise into the tool handler.
+    ``ctx`` is an MCPServer :class:`mcp.server.mcpserver.Context`. We go
+    through the underlying session because ``check_client_capability``
+    is the supported way to interrogate the client's declared
+    capabilities — on legacy revisions these come from the ``initialize``
+    handshake, on 2026-07-28+ from the per-request ``_meta`` envelope;
+    the SDK normalises both onto the same accessor. Any failure (no
+    context, no session, capability object not importable) is treated as
+    "no sampling" — we never want capability detection to raise into the
+    tool handler.
     """
     if ctx is None:
         return False
 
-    # ``ctx.session`` is a property that raises ValueError when the
-    # Context is constructed outside a live request (FastMCP test
+    # ``ctx.session`` is a property that raises when the Context is
+    # constructed outside a live request (in-process test
     # harness, synthetic invocations). We swallow any such failure —
     # capability detection must never raise into a tool handler.
     try:
@@ -168,7 +200,7 @@ def decide_mode(
     """Choose between sampling and BYOK for this tool call.
 
     Args:
-        ctx: The FastMCP :class:`Context` passed into the tool.
+        ctx: The MCPServer :class:`Context` passed into the tool.
         use_sampling: Explicit override from the tool caller. ``True``
             forces sampling (error if unsupported), ``False`` forces
             BYOK, ``None`` picks automatically.
@@ -283,6 +315,7 @@ async def sample_text(
     is real (multimodal tokens can be ~10x a text-only turn), so the flag
     is opt-in per call.
     """
+    from mcp.shared.exceptions import MCPDeprecationWarning
     from mcp.types import SamplingMessage, TextContent
 
     messages = [
@@ -291,16 +324,39 @@ async def sample_text(
             content=TextContent(type="text", text=prompt),
         )
     ]
-    result = await ctx.session.create_message(
-        messages=messages,
-        max_tokens=max_tokens,
-        system_prompt=system_prompt,
-        temperature=temperature,
-    )
+    with warnings.catch_warnings():
+        # SDK 2.0 deprecates classic sampling (SEP-2577) but keeps it
+        # functional for handshake-era clients. Suppress the advisory —
+        # althing routes 2026-07-28+ clients through the InputRequired
+        # flow (SamplingBridge) instead of this call.
+        warnings.simplefilter("ignore", MCPDeprecationWarning)
+        result = await ctx.session.create_message(
+            messages=messages,
+            max_tokens=max_tokens,
+            system_prompt=system_prompt,
+            temperature=temperature,
+        )
 
+    return _normalize_sample_result(result, max_tokens=max_tokens, accept_multimodal=accept_multimodal)
+
+
+def _normalize_sample_result(
+    result: Any,
+    *,
+    max_tokens: int,
+    accept_multimodal: bool = False,
+) -> dict[str, Any]:
+    """Flatten a ``CreateMessageResult`` into althing's sampling result dict.
+
+    Shared by the mid-call legacy path (:func:`sample_text`) and the
+    2026-07-28 InputRequired path (:class:`SamplingBridge`), so both
+    protocol eras surface identical result shapes to the executors —
+    including truncation detection (sp-k2ed4a) and opt-in multimodal
+    block extraction (T6 / hq-l0lw).
+    """
     text = _extract_text(result.content)
     content_blocks = _extract_content_blocks(result.content) if accept_multimodal else None
-    stop_reason = getattr(result, "stopReason", None)
+    stop_reason = getattr(result, "stop_reason", None) or getattr(result, "stopReason", None)
     truncated = stop_reason == SAMPLING_STOP_REASON_TRUNCATED
     warning: str | None = None
     if truncated:
@@ -322,6 +378,211 @@ async def sample_text(
         "requested_max_tokens": max_tokens,
         "warning": warning,
     }
+
+
+# ---------------------------------------------------------------------------
+# 2026-07-28 multi-round-trip sampling (SEP-2322)
+# ---------------------------------------------------------------------------
+
+# request_state schema version for the sampling bridge. The SDK's
+# RequestStateBoundary seals/verifies the token, so the payload only needs
+# to be self-describing, not tamper-proof.
+_BRIDGE_STATE_VERSION = 1
+
+# Protocol revision at which server→client requests disappear and
+# `tools/call` grows the InputRequiredResult retry loop.
+_INPUT_REQUIRED_VERSION = "2026-07-28"
+
+
+def uses_input_required(ctx: Any) -> bool:
+    """True when this request negotiated a 2026-07-28+ protocol revision.
+
+    Modern revisions define **no** server→client requests, so classic
+    ``sampling/createMessage`` cannot be sent mid-call; sampling must ride
+    the ``InputRequiredResult`` retry loop instead. Unknown or missing
+    protocol versions conservatively return ``False`` (the legacy mid-call
+    path), matching the SDK's own version-comparison semantics.
+    """
+    try:
+        version = ctx.protocol_version
+    except Exception:
+        return False
+    if not isinstance(version, str):
+        return False
+    try:
+        from mcp_types.version import is_version_at_least
+
+        return is_version_at_least(version, _INPUT_REQUIRED_VERSION)
+    except Exception:
+        return version >= _INPUT_REQUIRED_VERSION
+
+
+@dataclass
+class SampleSpec:
+    """One sampling request an executor wants fulfilled.
+
+    Rendered to a ``CreateMessageRequest`` on the modern path or passed to
+    ``ctx.session.create_message`` on the legacy path.
+    """
+
+    prompt: str
+    system_prompt: str | None = None
+    max_tokens: int = SAMPLING_MAX_TOKENS_DEFAULT
+    temperature: float | None = None
+
+
+class SamplingSuspend(Exception):
+    """The tool must return an ``InputRequiredResult`` and wait for a retry.
+
+    Raised by :meth:`SamplingBridge.gather` on 2026-07-28+ connections when
+    one or more requested samples have no recorded answer yet. Carries the
+    batched ``input_requests`` map plus the serialized bridge state
+    (already-answered samples) to echo through ``request_state``.
+    """
+
+    def __init__(self, input_requests: dict[str, Any], request_state: str) -> None:
+        super().__init__("sampling requires client input (InputRequiredResult round-trip)")
+        self.input_requests = input_requests
+        self.request_state = request_state
+
+    def to_input_required(self) -> Any:
+        """Build the ``InputRequiredResult`` for the tool to return."""
+        from mcp.types import InputRequiredResult
+
+        return InputRequiredResult(
+            input_requests=self.input_requests,
+            request_state=self.request_state,
+        )
+
+
+@dataclass
+class SamplingBridge:
+    """Protocol-era-agnostic sampling executor support.
+
+    Constructed once per tool invocation from the request :class:`Context`.
+    Executors call :meth:`gather` with a mapping of stable keys to
+    :class:`SampleSpec`\\ s:
+
+    * **Legacy connections** (≤ 2025-11-25): each spec is fulfilled
+      immediately via ``ctx.session.create_message`` (serial — host agents
+      rate-limit sampling), exactly as before SDK 2.0.
+    * **Modern connections** (2026-07-28+): answers recorded on earlier
+      retry rounds are restored from ``request_state`` /
+      ``input_responses``; any still-missing specs raise
+      :class:`SamplingSuspend`, which the tool converts into an
+      ``InputRequiredResult``. The client's sampling callback answers the
+      batched requests and retries the call, re-running the executor with
+      the answers available.
+
+    Keys must be deterministic across retry rounds (the client echoes them
+    back verbatim); executors use semantic keys like ``persona_0`` /
+    ``synthesis``.
+    """
+
+    ctx: Any
+    modern: bool = field(init=False)
+    _answers: dict[str, dict[str, Any]] = field(init=False, default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.modern = uses_input_required(self.ctx)
+        if self.modern:
+            self._restore()
+
+    def _restore(self) -> None:
+        """Load answers from the echoed request_state and this round's responses."""
+        raw_state = getattr(self.ctx, "request_state", None)
+        if raw_state:
+            try:
+                payload = json.loads(raw_state)
+                if isinstance(payload, dict) and payload.get("v") == _BRIDGE_STATE_VERSION:
+                    answers = payload.get("answers")
+                    if isinstance(answers, dict):
+                        self._answers.update(answers)
+            except (ValueError, TypeError):
+                # The SDK verified the token's integrity; a parse failure
+                # here means a bridge-version skew. Re-ask from scratch.
+                logger.warning("sampling bridge: unreadable request_state; restarting sampling flow")
+        responses = getattr(self.ctx, "input_responses", None)
+        if responses:
+            for key, response in responses.items():
+                dump = getattr(response, "model_dump", None)
+                if dump is None:
+                    continue
+                self._answers[key] = dump(mode="json", by_alias=True, exclude_none=True)
+
+    def _render_request(self, spec: SampleSpec) -> Any:
+        from mcp.types import CreateMessageRequest, CreateMessageRequestParams, SamplingMessage, TextContent
+
+        return CreateMessageRequest(
+            params=CreateMessageRequestParams(
+                messages=[SamplingMessage(role="user", content=TextContent(type="text", text=spec.prompt))],
+                max_tokens=spec.max_tokens,
+                system_prompt=spec.system_prompt,
+                temperature=spec.temperature,
+            )
+        )
+
+    def _decode_answer(self, key: str, spec: SampleSpec, *, accept_multimodal: bool) -> dict[str, Any]:
+        from mcp.types import CreateMessageResult
+
+        result = CreateMessageResult.model_validate(self._answers[key])
+        return _normalize_sample_result(result, max_tokens=spec.max_tokens, accept_multimodal=accept_multimodal)
+
+    async def gather(
+        self,
+        requests: dict[str, SampleSpec],
+        *,
+        accept_multimodal: bool = False,
+        on_progress: Any = None,
+    ) -> dict[str, dict[str, Any]]:
+        """Fulfil every requested sample, or suspend for a retry round.
+
+        Args:
+            requests: Mapping of stable keys to sample specs. Keys must
+                render identically on every retry round of the same call.
+            accept_multimodal: Preserve image/document blocks from the host
+                (T6 / hq-l0lw) in each result's ``content_blocks``.
+            on_progress: Optional ``async (done, total)`` callback, invoked
+                per fulfilled sample on the legacy path and once after
+                restore on the modern path.
+
+        Returns:
+            Mapping of the same keys to normalized sampling result dicts
+            (see :func:`_normalize_sample_result`).
+
+        Raises:
+            SamplingSuspend: Modern connection and at least one sample is
+                unanswered; the tool must return
+                ``SamplingSuspend.to_input_required()``.
+        """
+        if not self.modern:
+            out: dict[str, dict[str, Any]] = {}
+            for i, (key, spec) in enumerate(requests.items()):
+                out[key] = await sample_text(
+                    self.ctx,
+                    prompt=spec.prompt,
+                    system_prompt=spec.system_prompt,
+                    max_tokens=spec.max_tokens,
+                    temperature=spec.temperature,
+                    accept_multimodal=accept_multimodal,
+                )
+                if on_progress is not None:
+                    await on_progress(i + 1, len(requests))
+            return out
+
+        missing = {key: spec for key, spec in requests.items() if key not in self._answers}
+        if missing:
+            state = json.dumps({"v": _BRIDGE_STATE_VERSION, "answers": self._answers})
+            raise SamplingSuspend(
+                {key: self._render_request(spec) for key, spec in missing.items()},
+                state,
+            )
+        results = {
+            key: self._decode_answer(key, spec, accept_multimodal=accept_multimodal) for key, spec in requests.items()
+        }
+        if on_progress is not None:
+            await on_progress(len(requests), len(requests))
+        return results
 
 
 def _extract_text(content: Any) -> str:

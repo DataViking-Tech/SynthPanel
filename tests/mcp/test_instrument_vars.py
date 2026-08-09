@@ -56,7 +56,7 @@ def _save_pack(name: str, instrument: dict) -> None:
 
 
 def _text(result) -> str:
-    return result[0][0].text
+    return result.content[0].text
 
 
 async def _call_run_panel(**kwargs):

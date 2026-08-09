@@ -122,7 +122,7 @@ async def test_invalid_flag_blocks_egress() -> None:
             },
         )
 
-    data = json.loads(result[0][0].text)
+    data = json.loads(result.content[0].text)
     assert data["error_code"] == "INVALID_FLAG"
     assert data["field_path"] == "flags[0].code"
     assert data["schema_version"] == "1.0.0"
@@ -147,7 +147,7 @@ async def test_valid_verdict_passes_egress_unchanged() -> None:
             },
         )
 
-    data = json.loads(result[0][0].text)
+    data = json.loads(result.content[0].text)
     assert data["schema_version"] == "1.0.0"
     assert data["headline"] == good["headline"]
     assert data["flags"] == good["flags"]
@@ -168,5 +168,5 @@ async def test_legacy_shape_unaffected() -> None:
             },
         )
 
-    data = json.loads(result[0][0].text)
+    data = json.loads(result.content[0].text)
     assert data == legacy

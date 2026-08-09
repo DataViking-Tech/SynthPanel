@@ -233,20 +233,27 @@ def _make_sampling_ctx(
     stop_reason: str = "endTurn",
 ):
     """Build a MagicMock Context that the tool can invoke without
-    hitting the FastMCP test harness's Context auto-injection path."""
+    hitting the in-process test harness's Context auto-injection path.
+
+    ``protocol_version`` is pinned to a handshake-era revision so the
+    SamplingBridge takes the legacy mid-call ``create_message`` path (a
+    MagicMock attribute would otherwise be a non-string and the bridge
+    already treats that as legacy, but pinning keeps intent explicit).
+    """
     ctx = MagicMock()
     ctx.session.check_client_capability.return_value = supports
+    ctx.protocol_version = "2025-11-25"
 
     async def _create_message(**kwargs: Any):
         # Mimic CreateMessageResult — only the fields _sample_text reads.
-        msg = MagicMock()
+        msg = MagicMock(spec=["content", "model", "role", "stop_reason"])
         text_block = MagicMock()
         text_block.type = "text"
         text_block.text = sample_text
         msg.content = text_block
         msg.model = "host-agent-model"
         msg.role = "assistant"
-        msg.stopReason = stop_reason
+        msg.stop_reason = stop_reason
         return msg
 
     ctx.session.create_message = AsyncMock(side_effect=_create_message)
@@ -372,9 +379,10 @@ class TestAcceptMultimodalSamplingFlag:
 
         ctx = MagicMock()
         ctx.session.check_client_capability.return_value = True
+        ctx.protocol_version = "2025-11-25"
 
         async def _create_message(**kwargs: Any):
-            msg = MagicMock()
+            msg = MagicMock(spec=["content", "model", "role", "stop_reason"])
             text_block = MagicMock()
             text_block.type = "text"
             text_block.text = "see image"
@@ -385,7 +393,7 @@ class TestAcceptMultimodalSamplingFlag:
             msg.content = [text_block, image_block]
             msg.model = "host-model"
             msg.role = "assistant"
-            msg.stopReason = "endTurn"
+            msg.stop_reason = "endTurn"
             return msg
 
         ctx.session.create_message = AsyncMock(side_effect=_create_message)

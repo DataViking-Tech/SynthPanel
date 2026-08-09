@@ -248,7 +248,7 @@ class TestLargePanelFastModelSwap:
     async def test_resources_registered(self):
         # Resource templates should be registered
         templates = await mcp.list_resource_templates()
-        uris = {t.uriTemplate for t in templates}
+        uris = {t.uri_template for t in templates}
         assert "persona-pack://{pack_id}" in uris
         assert "panel-result://{result_id}" in uris
 
@@ -278,7 +278,7 @@ class TestRunPrompt:
             MockClient.return_value.send.return_value = mock_response
             result = await mcp.call_tool("run_prompt", {"prompt": "Say hello"})
 
-        data = json.loads(result[0][0].text)
+        data = json.loads(result.content[0].text)
         assert data["response"] == "Hello back!"
         assert data["model"] == "claude-haiku-4-5-20251001"
         assert "cost" in data
@@ -338,7 +338,7 @@ class TestDataTools:
     async def test_list_persona_packs_builtins_only(self):
         result = await mcp.call_tool("list_persona_packs", {})
         # call_tool returns a list of content blocks
-        text = result[0][0].text
+        text = result.content[0].text
         data = json.loads(text)
         assert all(p["builtin"] for p in data)
         assert len(data) >= 1  # at least one bundled pack
@@ -354,26 +354,26 @@ class TestDataTools:
                 "pack_id": "test-1",
             },
         )
-        saved = json.loads(save_result[0][0].text)
+        saved = json.loads(save_result.content[0].text)
         assert saved["id"] == "test-1"
         assert saved["persona_count"] == 2
 
         # Get
         get_result = await mcp.call_tool("get_persona_pack", {"pack_id": "test-1"})
-        pack = json.loads(get_result[0][0].text)
+        pack = json.loads(get_result.content[0].text)
         assert pack["name"] == "Test Pack"
         assert len(pack["personas"]) == 2
 
         # List — saved pack should appear alongside builtins
         list_result = await mcp.call_tool("list_persona_packs", {})
-        packs = json.loads(list_result[0][0].text)
+        packs = json.loads(list_result.content[0].text)
         saved_ids = [p["id"] for p in packs if not p.get("builtin")]
         assert "test-1" in saved_ids
 
     @pytest.mark.asyncio
     async def test_list_panel_results_empty(self):
         result = await mcp.call_tool("list_panel_results", {})
-        data = json.loads(result[0][0].text)
+        data = json.loads(result.content[0].text)
         assert data == []
 
 
@@ -437,7 +437,7 @@ class TestRunPanelPackId:
                 "questions": [{"text": "Hello?"}],
             },
         )
-        data = json.loads(result[0][0].text)
+        data = json.loads(result.content[0].text)
         assert "error" in data
 
     @pytest.mark.asyncio
@@ -452,7 +452,7 @@ class TestRunPanelPackId:
                 "decision_being_informed": "choosing which persona pack to reuse",
             },
         )
-        data = json.loads(result[0][0].text)
+        data = json.loads(result.content[0].text)
         assert data["error_code"] == "INVALID_TOOL_ARG"
         assert data["field_path"] == "pack_id"
         assert "nonexistent" in data["message"]
@@ -544,7 +544,7 @@ class TestRunPanelExtractSchema:
                 "extract_schema": "nonexistent",
             },
         )
-        data = json.loads(result[0][0].text)
+        data = json.loads(result.content[0].text)
         assert "error" in data
         assert "nonexistent" in data["error"]
 
@@ -591,7 +591,7 @@ class TestRunPanelModels:
                 },
             )
             mock_ens.assert_called_once()
-            data = json.loads(result[0][0].text)
+            data = json.loads(result.content[0].text)
             assert "per_model_results" in data
             assert data["models"] == ["haiku", "sonnet"]
 
@@ -630,7 +630,7 @@ class TestRunPanelModels:
                 },
             )
             mock_run.assert_not_called()
-            data = json.loads(result[0][0].text)
+            data = json.loads(result.content[0].text)
             assert data["error_code"] == "INVALID_TOOL_ARG"
             assert data["field_path"] == "models"
             assert "at least one" in data["error"]
@@ -653,7 +653,7 @@ class TestRunPanelModels:
             )
             mock_run.assert_not_called()
             mock_ens.assert_not_called()
-            data = json.loads(result[0][0].text)
+            data = json.loads(result.content[0].text)
             assert data["error_code"] == "INVALID_TOOL_ARG"
             assert "mutually exclusive" in data["error"]
 
@@ -679,7 +679,7 @@ class TestRunPanelModels:
                     "model": "haiku",
                 },
             )
-            data = json.loads(result[0][0].text)
+            data = json.loads(result.content[0].text)
             assert data["error_code"] == "PANEL_TIMEOUT"
             assert "timed out" in data["error"]
             assert data["timeout_seconds"] > 0
@@ -737,7 +737,7 @@ class TestInstrumentPackTools:
     @pytest.mark.asyncio
     async def test_list_builtins_only(self):
         result = await mcp.call_tool("list_instrument_packs", {})
-        data = json.loads(result[0][0].text)
+        data = json.loads(result.content[0].text)
         assert all(p.get("source") == "bundled" for p in data)
         assert len(data) >= 1  # at least one bundled pack
 
@@ -760,23 +760,23 @@ class TestInstrumentPackTools:
                 "content": body,
             },
         )
-        meta = json.loads(save_res[0][0].text)
+        meta = json.loads(save_res.content[0].text)
         assert meta["id"] == "demo"
         assert meta["version"] == "1.0.0"
 
         list_res = await mcp.call_tool("list_instrument_packs", {})
-        listed = json.loads(list_res[0][0].text)
+        listed = json.loads(list_res.content[0].text)
         saved_ids = [p["id"] for p in listed if p.get("source") != "bundled"]
         assert "demo" in saved_ids
 
         get_res = await mcp.call_tool("get_instrument_pack", {"name": "demo"})
-        loaded = json.loads(get_res[0][0].text)
+        loaded = json.loads(get_res.content[0].text)
         assert loaded["id"] == "demo"
         assert loaded["instrument"]["questions"][0]["text"] == "Hi?"
 
     @pytest.mark.asyncio
     async def test_save_rejects_invalid_instrument(self):
-        from mcp.server.fastmcp.exceptions import ToolError
+        from mcp.server.mcpserver.exceptions import ToolError
 
         bad = {"name": "Bad", "instrument": {"version": 1}}  # no questions/rounds
         with pytest.raises(ToolError):
@@ -852,7 +852,7 @@ class TestRunPanelInstrument:
                 "personas": [{"name": "A"}],
             },
         )
-        data = json.loads(result[0][0].text)
+        data = json.loads(result.content[0].text)
         assert "error" in data
 
     @pytest.mark.asyncio
@@ -889,7 +889,7 @@ class TestRunPanelInstrument:
                 },
             },
         )
-        data = json.loads(result[0][0].text)
+        data = json.loads(result.content[0].text)
         assert "error" in data, f"Expected error, got: {data}"
         assert "typo_field" in data["error"], f"Error must name the offending field; got: {data['error']!r}"
 
@@ -962,7 +962,7 @@ class TestRunPanelVariants:
                 "variants": 25,
             },
         )
-        data = json.loads(result[0][0].text)
+        data = json.loads(result.content[0].text)
         assert "error" in data
         assert "variants" in data["error"].lower()
 
@@ -977,7 +977,7 @@ class TestRunPanelVariants:
                 "variants": -1,
             },
         )
-        data = json.loads(result[0][0].text)
+        data = json.loads(result.content[0].text)
         assert "error" in data
 
 
@@ -1004,7 +1004,7 @@ class TestListPanelResultsVariantCount:
             variant_count=5,
         )
         result = await mcp.call_tool("list_panel_results", {})
-        data = json.loads(result[0][0].text)
+        data = json.loads(result.content[0].text)
         assert len(data) == 1
         assert data[0]["variant_count"] == 5
 
@@ -1022,7 +1022,7 @@ class TestListPanelResultsVariantCount:
             question_count=1,
         )
         result = await mcp.call_tool("list_panel_results", {})
-        data = json.loads(result[0][0].text)
+        data = json.loads(result.content[0].text)
         assert len(data) == 1
         assert "variant_count" not in data[0]
 
@@ -1151,7 +1151,7 @@ class TestWeightedModelSpecRejection:
                 },
             )
             mock_ens.assert_not_called()
-            data = json.loads(result[0][0].text)
+            data = json.loads(result.content[0].text)
             assert "error" in data
             msg = data["error"]
             assert "haiku:0.25" in msg
@@ -1177,7 +1177,7 @@ class TestWeightedModelSpecRejection:
                 },
             )
             mock_ens.assert_called_once()
-            data = json.loads(result[0][0].text)
+            data = json.loads(result.content[0].text)
             assert "error" not in data
 
     @pytest.mark.asyncio
@@ -1190,7 +1190,7 @@ class TestWeightedModelSpecRejection:
                 "model": "haiku:0.5",
             },
         )
-        data = json.loads(result[0][0].text)
+        data = json.loads(result.content[0].text)
         assert "error" in data
         assert "haiku:0.5" in data["error"]
 
@@ -1204,7 +1204,7 @@ class TestWeightedModelSpecRejection:
                 "synthesis_model": "sonnet:1.0",
             },
         )
-        data = json.loads(result[0][0].text)
+        data = json.loads(result.content[0].text)
         assert "error" in data
         assert "sonnet:1.0" in data["error"]
 
@@ -1218,7 +1218,7 @@ class TestWeightedModelSpecRejection:
                 "persona_models": {"Alice": "haiku:0.25"},
             },
         )
-        data = json.loads(result[0][0].text)
+        data = json.loads(result.content[0].text)
         assert "error" in data
         assert "haiku:0.25" in data["error"]
 
@@ -1236,7 +1236,7 @@ class TestWeightedModelSpecRejection:
                 },
             )
             mock_run.assert_called_once()
-            data = json.loads(result[0][0].text)
+            data = json.loads(result.content[0].text)
             assert "error" not in data
 
     @pytest.mark.asyncio
@@ -1245,7 +1245,7 @@ class TestWeightedModelSpecRejection:
             "run_prompt",
             {"prompt": "hello", "model": "haiku:0.5"},
         )
-        data = json.loads(result[0][0].text)
+        data = json.loads(result.content[0].text)
         assert "error" in data
         assert "haiku:0.5" in data["error"]
 
@@ -1255,7 +1255,7 @@ class TestWeightedModelSpecRejection:
             "run_quick_poll",
             {"question": "hello?", "model": "haiku:0.5"},
         )
-        data = json.loads(result[0][0].text)
+        data = json.loads(result.content[0].text)
         assert "error" in data
         assert "haiku:0.5" in data["error"]
 
@@ -1269,7 +1269,7 @@ class TestWeightedModelSpecRejection:
                 "model": "haiku:0.5",
             },
         )
-        data = json.loads(result[0][0].text)
+        data = json.loads(result.content[0].text)
         assert "error" in data
         assert "haiku:0.5" in data["error"]
 

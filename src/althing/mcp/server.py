@@ -36,7 +36,8 @@ import json
 import logging
 from typing import Any
 
-from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.mcpserver import Context, MCPServer
+from mcp.types import InputRequiredResult
 
 from althing import __version__ as _althing_version
 from althing._runners import (
@@ -120,12 +121,15 @@ from althing.mcp.sampling import (
     SAMPLING_MAX_PERSONAS,
     SAMPLING_MAX_QUESTIONS,
     SAMPLING_MAX_TOKENS_DEFAULT,
+    SampleSpec,
+    SamplingBridge,
+    SamplingSuspend,
 )
 from althing.mcp.sampling import (
     decide_mode as _decide_sampling_mode,
 )
 from althing.mcp.sampling import (
-    sample_text as _sample_text,
+    sample_text as _sample_text,  # noqa: F401 — re-exported for back-compat
 )
 from althing.metadata import PanelTimer, build_metadata
 from althing.orchestrator import (
@@ -957,18 +961,18 @@ __all__ = [
 ]
 
 
-mcp = FastMCP(
+mcp = MCPServer(
     "althing",
     instructions=(
         "Synthetic focus group server. Run panels of AI personas to get "
         "structured qualitative feedback on products, concepts, and names."
     ),
+    # SDK 2.0's public ``version=`` replaces the pre-2.0 hack of assigning
+    # ``mcp._mcp_server.version`` — without it the low-level server falls
+    # back to ``importlib.metadata.version("mcp")`` and leaks the SDK
+    # version into serverInfo.
+    version=_althing_version,
 )
-# FastMCP forwards to an internal low-level Server whose ``version`` falls
-# back to ``importlib.metadata.version("mcp")`` when left unset — that
-# leaks the MCP SDK version into serverInfo. Pin the althing package
-# version so clients see the correct release string on initialize.
-mcp._mcp_server.version = _althing_version
 
 
 # Minimal default persona set for ``run_quick_poll`` — three diverse
@@ -1628,7 +1632,7 @@ async def run_prompt(
     use_sampling: bool | None = None,
     accept_multimodal_sampling: bool = False,
     ctx: Context = None,
-) -> str:
+) -> str | InputRequiredResult:
     """Send a single prompt to an LLM and get a response. No personas required.
 
     The simplest tool — ask a quick research question without constructing
@@ -1674,13 +1678,17 @@ async def run_prompt(
         return json.dumps({"error": decision.error})
 
     if decision.mode == "sampling":
-        sample = await _sample_text(
-            ctx,
-            prompt=prompt,
-            max_tokens=4096,
-            temperature=temperature,
-            accept_multimodal=accept_multimodal_sampling,
-        )
+        bridge = SamplingBridge(ctx)
+        try:
+            gathered = await bridge.gather(
+                {"prompt": SampleSpec(prompt=prompt, max_tokens=4096, temperature=temperature)},
+                accept_multimodal=accept_multimodal_sampling,
+            )
+        except SamplingSuspend as suspend:
+            # 2026-07-28+ client: sampling rides the InputRequiredResult
+            # retry loop instead of a mid-call server→client request.
+            return suspend.to_input_required()
+        sample = gathered["prompt"]
         # sp-k2ed4a: surface host-side truncation so callers see why a
         # prompt response is short, not just a generic empty result.
         warnings = [sample["warning"]] if sample.get("truncated") and sample.get("warning") else []
@@ -1755,7 +1763,7 @@ async def run_panel(
     decision_being_informed: str | None = None,
     detail: str = "summary",
     ctx: Context = None,
-) -> str:
+) -> str | InputRequiredResult:
     """Run a full synthetic focus group panel.
 
     Each persona answers all questions independently in parallel.
@@ -2174,17 +2182,22 @@ async def run_panel(
                     }
                 )
 
-            sampling_result = await _run_panel_sampling(
-                ctx,
-                personas=merged,
-                questions=sampling_questions,
-                synthesis=synthesis,
-                synthesis_prompt=synthesis_prompt,
-                temperature=temperature,
-                hint=decision.hint,
-                accept_multimodal=accept_multimodal_sampling,
-                decision_being_informed=decision_being_informed,
-            )
+            try:
+                sampling_result = await _run_panel_sampling(
+                    ctx,
+                    personas=merged,
+                    questions=sampling_questions,
+                    synthesis=synthesis,
+                    synthesis_prompt=synthesis_prompt,
+                    temperature=temperature,
+                    hint=decision.hint,
+                    accept_multimodal=accept_multimodal_sampling,
+                    decision_being_informed=decision_being_informed,
+                )
+            except SamplingSuspend as suspend:
+                # 2026-07-28+ client: sampling rides the InputRequiredResult
+                # retry loop instead of mid-call server→client requests.
+                return suspend.to_input_required()
             return json.dumps(apply_response_gate(sampling_result), indent=2)
 
     # ── Ensemble mode: run with each model, compare across models ────────
@@ -2345,7 +2358,7 @@ async def run_quick_poll(
     decision_being_informed: str | None = None,
     detail: str = "summary",
     ctx: Context = None,
-) -> str:
+) -> str | InputRequiredResult:
     """Quick single-question poll across personas.
 
     A simplified version of run_panel for quick feedback on one question.
@@ -2525,17 +2538,22 @@ async def run_quick_poll(
                     )
                 }
             )
-        result = await _run_quick_poll_sampling(
-            ctx,
-            question=question,
-            personas=personas,
-            synthesis=synthesis,
-            synthesis_prompt=synthesis_prompt,
-            temperature=temperature,
-            hint=decision.hint,
-            accept_multimodal=accept_multimodal_sampling,
-            decision_being_informed=decision_being_informed,
-        )
+        try:
+            result = await _run_quick_poll_sampling(
+                ctx,
+                question=question,
+                personas=personas,
+                synthesis=synthesis,
+                synthesis_prompt=synthesis_prompt,
+                temperature=temperature,
+                hint=decision.hint,
+                accept_multimodal=accept_multimodal_sampling,
+                decision_being_informed=decision_being_informed,
+            )
+        except SamplingSuspend as suspend:
+            # 2026-07-28+ client: sampling rides the InputRequiredResult
+            # retry loop instead of mid-call server→client requests.
+            return suspend.to_input_required()
         return json.dumps(apply_response_gate(result), indent=2)
 
     questions = [{"text": question}]
@@ -2599,37 +2617,48 @@ async def _run_panel_sampling(
     (``usage``, ``cost``, ``metadata``) are ``None`` — the host agent
     absorbs token cost.
 
-    Serial across personas (host agents rate-limit sampling) but each
-    persona answers all questions in a single sampling call to keep
-    round-trips small.
+    Serial across personas on legacy connections (host agents rate-limit
+    sampling) but each persona answers all questions in a single sampling
+    call to keep round-trips small. On 2026-07-28+ connections the
+    per-persona requests are batched into one ``InputRequiredResult``
+    round (SEP-2322) via :class:`SamplingBridge`; the synthesis call is a
+    second round.
     """
     from althing.prompts import SYNTHESIS_PROMPT
 
     await ctx.report_progress(0, len(personas))
+    bridge = SamplingBridge(ctx)
     panelist_entries: list[dict[str, Any]] = []
     host_model: str | None = None
 
     question_texts = [str(q["text"]) for q in questions]
     joined_questions = "\n\n".join(f"Q{i + 1}: {t}" for i, t in enumerate(question_texts))
+    user_prompt = (
+        "Answer each of the following questions in order. "
+        "Label each answer with the matching Q number.\n\n" + joined_questions
+    )
+
+    persona_specs = {
+        f"persona_{i}": SampleSpec(
+            prompt=user_prompt,
+            system_prompt=persona_system_prompt(persona),
+            max_tokens=SAMPLING_MAX_TOKENS_DEFAULT,
+            temperature=temperature,
+        )
+        for i, persona in enumerate(personas)
+    }
+    samples = await bridge.gather(
+        persona_specs,
+        accept_multimodal=accept_multimodal,
+        on_progress=ctx.report_progress,
+    )
 
     # sp-k2ed4a: collect host-side truncation warnings so the run summary
     # can flag turns that were silently cut off by the host's max_tokens
     # ceiling (otherwise indistinguishable from generic schema-fail).
     sampling_warnings: list[str] = []
     for i, persona in enumerate(personas):
-        system_prompt = persona_system_prompt(persona)
-        user_prompt = (
-            "Answer each of the following questions in order. "
-            "Label each answer with the matching Q number.\n\n" + joined_questions
-        )
-        sample = await _sample_text(
-            ctx,
-            prompt=user_prompt,
-            system_prompt=system_prompt,
-            max_tokens=SAMPLING_MAX_TOKENS_DEFAULT,
-            temperature=temperature,
-            accept_multimodal=accept_multimodal,
-        )
+        sample = samples[f"persona_{i}"]
         host_model = sample["model"]
         if sample.get("truncated") and sample.get("warning"):
             persona_name = persona.get("name", f"persona_{i}")
@@ -2645,7 +2674,6 @@ async def _run_panel_sampling(
                 "usage": None,
             }
         )
-        await ctx.report_progress(i + 1, len(personas))
 
     synthesis_block: dict[str, Any] | None = None
     if synthesis and panelist_entries:
@@ -2657,13 +2685,18 @@ async def _run_panel_sampling(
             )
             for entry in panelist_entries
         )
-        synth = await _sample_text(
-            ctx,
-            prompt=rendered_panel,
-            system_prompt=synth_prompt,
-            max_tokens=SAMPLING_MAX_TOKENS_DEFAULT,
-            temperature=temperature,
-        )
+        synth = (
+            await bridge.gather(
+                {
+                    "synthesis": SampleSpec(
+                        prompt=rendered_panel,
+                        system_prompt=synth_prompt,
+                        max_tokens=SAMPLING_MAX_TOKENS_DEFAULT,
+                        temperature=temperature,
+                    )
+                }
+            )
+        )["synthesis"]
         if synth.get("truncated") and synth.get("warning"):
             sampling_warnings.append(f"synthesis: {synth['warning']}")
         synthesis_block = {
@@ -2715,8 +2748,10 @@ async def _run_quick_poll_sampling(
 ) -> dict[str, Any]:
     """Run a quick poll via MCP sampling.
 
-    One ``create_message`` call per persona (serial — host agents
-    generally rate-limit sampling), plus one synthesis call when
+    One sampling request per persona — fulfilled serially via
+    ``create_message`` on legacy connections (host agents generally
+    rate-limit sampling), or batched into a single ``InputRequiredResult``
+    round on 2026-07-28+ (SEP-2322) — plus one synthesis call when
     enabled. The result shape deliberately mirrors the BYOK
     :func:`_run_panel_async` output for the fields callers care about
     (``results``, ``synthesis``, ``rounds``, ``persona_count``,
@@ -2727,20 +2762,29 @@ async def _run_quick_poll_sampling(
     from althing.prompts import SYNTHESIS_PROMPT
 
     await ctx.report_progress(0, len(personas))
+    bridge = SamplingBridge(ctx)
     panelist_entries: list[dict[str, Any]] = []
     host_model: str | None = None
     sampling_warnings: list[str] = []
-    for i, persona in enumerate(personas):
-        system_prompt = persona_system_prompt(persona)
-        user_prompt = build_question_prompt({"text": question})
-        sample = await _sample_text(
-            ctx,
+
+    user_prompt = build_question_prompt({"text": question})
+    persona_specs = {
+        f"persona_{i}": SampleSpec(
             prompt=user_prompt,
-            system_prompt=system_prompt,
+            system_prompt=persona_system_prompt(persona),
             max_tokens=2048,
             temperature=temperature,
-            accept_multimodal=accept_multimodal,
         )
+        for i, persona in enumerate(personas)
+    }
+    samples = await bridge.gather(
+        persona_specs,
+        accept_multimodal=accept_multimodal,
+        on_progress=ctx.report_progress,
+    )
+
+    for i, persona in enumerate(personas):
+        sample = samples[f"persona_{i}"]
         host_model = sample["model"]
         if sample.get("truncated") and sample.get("warning"):
             persona_name = persona.get("name", f"persona_{i}")
@@ -2758,7 +2802,6 @@ async def _run_quick_poll_sampling(
                 "usage": None,
             }
         )
-        await ctx.report_progress(i + 1, len(personas))
 
     synthesis_block: dict[str, Any] | None = None
     if synthesis and panelist_entries:
@@ -2767,14 +2810,19 @@ async def _run_quick_poll_sampling(
             f"Panelist: {entry['persona'].get('name', 'anon')}\nQ: {question}\nA: {entry['responses'][0]['answer']}"
             for entry in panelist_entries
         )
-        synth = await _sample_text(
-            ctx,
-            prompt=rendered_panel,
-            system_prompt=synth_prompt,
-            max_tokens=2048,
-            temperature=temperature,
-            accept_multimodal=accept_multimodal,
-        )
+        synth = (
+            await bridge.gather(
+                {
+                    "synthesis": SampleSpec(
+                        prompt=rendered_panel,
+                        system_prompt=synth_prompt,
+                        max_tokens=2048,
+                        temperature=temperature,
+                    )
+                },
+                accept_multimodal=accept_multimodal,
+            )
+        )["synthesis"]
         if synth.get("truncated") and synth.get("warning"):
             sampling_warnings.append(f"synthesis: {synth['warning']}")
         synthesis_block = {
@@ -3339,33 +3387,18 @@ def concept_test(
 def serve() -> None:
     """Run the MCP server on stdio transport.
 
-    FastMCP's default ``run_stdio_async`` calls
-    ``create_initialization_options()`` with no arguments, so althing
-    cannot advertise that it *uses* MCP sampling. We reimplement the
-    stdio loop here to advertise sampling in two places on the
-    initialize response: at the top level of ``capabilities`` so hosts
-    and inspectors that scan top-level keys can discover the dependency
-    directly, and nested under ``experimental`` for backwards
-    compatibility with clients that only look there. The MCP spec does
-    not reserve a ``sampling`` field on ``ServerCapabilities`` (sampling
-    is defined as a client capability), but ``ServerCapabilities`` is
-    declared ``extra="allow"`` so the top-level key round-trips cleanly.
+    Uses the SDK's public stdio runner. Pre-2.0 althing reimplemented the
+    stdio loop here to inject a ``sampling`` advertisement into the
+    initialize response — nested under ``experimental`` *and*, off-spec,
+    at the top level of ``ServerCapabilities`` (sampling is defined by the
+    spec as a *client* capability; the injection relied on
+    ``extra="allow"``). SDK 2.0's ``MCPServer.run`` exposes no public
+    initialization-option hook, and the 2026-07-28 revision's
+    ``server/discover`` path never consults ``initialize`` options at
+    all, so the advertisement is dropped entirely: whether sampling is
+    used is decided at call time by probing the *client's* declared
+    ``sampling`` capability (``decide_mode`` in althing.mcp.sampling),
+    which works identically on both protocol eras. See docs/mcp.md.
     """
-    import anyio
-    from mcp.server.stdio import stdio_server
-
     logger.info("MCP server starting (stdio transport)")
-
-    async def _run() -> None:
-        server = mcp._mcp_server
-        init_opts = server.create_initialization_options(
-            experimental_capabilities={"sampling": {}},
-        )
-        # Also surface `sampling` at the top of ServerCapabilities —
-        # multiple MCP inspectors and hosts enumerate top-level
-        # capability keys and miss the experimental nesting.
-        init_opts.capabilities = init_opts.capabilities.model_copy(update={"sampling": {}})
-        async with stdio_server() as (read_stream, write_stream):
-            await server.run(read_stream, write_stream, init_opts)
-
-    anyio.run(_run)
+    mcp.run(transport="stdio")

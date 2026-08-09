@@ -67,7 +67,7 @@ async def test_run_prompt_rejects_decision_field():
     decision contract into a sub-decisional tool.
     """
     tools = await mcp.list_tools()
-    schema = next(t for t in tools if t.name == "run_prompt").inputSchema
+    schema = next(t for t in tools if t.name == "run_prompt").input_schema
     properties = schema.get("properties", {}) or {}
     assert "decision_being_informed" not in properties
 
@@ -76,7 +76,7 @@ async def test_run_prompt_rejects_decision_field():
 @pytest.mark.parametrize("tool", _PANEL_TOOLS)
 async def test_panel_tools_advertise_decision_field(tool: str):
     tools = await mcp.list_tools()
-    schema = next(t for t in tools if t.name == tool).inputSchema
+    schema = next(t for t in tools if t.name == tool).input_schema
     properties = schema.get("properties", {}) or {}
     assert "decision_being_informed" in properties, f"{tool} must advertise decision_being_informed in its input schema"
 
@@ -95,7 +95,7 @@ async def test_panel_tools_advertise_decision_field(tool: str):
 @pytest.mark.parametrize("tool", _PANEL_TOOLS)
 async def test_whitespace_only_decision_treated_as_missing(tool: str):
     result = await mcp.call_tool(tool, _call_args_for(tool, decision="          "))
-    data = _payload(result[0][0].text)
+    data = _payload(result.content[0].text)
     assert data["error_code"] == "MISSING_DECISION"
     assert data["field_path"] == "decision_being_informed"
 
@@ -104,7 +104,7 @@ async def test_whitespace_only_decision_treated_as_missing(tool: str):
 @pytest.mark.parametrize("tool", _PANEL_TOOLS)
 async def test_empty_string_decision_treated_as_missing(tool: str):
     result = await mcp.call_tool(tool, _call_args_for(tool, decision=""))
-    data = _payload(result[0][0].text)
+    data = _payload(result.content[0].text)
     assert data["error_code"] == "MISSING_DECISION"
 
 
@@ -126,7 +126,7 @@ async def test_omitted_decision_is_pass_through(tool: str):
     with patch("althing.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_run:
         mock_run.return_value = {"results": []}
         result = await mcp.call_tool(tool, _call_args_for(tool, decision=None))
-        data = _payload(result[0][0].text)
+        data = _payload(result.content[0].text)
         assert data.get("error_code") not in {
             "MISSING_DECISION",
             "INVALID_TOOL_ARG",
@@ -143,7 +143,7 @@ async def test_omitted_decision_is_pass_through(tool: str):
 @pytest.mark.parametrize("tool", _PANEL_TOOLS)
 async def test_decision_too_long_returns_typed_envelope(tool: str):
     result = await mcp.call_tool(tool, _call_args_for(tool, decision="x" * 281))
-    data = _payload(result[0][0].text)
+    data = _payload(result.content[0].text)
     assert data["error_code"] == "DECISION_TOO_LONG"
     assert data["field_path"] == "decision_being_informed"
 
@@ -152,7 +152,7 @@ async def test_decision_too_long_returns_typed_envelope(tool: str):
 @pytest.mark.parametrize("tool", _PANEL_TOOLS)
 async def test_short_after_trim_returns_invalid_tool_arg(tool: str):
     result = await mcp.call_tool(tool, _call_args_for(tool, decision="  short  "))
-    data = _payload(result[0][0].text)
+    data = _payload(result.content[0].text)
     assert data["error_code"] == "INVALID_TOOL_ARG"
     assert data["field_path"] == "decision_being_informed"
 
@@ -161,7 +161,7 @@ async def test_short_after_trim_returns_invalid_tool_arg(tool: str):
 @pytest.mark.parametrize("tool", _PANEL_TOOLS)
 async def test_newline_in_decision_rejected(tool: str):
     result = await mcp.call_tool(tool, _call_args_for(tool, decision="Decide whether\nto ship anything yet."))
-    data = _payload(result[0][0].text)
+    data = _payload(result.content[0].text)
     assert data["error_code"] == "INVALID_TOOL_ARG"
     assert "newline" in data["message"].lower()
 
@@ -183,7 +183,7 @@ async def test_minimum_length_accepted(tool: str):
     with patch("althing.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_panel:
         mock_panel.return_value = {"results": []}
         result = await mcp.call_tool(tool, _call_args_for(tool, decision="exactly12chr"))
-        data = _payload(result[0][0].text)
+        data = _payload(result.content[0].text)
         assert data.get("field_path") != "decision_being_informed", (
             f"length-12 decision must not produce a decision-field envelope; got {data}"
         )
@@ -196,7 +196,7 @@ async def test_maximum_length_accepted(tool: str):
     with patch("althing.mcp.server._run_panel_async", new_callable=AsyncMock) as mock_panel:
         mock_panel.return_value = {"results": []}
         result = await mcp.call_tool(tool, _call_args_for(tool, decision="x" * 280))
-        data = _payload(result[0][0].text)
+        data = _payload(result.content[0].text)
         assert data.get("error_code") not in {
             "DECISION_TOO_LONG",
             "MISSING_DECISION",
@@ -221,5 +221,5 @@ async def test_run_panel_valid_decision_reaches_runner():
             },
         )
         assert mock_run.called, "valid decision must not short-circuit"
-        data = _payload(result[0][0].text)
+        data = _payload(result.content[0].text)
         assert "error_code" not in data
